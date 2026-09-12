@@ -1,0 +1,174 @@
+"""Detect the scale and currency a statement is presented in.
+
+A wrong scale is off by 1000x on every figure, so detection returns the text it matched and
+callers should stop on conflicting signals instead of picking one.
+
+Golden set cases this handles:
+
+- Almarai's statement header extracts as ``X '000``. The riyal sign is a font glyph that
+  never reaches the text layer, so scale is readable but currency has to come from elsewhere
+  on the page.
+- The Arabic edition of the same header extracts as ``بآالف X``, where the PDF has mangled
+  ``بآلاف``. Both spellings are therefore accepted.
+"""
+
+from __future__ import annotations
+
+import re
+import unicodedata
+from dataclasses import dataclass
+
+from fra_core.numbers import strip_bidi
+
+__all__ = ["ScaleSignal", "detect_currency", "detect_scale"]
+
+_THOUSAND_CUES: tuple[str, ...] = (
+    "'000",
+    "’000",
+    "in thousands",
+    "thousands of",
+    "thousand",
+    "(000)",
+    "بآلاف",
+    "بآالف",
+    "بالآلاف",
+    "آلاف",
+    "الاف",
+    "ألف",
+)
+_MILLION_CUES: tuple[str, ...] = (
+    "in millions",
+    "millions of",
+    "million",
+    " mn",
+    "€m",
+    "us$m",
+    "بالملايين",
+    "ملايين",
+    "مليون",
+)
+_BILLION_CUES: tuple[str, ...] = ("in billions", "billion", " bn", "بالمليارات", "مليار")
+
+# Per-share figures are printed unscaled even when the statement is in thousands.
+_PER_SHARE_CUES: tuple[str, ...] = (
+    "except per share",
+    "except share",
+    "per share data",
+    "عدا نصيب السهم",
+    "فيما عدا السهم",
+)
+
+_CURRENCY_WORDS: dict[str, str] = {
+    "saudi riyal": "SAR",
+    "saudi riyals": "SAR",
+    "riyal": "SAR",
+    "ريال سعودي": "SAR",
+    "ريال": "SAR",
+    "sar": "SAR",
+    "egyptian pound": "EGP",
+    "egyptian pounds": "EGP",
+    "جنيه مصري": "EGP",
+    "جنيه": "EGP",
+    "egp": "EGP",
+    "l.e.": "EGP",
+    "le": "EGP",
+    "ج.م": "EGP",
+    "us dollar": "USD",
+    "u.s. dollar": "USD",
+    "dollars": "USD",
+    "دولار": "USD",
+    "usd": "USD",
+    "euro": "EUR",
+    "eur": "EUR",
+    "يورو": "EUR",
+    "uae dirham": "AED",
+    "dirham": "AED",
+    "درهم": "AED",
+    "aed": "AED",
+}
+_CURRENCY_NAMES_BY_LENGTH = sorted(_CURRENCY_WORDS, key=len, reverse=True)
+
+_ISO_CODE = re.compile(r"(?<![A-Za-z])(SAR|EGP|USD|EUR|AED|KWD|QAR|BHD|OMR|JOD)(?![A-Za-z])")
+
+
+@dataclass(frozen=True)
+class ScaleSignal:
+    """A scale reading, with the text that produced it."""
+
+    scale: int
+    currency: str | None
+    per_share_exempt: bool
+    evidence: str
+
+    @property
+    def is_units(self) -> bool:
+        return self.scale == 1
+
+
+def detect_scale(text: str) -> ScaleSignal | None:
+    """Read the scale from a caption, column header or page fragment.
+
+    Returns ``None`` when the text carries no scale wording at all, which is different from
+    finding that figures are in units.
+    """
+    if not text or not text.strip():
+        return None
+
+    cleaned = unicodedata.normalize("NFKC", strip_bidi(text))
+    lowered = cleaned.casefold()
+
+    scale, evidence = _match_scale(lowered)
+    if scale is None:
+        return None
+
+    return ScaleSignal(
+        scale=scale,
+        currency=detect_currency(cleaned),
+        per_share_exempt=any(cue in lowered for cue in _PER_SHARE_CUES),
+        evidence=evidence,
+    )
+
+
+def detect_currency(text: str) -> str | None:
+    """Find an ISO 4217 code, a currency code written in the text, or a currency word."""
+    if not text or not text.strip():
+        return None
+
+    cleaned = unicodedata.normalize("NFKC", strip_bidi(text))
+
+    code = _ISO_CODE.search(cleaned.upper())
+    if code:
+        return code.group(1)
+
+    lowered = cleaned.casefold()
+    for name in _CURRENCY_NAMES_BY_LENGTH:
+        if _mentions_currency(name, lowered):
+            return _CURRENCY_WORDS[name]
+    return None
+
+
+def _mentions_currency(name: str, text: str) -> bool:
+    """Whether ``name`` appears in ``text`` as a currency reference.
+
+    Latin abbreviations need word boundaries: Juhayna writes Egyptian pounds as "LE", which
+    also sits inside "sales" and "scale". Arabic can't use boundaries since the article
+    and plural endings attach directly to the stem: ريال appears inside الريالات with word
+    characters on both sides, so a boundary test would reject a correct match.
+    """
+    if name.isascii():
+        return re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text) is not None
+    return name in text
+
+
+def _match_scale(lowered: str) -> tuple[int | None, str]:
+    """Largest unit first: "in millions" must not be read as "in thousands"."""
+    for cue in _BILLION_CUES:
+        if cue in lowered:
+            return 1_000_000_000, cue.strip()
+    for cue in _MILLION_CUES:
+        if cue in lowered:
+            return 1_000_000, cue.strip()
+    for cue in _THOUSAND_CUES:
+        if cue in lowered:
+            return 1_000, cue.strip()
+    return None, ""

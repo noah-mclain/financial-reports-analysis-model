@@ -1,0 +1,20 @@
+# Runtime state and caches
+var/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Frontend
+node_modules/
+apps/web/dist/
+
+# Model and training artifacts (weights are never committed)
+training/data/
+training/adapters/*/
+!training/adapters/*/manifest.json
+
+# macOS
+.DS_Store

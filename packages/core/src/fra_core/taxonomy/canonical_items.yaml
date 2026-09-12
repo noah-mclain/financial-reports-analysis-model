@@ -1,0 +1,371 @@
+# Canonical line items for non-financial corporates, v1.
+#
+# Scope: statement of financial position and profit or loss. Banks, insurers and Islamic
+# financial institutions use a different structure and are declined, not mapped here.
+#
+# Arabic aliases carry both regional vocabularies, because the golden set contains both:
+# Saudi filings write الموجودات and المطلوبات, Egyptian filings write الأصول والالتزامات.
+#
+# natural_sign is how the item is normally printed. A value contradicting it is flagged
+# rather than silently corrected.
+# critical items gate the pipeline: if one is missing or unmapped, the job stops for review
+# instead of producing a confident summary from an incomplete statement.
+
+version: 1
+
+items:
+  # ---------------- Profit or loss ----------------
+  - id: revenue
+    statement: income
+    critical: true
+    natural_sign: "+"
+    aliases:
+      en: [revenue, revenues, net sales, sales, turnover, revenue from contracts with customers]
+      ar: [الإيرادات, إيرادات, المبيعات, صافي المبيعات, الإيرادات من العقود مع العملاء]
+
+  - id: cost_of_revenue
+    statement: income
+    natural_sign: "-"
+    aliases:
+      en: [cost of sales, cost of revenue, cost of goods sold]
+      ar: [تكلفة المبيعات, تكلفة الإيرادات, تكلفة البضاعة المباعة]
+
+  - id: gross_profit
+    statement: income
+    natural_sign: "+"
+    aliases:
+      en: [gross profit, gross income]
+      ar: [مجمل الربح, إجمالي الربح, الربح الإجمالي]
+
+  - id: selling_general_admin
+    statement: income
+    natural_sign: "-"
+    aliases:
+      en: [selling and distribution expenses, general and administrative expenses, administrative expenses]
+      ar: [مصروفات البيع والتوزيع, مصروفات عمومية وإدارية, المصروفات الإدارية]
+
+  - id: depreciation_amortization
+    statement: income
+    natural_sign: "-"
+    aliases:
+      en: [depreciation and amortisation, depreciation and amortization, depreciation]
+      ar: [الاستهلاك والإطفاء, الإهلاك والإطفاء, الاستهلاك]
+
+  - id: operating_income
+    statement: income
+    critical: true
+    natural_sign: "+"
+    aliases:
+      en: [operating profit, profit from operations, results from operating activities, operating income]
+      ar: [الربح التشغيلي, أرباح العمليات, نتائج الأنشطة التشغيلية, الربح من العمليات]
+
+  - id: finance_income
+    statement: income
+    natural_sign: "+"
+    aliases:
+      en: [finance income, interest income, investment income]
+      ar: [إيرادات التمويل, إيرادات الفوائد, إيرادات استثمار]
+
+  - id: finance_costs
+    statement: income
+    natural_sign: "-"
+    aliases:
+      en: [finance costs, finance charges, interest expense, borrowing costs]
+      ar: [تكاليف التمويل, أعباء تمويلية, مصروفات الفوائد, تكاليف الاقتراض]
+
+  - id: profit_before_tax
+    statement: income
+    natural_sign: "+"
+    aliases:
+      en: [profit before tax, profit before income tax, profit before zakat and income tax]
+      ar: [الربح قبل الضرائب, الربح قبل الزكاة والضريبة, صافي الربح قبل الضرائب]
+
+  - id: income_tax_expense
+    statement: income
+    natural_sign: "-"
+    aliases:
+      en: [income tax expense, income tax, zakat and income tax, tax expense]
+      ar: [ضريبة الدخل, مصروف ضريبة الدخل, الزكاة وضريبة الدخل]
+
+  - id: net_income
+    statement: income
+    critical: true
+    natural_sign: "+"
+    aliases:
+      en: [net profit, profit for the year, net income, profit for the period]
+      ar: [صافي الربح, ربح السنة, صافي ربح السنة, الربح عن الفترة]
+
+  - id: net_income_attributable_parent
+    statement: income
+    critical: true
+    natural_sign: "+"
+    aliases:
+      en: [profit attributable to shareholders of the parent, profit attributable to equity holders of the parent, attributable to owners of the company]
+      ar: [الربح العائد لمساهمي الشركة الأم, العائد إلى مالكي الشركة الأم, الحصة في الربح العائدة للشركة الأم]
+
+  - id: net_income_attributable_nci
+    statement: income
+    natural_sign: "+"
+    aliases:
+      en: [non-controlling interests, profit attributable to non-controlling interests]
+      ar: [الحصص غير المسيطرة, حقوق الأقلية, العائد إلى الحصص غير المسيطرة]
+
+  - id: eps_basic
+    statement: income
+    natural_sign: "+"
+    per_share: true
+    aliases:
+      en: [basic earnings per share, earnings per share basic, basic eps]
+      ar: [ربحية السهم الأساسية, العائد الأساسي للسهم, ربحية السهم]
+
+  - id: eps_diluted
+    statement: income
+    natural_sign: "+"
+    per_share: true
+    aliases:
+      en: [diluted earnings per share, diluted eps]
+      ar: [ربحية السهم المخفضة, العائد المخفض للسهم]
+
+  # ---------------- Financial position: assets ----------------
+  - id: cash_and_equivalents
+    statement: balance
+    critical: true
+    natural_sign: "+"
+    aliases:
+      en: [cash and cash equivalents, cash and bank balances, cash at bank and in hand]
+      ar: [النقد وما في حكمه, النقدية وما في حكمها, نقد وأرصدة لدى البنوك, النقدية وأرصدة البنوك]
+
+  - id: short_term_investments
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [short-term investments, short term investments, murabaha deposits]
+      ar: [استثمارات قصيرة الأجل, ودائع قصيرة الأجل]
+
+  - id: trade_receivables
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [trade receivables, accounts receivable, trade and other receivables, receivables]
+      ar: [ذمم مدينة, ذمم مدينة تجارية, العملاء والمدينون, المدينون وأرصدة مدينة أخرى]
+
+  - id: inventories
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [inventories, inventory, stock]
+      ar: [المخزون, مخزون, البضاعة, بضاعة]
+
+  - id: other_current_assets
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [prepayments and other current assets, other current assets, prepaid expenses]
+      ar: [أصول متداولة أخرى, موجودات متداولة أخرى, مصروفات مدفوعة مقدماً]
+
+  - id: total_current_assets
+    statement: balance
+    critical: true
+    natural_sign: "+"
+    subtotal: true
+    aliases:
+      en: [total current assets, current assets]
+      ar: [إجمالي الأصول المتداولة, مجموع الموجودات المتداولة, إجمالي الموجودات المتداولة]
+
+  - id: ppe_net
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [property plant and equipment, fixed assets, property and equipment]
+      ar: [الممتلكات والآلات والمعدات, أصول ثابتة, الموجودات الثابتة, ممتلكات ومعدات]
+
+  - id: right_of_use_assets
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [right-of-use assets, right of use assets]
+      ar: [أصول حق الاستخدام, أصول حق الانتفاع, موجودات حق الاستخدام]
+
+  - id: goodwill
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [goodwill]
+      ar: [الشهرة, شهرة]
+
+  - id: intangible_assets
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [intangible assets, other intangible assets]
+      ar: [أصول غير ملموسة, موجودات غير ملموسة, الأصول غير الملموسة]
+
+  - id: investments_in_associates
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [investments in associates, investments accounted for using the equity method, equity-accounted investees]
+      ar: [استثمارات في شركات زميلة, استثمارات يتم المحاسبة عنها بطريقة حقوق الملكية]
+
+  - id: other_non_current_assets
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [other non-current assets, other long-term assets]
+      ar: [أصول غير متداولة أخرى, موجودات غير متداولة أخرى]
+
+  - id: total_non_current_assets
+    statement: balance
+    natural_sign: "+"
+    subtotal: true
+    aliases:
+      en: [total non-current assets, non-current assets]
+      ar: [إجمالي الأصول غير المتداولة, مجموع الموجودات غير المتداولة, إجمالي الموجودات غير المتداولة]
+
+  - id: total_assets
+    statement: balance
+    critical: true
+    natural_sign: "+"
+    subtotal: true
+    aliases:
+      en: [total assets]
+      ar: [إجمالي الأصول, مجموع الموجودات, إجمالي الموجودات]
+
+  # ---------------- Financial position: liabilities ----------------
+  - id: trade_payables
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [trade payables, accounts payable, trade and other payables]
+      ar: [ذمم دائنة, دائنون تجاريون, الدائنون وأرصدة دائنة أخرى]
+
+  - id: short_term_borrowings
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [short-term borrowings, short-term loans, bank overdraft, credit facilities]
+      ar: [قروض قصيرة الأجل, تسهيلات ائتمانية, البنوك الدائنة]
+
+  - id: current_portion_long_term_debt
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [current portion of long-term loans, current portion of long-term debt]
+      ar: [الجزء المتداول من القروض طويلة الأجل, الجزء المتداول من التزامات طويلة الأجل]
+
+  - id: lease_liabilities_current
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [current lease liabilities, lease liabilities current portion]
+      ar: [التزامات عقود الإيجار المتداولة, الجزء المتداول من التزامات الإيجار]
+
+  - id: other_current_liabilities
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [other current liabilities, accrued expenses, provisions current]
+      ar: [التزامات متداولة أخرى, مطلوبات متداولة أخرى, مصروفات مستحقة]
+
+  - id: total_current_liabilities
+    statement: balance
+    critical: true
+    natural_sign: "+"
+    subtotal: true
+    aliases:
+      en: [total current liabilities, current liabilities]
+      ar: [إجمالي الالتزامات المتداولة, مجموع المطلوبات المتداولة, إجمالي المطلوبات المتداولة]
+
+  - id: long_term_borrowings
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [long-term borrowings, long-term loans, term loans]
+      ar: [قروض طويلة الأجل, التزامات طويلة الأجل]
+
+  - id: lease_liabilities_non_current
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [non-current lease liabilities, lease liabilities non-current]
+      ar: [التزامات عقود الإيجار غير المتداولة]
+
+  - id: other_non_current_liabilities
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [other non-current liabilities, employee benefit obligations, end of service benefits]
+      ar: [التزامات غير متداولة أخرى, مكافأة نهاية الخدمة, التزامات منافع الموظفين]
+
+  - id: total_non_current_liabilities
+    statement: balance
+    natural_sign: "+"
+    subtotal: true
+    aliases:
+      en: [total non-current liabilities, non-current liabilities]
+      ar: [إجمالي الالتزامات غير المتداولة, مجموع المطلوبات غير المتداولة]
+
+  - id: total_liabilities
+    statement: balance
+    critical: true
+    natural_sign: "+"
+    subtotal: true
+    aliases:
+      en: [total liabilities]
+      ar: [إجمالي الالتزامات, مجموع المطلوبات, إجمالي المطلوبات]
+
+  # ---------------- Financial position: equity ----------------
+  - id: share_capital
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [share capital, issued capital, paid-up capital]
+      ar: [رأس المال, رأس المال المدفوع, رأس المال المصدر]
+
+  - id: retained_earnings
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [retained earnings, accumulated profits, accumulated losses]
+      ar: [الأرباح المبقاة, أرباح مرحلة, الأرباح المرحلة, الخسائر المتراكمة]
+
+  - id: other_reserves
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [other reserves, statutory reserve, general reserve, reserves]
+      ar: [احتياطيات أخرى, الاحتياطي القانوني, الاحتياطيات, احتياطي عام]
+
+  - id: equity_attributable_parent
+    statement: balance
+    critical: true
+    natural_sign: "+"
+    subtotal: true
+    aliases:
+      en: [equity attributable to shareholders of the parent, equity attributable to owners of the company, shareholders equity]
+      ar: [حقوق المساهمين في الشركة الأم, الحقوق العائدة لمساهمي الشركة الأم, حقوق مالكي الشركة الأم]
+
+  - id: non_controlling_interests
+    statement: balance
+    natural_sign: "+"
+    aliases:
+      en: [non-controlling interests, minority interest]
+      ar: [الحصص غير المسيطرة, حقوق الأقلية]
+
+  - id: total_equity
+    statement: balance
+    critical: true
+    natural_sign: "+"
+    subtotal: true
+    aliases:
+      en: [total equity, total shareholders equity, total equity and reserves]
+      ar: [إجمالي حقوق الملكية, مجموع حقوق المساهمين, إجمالي حقوق المساهمين]
+
+  - id: total_liabilities_and_equity
+    statement: balance
+    critical: true
+    natural_sign: "+"
+    subtotal: true
+    aliases:
+      en: [total liabilities and equity, total equity and liabilities]
+      ar: [إجمالي الالتزامات وحقوق الملكية, مجموع المطلوبات وحقوق المساهمين, إجمالي المطلوبات وحقوق الملكية]

@@ -1,0 +1,70 @@
+[project]
+# Not installable (package = false). Depends on the members so `uv run` doesn't uninstall
+# them between commands.
+name = "fra-workspace"
+version = "0.0.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fra-core",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+# Members are added on the day their package lands, so `uv sync` stays green at every commit.
+# Planned order (see docs/blueprint/07-build-plan.md):
+#   packages/ingest (day 3), packages/analytics (day 8), packages/modeling (day 11),
+#   apps/api (day 12), apps/worker (day 12)
+members = [
+  "packages/core",
+]
+
+[tool.uv.sources]
+fra-core = { workspace = true }
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4",
+  "pytest-cov>=6.0",
+  "hypothesis>=6.130",
+  "ruff>=0.14",
+  "mypy>=1.18",
+  "types-PyYAML>=6.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["packages/*/src", "apps/*/src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+# RUF001/RUF002/RUF003 flag "ambiguous" Unicode. This project handles Arabic text on purpose.
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+mypy_path = "packages/core/src:packages/ingest/src:packages/analytics/src:packages/modeling/src"
+
+[[tool.mypy.overrides]]
+module = ["docling.*", "docling_core.*", "mlx.*", "mlx_lm.*", "pypdfium2.*", "matplotlib.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+# Extend as apps/ and tests/ land (day 12 and day 7 respectively).
+testpaths = ["packages"]
+# Keep in sync with workspace members. uv marks editable .pth files hidden on macOS and
+# Python 3.11+ skips hidden .pth files, so tests set the paths directly.
+# `make unhide-pth` fixes it for scripts and `uv run python`.
+pythonpath = ["packages/core/src"]
+addopts = "-q --strict-markers"
+markers = [
+  "slow: needs model weights or OCR, excluded from the default run",
+  "golden: reads documents from eval/golden",
+]

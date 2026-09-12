@@ -1,0 +1,288 @@
+# Golden set inventory. All fields measured 2026-09-12.
+# text_layer: digital | scanned | mixed  (sampled with pdffonts on pages 1,3,5,7,9)
+# statement_pages: 1-based PDF page numbers; null where a scan makes them unknown until OCR runs.
+# Vetting method and findings: see README.md
+
+meta:
+  collected: 2026-09-12
+  method: "pdfinfo, pdftotext character counts, pdffonts and pdfimages per page, macOS Vision OCR spike"
+  ocr_reference: "Vision accurate mode, 150 dpi, warm: 24.7 s per page. Fast mode corrupts digits and is unusable for statements."
+
+documents:
+
+  # ---- Tier A: digital, bilingual, page-aligned across languages ----
+  - id: almarai-2025-en
+    file: documents/almarai-2025-en-annualreport.pdf
+    issuer: Almarai Company
+    market: Saudi Exchange (Tadawul)
+    fiscal_year: 2025
+    period_end: 2025-12-31
+    language: en
+    scope: consolidated
+    document_type: annual report (statements embedded)
+    framework: IFRS
+    currency: SAR
+    scale: 1000            # header reads "<riyal glyph> '000"
+    pages: 275
+    text_layer: mixed      # cover page is an image; all content pages carry text
+    statement_pages:
+      financial_position: [156, 158]
+      profit_or_loss: [159, 159]
+      changes_in_equity: [162, 163]
+      cash_flows: [164, 166]
+    traits: [comparative_prior_year, notes_column, embedded_in_annual_report, currency_glyph_not_extractable]
+    source_url: https://annualreport.almarai.com/downloads/pdf/en/full-report.pdf
+    retrieved: 2026-09-12
+    sha256_prefix: 08ec6e6c61822876
+    notes: "Reference document for development. The currency symbol extracts as the letter X, so currency must be read from surrounding text, not the glyph."
+
+  - id: almarai-2025-ar
+    file: documents/almarai-2025-ar-annualreport.pdf
+    issuer: Almarai Company
+    market: Saudi Exchange (Tadawul)
+    fiscal_year: 2025
+    period_end: 2025-12-31
+    language: ar
+    scope: consolidated
+    document_type: annual report (statements embedded)
+    framework: IFRS
+    currency: SAR
+    scale: 1000
+    pages: 275
+    text_layer: mixed      # cover page is an image; content pages carry proper Unicode Arabic
+    statement_pages:
+      financial_position: [156, 158]
+      profit_or_loss: [159, 159]
+      changes_in_equity: [162, 163]
+      cash_flows: [164, 166]
+    traits: [arabic_indic_digits, comma_thousands_separator, bidi_controls, rtl_columns, gulf_terminology, comparative_prior_year, notes_column]
+    source_url: https://annualreport.almarai.com/downloads/pdf/ar/full-report.pdf
+    retrieved: 2026-09-12
+    sha256_prefix: f287fd06753d942a
+    notes: >
+      Same statements, same page numbers as almarai-2025-en, which makes the pair usable for
+      cross-language verification without hand-annotation. 21,239 Arabic characters and zero
+      presentation forms in the first 15 pages. Value columns extract in the opposite order to
+      the English edition (prior year, current year, note), so columns must be bound to header
+      text rather than position. Uses Gulf terms: الموجودات, المطلوبات.
+
+  # ---- Tier B: scanned filings, the realistic Egyptian exchange population ----
+  - id: juhayna-2025-ar-standalone
+    file: documents/juhayna-2025-ar-standalone.pdf
+    issuer: Juhayna Food Industries
+    market: EGX
+    fiscal_year: 2025
+    period_end: 2025-12-31
+    language: ar
+    scope: standalone
+    document_type: financial statements
+    framework: EAS
+    currency: EGP
+    scale: unconfirmed
+    pages: 62
+    text_layer: scanned
+    statement_pages: null
+    traits: [scanned, arabic_indic_digits, space_thousands_separator, egyptian_terminology, signed_filing]
+    source_url: https://www.juhayna.com/app/uploads/2026/03/القوائم-الماليه-المستقلة-31-ديسمبر-2025.pdf
+    retrieved: 2026-09-12
+    sha256_prefix: 2ae124ccaf8ebc9c
+    notes: "Vision OCR on a statement page returned إجمالي الأصول, الأصول غير المتداولة, مخزون, شهرة and figures such as ٨ ٨٦٤ ٣٨٣ ٢٤٤."
+
+  - id: juhayna-2025-ar-consolidated
+    file: documents/juhayna-2025-ar-consolidated.pdf
+    issuer: Juhayna Food Industries
+    market: EGX
+    fiscal_year: 2025
+    period_end: 2025-12-31
+    language: ar
+    scope: consolidated
+    document_type: financial statements
+    framework: EAS
+    currency: EGP
+    scale: unconfirmed
+    pages: 64
+    text_layer: scanned
+    statement_pages: null
+    traits: [scanned, arabic_indic_digits, space_thousands_separator, egyptian_terminology, signed_filing]
+    source_url: https://www.juhayna.com/app/uploads/2026/03/القوائم-الماليه-المجمعه-31-ديسمبر-2025.pdf
+    retrieved: 2026-09-12
+    sha256_prefix: c7bbd3413bfd1b86
+
+  - id: juhayna-2025-en-consolidated
+    file: documents/juhayna-2025-en-consolidated.pdf
+    issuer: Juhayna Food Industries
+    market: EGX
+    fiscal_year: 2025
+    period_end: 2025-12-31
+    language: en
+    scope: consolidated
+    document_type: financial statements
+    framework: EAS
+    currency: EGP
+    scale: unconfirmed
+    pages: 59
+    text_layer: mixed      # front matter and auditor pages scanned, later pages carry text
+    statement_pages: null
+    traits: [mixed_mode, english_translation_of_arabic_original, signed_filing]
+    source_url: https://www.juhayna.com/app/uploads/2026/03/JFI-English-Cons-FS-YE-2025.pdf
+    retrieved: 2026-09-12
+    sha256_prefix: 8471e73426b746df
+
+  - id: juhayna-2024-ar-consolidated
+    file: documents/juhayna-2024-ar-consolidated.pdf
+    issuer: Juhayna Food Industries
+    market: EGX
+    fiscal_year: 2024
+    period_end: 2024-12-31
+    language: ar
+    scope: consolidated
+    document_type: financial statements
+    framework: EAS
+    currency: EGP
+    scale: unconfirmed
+    pages: 59
+    text_layer: scanned
+    statement_pages: null
+    traits: [scanned, arabic_indic_digits, prior_year_of_juhayna_2025, signed_filing]
+    source_url: https://www.juhayna.com/app/uploads/2025/11/1743085131_556_1911930_4q24consarabic-2.pdf
+    retrieved: 2026-09-12
+    sha256_prefix: 2b9e3bc80243dd8c
+
+  - id: juhayna-2024-en-consolidated
+    file: documents/juhayna-2024-en-consolidated.pdf
+    issuer: Juhayna Food Industries
+    market: EGX
+    fiscal_year: 2024
+    period_end: 2024-12-31
+    language: en
+    scope: consolidated
+    document_type: financial statements
+    framework: EAS
+    currency: EGP
+    scale: unconfirmed
+    pages: 57
+    text_layer: scanned
+    statement_pages: null
+    traits: [scanned, prior_year_of_juhayna_2025, signed_filing]
+    source_url: https://www.juhayna.com/app/uploads/2025/11/1743085084_825_2594178_4q24consenglish-2.pdf
+    retrieved: 2026-09-12
+    sha256_prefix: 4c52b27b92e8de96
+
+  - id: edita-2025-ar-consolidated
+    file: documents/edita-2025-ar-consolidated-eas.pdf
+    issuer: Edita Food Industries
+    market: EGX
+    fiscal_year: 2025
+    period_end: 2025-12-31
+    language: ar
+    scope: consolidated
+    document_type: financial statements
+    framework: EAS
+    currency: EGP
+    scale: unconfirmed
+    pages: 63
+    text_layer: scanned
+    statement_pages: null
+    traits: [scanned, arabic_indic_digits, egyptian_terminology, signed_filing, second_issuer]
+    source_url: https://irfiles.technologyverse.com/efid/Edita-consolidated-Arabic-Signed-FY25-4-.pdf
+    retrieved: 2026-09-12
+    sha256_prefix: 5eae6c7b4abc13d6
+
+  - id: edita-2025-en-consolidated-eas
+    file: documents/edita-2025-en-consolidated-eas.pdf
+    issuer: Edita Food Industries
+    market: EGX
+    fiscal_year: 2025
+    period_end: 2025-12-31
+    language: en
+    scope: consolidated
+    document_type: financial statements
+    framework: EAS
+    currency: EGP
+    scale: unconfirmed
+    pages: 66
+    text_layer: scanned
+    statement_pages: null
+    traits: [scanned, pairs_with_edita-2025-ar-consolidated, signed_filing]
+    source_url: https://irfiles.technologyverse.com/efid/Edita-consolidated-English-Signed-FY25.pdf
+    retrieved: 2026-09-12
+    sha256_prefix: 04f1603f40a9ebde
+
+  - id: edita-2025-en-consolidated-ifrs
+    file: documents/edita-2025-en-consolidated-ifrs.pdf
+    issuer: Edita Food Industries
+    market: EGX
+    fiscal_year: 2025
+    period_end: 2025-12-31
+    language: en
+    scope: consolidated
+    document_type: financial statements
+    framework: IFRS
+    currency: EGP
+    scale: unconfirmed
+    pages: 85
+    text_layer: scanned
+    statement_pages: null
+    traits: [scanned, same_company_two_frameworks, signed_filing]
+    source_url: https://irfiles.technologyverse.com/efid/Edita-Food-Industries-FY-2025-IFRS.pdf
+    retrieved: 2026-09-12
+    sha256_prefix: d79f325d4843db93
+    notes: "Same issuer and year as edita-2025-en-consolidated-eas but prepared under IFRS, so the two differ by design. Useful for testing that framework is detected, not for value comparison."
+
+  - id: edita-2024-ar-consolidated
+    file: documents/edita-2024-ar-consolidated-eas.pdf
+    issuer: Edita Food Industries
+    market: EGX
+    fiscal_year: 2024
+    period_end: 2024-12-31
+    language: ar
+    scope: consolidated
+    document_type: financial statements
+    framework: EAS
+    currency: EGP
+    scale: unconfirmed
+    pages: 61
+    text_layer: scanned
+    statement_pages: null
+    traits: [scanned, arabic_indic_digits, prior_year_of_edita_2025, signed_filing]
+    source_url: https://irfiles.technologyverse.com/efid/Edita-Consolidated-FS-EAS-A.pdf
+    retrieved: 2026-09-12
+    sha256_prefix: ec1f045a8a9eb594
+
+  # ---- Tier C: mixed-mode, short, fastest to iterate against ----
+  - id: juhayna-2025-en-standalone
+    file: documents/juhayna-2025-en-standalone.pdf
+    issuer: Juhayna Food Industries
+    market: EGX
+    fiscal_year: 2025
+    period_end: 2025-12-31
+    language: en
+    scope: standalone
+    document_type: financial statements
+    framework: EAS
+    currency: EGP
+    scale: unconfirmed      # statement header reads "LE"; figures appear to be in units
+    pages: 61
+    text_layer: mixed
+    statement_pages:
+      financial_position: [5, 5]      # scanned image page
+      profit_or_loss: [6, 6]          # text
+      comprehensive_income: [7, 7]    # text
+      changes_in_equity: [8, 8]       # text
+      cash_flows: [9, 9]              # text
+    traits: [mixed_mode, scanned_balance_sheet_in_digital_pdf, space_thousands_separator, english_translation_of_arabic_original]
+    source_url: https://www.juhayna.com/app/uploads/2026/03/JFI-English-Dec-FS-YE-2025.pdf
+    retrieved: 2026-09-12
+    sha256_prefix: 9d6b488392963d2f
+    notes: >
+      The most instructive document in the set. Pages 1-2 and 6 onward carry text, pages 3-5 are
+      page-sized images, and the statement of financial position is one of those images. A
+      pipeline that decides OCR per document rather than per page would either miss the balance
+      sheet or needlessly OCR 55 text pages.
+
+# What is not here yet, in priority order.
+collection_gaps:
+  - "A bank or insurer pair, for the separate template that decision D7 puts out of v1 scope."
+  - "An Egyptian issuer publishing digital rather than scanned filings, if one exists."
+  - "A third issuer for tier B, so extraction quality is not measured on two companies alone."
+  - "Interim (quarterly) statements, to exercise period lengths other than 12 months."
