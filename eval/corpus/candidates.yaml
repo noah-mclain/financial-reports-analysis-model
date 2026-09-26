@@ -21,7 +21,6 @@ pools:
 documents:
 
   # ---- dev ----
-  - {id: almarai-2024-en, issuer: Almarai Company, country: SA, language: en, fiscal_year: 2024, period: annual, kind: annual_report, url: 'https://annualreport.almarai.com/assets/img/pdfs/Almarai%20AR%202024-English.pdf', pool: dev, role: corporate, verified: false}
   - {id: almarai-company-2022-ar, issuer: Almarai Company, country: SA, language: ar, fiscal_year: 2022, period: annual, kind: financial_statements, url: 'https://argaamplus.s3.amazonaws.com/f4478651-2329-4ffd-aff3-9b5cb96f0753.pdf', pool: dev, role: corporate, verified: '2026-09-26'}
   - {id: almarai-company-2023-ar, issuer: Almarai Company, country: SA, language: ar, fiscal_year: 2023, period: annual, kind: financial_statements, url: 'https://argaamplus.s3.amazonaws.com/b75d9083-9cf5-421b-ba09-7b092e3c94bb.pdf', pool: dev, role: corporate, verified: '2026-09-26'}
   - {id: almarai-company-2025-ar, issuer: Almarai Company, country: SA, language: ar, fiscal_year: 2025, period: annual, kind: financial_statements, url: 'https://argaamplus.s3.amazonaws.com/6150ffe7-4bb5-42e3-afc6-e0b11a6a5e2f.pdf', pool: dev, role: corporate, verified: '2026-09-26'}

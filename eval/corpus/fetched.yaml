@@ -183,10 +183,6 @@ documents:
     sha256: 3739c85c6251ccb7cb99c47b490b936371311433fae492af76e749fd4d9f7d0c
     status: new
     text_layer: mixed
-  almarai-2024-en:
-    error: 'PermissionError: disallowed by robots.txt, or robots.txt unreachable'
-    pool: dev
-    status: failed
   almarai-company-2022-ar:
     bytes: 3185774
     pages: 65

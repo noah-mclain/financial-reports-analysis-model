@@ -123,7 +123,7 @@ def test_unreachable_robots_reports_the_cause(monkeypatch: pytest.MonkeyPatch) -
         raise urllib.error.URLError(ssl.SSLCertVerificationError("CERTIFICATE_VERIFY_FAILED"))
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
-    polite = corpus.Politeness(delay_s=0)
+    polite = corpus.Politeness(delay_s=0, backoff_s=0)
     url = "https://tls.example/a.pdf"
     assert not polite.allowed(url)
     assert "robots.txt unreachable" in polite.refusal(url)
@@ -140,3 +140,57 @@ def test_failed_download_keeps_earlier_measurement() -> None:
 
     fresh = after_failure(None, {"pool": "train"}, "URLError: timed out")
     assert fresh == {"pool": "train", "status": "failed", "error": "URLError: timed out"}
+
+
+def test_dropped_connection_is_retried_but_http_status_is_not(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import http.client
+    import urllib.error
+
+    import corpus
+
+    calls: list[str] = []
+
+    class Body:
+        def __enter__(self) -> "Body":
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b"%PDF-1.7"
+
+    def fake_urlopen(request: Any, timeout: float = 0) -> Any:
+        calls.append(request.full_url)
+        if "forbidden" in request.full_url:
+            raise urllib.error.HTTPError(request.full_url, 403, "x", None, None)  # type: ignore[arg-type]
+        if len(calls) < 3:
+            raise http.client.IncompleteRead(b"", 100)
+        return Body()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    polite = corpus.Politeness(delay_s=0, backoff_s=0)
+    assert polite.get("https://flaky.example/a.pdf") == b"%PDF-1.7"
+    assert len(calls) == 3
+
+    calls.clear()
+    with pytest.raises(urllib.error.HTTPError):
+        polite.get("https://forbidden.example/a.pdf")
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("error", "by_hand"),
+    [
+        ("PermissionError: robots.txt unreachable: Remote end closed connection", True),
+        ("HTTPError: HTTP Error 403: Forbidden", True),
+        ("HTTPError: HTTP Error 404: Not Found", False),
+        ("IncompleteRead: IncompleteRead(0 bytes read, 10 more expected)", False),
+    ],
+)
+def test_refused_downloads_are_listed_for_a_browser(error: str, by_hand: bool) -> None:
+    from corpus import refused
+
+    assert refused(error) is by_hand

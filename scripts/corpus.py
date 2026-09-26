@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import hashlib
+import http.client
 import re
 import sys
 import time
@@ -159,8 +160,10 @@ def assign_pool(issuer: str) -> str:
 class Politeness:
     """robots.txt per RFC 9309 and at most one request per second per host."""
 
-    def __init__(self, delay_s: float = 1.0) -> None:
+    def __init__(self, delay_s: float = 1.0, retries: int = 3, backoff_s: float = 2.0) -> None:
         self.delay_s = delay_s
+        self.retries = retries
+        self.backoff_s = backoff_s
         self._robots: dict[str, urllib.robotparser.RobotFileParser | None] = {}
         self._why: dict[str, str] = {}
         self._last: dict[str, float] = {}
@@ -181,8 +184,9 @@ class Politeness:
                 f"{host}/robots.txt", headers={"User-Agent": USER_AGENT}
             )
             try:
-                with urllib.request.urlopen(request, timeout=30) as response:
-                    lines = response.read().decode("utf-8", errors="replace").splitlines()
+                lines = (
+                    self._read(request, timeout=30).decode("utf-8", errors="replace").splitlines()
+                )
                 assert parser is not None
                 parser.parse(lines)
             except urllib.error.HTTPError as exc:
@@ -190,7 +194,7 @@ class Politeness:
                 parser = None if exc.code < 500 else _DENY_ALL
                 if parser is _DENY_ALL:
                     self._why[host] = f"robots.txt returned HTTP {exc.code}"
-            except OSError as exc:
+            except (OSError, http.client.HTTPException) as exc:
                 # Unreachable robots.txt means no permission (RFC 9309). Keep the cause: a TLS
                 # or proxy failure here is a local problem, not the site saying no.
                 parser = _DENY_ALL
@@ -206,11 +210,26 @@ class Politeness:
         return self._why.get(f"{parts.scheme}://{parts.netloc}", "disallowed by robots.txt")
 
     def get(self, url: str) -> bytes:
-        self._wait(urllib.parse.urlsplit(url).netloc)
         request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-        with urllib.request.urlopen(request, timeout=120) as response:
-            data: bytes = response.read()
-        return data
+        return self._read(request, timeout=120)
+
+    def _read(self, request: urllib.request.Request, timeout: float) -> bytes:
+        """One polite request, retried with backoff when the connection drops or times out.
+        An HTTP status is an answer, not a dropped connection, so it is never retried."""
+        host = urllib.parse.urlsplit(request.full_url).netloc
+        for attempt in range(self.retries + 1):
+            self._wait(host)
+            try:
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    data: bytes = response.read()
+                return data
+            except urllib.error.HTTPError:
+                raise
+            except (OSError, http.client.HTTPException):
+                if attempt == self.retries:
+                    raise
+                time.sleep(self.backoff_s * 2**attempt)
+        raise AssertionError("unreachable")
 
 
 _DENY_ALL = urllib.robotparser.RobotFileParser()
@@ -235,6 +254,13 @@ def after_failure(
     if prior and "sha256" in prior:
         return {**prior, "last_error": error}
     return {**entry, "status": "failed", "error": error}
+
+
+def refused(error: str) -> bool:
+    """The site said no to automated clients, as opposed to a dropped connection."""
+    return error.startswith("PermissionError") or any(
+        f"HTTP Error {code}" in error for code in (401, 403)
+    )
 
 
 def use_system_trust() -> None:
@@ -298,6 +324,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     today = dt.date.today().isoformat()
     polite = Politeness()
     failures: Counter[str] = Counter()
+    by_hand: list[tuple[Path, str]] = []
     for doc in documents:
         if args.pool and doc["pool"] != args.pool:
             continue
@@ -322,11 +349,22 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         print(f"{doc_id:<32} {entry['status']:<8} {note or entry.get('text_layer', '')}")
         if problem:
             failures[problem] += 1
+            if entry["status"] == "failed" and refused(problem):
+                by_hand.append((dest, doc["url"]))
 
     if failures:
         print(f"\n{sum(failures.values())} downloads failed. Most common causes:", file=sys.stderr)
         for cause, n in failures.most_common(3):
             print(f"  {n:>4}  {cause}", file=sys.stderr)
+        print("Run again to retry dropped connections.", file=sys.stderr)
+    if by_hand:
+        print(
+            "\nThese sites refuse automated downloads. Save each one from a browser to the path"
+            " shown, then run again to measure it:",
+            file=sys.stderr,
+        )
+        for path, url in by_hand:
+            print(f"  {path.relative_to(ROOT)}\n      {url}", file=sys.stderr)
 
     # Dedupe after the loop so the result does not depend on download order.
     by_hash: dict[str, list[str]] = defaultdict(list)
