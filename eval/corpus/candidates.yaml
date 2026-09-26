@@ -1,0 +1,363 @@
+# Corpus candidates, beyond the golden set. Collected 2026-09-26 from web search results.
+#
+# Nothing here is verified yet. Issuer, year, language and scope come from search result titles
+# and snippets. `make corpus-fetch` downloads each file, measures it, and writes the facts to
+# fetched.yaml. Correct an entry here when fetched.yaml disagrees with it.
+#
+# pool:   dev | train | model_test | blind
+#         Split by issuer: every document from one issuer sits in one pool. See README.md.
+# role:   corporate | negative_control   (negative_control = bank or insurer, must be declined)
+# period: annual | interim
+
+pools:
+  dev: "Golden set issuers. Development and debugging happen here."
+  train: "Source documents for model training data. Seen by the model, never scored."
+  model_test: "Held-out issuers for scoring the model and the pipeline. Never trained on."
+  blind: "Never opened during development. Demo documents are picked from here."
+
+documents:
+
+  # ---- Found during collection but already covered by the golden set ----
+  - id: almarai-2024-en
+    issuer: Almarai Company
+    country: SA
+    language: en
+    fiscal_year: 2024
+    period: annual
+    kind: annual_report
+    url: https://annualreport.almarai.com/assets/img/pdfs/Almarai%20AR%202024-English.pdf
+    pool: dev
+    role: corporate
+
+  - id: almarai-argaam-ar
+    issuer: Almarai Company
+    country: SA
+    language: ar
+    fiscal_year: null        # year not shown in the search result
+    period: annual
+    kind: financial_statements
+    url: https://argaamplus.s3.amazonaws.com/6150ffe7-4bb5-42e3-afc6-e0b11a6a5e2f.pdf
+    pool: dev
+    role: corporate
+
+  # ---- Blind: diverse by country, language, format and size ----
+  - id: savola-2025-en
+    issuer: Savola Group
+    country: SA
+    language: en
+    fiscal_year: 2025
+    period: annual
+    kind: financial_statements
+    url: https://savola.blob.core.windows.net/website/docs/default-source/financial-reports/25-savola-en-signed-fs.pdf
+    pool: blind
+    role: corporate
+
+  - id: sadafco-2025
+    issuer: Saudia Dairy and Foodstuff Company
+    country: SA
+    language: null           # confirm on fetch
+    fiscal_year: 2025
+    period: annual
+    kind: financial_statements
+    url: https://argaamplus.s3.amazonaws.com/03e1f112-999b-4585-b2cb-edec2696fdac.pdf
+    pool: blind
+    role: corporate
+
+  - id: agthia-2025-en
+    issuer: Agthia Group
+    country: AE
+    language: en
+    fiscal_year: 2025
+    period: annual
+    kind: financial_statements
+    url: https://www.agthia.com/sites/default/files/2026-04/FY%202025%20-%20Audited%20Financial%20Statements_EN.pdf
+    pool: blind
+    role: corporate
+
+  - id: agthia-2025-ar
+    issuer: Agthia Group
+    country: AE
+    language: ar
+    fiscal_year: 2025
+    period: annual
+    kind: annual_report
+    url: https://www.agthia.com/sites/default/files/2026-04/Annual-Report-2025-Arabic.pdf
+    pool: blind
+    role: corporate
+
+  - id: orascom-construction-2025-en
+    issuer: Orascom Construction
+    country: EG
+    language: en
+    fiscal_year: 2025
+    period: annual
+    kind: financial_statements
+    url: https://apigateway.adx.ae/adx/cdn/1.0/content/download/4795197
+    pool: blind
+    role: corporate
+
+  - id: gadwa-ar-standalone
+    issuer: Gadwa for Industrial Development
+    country: EG
+    language: ar
+    fiscal_year: null        # search result did not show the year
+    period: annual
+    kind: financial_statements
+    url: https://www.egx.com.eg/downloads/News/172962_092953.pdf
+    pool: blind
+    role: corporate
+
+  - id: emaar-2025-en
+    issuer: Emaar Properties
+    country: AE
+    language: en
+    fiscal_year: 2025
+    period: annual
+    kind: financial_statements
+    url: https://feeds.dfm.ae/documents/2026/Feb/12/9e0de168-d6ee-4ebe-a343-58b56a84ab2f/Emaar%20Properties%20PJS.pdf
+    pool: blind
+    role: corporate
+
+  - id: tesco-2025-en
+    issuer: Tesco
+    country: GB
+    language: en
+    fiscal_year: 2025        # 52 weeks to 22 February 2025
+    period: annual
+    kind: annual_report
+    url: https://www.tescoplc.com/media/ky0bfwpo/tesco_ar25_interactive.pdf
+    pool: blind
+    role: corporate
+
+  - id: general-mills-2025-en
+    issuer: General Mills
+    country: US
+    language: en
+    fiscal_year: 2025        # year to 25 May 2025
+    period: annual
+    kind: form_10k
+    url: https://s29.q4cdn.com/993087495/files/doc_financials/2025/ar/GIS009_10K_2025_Bookmarked.pdf
+    pool: blind
+    role: corporate
+
+  - id: alrajhi-2025-en
+    issuer: Al Rajhi Bank
+    country: SA
+    language: en
+    fiscal_year: 2025
+    period: annual
+    kind: annual_report
+    url: https://www.alrajhibank.com.sa/ir25/services/pdf/Al_Rajhi_Bank_AR2025_English.pdf
+    pool: blind
+    role: negative_control
+
+  - id: tawuniya-2025-en
+    issuer: Tawuniya
+    country: SA
+    language: en
+    fiscal_year: 2025
+    period: annual
+    kind: annual_report
+    url: https://www.tawuniya.com/docs/2025_Annual_Report_EN.pdf
+    pool: blind
+    role: negative_control
+
+  # ---- Model test: held-out issuers for scoring ----
+  - id: jarir-2025-en
+    issuer: Jarir Marketing
+    country: SA
+    language: en
+    fiscal_year: 2025
+    period: annual
+    kind: financial_statements
+    url: https://argaamplus.s3.amazonaws.com/46ee85d1-dd38-4906-8bc3-bf864f6c5392.pdf
+    pool: model_test
+    role: corporate
+
+  - id: jarir-ar
+    issuer: Jarir Marketing
+    country: SA
+    language: ar
+    fiscal_year: null
+    period: annual
+    kind: financial_statements
+    url: https://argaamplus.s3.amazonaws.com/64127480-9e15-49a3-9552-0ed0cd560abd.pdf
+    pool: model_test
+    role: corporate
+
+  - id: othaim-ar
+    issuer: Abdullah Al Othaim Markets
+    country: SA
+    language: ar
+    fiscal_year: null
+    period: null             # may be interim; confirm on fetch
+    kind: financial_statements
+    url: https://argaamplus.s3.amazonaws.com/68f606b6-1eff-4f4c-89b8-660b9175a0c4.pdf
+    pool: model_test
+    role: corporate
+
+  - id: electrical-industries-ar
+    issuer: Electrical Industries Company
+    country: SA
+    language: ar
+    fiscal_year: null
+    period: annual
+    kind: financial_statements
+    url: https://argaamplus.s3.amazonaws.com/7004a031-f1f9-42c0-87a3-029492199deb.pdf
+    pool: model_test
+    role: corporate
+
+  - id: aldar-2025-en
+    issuer: Aldar Properties
+    country: AE
+    language: en
+    fiscal_year: 2025
+    period: annual
+    kind: financial_statements
+    url: https://vazeno.files.cmp.optimizely.com/download/assets/English+Signed+FS+31+Dec+2025+-+Aldar+Properties+PJSC-vf.pdf/fc35b8142c2d11f19f9b4a3c2454f4e7
+    pool: model_test
+    role: corporate
+
+  - id: telecom-egypt-2025-ar
+    issuer: Telecom Egypt
+    country: EG
+    language: ar
+    fiscal_year: 2025
+    period: annual
+    kind: financial_statements
+    url: https://www.egx.com.eg/downloads/News/%D8%A7%D9%84%D9%85%D8%B5%D8%B1%D9%8A%D8%A9%20%D9%84%D9%84%D8%A7%D8%AA%D8%B5%D8%A7%D9%84%D8%A7%D8%AA%20%D8%A7%D9%84%D9%82%D9%88%D8%A7%D8%A6%D9%85%20%D8%A7%D9%84%D9%85%D8%A7%D9%84%D9%8A%D8%A9%20%D8%A7%D9%84%D9%85%D8%AC%D9%85%D8%B9%D8%A9%20%20%D8%A8%D8%A7%D9%84%D9%84%D8%BA%D8%A9%20%D8%A7%D9%84%D8%B9%D8%B1%D8%A8%D9%8A%D8%A9%2026-02-2026.pdf
+    pool: model_test
+    role: corporate
+
+  - id: ibnsina-2024-en
+    issuer: Ibnsina Pharma
+    country: EG
+    language: en
+    fiscal_year: 2024
+    period: annual
+    kind: financial_statements
+    url: https://s3.amazonaws.com/resources.inktankir.com/isph/IbnSina-Pharma-31DEC24-Cons-FSs-EN-Issued.pdf
+    pool: model_test
+    role: corporate
+
+  - id: credit-agricole-egypt-ar
+    issuer: Credit Agricole Egypt
+    country: EG
+    language: ar
+    fiscal_year: null
+    period: interim
+    kind: financial_statements
+    url: https://www.egx.com.eg/downloads/News/164235_090821.pdf
+    pool: model_test
+    role: negative_control
+
+  # ---- Train: source documents for training data ----
+  - id: nadec-ar
+    issuer: National Agricultural Development Company
+    country: SA
+    language: ar
+    fiscal_year: null
+    period: annual
+    kind: financial_statements
+    url: https://argaamplus.s3.amazonaws.com/2f5ab1df-24a9-4265-9564-8e8a9ba1b2de.pdf
+    pool: train
+    role: corporate
+
+  - id: aldawaa-ar
+    issuer: Al-Dawaa Medical Services
+    country: SA
+    language: ar
+    fiscal_year: null
+    period: annual
+    kind: financial_statements
+    url: https://argaamplus.s3.amazonaws.com/87989e07-9619-4da5-af39-71ead4f698de.pdf
+    pool: train
+    role: corporate
+
+  - id: jazan-development-ar
+    issuer: Jazan Development and Investment
+    country: SA
+    language: ar
+    fiscal_year: null
+    period: annual
+    kind: financial_statements
+    url: https://argaamplus.s3.amazonaws.com/a8ff06d5-e509-477e-ac92-450154c3ef8b.pdf
+    pool: train
+    role: corporate
+
+  - id: alkathiri-2025-ar
+    issuer: Al Kathiri Holding
+    country: SA
+    language: ar
+    fiscal_year: 2025
+    period: annual
+    kind: financial_statements
+    url: https://argaamplus.s3.amazonaws.com/c7b3ed04-7ffc-4299-acf2-2b35e54ad27f.pdf
+    pool: train
+    role: corporate
+
+  - id: arabian-drilling-ar
+    issuer: Arabian Drilling
+    country: SA
+    language: ar
+    fiscal_year: null
+    period: annual
+    kind: financial_statements
+    url: https://argaamplus.s3.amazonaws.com/712efce3-10ff-4a16-b697-518f22d748e3.pdf
+    pool: train
+    role: corporate
+
+  - id: eastern-company-2020q1-en
+    issuer: Eastern Company
+    country: EG
+    language: en
+    fiscal_year: 2020
+    period: interim
+    kind: financial_statements
+    url: https://www.easternegypt.com/wp-content/uploads/2020/06/Eastern-company-F.S-March-2020-English-final.pdf
+    pool: train
+    role: corporate
+
+  - id: lecico-2025q2-en
+    issuer: Lecico Egypt
+    country: EG
+    language: en
+    fiscal_year: 2025
+    period: interim
+    kind: financial_statements
+    url: https://www.lecicoegypt.com/uploads/reports/attachments/2q-2025-results-financial-statements-08142025124755.pdf
+    pool: train
+    role: corporate
+
+  - id: orascom-investment-2025-ar
+    issuer: Orascom Investment Holding
+    country: EG
+    language: ar
+    fiscal_year: 2025
+    period: annual
+    kind: financial_statements
+    url: https://www.egx.com.eg/downloads/News/%D8%A7%D9%88%D8%B1%D8%A7%D8%B3%D9%83%D9%88%D9%85%20%D9%84%D9%84%D8%A7%D8%B3%D8%AA%D8%AB%D9%85%D8%A7%D8%B1%20%D9%82%D9%88%D8%A7%D8%A6%D9%85%20%D9%85%D8%AC%D9%85%D8%B9%D8%A9%2031-12-2025.pdf
+    pool: train
+    role: corporate
+
+  - id: eipico-2025h1-ar
+    issuer: EIPICO
+    country: EG
+    language: ar
+    fiscal_year: 2025
+    period: interim
+    kind: financial_statements
+    url: https://www.egx.com.eg/downloads/News/%D9%82%D9%88%D8%A7%D8%A6%D9%85%20%D9%85%D8%B3%D8%AA%D9%82%D9%84%D8%A9%20%D8%A8%D8%A7%D9%84%D9%84%D8%BA%D8%A9%20%D8%A7%D9%84%D8%B9%D8%B1%D8%A8%D9%8A%D8%A9%2014-08-2025.PDF
+    pool: train
+    role: corporate
+
+  - id: arab-banking-corp-2025-ar
+    issuer: Arab Banking Corporation
+    country: BH
+    language: ar
+    fiscal_year: 2025
+    period: annual
+    kind: financial_statements
+    url: https://argaamplus.s3.amazonaws.com/32809b64-e5b0-4f5d-b6b7-d043b3e3083a.pdf
+    pool: train
+    role: negative_control
