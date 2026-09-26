@@ -111,3 +111,32 @@ def test_missing_robots_txt_allows_and_server_error_denies(monkeypatch: pytest.M
     polite = corpus.Politeness(delay_s=0)
     assert polite.allowed("https://allow.example/a.pdf")
     assert not polite.allowed("https://down.example/a.pdf")
+
+
+def test_unreachable_robots_reports_the_cause(monkeypatch: pytest.MonkeyPatch) -> None:
+    import ssl
+    import urllib.error
+
+    import corpus
+
+    def fake_urlopen(request: Any, timeout: float = 0) -> Any:
+        raise urllib.error.URLError(ssl.SSLCertVerificationError("CERTIFICATE_VERIFY_FAILED"))
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    polite = corpus.Politeness(delay_s=0)
+    url = "https://tls.example/a.pdf"
+    assert not polite.allowed(url)
+    assert "robots.txt unreachable" in polite.refusal(url)
+    assert "CERTIFICATE_VERIFY_FAILED" in polite.refusal(url)
+
+
+def test_failed_download_keeps_earlier_measurement() -> None:
+    from corpus import after_failure
+
+    prior = {"pool": "train", "sha256": "ab", "pages": 40, "status": "new"}
+    kept = after_failure(prior, {"pool": "train"}, "URLError: timed out")
+    assert kept["sha256"] == "ab" and kept["status"] == "new"
+    assert kept["last_error"] == "URLError: timed out"
+
+    fresh = after_failure(None, {"pool": "train"}, "URLError: timed out")
+    assert fresh == {"pool": "train", "status": "failed", "error": "URLError: timed out"}

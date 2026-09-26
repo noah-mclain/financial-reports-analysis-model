@@ -180,6 +180,9 @@ def main(argv: list[str] | None = None) -> int:
             'set FRA_SEC_USER_AGENT="Your Name you@example.com" (sec.gov policy)', file=sys.stderr
         )
         return 2
+    import truststore  # system trust store; see scripts/corpus.py use_system_trust
+
+    truststore.inject_into_ssl()
     pinned = pinned_ciks(yaml.safe_load(CANDIDATES.read_text(encoding="utf-8"))["documents"])
 
     total: Counter[str] = Counter()

@@ -32,6 +32,7 @@ dev = [
   "mypy>=1.18",
   "types-PyYAML>=6.0",
   "pypdfium2>=4.30",
+  "truststore>=0.10",
 ]
 
 [tool.ruff]

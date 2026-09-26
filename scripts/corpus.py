@@ -21,7 +21,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import urllib.robotparser
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -162,6 +162,7 @@ class Politeness:
     def __init__(self, delay_s: float = 1.0) -> None:
         self.delay_s = delay_s
         self._robots: dict[str, urllib.robotparser.RobotFileParser | None] = {}
+        self._why: dict[str, str] = {}
         self._last: dict[str, float] = {}
 
     def _wait(self, host: str) -> None:
@@ -187,11 +188,22 @@ class Politeness:
             except urllib.error.HTTPError as exc:
                 # 4xx: no robots.txt, so everything is allowed. 5xx: treat as disallowed.
                 parser = None if exc.code < 500 else _DENY_ALL
-            except OSError:
+                if parser is _DENY_ALL:
+                    self._why[host] = f"robots.txt returned HTTP {exc.code}"
+            except OSError as exc:
+                # Unreachable robots.txt means no permission (RFC 9309). Keep the cause: a TLS
+                # or proxy failure here is a local problem, not the site saying no.
                 parser = _DENY_ALL
+                reason = exc.reason if isinstance(exc, urllib.error.URLError) else exc
+                self._why[host] = f"robots.txt unreachable: {reason}"
             self._robots[host] = parser
         parser = self._robots[host]
         return parser is None or parser.can_fetch(USER_AGENT, url)
+
+    def refusal(self, url: str) -> str:
+        """Why `allowed` said no for this URL."""
+        parts = urllib.parse.urlsplit(url)
+        return self._why.get(f"{parts.scheme}://{parts.netloc}", "disallowed by robots.txt")
 
     def get(self, url: str) -> bytes:
         self._wait(urllib.parse.urlsplit(url).netloc)
@@ -207,12 +219,30 @@ _DENY_ALL.parse(["User-agent: *", "Disallow: /"])
 
 def download(url: str, dest: Path, polite: Politeness) -> None:
     if not polite.allowed(url):
-        raise PermissionError("disallowed by robots.txt, or robots.txt unreachable")
+        raise PermissionError(polite.refusal(url))
     data = polite.get(url)
     if not data.startswith(b"%PDF"):
         raise ValueError(f"not a PDF (starts with {data[:16]!r})")
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(data)
+
+
+def after_failure(
+    prior: dict[str, Any] | None, entry: dict[str, Any], error: str
+) -> dict[str, Any]:
+    """A failed download never erases facts measured by an earlier run (possibly on another
+    machine): the bytes behind the URL were already hashed and measured."""
+    if prior and "sha256" in prior:
+        return {**prior, "last_error": error}
+    return {**entry, "status": "failed", "error": error}
+
+
+def use_system_trust() -> None:
+    """Verify TLS against the operating system's trust store. uv's standalone Python does not
+    read the macOS keychain, so plain urllib fails every HTTPS request there."""
+    import truststore
+
+    truststore.inject_into_ssl()
 
 
 def load_yaml(path: Path) -> Any:
@@ -267,6 +297,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     )
     today = dt.date.today().isoformat()
     polite = Politeness()
+    failures: Counter[str] = Counter()
     for doc in documents:
         if args.pool and doc["pool"] != args.pool:
             continue
@@ -284,12 +315,18 @@ def cmd_fetch(args: argparse.Namespace) -> int:
             entry.update(measure(dest))
             entry["status"] = "new"
         except Exception as exc:  # recorded per document, the run continues
-            entry["status"] = "failed"
-            entry["error"] = f"{type(exc).__name__}: {exc}"
+            entry = after_failure(fetched.get(doc_id), entry, f"{type(exc).__name__}: {exc}")
         fetched[doc_id] = entry
-        print(
-            f"{doc_id:<32} {entry['status']:<8} {entry.get('text_layer', entry.get('error', ''))}"
-        )
+        problem = entry.get("error") or entry.get("last_error")
+        note = f"kept earlier measurement; {problem}" if entry.get("last_error") else problem
+        print(f"{doc_id:<32} {entry['status']:<8} {note or entry.get('text_layer', '')}")
+        if problem:
+            failures[problem] += 1
+
+    if failures:
+        print(f"\n{sum(failures.values())} downloads failed. Most common causes:", file=sys.stderr)
+        for cause, n in failures.most_common(3):
+            print(f"  {n:>4}  {cause}", file=sys.stderr)
 
     # Dedupe after the loop so the result does not depend on download order.
     by_hash: dict[str, list[str]] = defaultdict(list)
@@ -336,6 +373,7 @@ def main(argv: list[str] | None = None) -> int:
     fetch.add_argument("--force", action="store_true", help="download again even if present")
     fetch.set_defaults(func=cmd_fetch)
     args = parser.parse_args(argv)
+    use_system_trust()
     return int(args.func(args))
 
 
