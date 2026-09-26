@@ -88,3 +88,26 @@ def test_candidates_file_obeys_the_rules() -> None:
     golden_issuers, _ = golden_index()
     report = check(load_yaml(CANDIDATES)["documents"], golden_issuers)
     assert report.errors == []
+
+
+def test_assign_pool_is_stable_and_spreads() -> None:
+    from corpus import assign_pool
+
+    assert assign_pool("Savola Group") == assign_pool("The Savola Group Company")
+    pools = {assign_pool(f"Issuer {i}") for i in range(300)}
+    assert pools == {"train", "model_test", "blind"}
+
+
+def test_missing_robots_txt_allows_and_server_error_denies(monkeypatch: pytest.MonkeyPatch) -> None:
+    import urllib.error
+
+    import corpus
+
+    def fake_urlopen(request: Any, timeout: float = 0) -> Any:
+        code = 404 if "allow.example" in request.full_url else 503
+        raise urllib.error.HTTPError(request.full_url, code, "x", None, None)  # type: ignore[arg-type]
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    polite = corpus.Politeness(delay_s=0)
+    assert polite.allowed("https://allow.example/a.pdf")
+    assert not polite.allowed("https://down.example/a.pdf")

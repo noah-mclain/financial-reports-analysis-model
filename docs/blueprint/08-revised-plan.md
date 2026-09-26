@@ -82,7 +82,7 @@ Split by issuer, never by document (`eval/corpus/README.md`):
 
 | Source | Gives | Volume | Where it runs |
 |--------|-------|--------|---------------|
-| SEC Financial Statement Data Sets (`training/sources/sec_fsds.py`) | English line-item labels with their us-gaap tag, statement and filer | Millions of label rows, thousands of filers per quarter | Mac (sec.gov is blocked in the cloud environment) |
+| SEC Financial Statement Data Sets (`training/sources/sec_fsds.py`) | English line-item labels with their us-gaap tag, statement and filer | Thousands of filers per quarter; the largest source by far | Mac (sec.gov is blocked in the cloud environment) |
 | Saudi filings from the Argaam archive (English and Arabic editions per issuer) | Arabic labels aligned to English ones by value vectors; digital layouts | Hundreds of issuer-years | Cloud or Mac |
 | EGX filings | Scanned Arabic and English layouts, Egyptian terminology | Tens of issuers | Mac |
 | UAE, Kuwait, Qatar, UK, US reports | Layout variety for the pipeline eval | Tens | Mac |

@@ -16,7 +16,11 @@ import datetime as dt
 import hashlib
 import re
 import sys
+import time
+import urllib.error
+import urllib.parse
 import urllib.request
+import urllib.robotparser
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -141,10 +145,70 @@ def measure(path: Path) -> dict[str, Any]:
     }
 
 
-def download(url: str, dest: Path) -> None:
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=120) as response:
-        data = response.read()
+def assign_pool(issuer: str) -> str:
+    """Default pool for a new issuer: a stable hash of its key, 65% train, 20% model_test,
+    15% blind. Golden issuers are always dev. Explicit pools in candidates.yaml win."""
+    bucket = int(hashlib.sha256(issuer_key(issuer).encode()).hexdigest(), 16) % 100
+    if bucket < 65:
+        return "train"
+    if bucket < 85:
+        return "model_test"
+    return "blind"
+
+
+class Politeness:
+    """robots.txt per RFC 9309 and at most one request per second per host."""
+
+    def __init__(self, delay_s: float = 1.0) -> None:
+        self.delay_s = delay_s
+        self._robots: dict[str, urllib.robotparser.RobotFileParser | None] = {}
+        self._last: dict[str, float] = {}
+
+    def _wait(self, host: str) -> None:
+        elapsed = time.monotonic() - self._last.get(host, 0.0)
+        if elapsed < self.delay_s:
+            time.sleep(self.delay_s - elapsed)
+        self._last[host] = time.monotonic()
+
+    def allowed(self, url: str) -> bool:
+        parts = urllib.parse.urlsplit(url)
+        host = f"{parts.scheme}://{parts.netloc}"
+        if host not in self._robots:
+            self._wait(parts.netloc)
+            parser: urllib.robotparser.RobotFileParser | None = urllib.robotparser.RobotFileParser()
+            request = urllib.request.Request(
+                f"{host}/robots.txt", headers={"User-Agent": USER_AGENT}
+            )
+            try:
+                with urllib.request.urlopen(request, timeout=30) as response:
+                    lines = response.read().decode("utf-8", errors="replace").splitlines()
+                assert parser is not None
+                parser.parse(lines)
+            except urllib.error.HTTPError as exc:
+                # 4xx: no robots.txt, so everything is allowed. 5xx: treat as disallowed.
+                parser = None if exc.code < 500 else _DENY_ALL
+            except OSError:
+                parser = _DENY_ALL
+            self._robots[host] = parser
+        parser = self._robots[host]
+        return parser is None or parser.can_fetch(USER_AGENT, url)
+
+    def get(self, url: str) -> bytes:
+        self._wait(urllib.parse.urlsplit(url).netloc)
+        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(request, timeout=120) as response:
+            data: bytes = response.read()
+        return data
+
+
+_DENY_ALL = urllib.robotparser.RobotFileParser()
+_DENY_ALL.parse(["User-agent: *", "Disallow: /"])
+
+
+def download(url: str, dest: Path, polite: Politeness) -> None:
+    if not polite.allowed(url):
+        raise PermissionError("disallowed by robots.txt, or robots.txt unreachable")
+    data = polite.get(url)
     if not data.startswith(b"%PDF"):
         raise ValueError(f"not a PDF (starts with {data[:16]!r})")
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -202,6 +266,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         (load_yaml(FETCHED) or {}).get("documents", {}) if FETCHED.exists() else {}
     )
     today = dt.date.today().isoformat()
+    polite = Politeness()
     for doc in documents:
         if args.pool and doc["pool"] != args.pool:
             continue
@@ -210,7 +275,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         entry: dict[str, Any] = {"pool": doc["pool"]}
         try:
             if args.force or not dest.exists():
-                download(doc["url"], dest)
+                download(doc["url"], dest, polite)
                 entry["retrieved"] = today
             else:
                 entry["retrieved"] = fetched.get(doc_id, {}).get("retrieved", today)

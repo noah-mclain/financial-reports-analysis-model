@@ -37,7 +37,7 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["packages/*/src", "apps/*/src", "scripts"]
+src = ["packages/*/src", "apps/*/src", "scripts", "training/sources"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
@@ -63,7 +63,7 @@ testpaths = ["packages", "tests"]
 # Keep in sync with workspace members. uv marks editable .pth files hidden on macOS and
 # Python 3.11+ skips hidden .pth files, so tests set the paths directly.
 # `make unhide-pth` fixes it for scripts and `uv run python`.
-pythonpath = ["packages/core/src", "scripts"]
+pythonpath = ["packages/core/src", "scripts", "training/sources"]
 addopts = "-q --strict-markers"
 markers = [
   "slow: needs model weights or OCR, excluded from the default run",
