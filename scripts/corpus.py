@@ -356,7 +356,8 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         print(f"\n{sum(failures.values())} downloads failed. Most common causes:", file=sys.stderr)
         for cause, n in failures.most_common(3):
             print(f"  {n:>4}  {cause}", file=sys.stderr)
-        print("Run again to retry dropped connections.", file=sys.stderr)
+        if any(not refused(cause) for cause in failures):
+            print("Run again to retry dropped connections.", file=sys.stderr)
     if by_hand:
         print(
             "\nThese sites refuse automated downloads. Save each one from a browser to the path"
