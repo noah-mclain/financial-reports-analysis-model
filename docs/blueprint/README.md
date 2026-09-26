@@ -1,7 +1,7 @@
 # Financial Statement Analysis Platform: Blueprint
 
-Status: Draft v1, 2026-09-11
-Scope: English financial statements (v1). Arabic in Phase 4.
+Status: Draft v1, 2026-09-11. Revised 2026-09-26: see [08-revised-plan.md](08-revised-plan.md).
+Scope: English and Arabic financial statements, live on documents the tool has never seen.
 
 ## Goal
 
@@ -40,7 +40,8 @@ written analysis, all on a single Apple Silicon machine (M3 Pro, 18 GB unified m
 | [02-architecture.md](02-architecture.md) | Decisions, process topology, pipeline stages, data contract, taxonomy, metrics, grounding |
 | [03-repository-layout.md](03-repository-layout.md) | Complete monorepo tree with file responsibilities |
 | [04-execution-phases.md](04-execution-phases.md) | Production roadmap: phases 0 to 4 with tasks, interfaces and exit gates. Reference, not the current build |
-| [07-build-plan.md](07-build-plan.md) | **The plan being executed**: 18 days to 2026-09-30, scope, gates, demo sequence |
+| [07-build-plan.md](07-build-plan.md) | Superseded 18-day plan to 2026-09-30. Kept for the record |
+| [08-revised-plan.md](08-revised-plan.md) | **The plan being executed**: live demo on unseen documents by 2026-10-26, run profiles, data pools, gates |
 | [05-verification-and-test.md](05-verification-and-test.md) | Verification work packages (layout) and Test work packages (calculation accuracy) |
 | [06-decisions-and-risks.md](06-decisions-and-risks.md) | Owner decisions, risk register, repository hygiene |
 

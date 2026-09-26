@@ -1,6 +1,8 @@
 # 07. Build Plan: 18 Days
 
-This is the plan being executed. [04-execution-phases.md](04-execution-phases.md) remains the
+> Superseded on 2026-09-26 by [08-revised-plan.md](08-revised-plan.md). Kept for the record.
+
+This was the plan being executed. [04-execution-phases.md](04-execution-phases.md) remains the
 production roadmap and is not being built in full.
 
 **Target:** 2026-09-30. **Started:** 2026-09-12. Full days available.
