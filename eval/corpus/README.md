@@ -30,17 +30,21 @@ rule 2 again on the downloaded bytes.
 
 ## Current size
 
-Measured 2026-09-26 (`fetched.yaml`): 163 candidates from 115 issuers in Saudi Arabia, the UAE,
-Kuwait, Bahrain, Egypt, the UK and the US. 145 files downloaded and measured, 7,892 pages;
-3 byte-identical duplicates and 3 golden-issuer documents flagged. The other 18 sit on hosts
-this environment cannot reach and are fetched with `make corpus-fetch` elsewhere.
+Measured 2026-09-26 (`fetched.yaml`): 225 candidates from 142 issuers in Saudi Arabia, Egypt,
+the UAE, Kuwait, Bahrain, the UK and the US. 207 files downloaded and measured, 10,582 pages;
+4 byte-identical duplicates and 3 golden-issuer documents flagged. The other 18 sit on hosts
+this environment cannot reach (the Egyptian Exchange among them) and are fetched with
+`make corpus-fetch` elsewhere.
 
 | Pool | Issuers | Documents |
 |------|---------|-----------|
 | dev | 1 | 4 |
-| train | 67 | 88 |
-| model_test | 26 | 39 |
-| blind | 21 | 32 |
+| train | 84 | 128 |
+| model_test | 30 | 49 |
+| blind | 27 | 44 |
+
+Egypt: 45 candidates from 17 issuers, 11 of them scanned or mostly scanned (3 in `blind`,
+2 in `model_test`, 6 in `train`), on top of the 10 scanned filings in the golden set.
 
 English line-item volume comes from `make sec-fsds` (below), the largest source by far; its row
 counts are recorded here after the first run.
@@ -59,7 +63,10 @@ These change the ingest design, not just the dataset:
 4. **Arabic header digits can come out reversed.** One filing's date extracts as
    `13 ديسمبر 9132`, the day 31 reversed and the year unreadable, so period parsing needs a
    cross-check (the auditor's report date, other statements) for Arabic headers.
-5. **Many issuers publish both editions of the same statements.** Those pairs give aligned
+5. **Scanned pages can carry both languages at once.** An Egypt Kuwait Holding results form puts
+   Arabic and English labels side by side on one scanned page, with a stamp and signatures
+   over the figures (`bilingual_page`).
+6. **Many issuers publish both editions of the same statements.** Those pairs give aligned
    Arabic and English labels for training without hand annotation.
 
 ## Files
