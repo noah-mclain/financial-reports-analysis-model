@@ -73,13 +73,23 @@ documents:
     status: new
     text_layer: mixed
   agthia-2025-ar:
-    error: 'PermissionError: disallowed by robots.txt, or robots.txt unreachable'
+    bytes: 18458500
+    pages: 167
+    pages_without_text: 2
     pool: blind
-    status: failed
+    retrieved: '2026-09-27'
+    sha256: 8b85049ac59b38a4d5d1dde7c5d4b28c67614f3bb5c8a1475267bda53194fb5b
+    status: new
+    text_layer: mixed
   agthia-2025-en:
-    error: 'PermissionError: disallowed by robots.txt, or robots.txt unreachable'
+    bytes: 1656936
+    pages: 64
+    pages_without_text: 0
     pool: blind
-    status: failed
+    retrieved: '2026-09-27'
+    sha256: bc654bad0db6b3a08f73e76c0f1dfa029fa26d71b5f8fc10fa50917a5a1f2622
+    status: new
+    text_layer: digital
   al-andalus-property-2025-en-interim:
     bytes: 823274
     pages: 18
@@ -171,9 +181,14 @@ documents:
     status: new
     text_layer: mixed
   aldar-2025-en:
-    error: 'PermissionError: disallowed by robots.txt, or robots.txt unreachable'
+    bytes: 2219573
+    pages: 134
+    pages_without_text: 0
     pool: model_test
-    status: failed
+    retrieved: '2026-09-27'
+    sha256: b002b1ec31e66489e6dc8d3c345f5474eae7e464814ed9b89b24bf0cf7679dcf
+    status: new
+    text_layer: digital
   alf-meem-yaa-medical-supplies-2025-en-interim:
     bytes: 1377554
     pages: 19
@@ -211,9 +226,14 @@ documents:
     status: existing_issuer
     text_layer: mixed
   alrajhi-2025-en:
-    error: 'PermissionError: disallowed by robots.txt, or robots.txt unreachable'
+    bytes: 9802593
+    pages: 432
+    pages_without_text: 2
     pool: blind
-    status: failed
+    retrieved: '2026-09-27'
+    sha256: d12f9a719295028e7c65e86fd1421a0690be6ca4b4033d8eacccfc3d3b7a9b3c
+    status: new
+    text_layer: mixed
   arab-banking-corporation-2025-ar:
     bytes: 2448155
     pages: 92
@@ -459,9 +479,14 @@ documents:
     status: new
     text_layer: mixed
   credit-agricole-egypt-ar:
-    error: 'PermissionError: disallowed by robots.txt, or robots.txt unreachable'
+    bytes: 1719604
+    pages: 41
+    pages_without_text: 0
     pool: model_test
-    status: failed
+    retrieved: '2026-09-27'
+    sha256: c35346f3970579199ac4abae362ae65aa1a072882c15847b83fef3291d244460
+    status: new
+    text_layer: digital
   dallah-healthcare-2024-ar:
     bytes: 2638958
     pages: 59
@@ -535,9 +560,14 @@ documents:
     status: new
     text_layer: mixed
   eastern-company-2020q1-en:
-    error: 'PermissionError: disallowed by robots.txt, or robots.txt unreachable'
+    bytes: 743991
+    pages: 43
+    pages_without_text: 0
     pool: train
-    status: failed
+    retrieved: '2026-09-27'
+    sha256: 91d0f3df467850716df92c71430ea05712ed389800e2f8a175fe962de92ce3d4
+    status: new
+    text_layer: digital
   eastern-province-cement-2017-ar:
     bytes: 1842724
     pages: 38
@@ -602,9 +632,14 @@ documents:
     status: new
     text_layer: scanned
   eipico-2025h1-ar:
-    error: 'PermissionError: disallowed by robots.txt, or robots.txt unreachable'
+    bytes: 1097399
+    pages: 39
+    pages_without_text: 7
     pool: train
-    status: failed
+    retrieved: '2026-09-27'
+    sha256: 4d9df04340bd5f1e41a05cd63e1da9af2bf91d98c83d4310424f5ad3e59b0f76
+    status: new
+    text_layer: mixed
   electrical-industries-company-2019-ar:
     bytes: 2492985
     pages: 55
@@ -660,9 +695,14 @@ documents:
     status: new
     text_layer: mixed
   emaar-2025-en:
-    error: 'PermissionError: disallowed by robots.txt, or robots.txt unreachable'
+    bytes: 2055550
+    pages: 77
+    pages_without_text: 1
     pool: blind
-    status: failed
+    retrieved: '2026-09-27'
+    sha256: 202b14f6198a9f07a83398e131d330329cd79c20c1b48bf81fdfca8e368f4f4e
+    status: new
+    text_layer: mixed
   emaar-the-economic-city-2022-en-interim:
     bytes: 1093936
     pages: 34
@@ -727,9 +767,14 @@ documents:
     status: new
     text_layer: mixed
   gadwa-ar-standalone:
-    error: 'PermissionError: disallowed by robots.txt, or robots.txt unreachable'
+    bytes: 1734150
+    pages: 32
+    pages_without_text: 4
     pool: blind
-    status: failed
+    retrieved: '2026-09-27'
+    sha256: 2a95cf17a246c2192eda995280ab5a4d240131b84a7d0c99c3c2f07c442a079b
+    status: new
+    text_layer: mixed
   gas-arabian-services-2025-en-interim:
     bytes: 1226524
     pages: 18
@@ -749,9 +794,14 @@ documents:
     status: new
     text_layer: digital
   general-mills-2025-en:
-    error: 'PermissionError: disallowed by robots.txt, or robots.txt unreachable'
+    bytes: 1423106
+    pages: 100
+    pages_without_text: 2
     pool: blind
-    status: failed
+    retrieved: '2026-09-27'
+    sha256: b6c75e29b87fafd33fdeac52eaa2f88b53fa3f312f35aeabd252f758254e9f6e
+    status: new
+    text_layer: mixed
   ghitha-holding-2025-ar-interim:
     bytes: 1136226
     pages: 41
@@ -802,7 +852,7 @@ documents:
     pages: 38
     pages_without_text: 5
     pool: model_test
-    retrieved: '2026-09-26'
+    retrieved: '2026-09-27'
     sha256: 032616a1300c81f97e4d83389398cd24245ed8f03e92a562c48999908c3ec2bb
     status: new
     text_layer: mixed
@@ -970,9 +1020,14 @@ documents:
     status: new
     text_layer: mixed
   lecico-2025q2-en:
-    error: 'PermissionError: disallowed by robots.txt, or robots.txt unreachable'
+    bytes: 2055943
+    pages: 65
+    pages_without_text: 2
     pool: train
-    status: failed
+    retrieved: '2026-09-27'
+    sha256: 130b2595f5eb408dc615e1cf7f473cbca514f3e580f4a360bb8d399a067cd128
+    status: new
+    text_layer: mixed
   luberef-2024-en:
     bytes: 858883
     pages: 50
@@ -996,7 +1051,7 @@ documents:
     pages: 113
     pages_without_text: 6
     pool: train
-    retrieved: '2026-09-26'
+    retrieved: '2026-09-27'
     sha256: a4dfb3da20eb87ee8ee11778fdd79d7290586af02649d08b2ca14dbeb8407ba3
     status: new
     text_layer: mixed
@@ -1077,7 +1132,7 @@ documents:
     pages: 57
     pages_without_text: 4
     pool: train
-    retrieved: '2026-09-26'
+    retrieved: '2026-09-27'
     sha256: 5e92074cfa688f22f78e826beae1bdd48a820f3682d07d246ae16a625964a110
     status: new
     text_layer: mixed
@@ -1122,7 +1177,7 @@ documents:
     pages: 34
     pages_without_text: 2
     pool: train
-    retrieved: '2026-09-26'
+    retrieved: '2026-09-27'
     sha256: 4532fb0493a208661bbd3f73b5cb37fb5ea30e78113a1c49c04ab929a71acc65
     status: new
     text_layer: mixed
@@ -1176,7 +1231,7 @@ documents:
     pages: 14
     pages_without_text: 1
     pool: train
-    retrieved: '2026-09-26'
+    retrieved: '2026-09-27'
     sha256: a15b579ec112c27580acd5be3dae76b0a7ae42c08cc7cac13b0ed658befbec0a
     status: new
     text_layer: mixed
@@ -1217,13 +1272,23 @@ documents:
     status: new
     text_layer: mixed
   orascom-construction-2025-en:
-    error: 'PermissionError: disallowed by robots.txt, or robots.txt unreachable'
+    bytes: 1674617
+    pages: 53
+    pages_without_text: 3
     pool: blind
-    status: failed
+    retrieved: '2026-09-27'
+    sha256: 2dab0bba9051597a1e0726ba50e247370ff552d5e671a32cc9a9bca1b3518d85
+    status: new
+    text_layer: mixed
   orascom-investment-2025-ar:
-    error: 'PermissionError: disallowed by robots.txt, or robots.txt unreachable'
+    bytes: 1200739
+    pages: 23
+    pages_without_text: 3
     pool: train
-    status: failed
+    retrieved: '2026-09-27'
+    sha256: de7984449fa05f684d91008bb3490fa3afcf7cb1c7823738f7c7ca93fcf63318
+    status: new
+    text_layer: mixed
   orient-takaful-2025-ar:
     bytes: 2351077
     pages: 69
@@ -1256,7 +1321,7 @@ documents:
     pages: 29
     pages_without_text: 4
     pool: train
-    retrieved: '2026-09-26'
+    retrieved: '2026-09-27'
     sha256: e0c2a7fa080c2eb288f48eaed802eacefb5f72883d49190cfc9979b5d8b09071
     status: new
     text_layer: mixed
@@ -1346,7 +1411,7 @@ documents:
     pages: 16
     pages_without_text: 6
     pool: train
-    retrieved: '2026-09-26'
+    retrieved: '2026-09-27'
     sha256: 163b1c64443ab62a33bc97da24f3e819c3210d6b0d41aabb68bd6f46ad6c8ba5
     status: new
     text_layer: mixed
@@ -1641,9 +1706,14 @@ documents:
     status: new
     text_layer: digital
   savola-2025-en:
-    error: 'PermissionError: disallowed by robots.txt, or robots.txt unreachable'
+    bytes: 5518267
+    pages: 113
+    pages_without_text: 10
     pool: blind
-    status: failed
+    retrieved: '2026-09-27'
+    sha256: 5d6f64aa1d953b5057b0a6236135364ced2b0bc405fc041a77213ab4322b9a72
+    status: new
+    text_layer: mixed
   seera-holding-2022-en-interim:
     bytes: 2046732
     pages: 34
@@ -1807,17 +1877,32 @@ documents:
     status: new
     text_layer: mixed
   tawuniya-2025-en:
-    error: 'PermissionError: disallowed by robots.txt, or robots.txt unreachable'
+    bytes: 20139113
+    pages: 149
+    pages_without_text: 1
     pool: blind
-    status: failed
+    retrieved: '2026-09-27'
+    sha256: fce6dcdf382f3a476a1eb5b2e0dee0200a1791f6d5d5ae2d7b44946464f06d75
+    status: new
+    text_layer: mixed
   telecom-egypt-2025-ar:
-    error: 'PermissionError: disallowed by robots.txt, or robots.txt unreachable'
+    bytes: 1458412
+    pages: 59
+    pages_without_text: 3
     pool: model_test
-    status: failed
+    retrieved: '2026-09-27'
+    sha256: 48576bf760f02717b5ef47f8d0677cfae7589a59585c0b7abf6748e9c0ec5f1b
+    status: new
+    text_layer: mixed
   tesco-2025-en:
-    error: 'PermissionError: disallowed by robots.txt, or robots.txt unreachable'
+    bytes: 8406667
+    pages: 248
+    pages_without_text: 0
     pool: blind
-    status: failed
+    retrieved: '2026-09-27'
+    sha256: 016e77082da46c0cf319d80aa589af936452b215c7bf447d145f5866311be52c
+    status: new
+    text_layer: digital
   united-electronics-2021-ar-interim:
     bytes: 1183927
     pages: 17
