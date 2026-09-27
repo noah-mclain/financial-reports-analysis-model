@@ -1,0 +1,25 @@
+# Ingest settings. Every key maps to a field of fra_ingest.config.IngestConfig.
+
+[statements]
+# Detected always. Converted only when enabled. Move a type from optional to enabled to add it.
+enabled = ["balance", "income", "comprehensive_income"]
+optional = ["cash_flow", "equity"]
+
+[text]
+# Fewer non-whitespace characters than this in the text layer makes a page an image page.
+min_text_chars = 50
+# Top share of the page treated as its header, where statement titles are printed.
+header_fraction = 0.35
+
+[ocr]
+# Accurate mode only. 72 dpi reads a scanned page in about 0.25 s once the model is loaded.
+dpi = 72
+languages = ["ar-SA", "en-US"]
+
+[locate]
+pad_pages = 1
+# Candidate pages above this share of the document raise the low_selectivity flag.
+low_selectivity_share = 0.25
+
+[artifacts]
+root = "var/artifacts"
