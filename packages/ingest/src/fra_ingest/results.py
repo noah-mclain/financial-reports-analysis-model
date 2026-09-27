@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from fra_core.schemas import PageMode, TextSource
+from fra_core.schemas import PageMode, StatementType, TextSource
 
 
 class PageText(BaseModel):
@@ -37,3 +37,25 @@ class PageText(BaseModel):
     @property
     def text(self) -> str:
         return f"{self.header_text}\n{self.body_text}"
+
+
+class PageScore(BaseModel):
+    """Evidence that a page holds each statement type, kept for review and tuning."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    page_no: int = Field(ge=1)
+    type_scores: dict[StatementType, float]
+    title_types: list[StatementType] = Field(default_factory=list)
+    cue_types: list[StatementType] = Field(
+        default_factory=list, description="Only filled when the header carries no title"
+    )
+    title_hits: list[str] = Field(default_factory=list)
+    numeric_tokens: int = Field(default=0, ge=0)
+    structure: list[str] = Field(default_factory=list)
+    negatives: list[str] = Field(default_factory=list)
+    continuation: bool = False
+
+    def is_candidate(self, statement_type: StatementType, threshold: float = 4.5) -> bool:
+        named = statement_type in self.title_types or statement_type in self.cue_types
+        return named and self.type_scores.get(statement_type, 0.0) >= threshold
