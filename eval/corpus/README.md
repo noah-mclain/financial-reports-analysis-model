@@ -24,6 +24,9 @@ pools so that no score is measured on something the code or the model has alread
    the document moves to `dev` and is replaced in `blind`.
 4. **Banks and insurers are `negative_control`.** They are in scope only as documents the tool
    must decline with a reason.
+5. **`model_test` and `blind` freeze at the first model_test evaluation.** After that only
+   `train` grows, and only to close a gap an evaluation measured (for example, too few Arabic
+   examples of a critical item). Scores from different weeks stay comparable.
 
 `make corpus-check` enforces rules 1 and 2 on `candidates.yaml`. `make corpus-fetch` enforces
 rule 2 again on the downloaded bytes.
@@ -45,10 +48,15 @@ saved from a browser to the paths `make corpus-fetch` prints, then measured.
 | dev | 1 | 3 |
 | train | 84 | 128 |
 | model_test | 30 | 49 |
-| blind | 27 | 44 |
+| blind | 30 | 49 |
 
 Egypt: 45 documents from 21 issuers, 11 of them scanned or mostly scanned (3 in `blind`,
 2 in `model_test`, 6 in `train`), on top of the 10 scanned filings in the golden set.
+
+Blind top-up, 2026-09-27: five Arabic Egyptian Exchange filings from Talaat Moustafa, Golden
+Tex Wool, Ferchem Misr and Gadwa, so the demo pool holds the hardest realistic case (Arabic,
+likely scanned, Egyptian terminology). They are `verified: false` until fetched from a
+browser and measured, which brings the total to 229 documents from 145 issuers.
 
 English line-item volume comes from `make sec-fsds` (below), the largest source by far; its row
 counts are recorded here after the first run.
