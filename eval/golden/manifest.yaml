@@ -81,7 +81,12 @@ documents:
     scale: unconfirmed
     pages: 62
     text_layer: scanned
-    statement_pages: null
+    statement_pages:  # labelled blind from the OCR sheet, then reconciled
+      financial_position: [5, 5]
+      profit_or_loss: [6, 6]
+      comprehensive_income: [7, 7]
+      changes_in_equity: [8, 8]
+      cash_flows: [9, 9]
     traits: [scanned, arabic_indic_digits, space_thousands_separator, egyptian_terminology, signed_filing]
     source_url: https://www.juhayna.com/app/uploads/2026/03/القوائم-الماليه-المستقلة-31-ديسمبر-2025.pdf
     retrieved: 2026-09-12
@@ -102,7 +107,12 @@ documents:
     scale: unconfirmed
     pages: 64
     text_layer: scanned
-    statement_pages: null
+    statement_pages:  # labelled blind from the OCR sheet, then reconciled
+      financial_position: [5, 5]
+      profit_or_loss: [6, 6]
+      comprehensive_income: [7, 7]
+      changes_in_equity: [8, 8]
+      cash_flows: [9, 9]
     traits: [scanned, arabic_indic_digits, space_thousands_separator, egyptian_terminology, signed_filing]
     source_url: https://www.juhayna.com/app/uploads/2026/03/القوائم-الماليه-المجمعه-31-ديسمبر-2025.pdf
     retrieved: 2026-09-12
@@ -122,7 +132,12 @@ documents:
     scale: unconfirmed
     pages: 59
     text_layer: mixed      # front matter and auditor pages scanned, later pages carry text
-    statement_pages: null
+    statement_pages:  # labelled blind from the OCR sheet, then reconciled
+      financial_position: [5, 5]
+      profit_or_loss: [6, 6]
+      comprehensive_income: [7, 7]
+      changes_in_equity: [8, 8]
+      cash_flows: [9, 9]
     traits: [mixed_mode, english_translation_of_arabic_original, signed_filing]
     source_url: https://www.juhayna.com/app/uploads/2026/03/JFI-English-Cons-FS-YE-2025.pdf
     retrieved: 2026-09-12
@@ -142,7 +157,12 @@ documents:
     scale: unconfirmed
     pages: 59
     text_layer: scanned
-    statement_pages: null
+    statement_pages:  # labelled blind from the OCR sheet, then reconciled
+      financial_position: [5, 5]
+      profit_or_loss: [6, 6]
+      comprehensive_income: [7, 7]
+      changes_in_equity: [8, 8]
+      cash_flows: [9, 9]
     traits: [scanned, arabic_indic_digits, prior_year_of_juhayna_2025, signed_filing]
     source_url: https://www.juhayna.com/app/uploads/2025/11/1743085131_556_1911930_4q24consarabic-2.pdf
     retrieved: 2026-09-12
@@ -162,7 +182,12 @@ documents:
     scale: unconfirmed
     pages: 57
     text_layer: scanned
-    statement_pages: null
+    statement_pages:  # labelled blind from the OCR sheet, then reconciled
+      financial_position: [5, 5]
+      profit_or_loss: [6, 6]
+      comprehensive_income: [7, 7]
+      changes_in_equity: [8, 8]
+      cash_flows: [9, 9]
     traits: [scanned, prior_year_of_juhayna_2025, signed_filing]
     source_url: https://www.juhayna.com/app/uploads/2025/11/1743085084_825_2594178_4q24consenglish-2.pdf
     retrieved: 2026-09-12
@@ -182,7 +207,12 @@ documents:
     scale: unconfirmed
     pages: 63
     text_layer: scanned
-    statement_pages: null
+    statement_pages:  # labelled blind from the OCR sheet, then reconciled
+      financial_position: [5, 5]
+      profit_or_loss: [6, 6]
+      comprehensive_income: [7, 7]
+      changes_in_equity: [8, 8]
+      cash_flows: [9, 9]
     traits: [scanned, arabic_indic_digits, egyptian_terminology, signed_filing, second_issuer]
     source_url: https://irfiles.technologyverse.com/efid/Edita-consolidated-Arabic-Signed-FY25-4-.pdf
     retrieved: 2026-09-12
@@ -202,7 +232,12 @@ documents:
     scale: unconfirmed
     pages: 66
     text_layer: scanned
-    statement_pages: null
+    statement_pages:  # labelled blind from the OCR sheet, then reconciled
+      financial_position: [5, 5]
+      profit_or_loss: [6, 6]
+      comprehensive_income: [7, 7]
+      changes_in_equity: [8, 8]
+      cash_flows: [9, 9]
     traits: [scanned, pairs_with_edita-2025-ar-consolidated, signed_filing]
     source_url: https://irfiles.technologyverse.com/efid/Edita-consolidated-English-Signed-FY25.pdf
     retrieved: 2026-09-12
@@ -222,7 +257,12 @@ documents:
     scale: unconfirmed
     pages: 85
     text_layer: scanned
-    statement_pages: null
+    statement_pages:  # labelled blind from the OCR sheet, then reconciled
+      financial_position: [8, 8]
+      profit_or_loss: [9, 9]
+      comprehensive_income: [10, 10]
+      changes_in_equity: [11, 12]
+      cash_flows: [13, 14]
     traits: [scanned, same_company_two_frameworks, signed_filing]
     source_url: https://irfiles.technologyverse.com/efid/Edita-Food-Industries-FY-2025-IFRS.pdf
     retrieved: 2026-09-12
@@ -243,7 +283,12 @@ documents:
     scale: unconfirmed
     pages: 61
     text_layer: scanned
-    statement_pages: null
+    statement_pages:  # labelled blind from the OCR sheet, then reconciled
+      financial_position: [5, 5]
+      profit_or_loss: [6, 6]
+      comprehensive_income: [7, 7]
+      changes_in_equity: [8, 8]
+      cash_flows: [9, 9]
     traits: [scanned, arabic_indic_digits, prior_year_of_edita_2025, signed_filing]
     source_url: https://irfiles.technologyverse.com/efid/Edita-Consolidated-FS-EAS-A.pdf
     retrieved: 2026-09-12
