@@ -71,7 +71,7 @@ package imports on Linux.
 |--------|----------------|
 | `config.py` | `IngestConfig` loaded from `configs/ingest.toml`: enabled and optional statement types, `min_text_chars` (50), `ocr_dpi` (72), `ocr_languages` (`["ar-SA", "en-US"]`), `pad_pages` (1), `header_fraction` (0.35), `low_selectivity_share` (0.25), artifact root (`var/artifacts`) |
 | `errors.py` | `IngestError(reason)` with reasons `unreadable_pdf`, `encrypted_pdf` and `empty_pdf` |
-| `ocr.py` | `OcrEngine` protocol: `recognize(image, languages) -> list[OcrLine]`, where `OcrLine` has text, bbox in page fraction and confidence. `VisionOcr` uses accurate mode only |
+| `ocr.py` | `OcrEngine` protocol: `recognize(image, languages) -> list[OcrLine]`, where `OcrLine` has text, bbox in page fraction and confidence. `VisionOcr` uses accurate mode only. `read_with_fallback` reads in each configured language in turn until the result is in that language's script (R21) |
 | `pages.py` | `read_pages(pdf, config, ocr) -> list[PageText]`, the page text cache, and `profiles(pages) -> list[PageProfile]` for `Document` |
 | `data/statement_titles.yaml` | Per type: English and Arabic titles, Gulf and Egyptian variants, continuation cues. Structural cues shared by all statements: period headers, the note column header, currency and scale lines. Negative cues for auditor's reports, contents pages and notes |
 | `data/industry_cues.yaml` | Per sector and sub-sector: English and Arabic cues with weights, and corporate phrases that must not count (`cash and bank balances`, `prepaid insurance`) |
@@ -263,7 +263,7 @@ sub-sector. Development runs use `dev` and `train`. `model_test` runs at checkpo
 | `sector: bank` or `insurer` documents given that verdict, `train` (6 documents) | all 6 |
 | Corporate documents marked bank or insurer, `train` | at most 2 |
 | Time, digital annual report | under 10 s |
-| Time, 64-page scanned filing, OCR model loaded | under 30 s |
+| Time, 64-page scanned filing, OCR model loaded | under 30 s (Arabic); about 30 s for English, which needs two reads per page (R21) |
 
 ## Labelling the scanned golden documents
 
@@ -289,7 +289,7 @@ against them, because `statement_pages` is an answer key and never an input (08,
 
 | ID | Risk | Mitigation |
 |----|------|------------|
-| R21 | Vision's result depends on the order of the language list, degrading one script when both are given | Measured in the first plan task: an English and an Arabic scan, each read with both language orders. If both orders read cleanly, one pass with both languages stays. If one degrades, a 36 dpi pass guesses each page's script and the full pass puts that language first |
+| R21 | Vision's result depends on the order of the language list | Measured 2026-09-27 on 24 pages of Juhayna and Edita scans: Vision reads only in the first language given. English first scores 0.00 to 0.17 on Arabic pages; Arabic first scores 0.13 to 0.99 on English pages; each language first scores 1.000 on its own script. A 36 dpi guessing pass recognises almost nothing, so it is not used. Instead each image page is read in Arabic first and read again in English when the Arabic read holds fewer than 10 Arabic letters (English pages gave 0 to 5, Arabic pages 798 to 1,338). Owner's decision. English scans cost two reads per page, about 0.45 s |
 | R22 | Statement titles appear in only one language on bilingual pages, or as images | Structural cues (period header, note column, currency and scale line) score the page without its title, alongside numeric density and continuation. The eval shows every miss with its page scores |
 | R23 | Label suggestions bias the owner toward the same pages the locator would find | Blind labelling first, suggestions shown only afterwards as a list of disagreements to settle |
 | R24 | Text layers return Arabic lines with words reversed (77 of 82), letters reversed (Almarai AR) or ligatures swapped | Two reading orders, per-page letter restoration and lam-alef folding when matching (see above). Part 3 repairs labels properly |
