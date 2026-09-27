@@ -1,0 +1,2022 @@
+# Written by scripts/corpus.py fetch. Measured facts; do not edit by hand.
+documents:
+  abdullah-al-othaim-markets-2026-ar-interim:
+    bytes: 2470937
+    pages: 23
+    pages_without_text: 7
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 1d516536d72f747863e3c623705e2824ed106607d83756d54d399780a6c04510
+    status: new
+    text_layer: mixed
+  abu-dhabi-commercial-bank-2024-ar:
+    bytes: 3327341
+    pages: 140
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: ebe57d43d35a20a85111ad546f15260b36f8b85288cebaee34df2cbcfc199004
+    status: new
+    text_layer: mixed
+  ades-holding-2023-ar-interim:
+    bytes: 1434055
+    pages: 38
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 16a325bd2fc3cafc95a5dc8475717af7f2a2c496e4fe7c0290a1c2ae872eec06
+    status: new
+    text_layer: mixed
+  advanced-building-industries-2025-en:
+    bytes: 2891129
+    pages: 72
+    pages_without_text: 4
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: a592c67df5488864ad15f58b847e14e93ee3b718d9037a14616229697b650652
+    status: new
+    text_layer: mixed
+  advanced-building-industries-2026-en-interim:
+    bytes: 1445323
+    pages: 25
+    pages_without_text: 5
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 2bab28e822ee97e8aeb1ead663bdd539e833ec43c4c992357a92199061e13278
+    status: new
+    text_layer: mixed
+  advanced-petrochemical-2024-ar-interim:
+    bytes: 507268
+    pages: 16
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 4bc3987e6e188a31d482e4ca15ac86bbf0c217ea81db539c5c06626035b5c567
+    status: new
+    text_layer: mixed
+  advanced-petrochemical-2024-en:
+    bytes: 2293918
+    pages: 60
+    pages_without_text: 12
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 0366da79d0d332bb34490d0b0e29b43e677696217b050c37edef5a6a302dd66c
+    status: new
+    text_layer: mixed
+  advanced-petrochemical-2025-en:
+    bytes: 2243201
+    pages: 64
+    pages_without_text: 9
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: e1a18376cf05fde2f05c470468c5030c20d78504ba70c02665783857b6cc94e1
+    status: new
+    text_layer: mixed
+  agthia-2025-ar:
+    bytes: 18458500
+    pages: 167
+    pages_without_text: 2
+    pool: blind
+    retrieved: '2026-09-27'
+    sha256: 8b85049ac59b38a4d5d1dde7c5d4b28c67614f3bb5c8a1475267bda53194fb5b
+    status: new
+    text_layer: mixed
+  agthia-2025-en:
+    bytes: 1656936
+    pages: 64
+    pages_without_text: 0
+    pool: blind
+    retrieved: '2026-09-27'
+    sha256: bc654bad0db6b3a08f73e76c0f1dfa029fa26d71b5f8fc10fa50917a5a1f2622
+    status: new
+    text_layer: digital
+  al-andalus-property-2025-en-interim:
+    bytes: 823274
+    pages: 18
+    pages_without_text: 5
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 023cf8df3377528f8a3e115dece6e0fe21000cec424c9aad2e7a885656d6a8f1
+    status: new
+    text_layer: mixed
+  al-babtain-power-and-telecommunications-2025-en-interim:
+    bytes: 3065254
+    pages: 24
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: ea62f6fa7d4c85299e97712b8284643f2dd88d9dcc452d6cd9f3837d84a72ea3
+    status: new
+    text_layer: mixed
+  al-dawaa-medical-services-2019-ar:
+    bytes: 1739945
+    pages: 53
+    pages_without_text: 2
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: a7e11d74a3f3d9c0460f808c310b338098aa560d07d3c6dce58cd01740c7b5fc
+    status: new
+    text_layer: mixed
+  al-dawaa-medical-services-2023-ar-interim:
+    bytes: 1247567
+    pages: 18
+    pages_without_text: 7
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: aba5c436ab3b3303745d21c26844e6c7b8e4d0ae8460a53855c067c6f7eb11f5
+    status: new
+    text_layer: mixed
+  al-dawaa-medical-services-2025-ar-interim:
+    bytes: 2406377
+    pages: 20
+    pages_without_text: 6
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: bbe1a2f5dc5cfbe3ae85628d6eee62e14c6b2cc883af564c97589aa85ddea4cc
+    status: new
+    text_layer: mixed
+  al-dawaa-medical-services-2025-en-interim:
+    bytes: 1005027
+    pages: 20
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 6fe5c6129593dff0cf4a4bb94161ee770073ff6dc19060e538da2040c0723934
+    status: new
+    text_layer: digital
+  al-jouf-cement-2024-ar-interim:
+    bytes: 2609845
+    pages: 19
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 6505c2ecc716082f896a7eb262499741b826a2df6e48caf40fd9612556d90378
+    status: new
+    text_layer: mixed
+  al-kathiri-holding-na-ar:
+    bytes: 2225532
+    pages: 39
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: c1a0f63daa1a1db520652d89f42d6c5096c240827aadbd050bd2be8876c1d00b
+    status: new
+    text_layer: digital
+  al-munajem-foods-2026-ar-interim:
+    bytes: 1138701
+    pages: 25
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 0c2494b1f5244dfdb41cf7df32e487ae2042dc6b20cc9cc072ea20d268f92f74
+    status: new
+    text_layer: mixed
+  al-sorayai-trading-and-industrial-group-na-ar:
+    bytes: 1146915
+    pages: 63
+    pages_without_text: 4
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 7c1b5da9d93a865ccd94b9237bc3f97b9529feda6068f303a46fdaa8a418154c
+    status: new
+    text_layer: mixed
+  aldar-2025-en:
+    bytes: 2219573
+    pages: 134
+    pages_without_text: 0
+    pool: model_test
+    retrieved: '2026-09-27'
+    sha256: b002b1ec31e66489e6dc8d3c345f5474eae7e464814ed9b89b24bf0cf7679dcf
+    status: new
+    text_layer: digital
+  alf-meem-yaa-medical-supplies-2025-en-interim:
+    bytes: 1377554
+    pages: 19
+    pages_without_text: 3
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 3739c85c6251ccb7cb99c47b490b936371311433fae492af76e749fd4d9f7d0c
+    status: new
+    text_layer: mixed
+  almarai-company-2022-ar:
+    bytes: 3185774
+    pages: 65
+    pages_without_text: 0
+    pool: dev
+    retrieved: '2026-09-26'
+    sha256: 6834ce59d4cb968afbdc0f7a167a4b264c66082dc5c892ca7ef1fad17463e39c
+    status: existing_issuer
+    text_layer: digital
+  almarai-company-2023-ar:
+    bytes: 4075835
+    pages: 62
+    pages_without_text: 6
+    pool: dev
+    retrieved: '2026-09-26'
+    sha256: 388a8fa48c1ef56a38309fc98b49717ea5339a4a4b32fcb1c1ce8e144a97d74c
+    status: existing_issuer
+    text_layer: mixed
+  almarai-company-2025-ar:
+    bytes: 2053786
+    pages: 56
+    pages_without_text: 6
+    pool: dev
+    retrieved: '2026-09-26'
+    sha256: 1507325b509b6a326bdb5ab8eb94fd531d8235f027eef902fbc062d31881fd8d
+    status: existing_issuer
+    text_layer: mixed
+  alrajhi-2025-en:
+    bytes: 9802593
+    pages: 432
+    pages_without_text: 2
+    pool: blind
+    retrieved: '2026-09-27'
+    sha256: d12f9a719295028e7c65e86fd1421a0690be6ca4b4033d8eacccfc3d3b7a9b3c
+    status: new
+    text_layer: mixed
+  arab-banking-corporation-2025-ar:
+    bytes: 2448155
+    pages: 92
+    pages_without_text: 8
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: a20e9d80fe17746d6ab4e2cf0966db1c55ff037489bf449b9a577efce58831af
+    status: new
+    text_layer: mixed
+  arabian-cement-2021-en:
+    bytes: 1782036
+    pages: 64
+    pages_without_text: 6
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 3baec4661fce0acbd57c3a8a0c43de414afffe73f703b3730f45868b80805730
+    status: new
+    text_layer: mixed
+  arabian-cement-2025-en:
+    bytes: 709323
+    pages: 68
+    pages_without_text: 1
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 95310e37c7e8adf82177a557e2949da2438f240300def0cbed6b61a0be75b261
+    status: new
+    text_layer: mixed
+  arabian-drilling-2025-ar:
+    bytes: 1166148
+    pages: 60
+    pages_without_text: 6
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 87524b5f5c473fe7a0dc903e2f3524d635a2aa0979a6500c7c419efbfa6560e0
+    status: new
+    text_layer: mixed
+  arabian-pipes-2024-en:
+    bytes: 3536213
+    pages: 46
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 9bade4c543bde8936e2aa9c7302359741c7bbdad3b9675e55b60f0cc476b715d
+    status: new
+    text_layer: mixed
+  arabian-pipes-2024-en-interim:
+    bytes: 1308945
+    pages: 23
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 1be92a99213bcd9b830cb6ad30d9d4144db4b1bdd8c95eeae49097fc2b90fdff
+    status: new
+    text_layer: mixed
+  arriyadh-development-2025-en-interim:
+    bytes: 2534097
+    pages: 27
+    pages_without_text: 1
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 3f5aaf88f6f9f38a62abc17608c42351e2fca88d5a2ba1ddf4766eb94df2780b
+    status: new
+    text_layer: mixed
+  artex-industrial-investment-2025-en-interim:
+    bytes: 2333989
+    pages: 18
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 8c167e3f697545fdde4012015e306191858a6c1eb900ea9b4dfeb70acb83ee48
+    status: new
+    text_layer: mixed
+  aseer-trading-tourism-industry-agriculture-real-estate-and-contracting-2021-en:
+    bytes: 1399171
+    pages: 73
+    pages_without_text: 13
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 914c0fd081de7bd9d44dd51228c674e11b4617a492600c32704be6c5ddc6f5b9
+    status: new
+    text_layer: mixed
+  aseer-trading-tourism-industry-agriculture-real-estate-and-contracting-2021-en-interim:
+    bytes: 800520
+    pages: 21
+    pages_without_text: 7
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 8765250db7dfc640d128ae5d228ae526d9ca30ede7262ee9d8ffdcc0aeb0fdcd
+    status: new
+    text_layer: mixed
+  atlas-elevators-2024-ar-interim:
+    bytes: 1371781
+    pages: 22
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 51a5c95191bf45d095a770c532f3b108dd81062c3f9a4699208430c3d92326de
+    status: new
+    text_layer: digital
+  b-investments-holding-2020-en-interim:
+    bytes: 2550936
+    pages: 16
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 561a1b0c5d01e469d3f5b7fbc77bde6ae1ca44569f6cce17903f8384e88838ca
+    status: new
+    text_layer: digital
+  b-investments-holding-2023-en-interim:
+    bytes: 1262042
+    pages: 20
+    pages_without_text: 20
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 4a7009ca51862a8ea5226373e25a509461aa71902958eb6b0dedc2d3dcce73fa
+    status: new
+    text_layer: scanned
+  batic-investment-and-logistics-2023-ar:
+    bytes: 3807767
+    pages: 51
+    pages_without_text: 6
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: c588b3b6c3ec6db1af0ccd942ac7e9f49d07a502767e338a27f32df04cda0f4c
+    status: new
+    text_layer: mixed
+  bawan-2025-ar:
+    bytes: 2098914
+    pages: 70
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 769b74690f9f9cad4339336cfdfad20f0c3870c888f39f73057cfbec2a874bb1
+    status: new
+    text_layer: mixed
+  bawan-2025-ar-interim:
+    bytes: 1558065
+    pages: 23
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 6ece7dec8192c8660072170b683ad891e21d62f36213605ca111940c6106dc5f
+    status: new
+    text_layer: mixed
+  cairo-for-investment-and-real-estate-development-2021-en:
+    bytes: 48552103
+    pages: 63
+    pages_without_text: 63
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 7a30b5a8426fe13acfa8115c4ca130ae93ec171b7d0b01f073c7aeb61c726d98
+    status: new
+    text_layer: scanned
+  cairo-poultry-2012-en:
+    bytes: 1411077
+    pages: 39
+    pages_without_text: 2
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 6ec96e00f47f11ddbd1b2149b99e1186345d5e74f3870b801762898d2d39386e
+    status: new
+    text_layer: mixed
+  cairo-poultry-2012-en-2e75:
+    bytes: 1411077
+    duplicate_of: cairo-poultry-2012-en
+    pages: 39
+    pages_without_text: 2
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 6ec96e00f47f11ddbd1b2149b99e1186345d5e74f3870b801762898d2d39386e
+    status: duplicate
+    text_layer: mixed
+  city-cement-2023-en:
+    bytes: 2510869
+    pages: 38
+    pages_without_text: 8
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: e965bbeac31f28fc5636c57e9fc64ae8554a46b21f4d9bcb313593236d6aba56
+    status: new
+    text_layer: mixed
+  city-cement-2024-en-interim:
+    bytes: 2273154
+    pages: 18
+    pages_without_text: 5
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 61ee8229860725463afdba0bcb9f0b95f78d53b11ce600047c970a8083fda1bf
+    status: new
+    text_layer: mixed
+  city-cement-2025-en:
+    bytes: 7797182
+    pages: 43
+    pages_without_text: 8
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 6958b51f874c338076467a8c7bac0e93f7a3aa13b944206be95bc6f3025127cd
+    status: new
+    text_layer: mixed
+  coast-investment-and-development-2025-en-interim:
+    bytes: 1642582
+    pages: 18
+    pages_without_text: 2
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: d2c7b7f50f28a45d2b82bd54fd9bbc2376a18a041641f12abb94b013d10d85f5
+    status: new
+    text_layer: mixed
+  combined-group-contracting-2020-ar:
+    bytes: 2586760
+    pages: 51
+    pages_without_text: 4
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 8a0aa2eefd1ef91ba585b72c55f6b74b949218a26fb8ce211e1a96c82a956090
+    status: new
+    text_layer: mixed
+  contact-financial-holding-2022-ar:
+    bytes: 2436504
+    pages: 65
+    pages_without_text: 2
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 6d7924be9dcb4db69c6594c64a1d375412407986f36538316969339075c2a111
+    status: new
+    text_layer: mixed
+  contact-financial-holding-2023-en-interim:
+    bytes: 1588602
+    pages: 70
+    pages_without_text: 4
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 2c710aa6d423e2a110f26b1f9910c3dc123f44557ab338cb78ddb2e713579644
+    status: new
+    text_layer: mixed
+  contact-financial-holding-2024-ar-interim:
+    bytes: 1831889
+    pages: 66
+    pages_without_text: 2
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 7b69d2ee29307fa4c5faa0d7ba2b629fd5f5959eafd91165ad856eb3d785e98f
+    status: new
+    text_layer: mixed
+  credit-agricole-egypt-ar:
+    bytes: 1719604
+    pages: 41
+    pages_without_text: 0
+    pool: model_test
+    retrieved: '2026-09-27'
+    sha256: c35346f3970579199ac4abae362ae65aa1a072882c15847b83fef3291d244460
+    status: new
+    text_layer: digital
+  dallah-healthcare-2024-ar:
+    bytes: 2638958
+    pages: 59
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: c8c9f1a1171eccb74d0a3caa71b96deec75c25f501838d866f5d8a2950dcf361
+    status: new
+    text_layer: mixed
+  dallah-healthcare-2024-en:
+    bytes: 3166960
+    pages: 56
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: bd73f09269dfee80dabc7227ae8ec49ac5ab3dc20f30c6b9e102ff963e7f4e10
+    status: new
+    text_layer: mixed
+  dar-al-medical-and-scientific-equipment-2025-ar-interim:
+    bytes: 1873584
+    pages: 19
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: d877b4f39415af4eaba685ddfc7d8a592e00cdd498f8dc2885f3b564a0c8c4e4
+    status: new
+    text_layer: mixed
+  deyaar-development-2025-ar-interim:
+    bytes: 903708
+    pages: 24
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 6ffb51fb54fdbe6f973bd7fbfcd4225096c33d7408d021f37a78e298fafdbb60
+    status: new
+    text_layer: mixed
+  dr-sulaiman-al-habib-medical-services-2024-en-interim:
+    bytes: 1106865
+    pages: 16
+    pages_without_text: 6
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 796e1dce0a57dd9937712d7ed5b5f353da4cde3686e0d100d29eaab944c274c1
+    status: new
+    text_layer: mixed
+  dubai-financial-market-2021-ar:
+    bytes: 1392454
+    pages: 54
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: f34c60ec7353307d70ed432aca1e29bc32aab4c77d6ccd0bda1801b27692a43b
+    status: new
+    text_layer: mixed
+  dubai-financial-market-2021-ar-interim:
+    bytes: 1189834
+    pages: 23
+    pages_without_text: 2
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 9f46b5bb51888c2b45f870ac0433a3b9cc7a5f8fee47c7a45e4019849640c322
+    status: new
+    text_layer: mixed
+  east-pipes-integrated-company-for-industry-2024-en-interim:
+    bytes: 417488
+    pages: 20
+    pages_without_text: 1
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 6a1048908689c76e8f4ed66c7ca3e9ad8b86e5b45f3ddc39762e6e148fd59c22
+    status: new
+    text_layer: mixed
+  eastern-company-2020q1-en:
+    bytes: 743991
+    pages: 43
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-09-27'
+    sha256: 91d0f3df467850716df92c71430ea05712ed389800e2f8a175fe962de92ce3d4
+    status: new
+    text_layer: digital
+  eastern-province-cement-2017-ar:
+    bytes: 1842724
+    pages: 38
+    pages_without_text: 8
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: f367e2cebfc65cd9ab5775fb8f9adf0e82cef537ef28d15eb3a7261e22403e0b
+    status: new
+    text_layer: mixed
+  eastern-province-cement-2025-en-interim:
+    bytes: 1268842
+    pages: 18
+    pages_without_text: 1
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: d280c06f0235b4d01ca82c939a4fd82b9c5e75b4e4a06e95d3eee10f4bb8d5a7
+    status: new
+    text_layer: mixed
+  eastern-province-cement-2025-en-interim-e637:
+    bytes: 1407745
+    pages: 18
+    pages_without_text: 1
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: d763943bf82f9c88612d27bb5fdc1c5ce8b08181e840bceb5ec11e9103fd0fad
+    status: new
+    text_layer: mixed
+  egypt-kuwait-holding-2023-en-interim:
+    bytes: 2049017
+    pages: 45
+    pages_without_text: 45
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: ea6986766ddd44cd0c0926c567bd0bf7de6746e9d9880ee83773b7e30efe22f4
+    status: new
+    text_layer: scanned
+  egypt-kuwait-holding-2024-ar-interim:
+    bytes: 2239743
+    pages: 35
+    pages_without_text: 3
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: a510c0515e8519712391ee555c676ea1f0a3e9acab8c19d783d6b31ce8cb45a7
+    status: new
+    text_layer: mixed
+  egypt-kuwait-holding-2024-en:
+    bytes: 2099354
+    pages: 52
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 982f38ad02c7a84ebd6eb45cabdf9560415b81b97012a59b1b4aafcb3cfcbade
+    status: new
+    text_layer: mixed
+  egypt-kuwait-holding-2025-en-interim:
+    bytes: 3647389
+    pages: 13
+    pages_without_text: 13
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 0d21df9c26e5ceb1b6074c25a610c039c45561ab2610f276f4f533eb75887ce5
+    status: new
+    text_layer: scanned
+  eipico-2025h1-ar:
+    bytes: 1097399
+    pages: 39
+    pages_without_text: 7
+    pool: train
+    retrieved: '2026-09-27'
+    sha256: 4d9df04340bd5f1e41a05cd63e1da9af2bf91d98c83d4310424f5ad3e59b0f76
+    status: new
+    text_layer: mixed
+  electrical-industries-company-2019-ar:
+    bytes: 2492985
+    pages: 55
+    pages_without_text: 5
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: b6b7a21652fa7a6f2485a3cd73cab3fcf19cb6765d9dce01bfdbe8eee5063e6b
+    status: new
+    text_layer: mixed
+  elsewedy-electric-2021-en:
+    bytes: 2331978
+    pages: 59
+    pages_without_text: 59
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: c920f50b52b60eb4b6c89be5bf497a09bd9614a8b49d0739afb71fa19f5b35af
+    status: new
+    text_layer: scanned
+  elsewedy-electric-2023-en-interim:
+    bytes: 3678100
+    pages: 54
+    pages_without_text: 54
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 7406bdc4b424b96d198862c3694b4bfc15a28e90267829aee300e5802e30d418
+    status: new
+    text_layer: scanned
+  elsewedy-electric-2024-en:
+    bytes: 1682339
+    pages: 62
+    pages_without_text: 3
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 641a1284ce34ea7200d632d9b45adeeaf8ae29f666af530710cd87af73963e3f
+    status: new
+    text_layer: mixed
+  elsewedy-electric-2024-en-c224:
+    bytes: 1858867
+    pages: 70
+    pages_without_text: 3
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 4c8ccef1b788d4da97e7cf9cdb39ec29eeeadb3f7bb73513c242fdfce442c6c6
+    status: new
+    text_layer: mixed
+  elsewedy-electric-2024-en-interim:
+    bytes: 1018163
+    pages: 39
+    pages_without_text: 3
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: fee322ebdff062e09fa2479a30904ae50865b841af08b1a5dbb6949cddb009fe
+    status: new
+    text_layer: mixed
+  emaar-2025-en:
+    bytes: 2055550
+    pages: 77
+    pages_without_text: 1
+    pool: blind
+    retrieved: '2026-09-27'
+    sha256: 202b14f6198a9f07a83398e131d330329cd79c20c1b48bf81fdfca8e368f4f4e
+    status: new
+    text_layer: mixed
+  emaar-the-economic-city-2022-en-interim:
+    bytes: 1093936
+    pages: 34
+    pages_without_text: 8
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 06837966682a32fd4bb943b3c51fca6c5d231163f393ab5855ceeb2ccbd3c6de
+    status: new
+    text_layer: mixed
+  etihad-atheeb-telecommunication-2025-en-interim:
+    bytes: 5979301
+    pages: 23
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 03fdba60b214662e3b28050931cca6d334848084219b57b49bca7dabcfe70275
+    status: new
+    text_layer: mixed
+  etihad-etisalat-2018-en:
+    bytes: 2161332
+    pages: 84
+    pages_without_text: 6
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 3524b45a991dd0d1259a1ee9cc44b92471b7e566743a2a343d6eafa22ae4ae85
+    status: new
+    text_layer: mixed
+  etihad-etisalat-2026-en-interim:
+    bytes: 1645466
+    pages: 15
+    pages_without_text: 2
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 5209c05d7f8c453371987a85d2c60fcbc8374935cf99cc606afceeee386b2b80
+    status: new
+    text_layer: mixed
+  first-avenue-real-estate-development-2025-ar-interim:
+    bytes: 2058156
+    pages: 24
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 7196b3a76f8cf93ab2b11334cc62c8cc19d50333e0f5599aa61b27f14502deae
+    status: new
+    text_layer: digital
+  fitaihi-holding-na-ar:
+    bytes: 1448992
+    pages: 46
+    pages_without_text: 5
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 4c97c19cc8181bf8bd53f5948ff979b59b55e341239b6e85d3740bbd233289fd
+    status: new
+    text_layer: mixed
+  foodco-national-foodstuff-2025-ar:
+    bytes: 1099165
+    pages: 62
+    pages_without_text: 2
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: ac23e654f618fd00480da98674f2a1b3d641141fc44d28c65df7763e696278eb
+    status: new
+    text_layer: mixed
+  gadwa-ar-standalone:
+    bytes: 1734150
+    pages: 32
+    pages_without_text: 4
+    pool: blind
+    retrieved: '2026-09-27'
+    sha256: 2a95cf17a246c2192eda995280ab5a4d240131b84a7d0c99c3c2f07c442a079b
+    status: new
+    text_layer: mixed
+  gas-arabian-services-2025-en-interim:
+    bytes: 1226524
+    pages: 18
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 6cbd3406ab9fd4d4e642dcb71cab96a6c700283b4661e54fa5876b05596f737e
+    status: new
+    text_layer: mixed
+  gb-auto-2019-en:
+    bytes: 983151
+    pages: 59
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 97b8f1a118c4ee915a299014e24bdba4bca82dd9ec6acab63da92183709f7aec
+    status: new
+    text_layer: digital
+  general-mills-2025-en:
+    bytes: 1423106
+    pages: 100
+    pages_without_text: 2
+    pool: blind
+    retrieved: '2026-09-27'
+    sha256: b6c75e29b87fafd33fdeac52eaa2f88b53fa3f312f35aeabd252f758254e9f6e
+    status: new
+    text_layer: mixed
+  ghitha-holding-2025-ar-interim:
+    bytes: 1136226
+    pages: 41
+    pages_without_text: 2
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 13815ff0cdef3c6a92bd0f1ec30cd231ceb586cb83e148ece6749d5cc6726742
+    status: new
+    text_layer: mixed
+  herfy-food-services-2022-ar:
+    bytes: 4391133
+    pages: 62
+    pages_without_text: 4
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 1061628f1eb9df3f923ec20400c3bec120ccb4c13b1c6bbb59b6536df728c0c4
+    status: new
+    text_layer: mixed
+  ibnsina-2024-en:
+    bytes: 3223707
+    pages: 39
+    pages_without_text: 8
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 9af81972977130c4833f3c3386953a9bbc4cfec3fb3412d7ca6ada95d9f90491
+    status: new
+    text_layer: mixed
+  ibnsina-pharma-2023-ar-interim:
+    bytes: 2876935
+    pages: 40
+    pages_without_text: 37
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 4ac63eed56ffc5efa23d0d3b5382ed2831fdbe7b612cd7b2e3f573e56f0ac8a5
+    status: new
+    text_layer: mixed
+  ibnsina-pharma-2024-ar:
+    bytes: 2923955
+    pages: 39
+    pages_without_text: 8
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: c688e659166af653321c7bd8d57b85588ab47b4d642103b49df1dea8a446b3d5
+    status: new
+    text_layer: mixed
+  ibnsina-pharma-2024-en-interim:
+    bytes: 4292341
+    pages: 38
+    pages_without_text: 5
+    pool: model_test
+    retrieved: '2026-09-27'
+    sha256: 032616a1300c81f97e4d83389398cd24245ed8f03e92a562c48999908c3ec2bb
+    status: new
+    text_layer: mixed
+  ibnsina-pharma-2024-en-interim-b9f2:
+    bytes: 1812791
+    pages: 39
+    pages_without_text: 5
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 5f831c77ad77a2bb21b20e88b14982c98d61635ca9f18ebd1c4e5b1da064059e
+    status: new
+    text_layer: mixed
+  integrated-holding-2020-en:
+    bytes: 539691
+    pages: 44
+    pages_without_text: 6
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 340db48bdc60c5046272b639b30f4eafb39a12ab8a4aea2adebb425f7cd2bc68
+    status: new
+    text_layer: mixed
+  international-holding-2025-ar-interim:
+    bytes: 3218437
+    pages: 126
+    pages_without_text: 1
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 2f275ff2ece56d4f1f46a3f0f3166a09ceaa428ad737faf3f3dc761cae1c92f9
+    status: new
+    text_layer: mixed
+  international-holding-2025-ar-interim-b127:
+    bytes: 3218437
+    duplicate_of: international-holding-2025-ar-interim
+    pages: 126
+    pages_without_text: 1
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 2f275ff2ece56d4f1f46a3f0f3166a09ceaa428ad737faf3f3dc761cae1c92f9
+    status: duplicate
+    text_layer: mixed
+  jabal-omar-development-2019-ar-interim:
+    bytes: 5089218
+    pages: 269
+    pages_without_text: 32
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: aad03f743ff476b35daead3d9b166923b0f4a404b1cf91199593e34f6c49cd27
+    status: new
+    text_layer: mixed
+  jabal-omar-development-2020-ar:
+    bytes: 3960298
+    pages: 78
+    pages_without_text: 6
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: c5b99aab1266095e34c0173dde9e648a252430dd6af23f11771cf359aa0a541f
+    status: new
+    text_layer: mixed
+  jabal-omar-development-2021-ar:
+    bytes: 955237
+    pages: 78
+    pages_without_text: 7
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: f1730fd4ae41c5055e5637f960db1b1e4d144d9855090049879b961cd883c71d
+    status: new
+    text_layer: mixed
+  jabal-omar-development-2023-ar:
+    bytes: 1973736
+    pages: 75
+    pages_without_text: 6
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 0b1377b03a7489c55eff5a156982b399ff6a7434eeda8feb9008fa61dde640b7
+    status: new
+    text_layer: mixed
+  jabal-omar-development-2024-ar:
+    bytes: 1985011
+    pages: 61
+    pages_without_text: 6
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 7908778b034b0c9724e0c708925b7752a711a21031e5ae64c010619fadab79b4
+    status: new
+    text_layer: mixed
+  jahez-international-2025-en-interim:
+    bytes: 1546177
+    pages: 32
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: c2b379c01e2b6f71ccf486374b0effd9aa9b72a74bd2a8e2cd3755da21cf6945
+    status: new
+    text_layer: digital
+  jamjoom-pharmaceuticals-2024-en:
+    bytes: 2229166
+    pages: 54
+    pages_without_text: 4
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 036f7fe50f81afcd0c6f2391fb795975fad2d6103fc8c35ccf4d6180f66488f2
+    status: new
+    text_layer: mixed
+  jarir-marketing-2025-ar:
+    bytes: 2041189
+    pages: 55
+    pages_without_text: 6
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 5feb7eee1864ff8797ce34d725a9ac09bfef23879fd7e18529e68fc46b7d6d5d
+    status: new
+    text_layer: mixed
+  jarir-marketing-2025-en:
+    bytes: 2152108
+    pages: 58
+    pages_without_text: 6
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 7c1e35764a96d4d66cc748468d4608d9e4d2b13ff159e990596948c6e9ce2f36
+    status: new
+    text_layer: mixed
+  jazan-development-and-investment-2024-ar:
+    bytes: 5325986
+    pages: 63
+    pages_without_text: 4
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 862045fc755c2da7e719f6de715f4979c15b7c8882e60171739448e1b1d1de5d
+    status: new
+    text_layer: mixed
+  jazan-development-and-investment-2025-en-interim:
+    bytes: 1463788
+    pages: 21
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 4659767cee0aadd05a83a32917785fdb7b7fb5eff4c7ce58f9d86e58611d995d
+    status: new
+    text_layer: mixed
+  kinan-international-real-estate-development-2021-ar:
+    bytes: 523334
+    pages: 63
+    pages_without_text: 0
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 64d0b737a63053735c47a442e7321b4a84e14f382190f41b647e8d0ab794e8e7
+    status: new
+    text_layer: digital
+  knowledge-economic-city-2025-en:
+    bytes: 1578588
+    pages: 63
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 983b559689c4cbcb061305078e64e678aa5df720be32f6636585f17b3922aacb
+    status: new
+    text_layer: mixed
+  l-azurde-company-for-jewelry-2025-en:
+    bytes: 2625763
+    pages: 49
+    pages_without_text: 6
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: c6b772ecb19c39d33098f32877b0630aa5ecd2852ef02893ed4584d44dc29401
+    status: new
+    text_layer: mixed
+  lecico-2025q2-en:
+    bytes: 2055943
+    pages: 65
+    pages_without_text: 2
+    pool: train
+    retrieved: '2026-09-27'
+    sha256: 130b2595f5eb408dc615e1cf7f473cbca514f3e580f4a360bb8d399a067cd128
+    status: new
+    text_layer: mixed
+  luberef-2024-en:
+    bytes: 858883
+    pages: 50
+    pages_without_text: 4
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 15ef1d810ca1257b0657aeafd8b65ddf8990a5f903f22683652c9ec989589172
+    status: new
+    text_layer: mixed
+  madinet-nasr-for-housing-and-development-2021-en:
+    bytes: 358939
+    pages: 55
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 161dc044f005511ca909155888f41c90e06b67ec79182fa9fad404f494d72c1e
+    status: new
+    text_layer: digital
+  malath-cooperative-insurance-2025-ar:
+    bytes: 4906106
+    pages: 113
+    pages_without_text: 6
+    pool: train
+    retrieved: '2026-09-27'
+    sha256: a4dfb3da20eb87ee8ee11778fdd79d7290586af02649d08b2ca14dbeb8407ba3
+    status: new
+    text_layer: mixed
+  manazel-2020-ar:
+    bytes: 4194304
+    pages: 57
+    pages_without_text: 3
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 84484eb96f2667f477b5e806e3914d0322d2e16761a9cffe9c0fbdcd56298dce
+    status: new
+    text_layer: mixed
+  mashaer-holding-2022-ar:
+    bytes: 1139971
+    pages: 48
+    pages_without_text: 1
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 5361ce8a9f98d5df33f27ca1a88d2e01195197bb70d26e4f4478ee9b8b3436c4
+    status: new
+    text_layer: mixed
+  mbc-group-2023-ar-interim:
+    bytes: 13159917
+    pages: 632
+    pages_without_text: 12
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 4d5ac7909d4d20f85d86309b6f4ae2656e4d091ad80418fd132de4112e286052
+    status: new
+    text_layer: mixed
+  mbc-group-2024-ar-interim:
+    bytes: 2092808
+    pages: 30
+    pages_without_text: 5
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 579a83b074f6ae2109aeef455c042c7562b6accd665d11fadfd67b5f43d0d3d4
+    status: new
+    text_layer: mixed
+  mbc-group-2025-en:
+    bytes: 3402658
+    pages: 73
+    pages_without_text: 5
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 26f15b8021b55b1741b7182dda2a310f6ee7b292cf8a1ef1a2a7e8a3589bef61
+    status: new
+    text_layer: mixed
+  miahona-2018-ar-interim:
+    bytes: 14130264
+    pages: 653
+    pages_without_text: 176
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: d18c7b1bbf37bb7cd39c4cf33446a2d29cbddfc184f54a17d2f70327e794e862
+    status: new
+    text_layer: mixed
+  middle-east-financial-investment-2017-en:
+    bytes: 477786
+    pages: 29
+    pages_without_text: 3
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: ee202dc41af5eea4cec331bbb6fccf859ff5e480013174217694ae0a07b4c1fc
+    status: new
+    text_layer: mixed
+  middle-east-healthcare-2024-ar:
+    bytes: 3024511
+    pages: 60
+    pages_without_text: 4
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 544ab225ab14c7d920ebc6749fa9ecd9aa39d563311125b621cebe6c8e85c74d
+    status: new
+    text_layer: mixed
+  middle-east-healthcare-2024-en:
+    bytes: 3007810
+    pages: 57
+    pages_without_text: 4
+    pool: train
+    retrieved: '2026-09-27'
+    sha256: 5e92074cfa688f22f78e826beae1bdd48a820f3682d07d246ae16a625964a110
+    status: new
+    text_layer: mixed
+  middle-east-healthcare-2024-en-interim:
+    bytes: 2888644
+    pages: 23
+    pages_without_text: 4
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 446606485d7991fb22a502a991deb9465aa3d969bb466cba8b4424b4421605a4
+    status: new
+    text_layer: mixed
+  middle-east-healthcare-2026-ar-interim:
+    bytes: 2045534
+    pages: 29
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 622074182eacac49e65f6aa07daf9e82a012ca894d4a8e935beafbc7caed6e7f
+    status: new
+    text_layer: mixed
+  middle-east-paper-2022-en-interim:
+    bytes: 4718261
+    pages: 20
+    pages_without_text: 5
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: d848b1f47048349867b0eb573768c8b510bdaf6bed541f1fd1a65942dea026c6
+    status: new
+    text_layer: mixed
+  mouwasat-medical-services-2017-en:
+    bytes: 2033103
+    pages: 51
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 812ccd33ba93153581196fee172fa89c9e9ed62ea92b340168d09f4e23517dda
+    status: new
+    text_layer: digital
+  musharaka-capital-2019-ar:
+    bytes: 2338317
+    pages: 34
+    pages_without_text: 2
+    pool: train
+    retrieved: '2026-09-27'
+    sha256: 4532fb0493a208661bbd3f73b5cb37fb5ea30e78113a1c49c04ab929a71acc65
+    status: new
+    text_layer: mixed
+  naba-al-saha-medical-services-2024-en:
+    bytes: 2692992
+    pages: 41
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 452cd2e344f9c55e5cf51ec962b8884643bc1fb0721a840e48604d7437aeed4a
+    status: new
+    text_layer: mixed
+  naba-al-saha-medical-services-na-ar:
+    bytes: 3467128
+    pages: 41
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 17e58d5fdc01aad369ba7afd6a47591da1d278c828855d17ddf2758c0208241c
+    status: new
+    text_layer: mixed
+  najran-cement-2025-ar:
+    bytes: 2610572
+    pages: 43
+    pages_without_text: 5
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 5329b70e5c8264ee1c0d14478d8dea6203bd3d82291ca96f347080e30a01fb40
+    status: new
+    text_layer: mixed
+  naseej-2022-ar:
+    bytes: 4387368
+    pages: 59
+    pages_without_text: 11
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 39bf1baaaf4f1b093d45e62701231ad3b40796c4b9ffea1fb3ad176464384aeb
+    status: new
+    text_layer: mixed
+  naseej-na-ar:
+    bytes: 2993902
+    pages: 36
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 4850b788454726a5bbddec2cb2b7a0ade6eea2eb6f85709815b17e9e6a544737
+    status: new
+    text_layer: digital
+  national-agricultural-development-company-2025-ar-interim:
+    bytes: 1831326
+    pages: 14
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-09-27'
+    sha256: a15b579ec112c27580acd5be3dae76b0a7ae42c08cc7cac13b0ed658befbec0a
+    status: new
+    text_layer: mixed
+  national-building-and-marketing-2025-ar:
+    bytes: 1794012
+    pages: 61
+    pages_without_text: 0
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: be91754f3d44533bae58ff884add8eb1df2de4177399a852d6e8b1623a5ab91a
+    status: new
+    text_layer: digital
+  national-industrialization-2023-ar:
+    bytes: 1976044
+    pages: 84
+    pages_without_text: 11
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 6aeb6627d2c4323510acd9a59ce37dfe85858289ea181026cd3b0ae9d7fee6be
+    status: new
+    text_layer: mixed
+  national-medical-care-2024-en-interim:
+    bytes: 2299707
+    pages: 19
+    pages_without_text: 4
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 4f29c71a8f2629982f1d4cc322f22faee402aaeff18735de2181b4c0a3240ce6
+    status: new
+    text_layer: mixed
+  national-petrochemical-2020-ar:
+    bytes: 1965105
+    pages: 46
+    pages_without_text: 10
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: d9f4c21eb7e5c33bb82bd2c2c6995ead4397590a2d36bb02a51e3d6469b45a2f
+    status: new
+    text_layer: mixed
+  orascom-construction-2025-en:
+    bytes: 1674617
+    pages: 53
+    pages_without_text: 3
+    pool: blind
+    retrieved: '2026-09-27'
+    sha256: 2dab0bba9051597a1e0726ba50e247370ff552d5e671a32cc9a9bca1b3518d85
+    status: new
+    text_layer: mixed
+  orascom-investment-2025-ar:
+    bytes: 1200739
+    pages: 23
+    pages_without_text: 3
+    pool: train
+    retrieved: '2026-09-27'
+    sha256: de7984449fa05f684d91008bb3490fa3afcf7cb1c7823738f7c7ca93fcf63318
+    status: new
+    text_layer: mixed
+  orient-takaful-2025-ar:
+    bytes: 2351077
+    pages: 69
+    pages_without_text: 4
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 27cbfef0644b0d432aec2ef4dfca55faa12578db51d26f8dacd1a55ccb80e158
+    status: new
+    text_layer: mixed
+  oriental-weavers-na-ar:
+    bytes: 2405933
+    pages: 23
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 2bd0714c4f3830e33df7eef9e00ceb84298aa0262b89489ce54e5d3d169b5234
+    status: new
+    text_layer: mixed
+  pioneers-holding-2017-ar-interim:
+    bytes: 1141028
+    pages: 31
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 0c2a3fe56aeea8fb76b7e406491d9055da9b0eea3a1112be636f97c9b70eb306
+    status: new
+    text_layer: digital
+  pioneers-holding-2018-ar:
+    bytes: 1900959
+    pages: 29
+    pages_without_text: 4
+    pool: train
+    retrieved: '2026-09-27'
+    sha256: e0c2a7fa080c2eb288f48eaed802eacefb5f72883d49190cfc9979b5d8b09071
+    status: new
+    text_layer: mixed
+  qalaa-holdings-2024-ar-interim:
+    bytes: 1207412
+    pages: 50
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: e3d42ae458a59d6af854cf52226bb533f8ad7fa134684a114523af1f007fe7eb
+    status: new
+    text_layer: mixed
+  qalaa-holdings-2024-ar-interim-d7e0:
+    bytes: 1237932
+    pages: 43
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: a70e1722b8a82e15dd14e151bd58ac8cd6d43671958c3af327b7fab8b7406022
+    status: new
+    text_layer: mixed
+  qalaa-holdings-2024-en-interim:
+    bytes: 2034658
+    pages: 51
+    pages_without_text: 51
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 0cb561a33db76467aee106a6c65e4e7a1551fcaa43a4ac685fb44eb12c38cc18
+    status: new
+    text_layer: scanned
+  qalaa-holdings-2024-en-interim-ca25:
+    bytes: 1338979
+    pages: 46
+    pages_without_text: 2
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 6a1875322dec4b4b899e7f0ef496d08fb878e30e9a047cc6fc1ab1d6c320cb89
+    status: new
+    text_layer: mixed
+  qassim-cement-2025-en:
+    bytes: 1485938
+    pages: 53
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 17ca838773025846d9b502f6f78c2bfbabcf18463c9399c37d5eea62b8308aa1
+    status: new
+    text_layer: mixed
+  rabigh-refining-and-petrochemical-2025-en:
+    bytes: 2331071
+    pages: 44
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 42d71071dd21a3a74edf2c68d1f73ea14e2c4e8b11a2084f0499fe8b65595b37
+    status: new
+    text_layer: mixed
+  retal-urban-development-2023-ar:
+    bytes: 2313499
+    pages: 59
+    pages_without_text: 5
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 59f0dc6d0a5239824fd8fb0a510e6d85bbde98849541a513ebf78cae2ef29e87
+    status: new
+    text_layer: mixed
+  retal-urban-development-2024-en-interim:
+    bytes: 1911335
+    pages: 21
+    pages_without_text: 4
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: b322cf11224d1234533f095d80417da92924329a1c0146b23a28fbda87d344d0
+    status: new
+    text_layer: mixed
+  sabic-2022-ar:
+    bytes: 6198662
+    pages: 110
+    pages_without_text: 6
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: e3895ddac47907b918cd4db51aeabb1b81701571dbb96cce7bbceb9cef816f5e
+    status: new
+    text_layer: mixed
+  sabic-agri-nutrients-2020-en-interim:
+    bytes: 1734918
+    pages: 16
+    pages_without_text: 6
+    pool: train
+    retrieved: '2026-09-27'
+    sha256: 163b1c64443ab62a33bc97da24f3e819c3210d6b0d41aabb68bd6f46ad6c8ba5
+    status: new
+    text_layer: mixed
+  sabic-agri-nutrients-2026-en-interim:
+    bytes: 1181762
+    pages: 20
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 789edde17afdbc8372e97602b19c82f299e61a84a8f5a01b960d6043c58a29a2
+    status: new
+    text_layer: digital
+  sal-saudi-logistics-services-2025-en:
+    bytes: 2217225
+    pages: 50
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 9d222fb6278ea52462fa23350f2813da17a9cf36ad3494a3d50da6fa07883725
+    status: new
+    text_layer: mixed
+  saudi-arabian-refineries-2024-ar-interim:
+    bytes: 1287606
+    pages: 14
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: ea1827fff9b6198d8209eb6783f051fca959cd5ecf1140ddb17e7bb6e95aa1ba
+    status: new
+    text_layer: digital
+  saudi-cable-2024-en-interim:
+    bytes: 2040142
+    pages: 27
+    pages_without_text: 4
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 0764971e2fe0ab943349ba28e389f2f68385c4c694c09872da3f7ba2847c0107
+    status: new
+    text_layer: mixed
+  saudi-cement-2022-en-interim:
+    bytes: 2582576
+    pages: 16
+    pages_without_text: 4
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: a49c427b0d352727473f654e10d7899451b74e003d9590d094cc956472aec89c
+    status: new
+    text_layer: mixed
+  saudi-chemical-holding-2021-ar:
+    bytes: 4057222
+    pages: 51
+    pages_without_text: 6
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: afb76f94ef7f3fe0385f4624b2555fa779c1dbf7a7e70f0582a5868acded91c6
+    status: new
+    text_layer: mixed
+  saudi-chemical-holding-2024-en:
+    bytes: 4535638
+    pages: 53
+    pages_without_text: 5
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 277447a46617350d98df8d5218c9265d0bd6db02bdba3c7a61d932b0e02323bf
+    status: new
+    text_layer: mixed
+  saudi-chemical-holding-2024-en-be09:
+    bytes: 4535638
+    duplicate_of: saudi-chemical-holding-2024-en
+    pages: 53
+    pages_without_text: 5
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 277447a46617350d98df8d5218c9265d0bd6db02bdba3c7a61d932b0e02323bf
+    status: duplicate
+    text_layer: mixed
+  saudi-chemical-holding-2025-en-interim:
+    bytes: 2402575
+    pages: 18
+    pages_without_text: 1
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: f53794956213374f6380d5e160e91a9cc5a31d21064227f6d239a3d93f5c9370
+    status: new
+    text_layer: mixed
+  saudi-company-for-hardware-2025-en-interim:
+    bytes: 1354184
+    pages: 22
+    pages_without_text: 3
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 59a5bb4228893da777f70ba83224642aefce60930ecb24e1bd8410bae3d0be04
+    status: new
+    text_layer: mixed
+  saudi-company-for-hardware-2025-en-interim-f7f9:
+    bytes: 1910346
+    pages: 22
+    pages_without_text: 4
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: da4128849d649a429647c5af4887c1b1e77adb8b86267f6a345494489ec9af58
+    status: new
+    text_layer: mixed
+  saudi-energy-2016-en-interim:
+    bytes: 308260
+    pages: 25
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 2adaaa50c63c476afdb998785f0c74082df6d6b9a8a294065fa92653d4b6a6cb
+    status: new
+    text_layer: mixed
+  saudi-energy-2025-en:
+    bytes: 3402601
+    pages: 111
+    pages_without_text: 7
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 7ba44cb9ed91f2d777d46e6fd2c42acdca9befb7e2e94e6ac4143a5a278b9b22
+    status: new
+    text_layer: mixed
+  saudi-energy-2025-en-interim:
+    bytes: 2906738
+    pages: 39
+    pages_without_text: 8
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 4aa114b93ec015b5cc713cb7befa83e5a232c42a5b196019262328f7a2e87058
+    status: new
+    text_layer: mixed
+  saudi-industrial-development-2025-en-interim:
+    bytes: 1420456
+    pages: 18
+    pages_without_text: 0
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: ec896c97f1e666b75f2f3d4df6d9b0f0495169598fa8c5005e37f027f900018b
+    status: new
+    text_layer: digital
+  saudi-industrial-export-2025-en-interim:
+    bytes: 976435
+    pages: 18
+    pages_without_text: 18
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 0284975b2f7fefe690348ea2e0bdb59111857bc7920a72f2da9b8fdc0b4331df
+    status: new
+    text_layer: scanned
+  saudi-industrial-investment-group-2025-en-interim:
+    bytes: 586896
+    pages: 22
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 83284b758d05b0e182d6de246221916391545c74e1c0e8bad4969f32c0ab964d
+    status: new
+    text_layer: mixed
+  saudi-industrial-investment-group-2026-en-interim:
+    bytes: 1245087
+    pages: 26
+    pages_without_text: 2
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: b81f30d6742a0cef7f368a3bc1dee2c8b6643d7a3d27789000a2f1c5195827ec
+    status: new
+    text_layer: mixed
+  saudi-kayan-petrochemical-2025-ar-interim:
+    bytes: 1772509
+    pages: 16
+    pages_without_text: 6
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 3d755ca0db5d713fb01f84d23f2b61cfe9233487439b8184906f0bc88343ecac
+    status: new
+    text_layer: mixed
+  saudi-marketing-2025-en-interim:
+    bytes: 1975378
+    pages: 14
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: af1f32a15989222ec69c5c1c4a0100808bf054bb0c7a13dc8ec0c1f63f482bad
+    status: new
+    text_layer: mixed
+  saudi-national-bank-2024-en:
+    bytes: 2640219
+    pages: 114
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: eaabe55f17423acffbeb13c6c95fa74da514a3e0098a5ca61354c05a6e3590cf
+    status: new
+    text_layer: mixed
+  saudi-national-bank-2024-en-interim:
+    bytes: 2308665
+    pages: 37
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 428c55eb940c128fe6c51211e98ecf01d9c7e7fb3b0676f1021ce3a51948baad
+    status: new
+    text_layer: digital
+  saudi-public-transport-2025-ar-interim:
+    bytes: 2080279
+    pages: 23
+    pages_without_text: 6
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: cbda74cd4fbb092b5768619a75000a57d988341f2ec63832dec89a9e8624dc8e
+    status: new
+    text_layer: mixed
+  saudi-real-estate-2021-ar-interim:
+    bytes: 886347
+    pages: 21
+    pages_without_text: 7
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 4d4b491bb6213c3528578bd21ba051718c4040a40496a0085e42377bbb3a4295
+    status: new
+    text_layer: mixed
+  saudi-real-estate-2026-en-interim:
+    bytes: 1574749
+    pages: 17
+    pages_without_text: 2
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 123fef278b1b7becc4dcc5e70c039eb77d3768e113d8265f82b4e45b233b1cfa
+    status: new
+    text_layer: mixed
+  saudi-research-and-media-group-2025-en:
+    bytes: 2657269
+    pages: 66
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: e4099ef1ba8450d33bbf01ac2c00c213a2b2eed4deb31174e7bd0ade527b7e64
+    status: new
+    text_layer: mixed
+  saudi-steel-pipes-2014-en:
+    bytes: 2074644
+    pages: 26
+    pages_without_text: 0
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: c82d5595fac82984079efa584b243290841bd48b86880ea42df0c38dda9d38c3
+    status: new
+    text_layer: digital
+  saudi-steel-pipes-2024-en-interim:
+    bytes: 3233193
+    pages: 19
+    pages_without_text: 5
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: d41d86eef10c10d95330c133dd9c4c3ee9d63e428b4038b277512fbfd3c9fc3a
+    status: new
+    text_layer: mixed
+  saudi-steel-pipes-2024-en-interim-f2c8:
+    bytes: 7730836
+    pages: 17
+    pages_without_text: 5
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: d5d179db189669a6535f9a7f89d94918786d3a45b0a76a4c324b184be6ccbab7
+    status: new
+    text_layer: mixed
+  saudi-tadawul-group-2025-en-interim:
+    bytes: 2277720
+    pages: 41
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 99a076878014e0a8ace17274a62a61d01857836c7dd94676e964e167ca0158a5
+    status: new
+    text_layer: mixed
+  saudi-tadawul-group-2025-en-interim-795f:
+    bytes: 2277720
+    duplicate_of: saudi-tadawul-group-2025-en-interim
+    pages: 41
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 99a076878014e0a8ace17274a62a61d01857836c7dd94676e964e167ca0158a5
+    status: duplicate
+    text_layer: mixed
+  saudia-dairy-and-foodstuff-company-2025-en:
+    bytes: 1420371
+    pages: 63
+    pages_without_text: 0
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 00e6c07e6c050222667faff445c729f5effaba4dfbe26d2093dc7b9f01dcd496
+    status: new
+    text_layer: digital
+  savola-2025-en:
+    bytes: 5518267
+    pages: 113
+    pages_without_text: 10
+    pool: blind
+    retrieved: '2026-09-27'
+    sha256: 5d6f64aa1d953b5057b0a6236135364ced2b0bc405fc041a77213ab4322b9a72
+    status: new
+    text_layer: mixed
+  seera-holding-2022-en-interim:
+    bytes: 2046732
+    pages: 34
+    pages_without_text: 5
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 7d1736842a073459a06dc8c6c12d27a9be4b24cf89d2d2239933b85d09112eef
+    status: new
+    text_layer: mixed
+  seera-holding-2024-en:
+    bytes: 1346588
+    pages: 87
+    pages_without_text: 0
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: ecdd3ff5a83cfd0bb123c0086aa7daa05aa94e5984e594f65058cf4423065564
+    status: new
+    text_layer: digital
+  sipchem-2018-ar:
+    bytes: 2291738
+    pages: 77
+    pages_without_text: 16
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 6cde5b87f01684262cf7d8ba49f1908bab3006ae78bdb95a842eec143eba0552
+    status: new
+    text_layer: mixed
+  sipchem-2022-ar:
+    bytes: 943958
+    pages: 72
+    pages_without_text: 8
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 03f4b4fe99c7ae7d826e563d4bf18aec6a16dfec66fa738742ba685359c37e08
+    status: new
+    text_layer: mixed
+  sipchem-2024-en-interim:
+    bytes: 1348940
+    pages: 21
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: d93f69dbf5396a6be40f460b28d00774c3d7921550fde297d1ad8c2d2e5ee920
+    status: new
+    text_layer: mixed
+  sipchem-2025-en-interim:
+    bytes: 1593462
+    pages: 24
+    pages_without_text: 7
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 134c85eda0e50a18086879312227f2ea709ff168e146d7afda1ffd53728d2608
+    status: new
+    text_layer: mixed
+  sipchem-2025-en-interim-ed27:
+    bytes: 1924026
+    pages: 23
+    pages_without_text: 6
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: de31a9a4ddd28f80a839c6bb2db8992214c7a543ea69fccc4f1abee727cc1b41
+    status: new
+    text_layer: mixed
+  sixth-of-october-for-development-and-investment-2008-en:
+    bytes: 1790301
+    pages: 50
+    pages_without_text: 0
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: d48a2fd457c65b929b55232fb5a02d610133959122800441a7a1a2d93e76f042
+    status: new
+    text_layer: digital
+  sixth-of-october-for-development-and-investment-2015-en-interim:
+    bytes: 1687693
+    pages: 50
+    pages_without_text: 1
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 7d229b2b50e78100bada3bed0bbe31360ce690a783a1a69f8faa414e8c44673f
+    status: new
+    text_layer: mixed
+  sixth-of-october-for-development-and-investment-2020-en-interim:
+    bytes: 735204
+    pages: 56
+    pages_without_text: 0
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 01982235046e872c6c2e6d58a48795807b958b12de6f13955b1f8982be959b93
+    status: new
+    text_layer: digital
+  sixth-of-october-for-development-and-investment-2023-en:
+    bytes: 4969354
+    pages: 59
+    pages_without_text: 59
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 94efb880f70a59aaa8912fc5e4287e3550bfadf165246bf8aa25f5e1a88740df
+    status: new
+    text_layer: scanned
+  sixth-of-october-for-development-and-investment-2023-en-e70d:
+    bytes: 5721306
+    pages: 73
+    pages_without_text: 73
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 3a5130dae1536a86dd9337deb7569f63c56b681db5ce4b043661c32059ea7dee
+    status: new
+    text_layer: scanned
+  sixth-of-october-for-development-and-investment-2024-en-interim:
+    bytes: 1139302
+    pages: 37
+    pages_without_text: 37
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 82f1b4322b47bbfc3b5e9d4a6bfad6e7acb34a44a8c4c539e1c3c4428307b3db
+    status: new
+    text_layer: scanned
+  specialized-medical-2025-en:
+    bytes: 2975496
+    pages: 53
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 8dd542c75de3eb7e1623aa660af321b46ac1944999574969bf4fad1bfd9640bf
+    status: new
+    text_layer: digital
+  spimaco-2025-en-interim:
+    bytes: 1473980
+    pages: 26
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 6cc99c17ad7e79a6f7a15efb15381d82238ab7e29cb47918fcf79c22aa20b954
+    status: new
+    text_layer: digital
+  sultan-food-2025-ar:
+    bytes: 2016604
+    pages: 57
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: d6a561782f05a49d13778e7b7c106bc8b01acb3b7cb81044563b917d7d69cb44
+    status: new
+    text_layer: mixed
+  sustained-infrastructure-holding-2025-en:
+    bytes: 3511005
+    pages: 73
+    pages_without_text: 8
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: dbe6c3a0f1edd84bc37de04ebb8e2082c1c5a1a41d72d6c9fe91a57e97c712dc
+    status: new
+    text_layer: mixed
+  takween-advanced-industries-na-ar:
+    bytes: 4486565
+    pages: 52
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 3aaea47a1df1a4883bb22e8183720a2d86e4c566f313bbaed6649fde186c55c4
+    status: new
+    text_layer: mixed
+  tawuniya-2025-en:
+    bytes: 20139113
+    pages: 149
+    pages_without_text: 1
+    pool: blind
+    retrieved: '2026-09-27'
+    sha256: fce6dcdf382f3a476a1eb5b2e0dee0200a1791f6d5d5ae2d7b44946464f06d75
+    status: new
+    text_layer: mixed
+  telecom-egypt-2025-ar:
+    bytes: 1458412
+    pages: 59
+    pages_without_text: 3
+    pool: model_test
+    retrieved: '2026-09-27'
+    sha256: 48576bf760f02717b5ef47f8d0677cfae7589a59585c0b7abf6748e9c0ec5f1b
+    status: new
+    text_layer: mixed
+  tesco-2025-en:
+    bytes: 8406667
+    pages: 248
+    pages_without_text: 0
+    pool: blind
+    retrieved: '2026-09-27'
+    sha256: 016e77082da46c0cf319d80aa589af936452b215c7bf447d145f5866311be52c
+    status: new
+    text_layer: digital
+  united-electronics-2021-ar-interim:
+    bytes: 1183927
+    pages: 17
+    pages_without_text: 4
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 6a0d00075ca972345c702b00117d04f7d563722f08ce1a9eb835b3b0e44dfe40
+    status: new
+    text_layer: mixed
+  united-electronics-2025-en:
+    bytes: 4794977
+    pages: 74
+    pages_without_text: 6
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 99fc44596d81650a9184561b09a3df278afb66803b712723c573971f6bef25ea
+    status: new
+    text_layer: mixed
+  united-financial-services-2021-ar:
+    bytes: 1167309
+    pages: 39
+    pages_without_text: 0
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 583c4cc7e4b80a3c0a9220761d5b9ac2e4bd5263586e6606f912cd6fec908680
+    status: new
+    text_layer: digital
+  united-foods-2022-ar:
+    bytes: 2306620
+    pages: 86
+    pages_without_text: 3
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: 93ba34045826d5de346118468e7ffe6c3e0f1f9e695f0aa083b3c43170df3d23
+    status: new
+    text_layer: mixed
+  united-international-transportation-2024-ar:
+    bytes: 2286701
+    pages: 55
+    pages_without_text: 7
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: d3dc0cbbaeeb3d49bb4bae927db74660cf3688104cc71c1b061f98f17fef4900
+    status: new
+    text_layer: mixed
+  yamama-cement-2023-ar-interim:
+    bytes: 1741087
+    pages: 16
+    pages_without_text: 5
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 8457002bb697a0dbc94478f77775608baf48862fbc8b0b5be33ac4edd3388b22
+    status: new
+    text_layer: mixed
+  yamama-cement-2023-ar-interim-17a7:
+    bytes: 1994957
+    pages: 16
+    pages_without_text: 5
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 04ad9ba580cd4d8bb0c700a57d57ee4c741af122b25558e7f32d7e9e611b5a26
+    status: new
+    text_layer: mixed
+  yamama-cement-2024-ar-interim:
+    bytes: 2425869
+    pages: 16
+    pages_without_text: 4
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: ad34de92e0e0e4ece86a1cf3b843c7abf1a8f91bf73fbd51cd29abe0824b2c5a
+    status: new
+    text_layer: mixed
+  yanbu-cement-2024-ar-interim:
+    bytes: 714662
+    pages: 17
+    pages_without_text: 1
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 5c2c849f6b9085321ceb5dc6b050f6915d61d6353d407b587db678e81d1df3be
+    status: new
+    text_layer: mixed
+  yanbu-cement-2025-en:
+    bytes: 2090190
+    pages: 46
+    pages_without_text: 3
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: 7aa24367df35cb17de610dc6b94d1d0be084c710ad44eb5a1f6cb3cf607343b9
+    status: new
+    text_layer: mixed
+  yanbu-cement-2025-en-interim:
+    bytes: 666355
+    pages: 15
+    pages_without_text: 1
+    pool: blind
+    retrieved: '2026-09-26'
+    sha256: d7f55fed8164d66f47278ac06e8f3dbc705247e1a87da0f16d4f781d5a03bfa9
+    status: new
+    text_layer: mixed
+  yanbu-national-petrochemical-2026-en-interim:
+    bytes: 1114590
+    pages: 17
+    pages_without_text: 0
+    pool: model_test
+    retrieved: '2026-09-26'
+    sha256: 92b22cbe379b680880f58747295750760204c4020e6f302fd960d6960c80542c
+    status: new
+    text_layer: digital
+  zain-ksa-2025-en:
+    bytes: 6141126
+    pages: 71
+    pages_without_text: 5
+    pool: train
+    retrieved: '2026-09-26'
+    sha256: bee6f9b63c9d81f625abb5675852d96679bb2776b746ef6f1bf2b1e7e26d192c
+    status: new
+    text_layer: mixed

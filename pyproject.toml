@@ -31,12 +31,14 @@ dev = [
   "ruff>=0.14",
   "mypy>=1.18",
   "types-PyYAML>=6.0",
+  "pypdfium2>=4.30",
+  "truststore>=0.10",
 ]
 
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["packages/*/src", "apps/*/src"]
+src = ["packages/*/src", "apps/*/src", "scripts", "training/sources"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
@@ -57,12 +59,12 @@ module = ["docling.*", "docling_core.*", "mlx.*", "mlx_lm.*", "pypdfium2.*", "ma
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-# Extend as apps/ and tests/ land (day 12 and day 7 respectively).
-testpaths = ["packages"]
+# Extend as apps/ lands.
+testpaths = ["packages", "tests"]
 # Keep in sync with workspace members. uv marks editable .pth files hidden on macOS and
 # Python 3.11+ skips hidden .pth files, so tests set the paths directly.
 # `make unhide-pth` fixes it for scripts and `uv run python`.
-pythonpath = ["packages/core/src"]
+pythonpath = ["packages/core/src", "scripts", "training/sources"]
 addopts = "-q --strict-markers"
 markers = [
   "slow: needs model weights or OCR, excluded from the default run",
