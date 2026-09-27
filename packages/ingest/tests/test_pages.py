@@ -82,7 +82,7 @@ def test_changing_the_ocr_resolution_invalidates_the_cache(tmp_path: Path) -> No
     pdf = make_blank_pdf(tmp_path / "scan.pdf")
     read_pages(pdf, IngestConfig(), FakeOcr([TITLE]), cache_dir=tmp_path / "cache")
     ocr = FakeOcr([TITLE])
-    read_pages(pdf, IngestConfig(ocr_dpi=100), ocr, cache_dir=tmp_path / "cache")
+    read_pages(pdf, IngestConfig(ocr_dpi=150), ocr, cache_dir=tmp_path / "cache")
     assert ocr.calls > 0
 
 

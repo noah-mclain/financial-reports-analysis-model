@@ -29,7 +29,9 @@ Apple Vision via ocrmac, on a scanned Juhayna statement page (2026-09-27):
 
 Consequences:
 
-- One accurate pass at 72 dpi over every image page is cheap enough to locate statements. The
+- One accurate pass at 100 dpi over every image page is cheap enough to locate statements. 72 dpi
+  was the first choice but left some scans nearly unread (Juhayna EN standalone p5: 6 lines
+  against 124 at 100 dpi, in about the same time). The
   fast-then-accurate scheme in 08, principle 3, is not needed, and fast mode is never used.
 - The 24.7 s per page recorded in `eval/golden/README.md` was mostly model load.
 - A 64-page scanned filing costs about 15 to 20 s of OCR once the model is loaded.
@@ -69,7 +71,7 @@ package imports on Linux.
 
 | Module | Responsibility |
 |--------|----------------|
-| `config.py` | `IngestConfig` loaded from `configs/ingest.toml`: enabled and optional statement types, `min_text_chars` (50), `ocr_dpi` (72), `ocr_languages` (`["ar-SA", "en-US"]`), `pad_pages` (1), `header_fraction` (0.35), `low_selectivity_share` (0.25), artifact root (`var/artifacts`) |
+| `config.py` | `IngestConfig` loaded from `configs/ingest.toml`: enabled and optional statement types, `min_text_chars` (50), `ocr_dpi` (100), `ocr_languages` (`["ar-SA", "en-US"]`), `pad_pages` (1), `header_fraction` (0.35), `low_selectivity_share` (0.25), artifact root (`var/artifacts`) |
 | `errors.py` | `IngestError(reason)` with reasons `unreadable_pdf`, `encrypted_pdf` and `empty_pdf` |
 | `ocr.py` | `OcrEngine` protocol: `recognize(image, languages) -> list[OcrLine]`, where `OcrLine` has text, bbox in page fraction and confidence. `VisionOcr` uses accurate mode only. `read_with_fallback` reads in each configured language in turn until the result is in that language's script (R21) |
 | `pages.py` | `read_pages(pdf, config, ocr) -> list[PageText]`, the page text cache, and `profiles(pages) -> list[PageProfile]` for `Document` |
@@ -145,13 +147,13 @@ class LocateResult(BaseModel):
 ```
 PDF ─► read_pages ─► PageText[] ─► score_page ─► PageScore[] ─► locate ─► LocateResult
        │ pypdfium2 per page      (cached)        (pure)        │ detect_industry  (locate.json)
-       │ char_count < 50: render at 72 dpi, OcrEngine
+       │ char_count < 50, or garbled: render at 100 dpi, OcrEngine
 ```
 
 1. **Read.** The file's sha256 identifies the document. For each page, pypdfium2 extracts
    the header region (top 35%) and the body separately, with bidi controls removed
    (`fra_core.numbers.strip_bidi`). A page under `min_text_chars` is an image page: it is
-   rendered at `ocr_dpi` and read with both OCR languages, and OCR lines are split into header
+   rendered at `ocr_dpi` and read Arabic first, then English (R21), and OCR lines are split into header
    and body by their bbox. Script counts give each page, and the document, its language.
    A text page whose Arabic words read backwards is marked `visual_arabic` (see below).
 2. **Cache.** `PageText[]` is written to `var/artifacts/<sha256>/pages.v<N>.json`, keyed by

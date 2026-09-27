@@ -155,9 +155,9 @@ negatives:
     - المحتويات
     - الفهرس
   notes:
-    - notes to the consolidated financial statements
-    - notes to the financial statements
-    - notes to the interim condensed
-    - إيضاحات حول القوائم المالية
+    # Stems: filers qualify the heading freely (standalone, separate, interim condensed).
+    - notes to the
+    - notes to and forming part of
+    - إيضاحات حول
     - الإيضاحات المتممة
     - إيضاحات متممة

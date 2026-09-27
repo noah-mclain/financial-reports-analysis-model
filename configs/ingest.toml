@@ -12,8 +12,9 @@ min_text_chars = 50
 header_fraction = 0.35
 
 [ocr]
-# Accurate mode only. 72 dpi reads a scanned page in about 0.25 s once the model is loaded.
-dpi = 72
+# Accurate mode only. 100 dpi: at 72 dpi some scans come back nearly empty (Juhayna EN
+# standalone p5: 6 lines against 124 at 100 dpi), for about the same time per page.
+dpi = 100
 languages = ["ar-SA", "en-US"]
 
 [locate]

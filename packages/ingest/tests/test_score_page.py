@@ -162,3 +162,21 @@ def test_a_title_whose_first_word_ocr_garbled_is_still_a_title() -> None:
     )
     score = score_page(text_page(header, numbers_block(label="بند")), BOOK)
     assert BALANCE in score.title_types
+
+
+def test_notes_headers_with_a_qualifier_are_still_notes() -> None:
+    # Juhayna: "Notes to the Standalone Financial Statements", then a note titled
+    # "Income Statement" over a table of numbers.
+    header = (
+        "Juhayna Food Industries Company (S.A.E.)\n"
+        "Notes to the Standalone Financial Statements for the Financial Year Ended 31 December 2025\n"
+        "Income Statement\nAmount in EGP 2025 2024"
+    )
+    score = score_page(text_page(header, numbers_block()), BOOK)
+    assert "notes" in score.negatives
+    assert not score.is_candidate(INCOME)
+
+
+def test_arabic_notes_headers_with_a_qualifier_are_still_notes() -> None:
+    header = "إيضاحات حول القوائم المالية المستقلة المجمعة\nللسنة المنتهية في 31 ديسمبر 2025\nقائمة الدخل"
+    assert "notes" in score_page(text_page(header, numbers_block(label="بند")), BOOK).negatives
