@@ -23,7 +23,8 @@ pools so that no score is measured on something the code or the model has alread
    and fix it on a `dev` or `train` document with the same trait. If that is impossible,
    the document moves to `dev` and is replaced in `blind`.
 4. **Banks and insurers are `negative_control`.** They are in scope only as documents the tool
-   must decline with a reason.
+   must decline with a reason. Each carries `sector`, and other financial companies a `subsector`,
+   so the industry signal can be scored (`docs/blueprint/09-ingest-locate.md`).
 5. **`model_test` and `blind` freeze at the first model_test evaluation.** After that only
    `train` grows, and only to close a gap an evaluation measured (for example, too few Arabic
    examples of a critical item). Scores from different weeks stay comparable.

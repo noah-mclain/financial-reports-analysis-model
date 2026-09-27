@@ -194,3 +194,41 @@ def test_refused_downloads_are_listed_for_a_browser(error: str, by_hand: bool) -
     from corpus import refused
 
     assert refused(error) is by_hand
+
+
+def control(doc_id: str, **fields: str) -> dict[str, Any]:
+    return {**doc(doc_id, f"Issuer {doc_id}", "train"), "role": "negative_control", **fields}
+
+
+def test_negative_controls_need_a_sector() -> None:
+    report = check([control("a")], GOLDEN)
+    assert report.errors == ["a: negative_control needs a sector (bank, insurer, other_financial)"]
+
+
+def test_other_financial_needs_a_subsector() -> None:
+    report = check([control("a", sector="other_financial")], GOLDEN)
+    assert report.errors == [
+        "a: other_financial needs a subsector (investment_holding, brokerage, "
+        "exchange_operator, consumer_finance, asset_manager, other)"
+    ]
+
+
+def test_banks_take_no_subsector() -> None:
+    report = check([control("a", sector="bank", subsector="brokerage")], GOLDEN)
+    assert report.errors == ["a: subsector is only for other_financial"]
+
+
+def test_corporates_take_no_sector() -> None:
+    report = check([{**doc("a", "Savola Group", "train"), "sector": "bank"}], GOLDEN)
+    assert report.errors == ["a: sector is only for negative_control"]
+
+
+def test_labelled_controls_pass() -> None:
+    report = check(
+        [
+            control("a", sector="bank"),
+            control("b", sector="other_financial", subsector="brokerage"),
+        ],
+        GOLDEN,
+    )
+    assert report.errors == []

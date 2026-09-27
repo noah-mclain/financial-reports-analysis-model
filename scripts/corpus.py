@@ -38,6 +38,15 @@ STORE = ROOT / "var/corpus"
 
 POOLS = ("dev", "train", "model_test", "blind")
 ROLES = ("corporate", "negative_control")
+SECTORS = ("bank", "insurer", "other_financial")
+SUBSECTORS = (
+    "investment_holding",
+    "brokerage",
+    "exchange_operator",
+    "consumer_finance",
+    "asset_manager",
+    "other",
+)
 # A page with fewer characters than this has no usable text layer (same rule as the locator).
 MIN_TEXT_CHARS = 50
 USER_AGENT = "Mozilla/5.0 (fra-corpus; research use of public filings)"
@@ -87,6 +96,7 @@ def check(documents: list[dict[str, Any]], golden_issuers: set[str]) -> CheckRep
             report.errors.append(f"{doc_id}: unknown pool {pool!r}")
         if role not in ROLES:
             report.errors.append(f"{doc_id}: unknown role {role!r}")
+        report.errors.extend(_sector_errors(doc_id, role, doc.get("sector"), doc.get("subsector")))
         url = doc.get("url")
         if url in seen_urls:
             report.errors.append(f"{doc_id}: same url as {seen_urls[url]}")
@@ -106,6 +116,19 @@ def check(documents: list[dict[str, Any]], golden_issuers: set[str]) -> CheckRep
         if len(pools) > 1:
             report.errors.append(f"issuer {key!r} spans pools {sorted(pools)}")
     return report
+
+
+def _sector_errors(doc_id: str, role: Any, sector: Any, subsector: Any) -> list[str]:
+    """Negative controls say what kind of financial company they are, for the industry eval."""
+    if role != "negative_control":
+        return [f"{doc_id}: sector is only for negative_control"] if sector else []
+    if sector not in SECTORS:
+        return [f"{doc_id}: negative_control needs a sector ({', '.join(SECTORS)})"]
+    if sector == "other_financial" and subsector not in SUBSECTORS:
+        return [f"{doc_id}: other_financial needs a subsector ({', '.join(SUBSECTORS)})"]
+    if sector != "other_financial" and subsector:
+        return [f"{doc_id}: subsector is only for other_financial"]
+    return []
 
 
 def text_layer(chars_per_page: list[int]) -> str:
