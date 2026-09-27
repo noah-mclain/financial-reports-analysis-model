@@ -6,7 +6,7 @@
 meta:
   collected: 2026-09-12
   method: "pdfinfo, pdftotext character counts, pdffonts and pdfimages per page, macOS Vision OCR spike"
-  ocr_reference: "Vision accurate mode, 150 dpi, warm: 24.7 s per page. Fast mode corrupts digits and is unusable for statements."
+  ocr_reference: "Vision accurate mode, 100 dpi, model loaded: about 0.25 s per Arabic page and 0.45 s per English page (read Arabic first, then English). The 24.7 s measured on 2026-09-12 was mostly model load. Fast mode corrupts digits and rejects Arabic."
 
 documents:
 

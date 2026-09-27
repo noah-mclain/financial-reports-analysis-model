@@ -295,3 +295,50 @@ against them, because `statement_pages` is an answer key and never an input (08,
 | R22 | Statement titles appear in only one language on bilingual pages, or as images | Structural cues (period header, note column, currency and scale line) score the page without its title, alongside numeric density and continuation. The eval shows every miss with its page scores |
 | R23 | Label suggestions bias the owner toward the same pages the locator would find | Blind labelling first, suggestions shown only afterwards as a list of disagreements to settle |
 | R24 | Text layers return Arabic lines with words reversed (77 of 82), letters reversed (Almarai AR) or ligatures swapped | Two reading orders, per-page letter restoration and lam-alef folding when matching (see above). Part 3 repairs labels properly |
+
+## Results
+
+Measured 2026-09-28 on the `ingest-locate` branch, after labelling the 9 scanned golden
+documents (blind, then reconciled: 34 disagreements, no label changed; 32 were extra
+suggestions on neighbouring statements or notes tables, 2 were misses on optional types).
+
+| Measure | Target | Result | |
+|---------|--------|--------|---|
+| Recall on the enabled types, golden set (12 documents) | 100% | 100% | pass |
+| Median candidate share, golden set | 15% or less | 10.7% (range 8.2% to 16.9%) | pass |
+| Corporate documents with a balance and an income range, `train` | 95% or more | 98.2% (107 of 109) | pass |
+| `sector: bank` or `insurer` given that verdict, `train` | all 6 | 6 of 6 | pass |
+| Corporate documents marked bank or insurer, `train` | at most 2 | 0 | pass |
+| Time, digital annual report (275 pages) | under 10 s | 1.4 to 2.3 s | pass |
+| Time, 64-page scanned filing, OCR model loaded | under 30 s | Arabic 11.5 to 15.2 s; English 30.4 s for 66 pages, 37.5 s for 85 | pass for Arabic; English at the limit (R21) |
+
+Optional types, reported only: cash flow and changes in equity are each found on 11 of 12
+golden documents. Juhayna 2024 AR loses its cash flow title to OCR (`قالمة التنفقات`), and
+Edita IFRS's landscape equity statement has no title OCR can read.
+
+`dev`: 3 of 3 covered. `train` misses: Al Dawaa 2025 interim and Jazan 2024 (not yet
+diagnosed). Other financial sub-kinds, which carry no target: 2 of 4 exchange operators are
+recognised; investment holdings, asset managers and consumer finance companies read as
+corporate, because their statements use ordinary line items. The week 2 decline rule needs a
+structural test for them (an income statement without revenue or cost of sales).
+
+### What tuning changed
+
+Every change was measured on `train` or on labelled golden pages and pinned by a test first.
+
+| Change | Found on |
+|--------|----------|
+| Scans read at 100 dpi, not 72 | Juhayna EN standalone p5: 6 lines at 72 dpi, 124 at 100 |
+| Arabic first, English retry (R21) | 24 golden scan pages |
+| Arabic read in both word orders, lam-alef folded (R24) | 77 of 82 Arabic corpus PDFs |
+| Text layers made of noise are read by OCR | Al Kathiri (Greek-mapped font), Naba (modifier-glyph digits) |
+| A currency line counts as structure | Al Dawaa 2023 |
+| Comprehensive-income title plus revenue lines is also income | Herfy 2022 |
+| Arabic title stems without قائمة | OCR reading قائمة as فائمة or خاامة |
+| Notes headings matched by stem (`notes to the`, `إيضاحات حول`) | Juhayna EN standalone |
+| No continuation through pages with negative cues | Juhayna AR consolidated: 52% and 56% of pages to 16% and 17% |
+| Industry: Gulf bank and takaful wording; whole-document fallback needs 3 distinct cues | ABC, Orient Takaful; Saudi Energy, United Electronics, Egypt Kuwait wrongly flagged before |
+
+The scoring weights are unchanged from the plan: title 3.0, cue 1.5, numbers up to 2.0 (full
+at 30 amounts), each structural cue 1.0, each negative -4.0, candidate at 4.5, continuation at
+15 amounts. Weight changes are made with the owner.
