@@ -21,6 +21,7 @@ def score(
     value: float = 8.0,
     numbers: int = 40,
     continuation: bool = False,
+    negatives: tuple[str, ...] = (),
 ) -> PageScore:
     names = list(titled)
     return PageScore(
@@ -29,6 +30,7 @@ def score(
         title_types=names,
         numeric_tokens=numbers,
         continuation=continuation,
+        negatives=list(negatives),
     )
 
 
@@ -73,3 +75,10 @@ def test_conversion_merges_enabled_ranges_and_skips_optional_ones() -> None:
         StatementRange(type=INC, first_page=30, last_page=30, score=5.0, rank=2),
     ]
     assert plan_conversion(ranges, [B, INC], page_count=40, pad=1) == [(4, 8), (29, 31)]
+
+
+def test_a_notes_page_never_continues_a_range() -> None:
+    # Juhayna AR consolidated: one unmarked notes page started a range that then ran through
+    # 24 numeric notes pages, each headed "تابع الإيضاحات المتممة".
+    ranges = find_ranges([score(32, [B]), score(33, negatives=("notes",)), score(34)])
+    assert spans(ranges, B) == [(32, 32)]

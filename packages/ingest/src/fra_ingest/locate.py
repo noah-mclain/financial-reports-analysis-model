@@ -247,7 +247,9 @@ def locate_flags(
 
 
 def _continues(score: PageScore) -> bool:
-    if score.title_types:
+    # A titled page starts its own range, and a page with auditor, contents or notes wording in
+    # its header is never part of a statement, however many numbers it holds.
+    if score.title_types or score.negatives:
         return False
     return score.continuation or score.numeric_tokens >= CONTINUATION_MIN_NUMBERS
 
