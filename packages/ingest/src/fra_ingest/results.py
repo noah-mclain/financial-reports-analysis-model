@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from fra_core.schemas import PageMode, StatementType, TextSource
@@ -74,3 +76,27 @@ class StatementRange(BaseModel):
 
     def padded(self, pad: int, page_count: int) -> tuple[int, int]:
         return max(1, self.first_page - pad), min(page_count, self.last_page + pad)
+
+
+IndustryKind = Literal["corporate", "bank", "insurer", "other_financial", "unknown"]
+IndustrySubkind = Literal[
+    "investment_holding",
+    "brokerage",
+    "exchange_operator",
+    "consumer_finance",
+    "asset_manager",
+    "other",
+]
+
+
+class IndustrySignal(BaseModel):
+    """What kind of company issued the document. Stored now; the decline rule is week 2."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: IndustryKind
+    subkind: IndustrySubkind | None = Field(
+        default=None, description="Set only when kind is other_financial"
+    )
+    score: float = 0.0
+    evidence: list[tuple[int, str]] = Field(default_factory=list)

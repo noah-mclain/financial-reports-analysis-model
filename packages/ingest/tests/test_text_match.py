@@ -1,6 +1,6 @@
 """Phrase matching on normalized text, and reading visual-order Arabic."""
 
-from fra_ingest.text_match import PhraseIndex, reading_variants
+from fra_ingest.text_match import PhraseIndex, canonical, reading_variants
 
 
 def test_phrases_match_whole_words_after_normalization() -> None:
@@ -51,3 +51,9 @@ def test_text_without_arabic_has_one_variant() -> None:
 def test_swapped_lam_alef_ligatures_still_match() -> None:
     index = PhraseIndex.build({"comprehensive_income": ["الدخل الشامل الآخر"]})
     assert index.find(["الدخل الشامل اآلخر"])  # ligature extracted as alef-madda, lam
+
+
+def test_canonical_form_is_stable_under_repetition() -> None:
+    # "للاستثمار" (for investment): folding once leaves a new lam-alef pair behind.
+    once = canonical("شركة للاستثمار")
+    assert canonical(once) == once

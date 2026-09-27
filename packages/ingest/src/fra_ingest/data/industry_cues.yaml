@@ -1,0 +1,100 @@
+# Cues for the industry signal, with weights. Groups are "<kind>" or "other_financial/<subkind>".
+# Compared after fra_core.labels.normalize_label. Exclusions are removed from the text first,
+# since ordinary companies print them too.
+
+exclude:
+  - cash and bank balances
+  - bank balances
+  - balances with banks
+  - cash at banks
+  - bank borrowings
+  - bank overdrafts
+  - prepaid insurance
+  - insurance expense
+  - أرصدة لدى البنوك
+  - النقد لدى البنوك
+  - قروض بنكية
+  - تسهيلات بنكية
+  - تأمين مدفوع مقدما
+
+cues:
+  bank:
+    deposits from customers: 3
+    customers' deposits: 3
+    due to customers: 2
+    loans and advances to customers: 3
+    financing and advances: 3
+    balances with the central bank: 3
+    balances with central banks: 3
+    statutory deposit with: 2
+    net interest income: 2
+    net special commission income: 3
+    ودائع العملاء: 3
+    قروض وسلف للعملاء: 3
+    تمويل وسلف: 3
+    أرصدة لدى البنك المركزي: 3
+    وديعة نظامية: 2
+    صافي دخل العمولات الخاصة: 3
+    صافي دخل الفوائد: 2
+  insurer:
+    insurance contract liabilities: 3
+    reinsurance contract assets: 3
+    insurance revenue: 3
+    insurance service result: 3
+    gross written premiums: 3
+    net claims incurred: 2
+    التزامات عقود التأمين: 3
+    موجودات عقود إعادة التأمين: 3
+    إيرادات التأمين: 3
+    نتيجة خدمات التأمين: 3
+    إجمالي أقساط التأمين المكتتبة: 3
+    صافي المطالبات المتكبدة: 2
+  other_financial/exchange_operator:
+    listing fees: 3
+    clearing and settlement: 3
+    trading commission income: 2
+    trading fees: 2
+    depository services: 2
+    post trade: 2
+    رسوم الإدراج: 3
+    المقاصة والتسوية: 3
+    عمولات التداول: 2
+    رسوم التداول: 2
+    خدمات الإيداع: 2
+  other_financial/brokerage:
+    brokerage commission: 3
+    brokerage fees: 3
+    margin lending: 2
+    clients' money: 3
+    client money: 3
+    عمولات الوساطة: 3
+    أموال العملاء: 2
+    تمويل الهامش: 2
+  other_financial/investment_holding:
+    net gains on investments at fair value through profit or loss: 2
+    dividend income from investees: 2
+    private equity: 2
+    أرباح الاستثمارات: 2
+    إيرادات توزيعات من الشركات المستثمر فيها: 2
+    الاستثمارات المباشرة: 2
+  other_financial/consumer_finance:
+    income from islamic financing contracts: 3
+    consumer finance: 3
+    net investment in finance receivables: 2
+    finance lease receivables: 2
+    instalment sales receivables: 2
+    إيرادات من عقود التمويل الإسلامي: 3
+    صافي الدخل من أنشطة التمويل الإسلامي: 3
+    التمويل الاستهلاكي: 3
+    مدينو التمويل: 2
+    مدينو عقود التأجير التمويلي: 2
+  other_financial/asset_manager:
+    assets under management: 3
+    fund management fees: 3
+    asset management fees: 3
+    management fees from funds: 2
+    subscription fees: 2
+    الأصول تحت الإدارة: 3
+    أتعاب إدارة الصناديق: 3
+    أتعاب إدارة الأصول: 3
+    رسوم الاشتراك: 2

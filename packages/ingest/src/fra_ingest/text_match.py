@@ -56,7 +56,12 @@ def canonical(text: str) -> str:
     """``normalize_label``, then lam-alef folded to alef-lam. Text layers often split the
     lam-alef ligature in the wrong order (``اآلخر`` for ``الآخر``, ``المعامالت`` for
     ``المعاملات``); folding both sides the same way makes the two spellings meet."""
-    return normalize_label(text).replace("لا", "ال")
+    folded = normalize_label(text)
+    # Repeat until stable: in "للا" one swap exposes another pair, and a form that changes
+    # when folded again would stop matching text that was folded twice.
+    while "لا" in folded:
+        folded = folded.replace("لا", "ال")
+    return folded
 
 
 @dataclass(frozen=True)
