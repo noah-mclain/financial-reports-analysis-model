@@ -176,23 +176,27 @@ PDF ─► read_pages ─► PageText[] ─► score_page ─► PageScore[] ─
    locator found them, and on every page otherwise, since line items show what kind of
    business it is while a corporate annual report can mention banking in its narrative. Excluded corporate phrases are
    removed before matching. A financial company that is neither a bank nor an insurer is
-   `other_financial` with a sub-kind: `investment_holding`, `brokerage`, `exchange_operator`
-   or `other`. The verdict is stored; nothing is declined in this part.
+   `other_financial` with a sub-kind: `investment_holding`, `brokerage`, `exchange_operator`,
+   `consumer_finance`, `asset_manager` or `other`. The verdict is stored; nothing is declined in this part.
 
-### Arabic stored in visual order
+### Arabic word and letter order in text layers
 
-Found while writing the plan (2026-09-27): the Almarai Arabic annual report stores Arabic in
-visual order, so the text layer yields every Arabic word with its letters reversed
-(`ةدحوملا يلاملا زكرملا ةمئاق` for `قائمة المركز المالي الموحدة`), and a line's words come
-out in either order. Amounts are unaffected. It is 1 of the 61 Arabic corpus documents with a
-text layer, but it is the Gate A document.
+Found while writing the plan (2026-09-27), measured on the non-blind Arabic corpus:
 
-A word never starts with ta marbuta or alef maqsura and never ends with the article, so
-counting those shapes separates the two orders clearly (1,484 against 5 on Almarai AR; 28
-against 1,621 on a normal Arabic filing). A page detected as visual is matched in two
-variants, letters restored with the word order kept and with it reversed, and a phrase counts
-if either variant holds it. Part 3 will need a full repair for labels; locate only needs to
-match.
+| What pypdfium2 returns | Documents | Example |
+|------------------------|-----------|---------|
+| Each line's words in reverse order, letters correct | 77 of 82 | `المالي المركز قائمة` for `قائمة المركز المالي` |
+| Letters of every word reversed as well (visual order) | Almarai AR (1 of 61 with a text layer) | `ةمئاق` for `قائمة` |
+| Lam-alef ligature split in the wrong order | common in both | `اآلخر` for `الآخر`, `المعامالت` for `المعاملات` |
+
+Amounts are unaffected. OCR output is in logical order.
+
+Handling in locate: any text holding Arabic is searched as extracted and with each line's
+words reversed, and a phrase counts if either holds it. Visual-order pages are detected per
+page (a word never starts with ta marbuta or alef maqsura and never ends with the article:
+1,484 against 5 on Almarai AR, 28 against 1,621 on a normal filing) and have each word's
+letters restored first. Phrase comparison folds lam-alef to alef-lam on both sides. Part 3
+needs a full repair to display labels; locate only needs to match.
 
 ## Failure handling
 
@@ -243,7 +247,8 @@ inside `convert_ranges`.
 wider than banks and insurers (it also holds investment holdings, brokerages and exchange
 operators), so each negative control gets `sector: bank | insurer | other_financial`, and an
 `other_financial` one also gets `subsector: investment_holding | brokerage | exchange_operator
-| other`. In `train` that is 4 bank, 2 insurer and 13 other financial documents. Only `bank`
+| consumer_finance | asset_manager | other`. In `train` that is 4 bank, 2 insurer and 13 other
+financial documents. Only `bank`
 and `insurer` have a target here; sub-sector verdicts are reported, and how `other_financial`
 is treated is part of the week 2 decline rule, which can act on the whole group or on one
 sub-sector. Development runs use `dev` and `train`. `model_test` runs at checkpoints only. The harness refuses `blind` (R17).
@@ -287,4 +292,4 @@ against them, because `statement_pages` is an answer key and never an input (08,
 | R21 | Vision's result depends on the order of the language list, degrading one script when both are given | Measured in the first plan task: an English and an Arabic scan, each read with both language orders. If both orders read cleanly, one pass with both languages stays. If one degrades, a 36 dpi pass guesses each page's script and the full pass puts that language first |
 | R22 | Statement titles appear in only one language on bilingual pages, or as images | Structural cues (period header, note column, currency and scale line) score the page without its title, alongside numeric density and continuation. The eval shows every miss with its page scores |
 | R23 | Label suggestions bias the owner toward the same pages the locator would find | Blind labelling first, suggestions shown only afterwards as a list of disagreements to settle |
-| R24 | A text layer stores Arabic in visual order (Almarai AR) | Per-page detection and two reading variants for matching (see above). Part 3 repairs labels properly |
+| R24 | Text layers return Arabic lines with words reversed (77 of 82), letters reversed (Almarai AR) or ligatures swapped | Two reading orders, per-page letter restoration and lam-alef folding when matching (see above). Part 3 repairs labels properly |

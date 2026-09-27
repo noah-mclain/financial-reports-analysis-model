@@ -44,8 +44,10 @@ only, optional), PyYAML, Pillow, pytest, mypy strict, ruff.
 4. **Arabic-Indic digits with space thousands separators** (`٨ ٨٦٤ ٣٨٣ ٢٤٤`), years and
    note references glued to a value must be counted correctly by the numeric density. Tests
    added in Task 4.
-5. **Arabic text extracted with reversed words** (Almarai AR) must still match titles and
-   cues. Detector and variant tests in Task 4, golden check in Task 3.
+5. **Arabic text in pypdfium2's extraction order.** 77 of 82 non-blind Arabic PDFs come out
+   with each line's words in reverse order, and Almarai AR also reverses the letters of every
+   word; lam-alef ligatures come out swapped (`اآلخر` for `الآخر`). Titles and cues must match
+   in all three cases. Variant and folding tests in Task 4, golden checks in Task 3.
 
 ## File Map
 
@@ -884,6 +886,11 @@ def test_text_layer_is_decided_page_by_page(golden: Callable[[str], Path]) -> No
     assert ocr.calls == 3
 
 
+def test_most_arabic_text_layers_reverse_word_order_only(golden: Callable[[str], Path]) -> None:
+    pages = read_pages(golden("juhayna-2025-ar-standalone.pdf"), IngestConfig(), FakeOcr())
+    assert not any(page.visual_arabic for page in pages)  # scanned: OCR gives logical order
+
+
 def test_arabic_text_layer_has_no_bidi_controls_and_is_marked_visual(
     golden: Callable[[str], Path],
 ) -> None:
@@ -1316,6 +1323,7 @@ def test_phrases_match_whole_words_after_normalization() -> None:
     assert index.find(["CONSOLIDATED STATEMENT OF FINANCIAL POSITION"]) == {
         "statement of financial position": frozenset({"balance"})
     }
+    # Keys are canonical forms: normalize_label, then lam-alef folded.
     assert index.find(["اجمالي الأصول"])  # hamza forms fold together
     assert not index.find(["statement of financial positions"])
 
@@ -1324,8 +1332,8 @@ def test_the_longest_phrase_wins_and_consumes_its_words() -> None:
     index = PhraseIndex.build(
         {"income": ["قائمة الدخل"], "comprehensive_income": ["قائمة الدخل الشامل"]}
     )
-    assert index.find(["قائمة الدخل الشامل الموحدة"]) == {
-        "قائمه الدخل الشامل": frozenset({"comprehensive_income"})
+    assert set(index.find(["قائمة الدخل الشامل الموحدة"]).values()) == {
+        frozenset({"comprehensive_income"})
     }
 
 
@@ -1341,8 +1349,23 @@ def test_visual_arabic_is_read_in_both_word_orders() -> None:
     assert "إيضاحات ۳۱ ديسمبر م٢٠٢٥" in variants[0]
 
 
-def test_logical_text_has_one_variant() -> None:
-    assert reading_variants("قائمة المركز المالي", False) == ["قائمة المركز المالي"]
+def test_arabic_lines_are_also_read_with_their_words_reversed() -> None:
+    variants = reading_variants("المالي المركز قائمة\n2025 2024", False)
+    assert variants[0] == "المالي المركز قائمة\n2025 2024"
+    assert variants[1].startswith("قائمة المركز المالي")
+    index = PhraseIndex.build({"balance": ["قائمة المركز المالي"]})
+    assert index.find(variants)
+
+
+def test_text_without_arabic_has_one_variant() -> None:
+    assert reading_variants("Statement of financial position", False) == [
+        "Statement of financial position"
+    ]
+
+
+def test_swapped_lam_alef_ligatures_still_match() -> None:
+    index = PhraseIndex.build({"comprehensive_income": ["الدخل الشامل الآخر"]})
+    assert index.find(["الدخل الشامل اآلخر"])  # ligature extracted as alef-madda, lam
 ```
 
 - [ ] **Step 3: Write the failing scoring tests**
@@ -1483,18 +1506,31 @@ imports):
 
 ```python
 def reading_variants(text: str, visual: bool) -> list[str]:
-    """Texts to search. Visual-order Arabic yields two: letters restored with the word order
-    kept, and with the word order reversed too. Titles need the second, column headers such as
-    ``31 December 2025`` the first, so both are searched."""
-    if not visual:
+    """Texts to search for phrases.
+
+    pypdfium2 returns most Arabic lines with their words in reverse order (77 of 82 Arabic
+    corpus PDFs), and a line can mix that with left-to-right runs such as dates. So any text
+    holding Arabic is searched as extracted and with each line's words reversed. Visual-order
+    text (Almarai AR) first has the letters of each Arabic word restored.
+    """
+    if not _ARABIC_WORD.search(text):
         return [text]
-    lines = [
-        [_ARABIC_WORD.sub(lambda match: match.group(0)[::-1], word) for word in line.split()]
-        for line in text.splitlines()
-    ]
+    lines = [line.split() for line in text.splitlines()]
+    if visual:
+        lines = [
+            [_ARABIC_WORD.sub(lambda match: match.group(0)[::-1], word) for word in words]
+            for words in lines
+        ]
     same_order = "\n".join(" ".join(words) for words in lines)
     reversed_order = "\n".join(" ".join(reversed(words)) for words in lines)
     return [same_order, reversed_order]
+
+
+def canonical(text: str) -> str:
+    """``normalize_label``, then lam-alef folded to alef-lam. Text layers often split the
+    lam-alef ligature in the wrong order (``اآلخر`` for ``الآخر``, ``المعامالت`` for
+    ``المعاملات``); folding both sides the same way makes the two spellings meet."""
+    return normalize_label(text).replace("لا", "ال")
 
 
 @dataclass(frozen=True)
@@ -1508,7 +1544,7 @@ class PhraseIndex:
         owners: dict[str, set[str]] = {}
         for group, phrases in groups.items():
             for phrase in phrases:
-                normalized = normalize_label(phrase)
+                normalized = canonical(phrase)
                 if normalized:
                     owners.setdefault(normalized, set()).add(group)
         ordered = sorted(owners.items(), key=lambda item: len(item[0]), reverse=True)
@@ -1519,7 +1555,7 @@ class PhraseIndex:
         a shorter phrase inside a longer one that matched is not reported again."""
         found: dict[str, frozenset[str]] = {}
         for text in texts:
-            haystack = f" {normalize_label(text)} "
+            haystack = f" {canonical(text)} "
             for phrase, groups in self.entries:
                 needle = f" {phrase} "
                 if needle in haystack:
@@ -2054,7 +2090,7 @@ git commit -m "Group candidate pages into ranges and plan the pages to convert"
 **Interfaces:**
 - Consumes: `PageText`, `StatementRange`, `PhraseIndex`, `reading_variants`.
 - Produces:
-  - `results.IndustrySignal(kind: Literal["corporate", "bank", "insurer", "other_financial", "unknown"], subkind: Literal["investment_holding", "brokerage", "exchange_operator", "other"] | None, score: float, evidence: list[tuple[int, str]])`
+  - `results.IndustrySignal(kind: Literal["corporate", "bank", "insurer", "other_financial", "unknown"], subkind: Literal["investment_holding", "brokerage", "exchange_operator", "consumer_finance", "asset_manager", "other"] | None, score: float, evidence: list[tuple[int, str]])`
   - `industry.IndustryBook`, `industry.load_industry_book(path: Path | None = None)`,
     `industry.detect_industry(pages, ranges, book) -> IndustrySignal`, `VERDICT_THRESHOLD`
 
@@ -2122,10 +2158,31 @@ def test_a_brokerage() -> None:
 
 def test_an_investment_holding() -> None:
     pages, ranges = on_statement_pages(
-        "Net gains on investments at fair value through profit or loss\nDividend income from investees\nAsset management fees"
+        "Net gains on investments at fair value through profit or loss\nDividend income from investees\nPrivate equity investments"
     )
     signal = detect_industry(pages, ranges, BOOK)
     assert (signal.kind, signal.subkind) == ("other_financial", "investment_holding")
+
+
+def test_a_consumer_finance_company() -> None:
+    pages, ranges = on_statement_pages(
+        "Income from Islamic financing contracts\nNet investment in finance receivables\nConsumer finance receivables"
+    )
+    signal = detect_industry(pages, ranges, BOOK)
+    assert (signal.kind, signal.subkind) == ("other_financial", "consumer_finance")
+
+
+def test_an_arabic_consumer_finance_company_with_reversed_word_order() -> None:
+    # As pypdfium2 extracts most Arabic filings: words spelled right, line order reversed.
+    pages, ranges = on_statement_pages("اإلسالمي التمويل عقود من إيرادات\nاالستهالكي التمويل مدينو")
+    signal = detect_industry(pages, ranges, BOOK)
+    assert (signal.kind, signal.subkind) == ("other_financial", "consumer_finance")
+
+
+def test_an_asset_manager() -> None:
+    pages, ranges = on_statement_pages("Fund management fees\nAssets under management\nSubscription fees")
+    signal = detect_industry(pages, ranges, BOOK)
+    assert (signal.kind, signal.subkind) == ("other_financial", "asset_manager")
 
 
 def test_ordinary_company_wording_stays_corporate() -> None:
@@ -2157,7 +2214,9 @@ Add `from typing import Literal` to the imports, then:
 
 ```python
 IndustryKind = Literal["corporate", "bank", "insurer", "other_financial", "unknown"]
-IndustrySubkind = Literal["investment_holding", "brokerage", "exchange_operator", "other"]
+IndustrySubkind = Literal[
+    "investment_holding", "brokerage", "exchange_operator", "consumer_finance", "asset_manager", "other"
+]
 
 
 class IndustrySignal(BaseModel):
@@ -2251,12 +2310,31 @@ cues:
   other_financial/investment_holding:
     net gains on investments at fair value through profit or loss: 2
     dividend income from investees: 2
-    asset management fees: 2
-    management fees from funds: 2
     private equity: 2
     أرباح الاستثمارات: 2
-    أتعاب إدارة الأصول: 2
     إيرادات توزيعات من الشركات المستثمر فيها: 2
+    الاستثمارات المباشرة: 2
+  other_financial/consumer_finance:
+    income from islamic financing contracts: 3
+    consumer finance: 3
+    net investment in finance receivables: 2
+    finance lease receivables: 2
+    instalment sales receivables: 2
+    إيرادات من عقود التمويل الإسلامي: 3
+    صافي الدخل من أنشطة التمويل الإسلامي: 3
+    التمويل الاستهلاكي: 3
+    مدينو التمويل: 2
+    مدينو عقود التأجير التمويلي: 2
+  other_financial/asset_manager:
+    assets under management: 3
+    fund management fees: 3
+    asset management fees: 3
+    management fees from funds: 2
+    subscription fees: 2
+    الأصول تحت الإدارة: 3
+    أتعاب إدارة الصناديق: 3
+    أتعاب إدارة الأصول: 3
+    رسوم الاشتراك: 2
 ```
 
 - [ ] **Step 5: Implement `industry.py`**
@@ -2279,10 +2357,9 @@ from typing import Any, cast
 
 import yaml
 
-from fra_core.labels import normalize_label
 from fra_core.schemas import StatementType
 from fra_ingest.results import IndustryKind, IndustrySignal, IndustrySubkind, PageText, StatementRange
-from fra_ingest.text_match import PhraseIndex, reading_variants
+from fra_ingest.text_match import PhraseIndex, canonical, reading_variants
 
 VERDICT_THRESHOLD = 6.0
 _EVIDENCE_LIMIT = 12
@@ -2307,7 +2384,7 @@ def load_industry_book(path: Path | None = None) -> IndustryBook:
         exclude=PhraseIndex.build({"exclude": data["exclude"]}),
         cues=PhraseIndex.build({group: list(cues) for group, cues in groups.items()}),
         weights={
-            (group, normalize_label(phrase)): float(weight)
+            (group, canonical(phrase)): float(weight)
             for group, cues in groups.items()
             for phrase, weight in cues.items()
         },
@@ -2354,7 +2431,7 @@ def detect_industry(
 
 def _without(book: IndustryBook, text: str) -> str:
     """The text with excluded phrases blanked, in normalized form."""
-    normalized = f" {normalize_label(text)} "
+    normalized = f" {canonical(text)} "
     for phrase, _ in book.exclude.entries:
         # A placeholder word, so the words on either side cannot join into a cue.
         normalized = normalized.replace(f" {phrase} ", " excluded ")
@@ -2364,7 +2441,7 @@ def _without(book: IndustryBook, text: str) -> str:
 - [ ] **Step 6: Run the tests to see them pass**
 
 Run: `uv run pytest packages/ingest/tests/test_industry.py -q`
-Expected: 10 passed.
+Expected: 13 passed.
 
 - [ ] **Step 7: Check and commit**
 
@@ -2795,7 +2872,7 @@ git commit -m "Add the fra-ingest locate command"
 
 **Interfaces:**
 - Produces: `corpus.SECTORS = ("bank", "insurer", "other_financial")`,
-  `corpus.SUBSECTORS = ("investment_holding", "brokerage", "exchange_operator", "other")`;
+  `corpus.SUBSECTORS = ("investment_holding", "brokerage", "exchange_operator", "consumer_finance", "asset_manager", "other")`;
   `check` reports a missing or wrong `sector`/`subsector` as an error.
 
 - [ ] **Step 1: Write the failing tests**
@@ -2815,8 +2892,8 @@ def test_negative_controls_need_a_sector() -> None:
 def test_other_financial_needs_a_subsector() -> None:
     report = check([control("a", sector="other_financial")], GOLDEN)
     assert report.errors == [
-        "a: other_financial needs a subsector "
-        "(investment_holding, brokerage, exchange_operator, other)"
+        "a: other_financial needs a subsector (investment_holding, brokerage, "
+        "exchange_operator, consumer_finance, asset_manager, other)"
     ]
 
 
@@ -2849,7 +2926,14 @@ Next to `ROLES`:
 
 ```python
 SECTORS = ("bank", "insurer", "other_financial")
-SUBSECTORS = ("investment_holding", "brokerage", "exchange_operator", "other")
+SUBSECTORS = (
+    "investment_holding",
+    "brokerage",
+    "exchange_operator",
+    "consumer_finance",
+    "asset_manager",
+    "other",
+)
 ```
 
 Inside the `for doc in documents:` loop of `check`, after the role check:
@@ -2893,16 +2977,16 @@ LABELS = {
     "malath-cooperative-insurance-2025-ar": "insurer",
     "orient-takaful-2025-ar": "insurer",
     "middle-east-financial-investment-2017-en": "other_financial/brokerage",
-    "united-financial-services-2021-ar": "other_financial/other",
+    "united-financial-services-2021-ar": "other_financial/consumer_finance",
     "b-investments-holding-2020-en-interim": "other_financial/investment_holding",
     "b-investments-holding-2023-en-interim": "other_financial/investment_holding",
     "coast-investment-and-development-2025-en-interim": "other_financial/investment_holding",
     "pioneers-holding-2017-ar-interim": "other_financial/investment_holding",
     "pioneers-holding-2018-ar": "other_financial/investment_holding",
-    "contact-financial-holding-2022-ar": "other_financial/other",
-    "contact-financial-holding-2023-en-interim": "other_financial/other",
-    "contact-financial-holding-2024-ar-interim": "other_financial/other",
-    "musharaka-capital-2019-ar": "other_financial/other",
+    "contact-financial-holding-2022-ar": "other_financial/consumer_finance",
+    "contact-financial-holding-2023-en-interim": "other_financial/consumer_finance",
+    "contact-financial-holding-2024-ar-interim": "other_financial/consumer_finance",
+    "musharaka-capital-2019-ar": "other_financial/asset_manager",
     "dubai-financial-market-2021-ar": "other_financial/exchange_operator",
     "dubai-financial-market-2021-ar-interim": "other_financial/exchange_operator",
     "saudi-tadawul-group-2025-en-interim": "other_financial/exchange_operator",
@@ -2919,15 +3003,16 @@ for doc_id, label in LABELS.items():
 path.write_text(text, encoding="utf-8")
 ```
 
-Contact Financial Holding (consumer finance), Musharaka Capital (asset management) and United
-Financial Services are `other`. Tell the owner these three calls when reporting the task, so
-they can be moved to a sub-sector if preferred.
+Contact Financial Holding and United Financial Services (revenue is income from Islamic
+financing contracts) are `consumer_finance`; Musharaka Capital is `asset_manager` (owner's
+decision, 2026-09-27). `other` stays available for companies that fit none of them.
 
 Add one line to the `role:` comment at the top of `candidates.yaml`:
 
 ```yaml
 # sector:    bank | insurer | other_financial   (negative controls only)
-# subsector: investment_holding | brokerage | exchange_operator | other   (other_financial only)
+# subsector: investment_holding | brokerage | exchange_operator | consumer_finance |
+#            asset_manager | other   (other_financial only)
 ```
 
 In `eval/corpus/README.md`, rule 4, add: "Each carries `sector`, and other financial companies
