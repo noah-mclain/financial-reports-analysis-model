@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from fra_core.schemas import PageMode, StatementType, TextSource
+from fra_core.schemas import Document, PageMode, StatementType, TextSource
 
 
 class PageText(BaseModel):
@@ -100,3 +100,25 @@ class IndustrySignal(BaseModel):
     )
     score: float = 0.0
     evidence: list[tuple[int, str]] = Field(default_factory=list)
+
+
+class LocateResult(BaseModel):
+    """Output of the locate stage, written to ``<artifact root>/<sha256>/locate.json``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: str
+    document: Document
+    pages: list[PageScore]
+    ranges: list[StatementRange]
+    convert_ranges: list[tuple[int, int]] = Field(
+        description="Padded, merged ranges of the enabled types: the pages docling converts"
+    )
+    industry: IndustrySignal
+    flags: list[str] = Field(default_factory=list)
+    timings: dict[str, float] = Field(default_factory=dict)
+
+    @property
+    def candidate_share(self) -> float:
+        pages = sum(last - first + 1 for first, last in self.convert_ranges)
+        return pages / self.document.page_count

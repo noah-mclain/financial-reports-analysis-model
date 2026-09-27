@@ -9,6 +9,7 @@ contents pages and notes subtracts.
 from __future__ import annotations
 
 import re
+import time
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from importlib import resources
@@ -18,9 +19,18 @@ from typing import Any
 import yaml
 
 from fra_core.numbers import normalize_digits
-from fra_core.schemas import StatementType
+from fra_core.schemas import Document, StatementType
 from fra_core.units import detect_scale
-from fra_ingest.results import PageScore, PageText, StatementRange
+from fra_ingest.config import IngestConfig
+from fra_ingest.industry import IndustryBook, detect_industry, load_industry_book
+from fra_ingest.pages import document_language, profiles
+from fra_ingest.results import (
+    IndustrySignal,
+    LocateResult,
+    PageScore,
+    PageText,
+    StatementRange,
+)
 from fra_ingest.text_match import PhraseIndex, reading_variants
 
 # Scoring weights. A page is a candidate for a type when it names the type (title or line
@@ -33,6 +43,8 @@ STRUCTURE_WEIGHT = 1.0
 NEGATIVE_WEIGHT = 4.0
 CANDIDATE_THRESHOLD = 4.5
 CONTINUATION_MIN_NUMBERS = 15
+
+LOCATE_VERSION = "1"
 
 _YEAR = re.compile(r"(?<!\d)(?:19|20)\d{2}(?!\d)")
 _NUMBER = re.compile(r"\d{1,3}(?:[,٬. ]\d{3})+|\d{3,}")
@@ -159,6 +171,70 @@ def plan_conversion(
         else:
             merged.append((first, last))
     return merged
+
+
+def locate(
+    pages: Sequence[PageText],
+    config: IngestConfig,
+    *,
+    sha256: str,
+    filename: str,
+    book: TitleBook | None = None,
+    industry_book: IndustryBook | None = None,
+    timings: dict[str, float] | None = None,
+) -> LocateResult:
+    started = time.perf_counter()
+    book = book or load_title_book()
+    industry_book = industry_book or load_industry_book()
+
+    scores = [score_page(page, book) for page in pages]
+    ranges = find_ranges(scores)
+    convert = plan_conversion(ranges, config.enabled_types, len(pages), config.pad_pages)
+    signal = detect_industry(list(pages), ranges, industry_book)
+    flags = locate_flags(pages, ranges, convert, signal, config)
+
+    return LocateResult(
+        version=LOCATE_VERSION,
+        document=Document(
+            sha256=sha256,
+            filename=filename,
+            page_count=len(pages),
+            pages=profiles(pages),
+            language=document_language(pages),
+        ),
+        pages=scores,
+        ranges=ranges,
+        convert_ranges=convert,
+        industry=signal,
+        flags=flags,
+        timings={**(timings or {}), "score": time.perf_counter() - started},
+    )
+
+
+def locate_flags(
+    pages: Sequence[PageText],
+    ranges: Sequence[StatementRange],
+    convert: Sequence[tuple[int, int]],
+    signal: IndustrySignal,
+    config: IngestConfig,
+) -> list[str]:
+    flags: list[str] = []
+    unread = sum(1 for page in pages if "ocr_unavailable" in page.flags)
+    if unread:
+        flags.append(f"image_pages_not_read:{unread}")
+    found = {r.type for r in ranges}
+    flags.extend(f"statement_not_found:{t.value}" for t in config.enabled_types if t not in found)
+    if not convert:
+        flags.append("no_statements_found")
+    elif pages:
+        share = sum(last - first + 1 for first, last in convert) / len(pages)
+        if share > config.low_selectivity_share:
+            flags.append("low_selectivity")
+    if signal.kind in ("bank", "insurer"):
+        flags.append(f"likely_{signal.kind}")
+    elif signal.kind == "other_financial":
+        flags.append(f"likely_other_financial:{signal.subkind or 'other'}")
+    return flags
 
 
 def _continues(score: PageScore) -> bool:
