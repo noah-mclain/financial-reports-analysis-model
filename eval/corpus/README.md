@@ -30,20 +30,24 @@ rule 2 again on the downloaded bytes.
 
 ## Current size
 
-Measured 2026-09-26 (`fetched.yaml`): 225 candidates from 142 issuers in Saudi Arabia, Egypt,
-the UAE, Kuwait, Bahrain, the UK and the US. 207 files downloaded and measured, 10,582 pages;
-4 byte-identical duplicates and 3 golden-issuer documents flagged. The other 18 sit on hosts
-this environment cannot reach (the Egyptian Exchange among them) and are fetched with
-`make corpus-fetch` elsewhere.
+Measured 2026-09-26 and 2026-09-27 (`fetched.yaml`): 224 documents from 142 issuers in Saudi
+Arabia, Egypt, the UAE, Kuwait, Bahrain, the UK and the US, all downloaded and measured:
+12,421 pages (181 mixed, 32 digital, 11 fully scanned). 4 byte-identical duplicates and 3
+golden-issuer documents are flagged.
+
+The set was fetched on two machines, and the 207 files measured on both have identical
+sha256, so the URLs serve the same bytes regardless of where they are fetched from. Seven
+hosts refuse automated clients (the Egyptian Exchange, Tawuniya, Tesco); those files were
+saved from a browser to the paths `make corpus-fetch` prints, then measured.
 
 | Pool | Issuers | Documents |
 |------|---------|-----------|
-| dev | 1 | 4 |
+| dev | 1 | 3 |
 | train | 84 | 128 |
 | model_test | 30 | 49 |
 | blind | 27 | 44 |
 
-Egypt: 45 candidates from 17 issuers, 11 of them scanned or mostly scanned (3 in `blind`,
+Egypt: 45 documents from 21 issuers, 11 of them scanned or mostly scanned (3 in `blind`,
 2 in `model_test`, 6 in `train`), on top of the 10 scanned filings in the golden set.
 
 English line-item volume comes from `make sec-fsds` (below), the largest source by far; its row
