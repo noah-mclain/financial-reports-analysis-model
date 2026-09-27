@@ -43,7 +43,7 @@ Consequences:
 | Ranges and `convert_ranges` for the enabled types | Declining banks and insurers (week 2 builds the rule on the signal stored here) |
 | Industry signal: corporate, bank, insurer | Job table, workers, API |
 | Labelling the 9 scanned golden documents | |
-| A `sector` field on the negative controls in `eval/corpus/candidates.yaml` | |
+| `sector` and `subsector` fields on the negative controls in `eval/corpus/candidates.yaml` | |
 | Scoring harness over the golden set and corpus pools | |
 
 ### Statement types
@@ -73,8 +73,8 @@ package imports on Linux.
 | `errors.py` | `IngestError(reason)` with reasons `unreadable_pdf` and `encrypted_pdf` |
 | `ocr.py` | `OcrEngine` protocol: `recognize(image, languages) -> list[OcrLine]`, where `OcrLine` has text, bbox in page fraction and confidence. `VisionOcr` uses accurate mode only |
 | `pages.py` | `read_pages(pdf, config, ocr) -> list[PageText]`, the page text cache, and `profiles(pages) -> list[PageProfile]` for `Document` |
-| `data/statement_titles.yaml` | Per type: English and Arabic titles, Gulf and Egyptian variants, continuation cues. Negative cues for auditor's reports, contents pages and notes |
-| `data/industry_cues.yaml` | Per industry: English and Arabic cues with weights, and corporate phrases that must not count (`cash and bank balances`, `prepaid insurance`) |
+| `data/statement_titles.yaml` | Per type: English and Arabic titles, Gulf and Egyptian variants, continuation cues. Structural cues shared by all statements: period headers, the note column header, currency and scale lines. Negative cues for auditor's reports, contents pages and notes |
+| `data/industry_cues.yaml` | Per sector and sub-sector: English and Arabic cues with weights, and corporate phrases that must not count (`cash and bank balances`, `prepaid insurance`) |
 | `locate.py` | `score_page(page, titles) -> PageScore` and `locate(pages, config) -> LocateResult`. Pure functions over text |
 | `industry.py` | `detect_industry(pages, scores) -> IndustrySignal`. Pure |
 | `cli.py` | `fra-ingest locate <pdf> [--json]` writes `var/artifacts/<sha256>/locate.json` |
@@ -84,7 +84,7 @@ Supporting work outside the package:
 | Path | Responsibility |
 |------|----------------|
 | `configs/ingest.toml` | The defaults above |
-| `scripts/label_statement_pages.py` | One-off: OCR every page of the scanned golden documents and write an HTML contact sheet of every page, with suggested statement pages highlighted. The owner marks the pages; confirmed ranges go into `eval/golden/manifest.yaml` |
+| `scripts/label_statement_pages.py` | One-off: OCR every page of the scanned golden documents and write an HTML contact sheet of every page. The owner labels blind, then reconciles against suggestions (see Labelling); confirmed ranges go into `eval/golden/manifest.yaml` |
 | `eval/harness/locate.py` | Scoring over the golden set and corpus pools (see Scoring) |
 
 ## Data model
@@ -119,7 +119,9 @@ class StatementRange(BaseModel):
     rank: int                       # 1 = best candidate for this type
 
 class IndustrySignal(BaseModel):
-    kind: Literal["corporate", "bank", "insurer", "unknown"]
+    kind: Literal["corporate", "bank", "insurer", "other_financial", "unknown"]
+    subkind: Literal["investment_holding", "brokerage", "exchange_operator", "other"] | None
+                                    # set only when kind is other_financial
     score: float
     evidence: list[tuple[int, str]] # (page_no, cue)
 
@@ -152,8 +154,12 @@ PDF ─► read_pages ─► PageText[] ─► score_page ─► PageScore[] ─
    cached; scoring always reruns, which keeps rule tuning to seconds per pass over a pool.
 3. **Score.** For every page and type: title matches in the header text on
    `normalize_label` forms; numeric density, counted as tokens that `fra_core.numbers`
-   parses with at least three digits; negative cues, which subtract. A page whose header
-   carries a continuation cue (`continued`, `تابع`) is marked as a continuation.
+   parses with at least three digits; structural cues, which every statement page carries
+   whatever its title: a period header (`2025 2024`, `31 December`, `ديسمبر`), a note column
+   header (`Note`, `إيضاح`), and a currency or scale line (`SAR '000`, `بالآلاف`); negative
+   cues, which subtract. Structural cues let a page be found when its title is printed in
+   only one language, drawn as an image, or garbled by OCR. A page whose header carries a
+   continuation cue (`continued`, `تابع`) is marked as a continuation.
 4. **Locate.** Pages over the threshold are grouped into consecutive ranges of one type. A
    numeric page without a title, directly after a titled page, extends that page's range.
    Every candidate range is kept and ranked, since a filing can hold consolidated and
@@ -162,7 +168,9 @@ PDF ─► read_pages ─► PageText[] ─► score_page ─► PageScore[] ─
    enabled types' ranges are merged into `convert_ranges`.
 5. **Industry.** Cues are counted over all pages, with candidate statement pages weighted
    higher, since line items show what kind of business it is. Excluded corporate phrases are
-   removed before matching. The verdict is stored; nothing is declined in this part.
+   removed before matching. A financial company that is neither a bank nor an insurer is
+   `other_financial` with a sub-kind: `investment_holding`, `brokerage`, `exchange_operator`
+   or `other`. The verdict is stored; nothing is declined in this part.
 
 ## Failure handling
 
@@ -177,7 +185,7 @@ Every failure is visible; none turns into a blank or a guess.
 | An enabled type has no range | `statement_not_found:<type>`; later stages carry on and the results page shows the gap |
 | No enabled type found | Empty `convert_ranges` and `no_statements_found`; the pipeline stops with that reason |
 | Candidate pages above `low_selectivity_share` of the document | `low_selectivity`; the run goes ahead and the eval counts it |
-| Industry verdict bank or insurer | `likely_bank` or `likely_insurer`; no decline yet |
+| Industry verdict bank, insurer or other financial | `likely_bank`, `likely_insurer` or `likely_other_financial:<subkind>`; no decline yet |
 
 ## Testing
 
@@ -185,9 +193,9 @@ Tests are written before the code they cover (repository rule).
 
 | Area | Cases | Marker |
 |------|-------|--------|
-| `score_page` | English and Arabic titles, Gulf and Egyptian variants. Must not score: an auditor's report quoting statement titles, a contents page, a notes heading. A continuation page. A garbled OCR title on a dense numeric page, found by numeric density | fast |
+| `score_page` | English and Arabic titles, Gulf and Egyptian variants. Must not score: an auditor's report quoting statement titles, a contents page, a notes heading. A continuation page. A garbled OCR title on a dense numeric page, found by numeric density and structural cues. A page with no title at all but a period header, note column and scale line | fast |
 | `locate` | Grouping, continuation, padding clamped at both ends, `convert_ranges` following config, every flag in the failure table | fast |
-| `detect_industry` | Bank and insurer in both languages. Stay `corporate`: `cash and bank balances`, `prepaid insurance` | fast |
+| `detect_industry` | Bank, insurer and each `other_financial` sub-kind in both languages. Stay `corporate`: `cash and bank balances`, `prepaid insurance`, and a manufacturer holding a few listed investments | fast |
 | `read_pages` | Juhayna EN standalone pp. 3 to 5 are `image` and the rest `text`; Almarai AR has no bidi controls left; a fake `OcrEngine` receives exactly the image pages; the cache is reused on a second call | `golden` |
 | `VisionOcr` | One English and one Arabic scanned page; skipped when ocrmac is not installed | `slow` |
 | CLI | `fra-ingest locate` writes a `locate.json` that validates against `LocateResult` | `golden` |
@@ -210,10 +218,12 @@ inside `convert_ranges`.
 `balance` and one `income` range was found; candidate share; and industry verdicts against
 `sector` in `eval/corpus/candidates.yaml`, as a confusion table. `role: negative_control` is
 wider than banks and insurers (it also holds investment holdings, brokerages and exchange
-operators), so each negative control gets `sector: bank | insurer | other_financial`. Only
-`bank` and `insurer` have a target here; how `other_financial` is treated is part of the week 2
-decline rule. Development runs use `dev` and
-`train`. `model_test` runs at checkpoints only. The harness refuses `blind` (R17).
+operators), so each negative control gets `sector: bank | insurer | other_financial`, and an
+`other_financial` one also gets `subsector: investment_holding | brokerage | exchange_operator
+| other`. In `train` that is 4 bank, 2 insurer and 13 other financial documents. Only `bank`
+and `insurer` have a target here; sub-sector verdicts are reported, and how `other_financial`
+is treated is part of the week 2 decline rule, which can act on the whole group or on one
+sub-sector. Development runs use `dev` and `train`. `model_test` runs at checkpoints only. The harness refuses `blind` (R17).
 
 ### Done when
 
@@ -233,19 +243,24 @@ The 9 documents with `statement_pages: null` are labelled before the locator is 
 against them, because `statement_pages` is an answer key and never an input (08, principle 1).
 
 1. `scripts/label_statement_pages.py` OCRs every page with `VisionOcr` and writes
-   `var/labels/<doc id>.html`: a thumbnail of every page with its page number, pages holding a
-   statement title highlighted as suggestions.
-2. The owner marks the pages of each statement from the full sheet, including any the
-   suggestions missed, and the ranges are written into `manifest.yaml`.
-3. Step 1 reads pages through `read_pages` with the configured dpi and languages, so it fills
+   `var/labels/<doc id>.html`: a thumbnail of every page with its page number and no
+   highlights.
+2. **Blind pass.** The owner marks the pages of each statement type on the sheet, which saves
+   them to `var/labels/<doc id>.json`.
+3. **Reconcile.** The script compares the marks with pages holding a statement title or
+   structural cues and lists every disagreement: pages it would suggest that the owner did not
+   mark, and marked pages it would not suggest. The owner settles each one, and the final
+   ranges are written into `manifest.yaml`. The disagreement list is kept in the labelling
+   notes as a first reading of where the cues are weak.
+4. Step 1 reads pages through `read_pages` with the configured dpi and languages, so it fills
    the page cache and the locator's first run on these documents costs no OCR.
-4. A comprehensive income statement on its own page gets its own `comprehensive_income` key,
+5. A comprehensive income statement on its own page gets its own `comprehensive_income` key,
    as in `juhayna-2025-en-standalone`.
 
 ## Risks
 
 | ID | Risk | Mitigation |
 |----|------|------------|
-| R21 | Vision's result depends on the order of the language list, degrading one script when both are given | Checked first in the plan on an English and an Arabic scan. If it degrades, OCR runs with the script guessed from a 36 dpi pass |
-| R22 | Statement titles appear in only one language on bilingual pages, or as images | Numeric density and continuation still find the page; the eval shows every miss with its page scores |
-| R23 | Label suggestions bias the owner toward the same pages the locator would find | The sheet shows every page, not only the suggestions |
+| R21 | Vision's result depends on the order of the language list, degrading one script when both are given | Measured in the first plan task: an English and an Arabic scan, each read with both language orders. If both orders read cleanly, one pass with both languages stays. If one degrades, a 36 dpi pass guesses each page's script and the full pass puts that language first |
+| R22 | Statement titles appear in only one language on bilingual pages, or as images | Structural cues (period header, note column, currency and scale line) score the page without its title, alongside numeric density and continuation. The eval shows every miss with its page scores |
+| R23 | Label suggestions bias the owner toward the same pages the locator would find | Blind labelling first, suggestions shown only afterwards as a list of disagreements to settle |
