@@ -9,7 +9,7 @@ contents pages and notes subtracts.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
@@ -20,7 +20,7 @@ import yaml
 from fra_core.numbers import normalize_digits
 from fra_core.schemas import StatementType
 from fra_core.units import detect_scale
-from fra_ingest.results import PageScore, PageText
+from fra_ingest.results import PageScore, PageText, StatementRange
 from fra_ingest.text_match import PhraseIndex, reading_variants
 
 # Scoring weights. A page is a candidate for a type when it names the type (title or line
@@ -105,6 +105,66 @@ def score_page(page: PageText, book: TitleBook) -> PageScore:
         negatives=negatives,
         continuation=bool(book.continuation.find(header)),
     )
+
+
+def find_ranges(scores: Sequence[PageScore]) -> list[StatementRange]:
+    """Group candidate pages per type. An untitled numeric page directly after a range
+    continues it, which covers statements printed over several pages."""
+    ordered = sorted(scores, key=lambda score: score.page_no)
+    ranges: list[StatementRange] = []
+    for statement_type in StatementType:
+        groups: list[list[PageScore]] = []
+        open_group: list[PageScore] | None = None
+        for score in ordered:
+            adjacent = open_group is not None and score.page_no == open_group[-1].page_no + 1
+            if score.is_candidate(statement_type, CANDIDATE_THRESHOLD):
+                if open_group is not None and adjacent:
+                    open_group.append(score)
+                else:
+                    open_group = [score]
+                    groups.append(open_group)
+            elif open_group is not None and adjacent and _continues(score):
+                open_group.append(score)
+            else:
+                open_group = None
+        found = [
+            (max(page.type_scores[statement_type] for page in group), group) for group in groups
+        ]
+        found.sort(key=lambda item: item[0], reverse=True)
+        ranges.extend(
+            StatementRange(
+                type=statement_type,
+                first_page=group[0].page_no,
+                last_page=group[-1].page_no,
+                score=best,
+                rank=rank,
+            )
+            for rank, (best, group) in enumerate(found, start=1)
+        )
+    return ranges
+
+
+def plan_conversion(
+    ranges: Sequence[StatementRange],
+    enabled: Sequence[StatementType],
+    page_count: int,
+    pad: int,
+) -> list[tuple[int, int]]:
+    """Padded ranges of the enabled types, merged where they touch or overlap."""
+    spans = sorted(r.padded(pad, page_count) for r in ranges if r.type in enabled)
+    merged: list[tuple[int, int]] = []
+    for first, last in spans:
+        if merged and first <= merged[-1][1] + 1:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], last))
+        else:
+            merged.append((first, last))
+    return merged
+
+
+def _continues(score: PageScore) -> bool:
+    if score.title_types:
+        return False
+    return score.continuation or score.numeric_tokens >= CONTINUATION_MIN_NUMBERS
 
 
 def _types(groups: Iterable[frozenset[str]]) -> list[StatementType]:

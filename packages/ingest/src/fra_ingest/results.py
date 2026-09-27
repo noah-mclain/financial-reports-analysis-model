@@ -59,3 +59,18 @@ class PageScore(BaseModel):
     def is_candidate(self, statement_type: StatementType, threshold: float = 4.5) -> bool:
         named = statement_type in self.title_types or statement_type in self.cue_types
         return named and self.type_scores.get(statement_type, 0.0) >= threshold
+
+
+class StatementRange(BaseModel):
+    """Consecutive pages holding one statement, before padding."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    type: StatementType
+    first_page: int = Field(ge=1)
+    last_page: int = Field(ge=1)
+    score: float
+    rank: int = Field(ge=1, description="1 is the best candidate for this type")
+
+    def padded(self, pad: int, page_count: int) -> tuple[int, int]:
+        return max(1, self.first_page - pad), min(page_count, self.last_page + pad)
