@@ -143,3 +143,14 @@ def test_the_whole_document_decides_when_statement_pages_hold_no_cues() -> None:
         for n in range(2, 5)
     ]
     assert detect_industry(pages, ranges, BOOK).kind == "insurer"
+
+
+def test_one_phrase_repeated_through_a_report_is_not_a_verdict() -> None:
+    # Saudi Energy, a utility, holds "deposits from customers" on many pages; Egypt Kuwait
+    # Holding mentions a consumer finance subsidiary throughout.
+    pages, ranges = on_statement_pages("Revenue\nCost of sales")
+    pages += [
+        text_page("Notes", "Deposits from customers\nConsumer finance", page_no=n)
+        for n in range(2, 12)
+    ]
+    assert detect_industry(pages, ranges, BOOK).kind == "corporate"

@@ -2,8 +2,10 @@
 
 Line items show the kind of business, so cues are read from the balance sheet and income
 statement pages when the locator found them. When those pages give no verdict, or none were
-found, every page is read and the evidence must be twice as strong, since an ordinary annual
-report can mention banking or insurance in passing. The verdict is stored on the locate
+found, every page is read, but each cue counts once and at least three different cues must
+appear: an ordinary report repeats one phrase on many pages (a utility's "deposits from
+customers", a group's consumer finance subsidiary), while a bank or insurer uses the whole
+vocabulary. The verdict is stored on the locate
 result; declining is decided in week 2.
 """
 
@@ -28,8 +30,8 @@ from fra_ingest.results import (
 from fra_ingest.text_match import PhraseIndex, canonical, reading_variants
 
 VERDICT_THRESHOLD = 6.0
-# Whole-document evidence needs to be this many times stronger than statement-page evidence.
-WHOLE_DOCUMENT_FACTOR = 2.0
+# Distinct cues the whole-document fallback needs, each counted once.
+WHOLE_DOCUMENT_MIN_CUES = 3
 _EVIDENCE_LIMIT = 12
 _STATEMENT_TYPES = (StatementType.BALANCE, StatementType.INCOME)
 
@@ -74,14 +76,17 @@ def detect_industry(
     }
     on_statements = [p for p in readable if p.page_no in statement_pages]
     if on_statements:
-        signal = _verdict(on_statements, book, VERDICT_THRESHOLD)
+        signal = _verdict(on_statements, book)
         if signal.kind != "corporate":
             return signal
-    return _verdict(readable, book, VERDICT_THRESHOLD * WHOLE_DOCUMENT_FACTOR)
+    return _verdict(readable, book, whole_document=True)
 
 
-def _verdict(pages: list[PageText], book: IndustryBook, threshold: float) -> IndustrySignal:
+def _verdict(
+    pages: list[PageText], book: IndustryBook, *, whole_document: bool = False
+) -> IndustrySignal:
     totals: dict[str, float] = defaultdict(float)
+    distinct: dict[str, set[str]] = defaultdict(set)
     evidence: list[tuple[int, str]] = []
     for page in pages:
         variants = [
@@ -89,13 +94,17 @@ def _verdict(pages: list[PageText], book: IndustryBook, threshold: float) -> Ind
         ]
         for phrase, groups in book.cues.find(variants).items():
             for group in groups:
+                if whole_document and phrase in distinct[group]:
+                    continue
                 totals[group] += book.weights[(group, phrase)]
+                distinct[group].add(phrase)
             evidence.append((page.page_no, phrase))
 
     if not totals:
         return IndustrySignal(kind="corporate")
     group, score = max(totals.items(), key=lambda item: item[1])
-    if score < threshold:
+    too_narrow = whole_document and len(distinct[group]) < WHOLE_DOCUMENT_MIN_CUES
+    if score < VERDICT_THRESHOLD or too_narrow:
         return IndustrySignal(kind="corporate", score=score, evidence=evidence[:_EVIDENCE_LIMIT])
     kind, _, subkind = group.partition("/")
     return IndustrySignal(
