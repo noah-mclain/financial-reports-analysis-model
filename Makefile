@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 UV ?= uv
 
-.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-fetch sec-fsds clean docs-check
+.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-fetch sec-fsds clean docs-check label-pages eval-locate
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -39,6 +39,14 @@ test-all: ## Every test, including slow ones
 
 eval: ## Accuracy report over the golden set
 	$(UV) run python -m fra_eval.report
+
+label-pages: ## Blind labelling sheets for the scanned golden documents (Mac, Vision OCR)
+	@$(MAKE) --no-print-directory unhide-pth
+	$(UV) run python scripts/label_statement_pages.py serve
+
+eval-locate: ## Score the locator (TARGET=golden, or TARGET=train / dev; model_test needs CHECKPOINT=1)
+	@$(MAKE) --no-print-directory unhide-pth
+	$(UV) run python eval/harness/locate.py $(or $(TARGET),golden) $(if $(CHECKPOINT),--checkpoint)
 
 corpus-check: ## Validate the corpus pool split (no network)
 	$(UV) run python scripts/corpus.py check
