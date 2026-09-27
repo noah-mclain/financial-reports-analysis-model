@@ -70,12 +70,14 @@ package imports on Linux.
 | Module | Responsibility |
 |--------|----------------|
 | `config.py` | `IngestConfig` loaded from `configs/ingest.toml`: enabled and optional statement types, `min_text_chars` (50), `ocr_dpi` (72), `ocr_languages` (`["ar-SA", "en-US"]`), `pad_pages` (1), `header_fraction` (0.35), `low_selectivity_share` (0.25), artifact root (`var/artifacts`) |
-| `errors.py` | `IngestError(reason)` with reasons `unreadable_pdf` and `encrypted_pdf` |
+| `errors.py` | `IngestError(reason)` with reasons `unreadable_pdf`, `encrypted_pdf` and `empty_pdf` |
 | `ocr.py` | `OcrEngine` protocol: `recognize(image, languages) -> list[OcrLine]`, where `OcrLine` has text, bbox in page fraction and confidence. `VisionOcr` uses accurate mode only |
 | `pages.py` | `read_pages(pdf, config, ocr) -> list[PageText]`, the page text cache, and `profiles(pages) -> list[PageProfile]` for `Document` |
 | `data/statement_titles.yaml` | Per type: English and Arabic titles, Gulf and Egyptian variants, continuation cues. Structural cues shared by all statements: period headers, the note column header, currency and scale lines. Negative cues for auditor's reports, contents pages and notes |
 | `data/industry_cues.yaml` | Per sector and sub-sector: English and Arabic cues with weights, and corporate phrases that must not count (`cash and bank balances`, `prepaid insurance`) |
+| `text_match.py` | Phrase matching on `normalize_label` forms, and detection of Arabic stored in visual order |
 | `locate.py` | `score_page(page, titles) -> PageScore` and `locate(pages, config) -> LocateResult`. Pure functions over text |
+| `stage.py` | `locate_pdf(pdf, config, ocr)`: read, locate, time, write `locate.json` |
 | `industry.py` | `detect_industry(pages, scores) -> IndustrySignal`. Pure |
 | `cli.py` | `fra-ingest locate <pdf> [--json]` writes `var/artifacts/<sha256>/locate.json` |
 
@@ -93,7 +95,7 @@ Supporting work outside the package:
 class PageText(BaseModel):          # cached
     page_no: int                    # 1-based
     mode: PageMode                  # text | image, from fra_core
-    source: TextSource              # text | ocr, from fra_core
+    source: TextSource | None       # text | ocr; None when an image page was not read
     header_text: str                # top header_fraction of the page
     body_text: str                  # the rest
     char_count: int                 # non-whitespace characters from the text layer
@@ -101,6 +103,8 @@ class PageText(BaseModel):          # cached
     height_pt: float
     arabic_chars: int
     latin_chars: int
+    visual_arabic: bool             # Arabic words stored reversed in the text layer
+    ocr_seconds: float
     flags: list[str]                # ocr_failed, ocr_unavailable
 
 class PageScore(BaseModel):
@@ -149,12 +153,14 @@ PDF ─► read_pages ─► PageText[] ─► score_page ─► PageScore[] ─
    (`fra_core.numbers.strip_bidi`). A page under `min_text_chars` is an image page: it is
    rendered at `ocr_dpi` and read with both OCR languages, and OCR lines are split into header
    and body by their bbox. Script counts give each page, and the document, its language.
+   A text page whose Arabic words read backwards is marked `visual_arabic` (see below).
 2. **Cache.** `PageText[]` is written to `var/artifacts/<sha256>/pages.v<N>.json`, keyed by
    document, stage and stage version (ADR 0005). OCR is the only expensive step, so only it is
    cached; scoring always reruns, which keeps rule tuning to seconds per pass over a pool.
 3. **Score.** For every page and type: title matches in the header text on
-   `normalize_label` forms; numeric density, counted as tokens that `fra_core.numbers`
-   parses with at least three digits; structural cues, which every statement page carries
+   `normalize_label` forms; numeric density, counted as amounts of three or more digits
+   after `fra_core.numbers.normalize_digits` (comma, Arabic and space thousands separators;
+   years excluded); structural cues, which every statement page carries
    whatever its title: a period header (`2025 2024`, `31 December`, `ديسمبر`), a note column
    header (`Note`, `إيضاح`), and a currency or scale line (`SAR '000`, `بالآلاف`); negative
    cues, which subtract. Structural cues let a page be found when its title is printed in
@@ -166,11 +172,27 @@ PDF ─► read_pages ─► PageText[] ─► score_page ─► PageScore[] ─
    standalone statements and an annual report can hold a highlights summary; recall comes
    before selectivity. Ranges are padded by `pad_pages`, clamped to the document, and the
    enabled types' ranges are merged into `convert_ranges`.
-5. **Industry.** Cues are counted over all pages, with candidate statement pages weighted
-   higher, since line items show what kind of business it is. Excluded corporate phrases are
+5. **Industry.** Cues are counted on the balance sheet and income statement pages when the
+   locator found them, and on every page otherwise, since line items show what kind of
+   business it is while a corporate annual report can mention banking in its narrative. Excluded corporate phrases are
    removed before matching. A financial company that is neither a bank nor an insurer is
    `other_financial` with a sub-kind: `investment_holding`, `brokerage`, `exchange_operator`
    or `other`. The verdict is stored; nothing is declined in this part.
+
+### Arabic stored in visual order
+
+Found while writing the plan (2026-09-27): the Almarai Arabic annual report stores Arabic in
+visual order, so the text layer yields every Arabic word with its letters reversed
+(`ةدحوملا يلاملا زكرملا ةمئاق` for `قائمة المركز المالي الموحدة`), and a line's words come
+out in either order. Amounts are unaffected. It is 1 of the 61 Arabic corpus documents with a
+text layer, but it is the Gate A document.
+
+A word never starts with ta marbuta or alef maqsura and never ends with the article, so
+counting those shapes separates the two orders clearly (1,484 against 5 on Almarai AR; 28
+against 1,621 on a normal Arabic filing). A page detected as visual is matched in two
+variants, letters restored with the word order kept and with it reversed, and a phrase counts
+if either variant holds it. Part 3 will need a full repair for labels; locate only needs to
+match.
 
 ## Failure handling
 
@@ -179,6 +201,7 @@ Every failure is visible; none turns into a blank or a guess.
 | Situation | Behaviour |
 |-----------|-----------|
 | Not a PDF, or corrupt | `IngestError("unreadable_pdf")`; the job stops with that reason |
+| A PDF with no pages | `IngestError("empty_pdf")`, or `unreadable_pdf` where pdfium refuses to open it |
 | Password protected | `IngestError("encrypted_pdf")` |
 | No OCR engine available (Linux or Docker before week 2) | Image pages flagged `ocr_unavailable`; result flag `image_pages_not_read:<n>`. Never scored as empty pages |
 | OCR fails on one page | That page is flagged `ocr_failed`; the run continues |
@@ -196,7 +219,7 @@ Tests are written before the code they cover (repository rule).
 | `score_page` | English and Arabic titles, Gulf and Egyptian variants. Must not score: an auditor's report quoting statement titles, a contents page, a notes heading. A continuation page. A garbled OCR title on a dense numeric page, found by numeric density and structural cues. A page with no title at all but a period header, note column and scale line | fast |
 | `locate` | Grouping, continuation, padding clamped at both ends, `convert_ranges` following config, every flag in the failure table | fast |
 | `detect_industry` | Bank, insurer and each `other_financial` sub-kind in both languages. Stay `corporate`: `cash and bank balances`, `prepaid insurance`, and a manufacturer holding a few listed investments | fast |
-| `read_pages` | Juhayna EN standalone pp. 3 to 5 are `image` and the rest `text`; Almarai AR has no bidi controls left; a fake `OcrEngine` receives exactly the image pages; the cache is reused on a second call | `golden` |
+| `read_pages` | Juhayna EN standalone pp. 3 to 5 are `image` and the rest `text`; Almarai AR has no bidi controls left and is marked `visual_arabic`; a fake `OcrEngine` receives exactly the image pages; the cache is reused on a second call | `golden` |
 | `VisionOcr` | One English and one Arabic scanned page; skipped when ocrmac is not installed | `slow` |
 | CLI | `fra-ingest locate` writes a `locate.json` that validates against `LocateResult` | `golden` |
 | Errors | Truncated file gives `unreadable_pdf` | fast |
@@ -264,3 +287,4 @@ against them, because `statement_pages` is an answer key and never an input (08,
 | R21 | Vision's result depends on the order of the language list, degrading one script when both are given | Measured in the first plan task: an English and an Arabic scan, each read with both language orders. If both orders read cleanly, one pass with both languages stays. If one degrades, a 36 dpi pass guesses each page's script and the full pass puts that language first |
 | R22 | Statement titles appear in only one language on bilingual pages, or as images | Structural cues (period header, note column, currency and scale line) score the page without its title, alongside numeric density and continuation. The eval shows every miss with its page scores |
 | R23 | Label suggestions bias the owner toward the same pages the locator would find | Blind labelling first, suggestions shown only afterwards as a list of disagreements to settle |
+| R24 | A text layer stores Arabic in visual order (Almarai AR) | Per-page detection and two reading variants for matching (see above). Part 3 repairs labels properly |
