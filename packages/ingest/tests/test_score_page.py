@@ -20,7 +20,7 @@ def test_an_english_balance_sheet_is_a_candidate() -> None:
     )
     assert score.is_candidate(BALANCE)
     assert not score.is_candidate(INCOME)
-    assert score.structure == ["period", "note_column", "scale"]
+    assert score.structure == ["period", "note_column", "scale_or_currency"]
 
 
 def test_an_egyptian_arabic_balance_sheet_is_a_candidate() -> None:
@@ -123,3 +123,42 @@ def test_a_separate_comprehensive_income_statement_is_not_income() -> None:
 )
 def test_numeric_tokens(text: str, expected: int) -> None:
     assert count_numeric_tokens(text) == expected
+
+
+# Tuning on the train pool, 2026-09-28. Each case is a failure class measured there.
+
+
+def test_a_currency_line_counts_as_structure() -> None:
+    # Al Dawaa (OCR): title garbled, no scale line, but the currency is printed.
+    header = "ائمة الربح أو الخسارة\nللفترة المنتهية في ٣١ مارس ٢٠٢٣م\nريال سعودي"
+    body = "ايرادات ١,٢٩٤,٨٢١,٠٠٢\n" + numbers_block(rows=12, label="بند") + "\nإجمالي الربح"
+    score = score_page(text_page(header, body), BOOK)
+    assert "scale_or_currency" in score.structure
+    assert score.is_candidate(INCOME)
+
+
+def test_a_comprehensive_income_statement_with_revenue_is_also_income() -> None:
+    # Herfy: the income statement is titled only "statement of comprehensive income".
+    header = "قائمة الدخل الشامل\nللسنة المنتهية في 31 ديسمبر 2022\nإيضاح 2022 2021"
+    body = (
+        "الإيرادات 1,319,092,436 1,243,838,271\nتكلفة الإيرادات (901,263,698) (936,834,428)\n"
+        + numbers_block(label="بند")
+    )
+    score = score_page(text_page(header, body), BOOK)
+    assert score.is_candidate(COMPREHENSIVE)
+    assert score.is_candidate(INCOME)
+
+
+def test_a_comprehensive_income_statement_without_revenue_is_not_income() -> None:
+    header = "Statement of comprehensive income\nNote 2025 2024\nSAR '000"
+    body = "Profit for the year 1,234 1,100\nOther comprehensive income\n" + numbers_block()
+    assert INCOME not in score_page(text_page(header, body), BOOK).title_types
+
+
+def test_a_title_whose_first_word_ocr_garbled_is_still_a_title() -> None:
+    # Herfy p7: "قائمة" read as "خاامة".
+    header = (
+        "شركة هرفى للخدمات الغذائية\nخاامة المركز المالى\nكما في 31 ديسمير 2022\nإيضاح 2022 2021"
+    )
+    score = score_page(text_page(header, numbers_block(label="بند")), BOOK)
+    assert BALANCE in score.title_types

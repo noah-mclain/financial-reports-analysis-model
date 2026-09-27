@@ -24,9 +24,11 @@ from fra_ingest.ocr import OcrEngine, read_with_fallback
 from fra_ingest.results import PageText
 from fra_ingest.text_match import is_visual_arabic
 
-PAGES_STAGE_VERSION = "1"
+PAGES_STAGE_VERSION = "2"
 
 _FPDF_ERR_PASSWORD = 4
+_GARBLE_MIN_CHARS = 100
+_GARBLE_READABLE_SHARE = 0.9
 _TEXT_SETTINGS = ("min_text_chars", "header_fraction", "ocr_dpi", "ocr_languages")
 
 
@@ -64,6 +66,31 @@ def read_pages(
     if cache_file is not None:
         _write_cache(cache_file, settings, pages)
     return pages
+
+
+def text_layer_is_garbled(text: str) -> bool:
+    """Whether a text layer is unusable: too many of its visible characters belong to no
+    script a filing is written in. Some filings embed fonts whose glyphs map to Greek letters
+    or to modifier and combining marks (measured on the train pool: Al Kathiri's text, Naba's
+    digits), and their text layer reads as noise."""
+    visible = [char for char in text if not char.isspace()]
+    if len(visible) < _GARBLE_MIN_CHARS:
+        return False
+    readable = sum(1 for char in visible if _readable(char))
+    return readable / len(visible) < _GARBLE_READABLE_SHARE
+
+
+def _readable(char: str) -> bool:
+    code = ord(char)
+    return (
+        char.isascii()
+        or char.isdecimal()
+        or 0x00A0 <= code <= 0x024F  # Latin-1 punctuation and Latin with diacritics
+        or 0x0600 <= code <= 0x06FF  # Arabic, including its digits and punctuation
+        or 0xFB50 <= code <= 0xFDFF  # Arabic presentation forms A
+        or 0xFE70 <= code <= 0xFEFF  # Arabic presentation forms B
+        or 0x2000 <= code <= 0x20CF  # general punctuation and currency signs
+    )
 
 
 def profiles(pages: Sequence[PageText]) -> list[PageProfile]:
@@ -107,10 +134,23 @@ def _read_page(page: Any, page_no: int, config: IngestConfig, ocr: OcrEngine | N
             textpage.close()
 
         char_count = sum(1 for char in full if not char.isspace())
-        if char_count >= config.min_text_chars:
+        garbled = char_count >= config.min_text_chars and text_layer_is_garbled(full)
+        if char_count >= config.min_text_chars and not (garbled and ocr is not None):
             return _page(
-                page_no, PageMode.TEXT, TextSource.TEXT, header, body, char_count, width, height
+                page_no,
+                PageMode.TEXT,
+                TextSource.TEXT,
+                header,
+                body,
+                char_count,
+                width,
+                height,
+                flags=["garbled_text_layer"] if garbled else None,
             )
+        if garbled and ocr is not None:
+            page_text = _ocr_page(page, page_no, config, ocr, char_count, width, height)
+            page_text.flags.append("garbled_text_layer")
+            return page_text
         if ocr is None:
             return _page(
                 page_no,

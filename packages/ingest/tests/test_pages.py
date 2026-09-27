@@ -10,7 +10,7 @@ from fra_core.schemas import PageMode, TextSource
 from fra_ingest.config import IngestConfig
 from fra_ingest.errors import IngestError
 from fra_ingest.ocr import OcrLine
-from fra_ingest.pages import document_language, profiles, read_pages
+from fra_ingest.pages import document_language, profiles, read_pages, text_layer_is_garbled
 from fra_ingest.text_match import is_visual_arabic
 
 TITLE = OcrLine("Statement of financial position", 0.98, left=0.2, top=0.05, width=0.6, height=0.03)
@@ -138,3 +138,19 @@ def test_profiles_and_language(tmp_path: Path) -> None:
 )
 def test_visual_order_arabic_is_detected(text: str, expected: bool) -> None:
     assert is_visual_arabic(text) is expected
+
+
+@pytest.mark.parametrize(
+    ("text", "garbled"),
+    [
+        ("قائمة المركز المالي الموحدة الأصول غير المتداولة الممتلكات والمعدات " * 3, False),
+        ("Statement of financial position Property, plant and equipment " * 3, False),
+        # Al Kathiri: a font whose glyphs map to Greek and odd Arabic forms.
+        ("ΔمΗΗ قلΗγلم΍ΕΎΑΎγΣل΍ϊΟ΍έمέيέقΗ ΓΩΣلمو΍ΔليΎلم΍م΍΋لقو΍ΔعΟ΍έمعنϊΟ΍έلم " * 3, True),
+        # Naba: digits drawn from modifier letters.
+        ("الممتلكات والمعدات ˿ ˽́˹٬˺˻̀٬̀̂ ̂٬˺́˹٬̂̀ ˼˺ ˿˿٬˽˻̂٬́˹˽ ٬˻˾˻٬̀˼ ˼٬̀̀˺٬˿˺˹ ٬́˻̀٬́̂˾ " * 3, True),
+        ("short", False),
+    ],
+)
+def test_a_garbled_text_layer_is_recognised(text: str, garbled: bool) -> None:
+    assert text_layer_is_garbled(text) is garbled

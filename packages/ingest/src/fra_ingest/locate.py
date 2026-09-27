@@ -20,7 +20,7 @@ import yaml
 
 from fra_core.numbers import normalize_digits
 from fra_core.schemas import Document, StatementType
-from fra_core.units import detect_scale
+from fra_core.units import detect_currency, detect_scale
 from fra_ingest.config import IngestConfig
 from fra_ingest.industry import IndustryBook, detect_industry, load_industry_book
 from fra_ingest.pages import document_language, profiles
@@ -54,6 +54,7 @@ _NUMBER = re.compile(r"\d{1,3}(?:[,٬. ]\d{3})+|\d{3,}")
 class TitleBook:
     titles: PhraseIndex
     body_cues: PhraseIndex
+    revenue_lines: PhraseIndex
     continuation: PhraseIndex
     note_headers: PhraseIndex
     period_words: PhraseIndex
@@ -71,6 +72,7 @@ def load_title_book(path: Path | None = None) -> TitleBook:
     return TitleBook(
         titles=PhraseIndex.build(data["titles"]),
         body_cues=PhraseIndex.build(data["body_cues"]),
+        revenue_lines=PhraseIndex.build({"revenue": data["revenue_lines"]}),
         continuation=PhraseIndex.build({"continued": data["continuation"]}),
         note_headers=PhraseIndex.build({"note": data["note_headers"]}),
         period_words=PhraseIndex.build({"period": data["period_words"]}),
@@ -90,6 +92,13 @@ def score_page(page: PageText, book: TitleBook) -> PageScore:
 
     title_hits = book.titles.find(header)
     title_types = _types(title_hits.values())
+    if (
+        StatementType.COMPREHENSIVE_INCOME in title_types
+        and StatementType.INCOME not in title_types
+        and book.revenue_lines.find(whole)
+    ):
+        # A single statement titled comprehensive income that carries revenue.
+        title_types = [t for t in StatementType if t in {*title_types, StatementType.INCOME}]
     cue_types = [] if title_types else _types(book.body_cues.find(whole).values())
     negatives = sorted({kind for kinds in book.negatives.find(header).values() for kind in kinds})
     numeric = count_numeric_tokens(page.text)
@@ -256,6 +265,6 @@ def _structure(page: PageText, header: list[str], book: TitleBook) -> list[str]:
         found.append("period")
     if book.note_headers.find(header):
         found.append("note_column")
-    if any(detect_scale(variant) for variant in header):
-        found.append("scale")
+    if any(detect_scale(variant) or detect_currency(variant) for variant in header):
+        found.append("scale_or_currency")
     return found

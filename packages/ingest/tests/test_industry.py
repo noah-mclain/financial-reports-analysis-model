@@ -114,3 +114,32 @@ def test_cues_outside_statement_pages_do_not_decide_when_statements_were_found()
 def test_no_readable_text_is_unknown() -> None:
     pages = [text_page("", "", page_no=1)]
     assert detect_industry(pages, [], BOOK).kind == "unknown"
+
+
+def test_bank_wording_from_gulf_filings() -> None:
+    # Arab Banking Corporation: deposits from banks and certificates of deposit, with the
+    # lam-alef ligature split the wrong way in العمالء.
+    pages, ranges = on_statement_pages("ودائع العمالء\nودائع البنوك\nشهادات إيداع")
+    assert detect_industry(pages, ranges, BOOK).kind == "bank"
+
+
+def test_takaful_is_insurance() -> None:
+    pages, ranges = on_statement_pages(
+        "موجودات عقود التكافل\nمطلوبات عقود التكافل\nإيرادات التكافل"
+    )
+    assert detect_industry(pages, ranges, BOOK).kind == "insurer"
+
+
+def test_the_whole_document_decides_when_statement_pages_hold_no_cues() -> None:
+    # Orient Takaful: a damaged text layer led the locator to a notes page, but the filing
+    # speaks of takaful contracts throughout.
+    pages, ranges = on_statement_pages("Revenue\nCost of sales")
+    pages += [
+        text_page(
+            "Notes",
+            "Takaful contract liabilities\nInsurance revenue\nReinsurance contract assets",
+            page_no=n,
+        )
+        for n in range(2, 5)
+    ]
+    assert detect_industry(pages, ranges, BOOK).kind == "insurer"

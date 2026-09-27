@@ -29,6 +29,9 @@ cues:
     statutory deposit with: 2
     net interest income: 2
     net special commission income: 3
+    deposits from banks: 2
+    due to banks: 2
+    certificates of deposit: 2
     ودائع العملاء: 3
     قروض وسلف للعملاء: 3
     تمويل وسلف: 3
@@ -36,6 +39,10 @@ cues:
     وديعة نظامية: 2
     صافي دخل العمولات الخاصة: 3
     صافي دخل الفوائد: 2
+    ودائع البنوك: 2
+    مبالغ مستحقة للبنوك: 2
+    شهادات إيداع: 2
+    ودائع من العملاء: 3
   insurer:
     insurance contract liabilities: 3
     reinsurance contract assets: 3
@@ -43,12 +50,18 @@ cues:
     insurance service result: 3
     gross written premiums: 3
     net claims incurred: 2
+    takaful contract: 3
+    takaful revenue: 3
+    participants' fund: 2
     التزامات عقود التأمين: 3
     موجودات عقود إعادة التأمين: 3
     إيرادات التأمين: 3
     نتيجة خدمات التأمين: 3
     إجمالي أقساط التأمين المكتتبة: 3
     صافي المطالبات المتكبدة: 2
+    عقود التكافل: 3
+    إيرادات التكافل: 3
+    صندوق المشتركين: 2
   other_financial/exchange_operator:
     listing fees: 3
     clearing and settlement: 3

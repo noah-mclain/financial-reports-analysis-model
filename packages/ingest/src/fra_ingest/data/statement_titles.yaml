@@ -9,6 +9,8 @@ titles:
     - قائمة المركز المالي
     - بيان المركز المالي
     - الميزانية العمومية
+    # The title without its first word: OCR often garbles قائمة (فائمة, خاامة).
+    - المركز المالي
   income:
     - statement of profit or loss
     - statement of profit and loss
@@ -21,17 +23,21 @@ titles:
     - بيان الربح أو الخسارة
     - بيان الدخل
     - قائمة الربح أو الخسارة والدخل الشامل الآخر
+    - الربح أو الخسارة
+    - الأرباح أو الخسائر
   comprehensive_income:
     - statement of comprehensive income
     - statement of profit or loss and other comprehensive income
     - قائمة الدخل الشامل
     - بيان الدخل الشامل
     - قائمة الربح أو الخسارة والدخل الشامل الآخر
+    - الدخل الشامل
   cash_flow:
     - statement of cash flows
     - cash flow statement
     - قائمة التدفقات النقدية
     - بيان التدفقات النقدية
+    - التدفقات النقدية
   equity:
     - statement of changes in equity
     - statement of changes in shareholders equity
@@ -39,6 +45,8 @@ titles:
     - قائمة التغير في حقوق الملكية
     - قائمة التغيرات في حقوق المساهمين
     - بيان التغيرات في حقوق الملكية
+    - التغيرات في حقوق الملكية
+    - التغير في حقوق الملكية
 
 # Line items that show the type of a page whose title is missing or unreadable.
 body_cues:
@@ -88,6 +96,23 @@ body_cues:
     - transfer to statutory reserve
     - الرصيد في
     - المحول إلى الاحتياطي النظامي
+
+# Revenue lines. A page titled only as comprehensive income that carries them is the income
+# statement as well: many Saudi filers title their single statement that way.
+revenue_lines:
+  - revenue
+  - revenues
+  - sales
+  - cost of sales
+  - cost of revenue
+  - gross profit
+  - الإيرادات
+  - إيرادات
+  - المبيعات
+  - تكلفة المبيعات
+  - تكلفة الإيرادات
+  - مجمل الربح
+  - إجمالي الربح
 
 continuation:
   - continued

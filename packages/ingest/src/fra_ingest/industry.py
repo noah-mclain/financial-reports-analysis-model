@@ -1,8 +1,10 @@
 """Whether the issuer is a bank, an insurer or another financial company.
 
 Line items show the kind of business, so cues are read from the balance sheet and income
-statement pages when the locator found them, and from every page otherwise. The verdict is
-stored on the locate result; declining is decided in week 2.
+statement pages when the locator found them. When those pages give no verdict, or none were
+found, every page is read and the evidence must be twice as strong, since an ordinary annual
+report can mention banking or insurance in passing. The verdict is stored on the locate
+result; declining is decided in week 2.
 """
 
 from __future__ import annotations
@@ -26,6 +28,8 @@ from fra_ingest.results import (
 from fra_ingest.text_match import PhraseIndex, canonical, reading_variants
 
 VERDICT_THRESHOLD = 6.0
+# Whole-document evidence needs to be this many times stronger than statement-page evidence.
+WHOLE_DOCUMENT_FACTOR = 2.0
 _EVIDENCE_LIMIT = 12
 _STATEMENT_TYPES = (StatementType.BALANCE, StatementType.INCOME)
 
@@ -68,11 +72,18 @@ def detect_industry(
         if r.type in _STATEMENT_TYPES
         for page_no in range(r.first_page, r.last_page + 1)
     }
-    evidence_pages = [p for p in readable if p.page_no in statement_pages] or readable
+    on_statements = [p for p in readable if p.page_no in statement_pages]
+    if on_statements:
+        signal = _verdict(on_statements, book, VERDICT_THRESHOLD)
+        if signal.kind != "corporate":
+            return signal
+    return _verdict(readable, book, VERDICT_THRESHOLD * WHOLE_DOCUMENT_FACTOR)
 
+
+def _verdict(pages: list[PageText], book: IndustryBook, threshold: float) -> IndustrySignal:
     totals: dict[str, float] = defaultdict(float)
     evidence: list[tuple[int, str]] = []
-    for page in evidence_pages:
+    for page in pages:
         variants = [
             _without(book, text) for text in reading_variants(page.text, page.visual_arabic)
         ]
@@ -84,7 +95,7 @@ def detect_industry(
     if not totals:
         return IndustrySignal(kind="corporate")
     group, score = max(totals.items(), key=lambda item: item[1])
-    if score < VERDICT_THRESHOLD:
+    if score < threshold:
         return IndustrySignal(kind="corporate", score=score, evidence=evidence[:_EVIDENCE_LIMIT])
     kind, _, subkind = group.partition("/")
     return IndustrySignal(
