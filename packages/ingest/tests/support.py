@@ -7,14 +7,16 @@ import subprocess
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Literal
 
 import pypdfium2 as pdfium
 from PIL import Image
 
 from fra_core.schemas import Document, PageMode, PageProfile, TextSource
+from fra_ingest.converter import RangeOutput
 from fra_ingest.locate import LOCATE_VERSION
 from fra_ingest.ocr import OcrLine
-from fra_ingest.results import IndustrySignal, LocateResult, PageText
+from fra_ingest.results import IndustrySignal, LocateResult, PageText, RangePlan
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 GOLDEN_DIR = REPO_ROOT / "eval" / "golden" / "documents"
@@ -110,6 +112,48 @@ def located(
         convert_ranges=list(ranges),
         industry=IndustrySignal(kind="corporate"),
     )
+
+
+class FakeRunner:
+    """Stands in for DoclingRunner. ``behaviour`` maps a range label such as "2-3" to one of
+    ok, partial, failed, raise, outside, no_image or short; unlisted ranges are ok."""
+
+    def __init__(self, behaviour: Mapping[str, str] | None = None) -> None:
+        self.behaviour = dict(behaviour or {})
+        self.calls: list[RangePlan] = []
+        self.models_seconds = 0.0
+
+    def __call__(self, pdf: Path, plan: RangePlan) -> RangeOutput:
+        self.calls.append(plan)
+        kind = self.behaviour.get(plan.label, "ok")
+        if kind == "raise":
+            msg = "docling stopped"
+            raise RuntimeError(msg)
+        pages = list(range(plan.first_page, plan.last_page + 1))
+        if kind == "outside":
+            pages = [n + 100 for n in pages]
+        if kind == "short":
+            pages = pages[:1]
+        images: dict[int, Image.Image | None] = {
+            n: None if kind == "no_image" else Image.new("RGB", (20, 30), "white") for n in pages
+        }
+        statuses: dict[str, Literal["ok", "partial", "failed"]] = {
+            "partial": "partial",
+            "failed": "failed",
+        }
+        status = statuses.get(kind, "ok")
+        return RangeOutput(
+            status=status,
+            page_numbers=pages,
+            page_images=images,
+            tables=1,
+            errors=[] if status == "ok" else ["page 3: document timeout exceeded"],
+            write_json=_write_stub_json,
+        )
+
+
+def _write_stub_json(path: Path) -> None:
+    path.write_text("{}", encoding="utf-8")
 
 
 def run_python(code: str) -> subprocess.CompletedProcess[str]:
