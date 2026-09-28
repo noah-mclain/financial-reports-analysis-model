@@ -71,7 +71,7 @@ package imports on Linux.
 
 | Module | Responsibility |
 |--------|----------------|
-| `config.py` | `IngestConfig` loaded from `configs/ingest.toml`: enabled and optional statement types, `min_text_chars` (50), `ocr_dpi` (100), `ocr_languages` (`["ar-SA", "en-US"]`), `pad_pages` (1), `header_fraction` (0.35), `low_selectivity_share` (0.25), artifact root (`var/artifacts`) |
+| `config.py` | `IngestConfig` loaded from `configs/ingest.toml`: enabled and optional statement types, `min_text_chars` (50), `ocr_dpi` (100), `ocr_languages` (`["ar-SA", "en-US"]`), `pad_pages` (1), `header_fraction` (0.35), `low_selectivity_share` (0.25), artifact root (`var/artifacts`). `FRA_ROOT` sets the root for configs and artifacts in an installed copy (the Docker image); `FRA_INGEST_CONFIG` names another settings file |
 | `errors.py` | `IngestError(reason)` with reasons `unreadable_pdf`, `encrypted_pdf` and `empty_pdf` |
 | `ocr.py` | `OcrEngine` protocol: `recognize(image, languages) -> list[OcrLine]`, where `OcrLine` has text, bbox in page fraction and confidence. `VisionOcr` uses accurate mode only. `read_with_fallback` reads in each configured language in turn until the result is in that language's script (R21) |
 | `pages.py` | `read_pages(pdf, config, ocr) -> list[PageText]`, the page text cache, and `profiles(pages) -> list[PageProfile]` for `Document` |
