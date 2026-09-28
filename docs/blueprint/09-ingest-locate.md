@@ -126,7 +126,8 @@ class StatementRange(BaseModel):
 
 class IndustrySignal(BaseModel):
     kind: Literal["corporate", "bank", "insurer", "other_financial", "unknown"]
-    subkind: Literal["investment_holding", "brokerage", "exchange_operator", "other"] | None
+    subkind: Literal["investment_holding", "brokerage", "exchange_operator",
+                     "consumer_finance", "asset_manager", "other"] | None
                                     # set only when kind is other_financial
     score: float
     evidence: list[tuple[int, str]] # (page_no, cue)
@@ -139,7 +140,7 @@ class LocateResult(BaseModel):
     convert_ranges: list[tuple[int, int]]  # padded, merged, enabled types only
     industry: IndustrySignal
     flags: list[str]
-    timings: dict[str, float]       # seconds: text, ocr, score
+    timings: dict[str, float]       # seconds: read, text, ocr, score
 ```
 
 ## Data flow
@@ -300,29 +301,34 @@ against them, because `statement_pages` is an answer key and never an input (08,
 
 Measured 2026-09-28 on the `ingest-locate` branch, after labelling the 9 scanned golden
 documents (blind, then reconciled: 34 disagreements, no label changed; 32 were extra
-suggestions on neighbouring statements or notes tables, 2 were misses on optional types).
+suggestions on neighbouring statements or notes tables, 2 were misses on optional types),
+and after the branch review's fixes. Times are wall clock from `make eval-locate` with
+`--fresh` (no page cache, OCR model loaded).
 
 | Measure | Target | Result | |
 |---------|--------|--------|---|
 | Recall on the enabled types, golden set (12 documents) | 100% | 100% | pass |
 | Median candidate share, golden set | 15% or less | 10.7% (range 8.2% to 16.9%) | pass |
-| Corporate documents with a balance and an income range, `train` | 95% or more | 98.2% (107 of 109) | pass |
+| Corporate documents with a balance and an income range, `train` | 95% or more | 100% (109 of 109) | pass |
 | `sector: bank` or `insurer` given that verdict, `train` | all 6 | 6 of 6 | pass |
 | Corporate documents marked bank or insurer, `train` | at most 2 | 0 | pass |
-| Time, digital annual report (275 pages) | under 10 s | 1.4 to 2.3 s | pass |
-| Time, 64-page scanned filing, OCR model loaded | under 30 s | Arabic 11.5 to 15.2 s; English 30.4 s for 66 pages, 37.5 s for 85 | pass for Arabic; English at the limit (R21) |
+| Time, digital annual report (275 pages) | under 10 s | 2.2 s English, 3.6 s Arabic | pass |
+| Time, 64-page scanned filing, OCR model loaded | under 30 s | Arabic 12.5 to 16.8 s for 59 to 64 pages; English 24.1 s for 57 pages, 33.7 s for 66, 41.6 s for 85 (about 31 to 33 s per 64 pages) | pass for Arabic; English about 10% over, because each page is read twice (R21) |
 
-Optional types, reported only: cash flow and changes in equity are each found on 11 of 12
-golden documents. Juhayna 2024 AR loses its cash flow title to OCR (`قالمة التنفقات`), and
-Edita IFRS's landscape equity statement has no title OCR can read.
+`dev`: 3 of 3 covered. Optional types, reported only: cash flow and changes in equity are each
+found on 11 of 12 golden documents. Juhayna 2024 AR loses its cash flow title to OCR
+(`قالمة التنفقات`), and the landscape equity statement in Edita IFRS has no title OCR can read.
 
-`dev`: 3 of 3 covered. `train` misses: Al Dawaa 2025 interim and Jazan 2024 (not yet
-diagnosed). Other financial sub-kinds, which carry no target: 2 of 4 exchange operators are
-recognised; investment holdings, asset managers and consumer finance companies read as
-corporate, because their statements use ordinary line items. The week 2 decline rule needs a
-structural test for them (an income statement without revenue or cost of sales).
+The golden set is not held out: tuning looked at golden pages, as did the labelling
+reconcile. The held-out score comes from the `model_test` checkpoint, which the owner has
+deferred (running it freezes `model_test` and `blind`, corpus README rule 5).
 
-### What tuning changed
+Other financial sub-kinds carry no target: 2 of 4 exchange operators are recognised;
+investment holdings, asset managers and consumer finance companies read as corporate because
+their statements use ordinary line items. The week 2 decline rule needs a structural test for
+them (an income statement without revenue or cost of sales).
+
+### What tuning and review changed
 
 Every change was measured on `train` or on labelled golden pages and pinned by a test first.
 
@@ -334,11 +340,25 @@ Every change was measured on `train` or on labelled golden pages and pinned by a
 | Text layers made of noise are read by OCR | Al Kathiri (Greek-mapped font), Naba (modifier-glyph digits) |
 | A currency line counts as structure | Al Dawaa 2023 |
 | Comprehensive-income title plus revenue lines is also income | Herfy 2022 |
-| Arabic title stems without قائمة | OCR reading قائمة as فائمة or خاامة |
+| Arabic title stems without قائمة, only on short lines without figures | OCR reading قائمة as فائمة or خاامة; the OCI reserve line posing as a title (Jazan 2024, Al Dawaa 2025) |
 | Notes headings matched by stem (`notes to the`, `إيضاحات حول`) | Juhayna EN standalone |
-| No continuation through pages with negative cues | Juhayna AR consolidated: 52% and 56% of pages to 16% and 17% |
+| No continuation through pages with negative cues | Juhayna AR consolidated: 52% and 56% of pages down to 16% and 17% |
 | Industry: Gulf bank and takaful wording; whole-document fallback needs 3 distinct cues | ABC, Orient Takaful; Saudi Energy, United Electronics, Egypt Kuwait wrongly flagged before |
+| Failed OCR reads flagged (`ocr_failed_pages`) and never reused from the cache | Branch review |
+| Header and body mapped through the page rotation | Branch review: Edita p36 lost 29% of its text |
+| A mostly unread document gets industry `unknown` | Branch review |
 
 The scoring weights are unchanged from the plan: title 3.0, cue 1.5, numbers up to 2.0 (full
 at 30 amounts), each structural cue 1.0, each negative -4.0, candidate at 4.5, continuation at
 15 amounts. Weight changes are made with the owner.
+
+## Later scope: notes
+
+Owner's decision, 2026-09-28: figures come from the primary statement pages only. Notes are
+70 to 90% of a filing, have no common identity to check against, and repeat statement figures
+in other groupings, so converting them would break the time budget and weaken the "right, or
+visibly unsure" rule. Part 3 records each line item's `note_ref`. Following a reference to its
+note (a lookup in the cached page text, then converting only that note's pages) is future scope,
+added only for a metric that needs a figure not on the face of the statements. Depreciation and
+amortisation for EBITDA is the likely first case, and enabling the cash flow statement covers it
+more cheaply than notes.
