@@ -80,7 +80,7 @@ class RangePlan(BaseModel):          # frozen
     first_page: int
     last_page: int
     ocr: RangeOcr                    # pdf_aware: every page has a text layer
-    ocr_language: str | None         # "ar-SA" | "en-US"; None for pdf_aware and skipped
+    ocr_language: str | None         # "ar-SA" | "en-US"; None when skipped or ocr_engine is none
     image_pages: list[int]
 
 class RangeConversion(BaseModel):
@@ -95,7 +95,7 @@ class RangeConversion(BaseModel):
     flags: list[str]
 
 class ConvertResult(BaseModel):      # written to <artifact root>/<sha256>/convert.json
-    version: str                     # "convert/1"
+    version: str                     # CONVERT_VERSION, "1"
     sha256: str
     locate_version: str
     docling_version: str
@@ -105,7 +105,7 @@ class ConvertResult(BaseModel):      # written to <artifact root>/<sha256>/conve
     page_images: dict[int, str]      # page_no -> "pages/12.png"
     peak_footprint_gb: float | None
     flags: list[str]
-    timings: dict[str, float]        # startup, models, convert, write
+    timings: dict[str, float]        # locate, models, convert, write; the parent adds child_wall
 ```
 
 `[convert]` settings, each mapped to an `IngestConfig` field as the existing sections are:
@@ -131,10 +131,12 @@ Inside the child, `fra-ingest convert <pdf>`:
 2. **Cache.** If `convert.json` exists with the same `settings_hash`, return it (ADR 0005).
 3. **Plan.** `plan_ranges` gives each range in `convert_ranges`:
    - `pdf_aware` when every page is `text` in `located.document.pages`, else `full_page`;
-   - for `full_page`, the OCR language most common in Part 1's reads of the range's image
-     pages (`PageText.ocr_language` in the page cache), falling back to `ar-SA` when
-     `document.language` is `ar` and `en-US` otherwise. Vision reads only in the first
-     language it is given (R21), so docling gets that one language, not the pair;
+   - one OCR language: for `full_page`, the language most common in Part 1's reads of the
+     range's image pages (`PageText.ocr_language` in the page cache); for `pdf_aware`, and when
+     there are no reads, `ar-SA` when `document.language` is `ar` and `en-US` otherwise.
+     docling OCRs image regions of text pages too, so `pdf_aware` needs a language as well.
+     Vision reads only in the first language it is given (R21), so docling gets that one
+     language, not the pair;
    - `skipped` when the range has image pages and `ocr_engine` is `none`.
 4. **Converters.** One `DocumentConverter` per distinct `(ocr, ocr_language)`, so a typical
    document loads docling's models once. `pdf_aware` maps to
