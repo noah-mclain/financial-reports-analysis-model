@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "Ingest: per-page text and OCR, statement page location, conversion and structuring."
 requires-python = ">=3.12,<3.13"
 dependencies = [
+  "docling==2.126.0",
+  "docling-core==2.96.0",
+  "docling-ibm-models==4.0.2",
   "fra-core",
   "pillow>=11.0",
   "pydantic>=2.11",
