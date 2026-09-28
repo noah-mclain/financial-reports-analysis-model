@@ -42,6 +42,7 @@ written analysis, all on a single Apple Silicon machine (M3 Pro, 18 GB unified m
 | [04-execution-phases.md](04-execution-phases.md) | Production roadmap: phases 0 to 4 with tasks, interfaces and exit gates. Reference, not the current build |
 | [07-build-plan.md](07-build-plan.md) | Superseded 18-day plan to 2026-09-30. Kept for the record |
 | [08-revised-plan.md](08-revised-plan.md) | **The plan being executed**: live demo on unseen documents by 2026-10-26, run profiles, data pools, gates |
+| [09-ingest-locate.md](09-ingest-locate.md) | Ingest part 1: per-page text and OCR, statement page locator, industry signal, and how they are scored |
 | [05-verification-and-test.md](05-verification-and-test.md) | Verification work packages (layout) and Test work packages (calculation accuracy) |
 | [06-decisions-and-risks.md](06-decisions-and-risks.md) | Owner decisions, risk register, repository hygiene |
 

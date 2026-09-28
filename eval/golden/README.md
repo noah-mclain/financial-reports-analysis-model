@@ -38,6 +38,11 @@ measured traits and checksum for each file.
 4. **Digital Arabic is proper Unicode.** The Almarai Arabic edition has 21,239 Arabic
    characters and zero presentation forms in its first 15 pages, so no glyph-form normalization
    is needed there. It does carry bidi controls (U+202A, U+202B, U+202C), which must be stripped.
+   Correction, 2026-09-27: its text layer stores Arabic in visual order, so every word comes out
+   with its letters reversed (`ةمئاق` for `قائمة`). Of 82 Arabic corpus PDFs with a text layer,
+   Almarai's is the only one that does this, but 77 return each line's words in reverse order,
+   and lam-alef ligatures often come out swapped (`اآلخر` for `الآخر`). See
+   `docs/blueprint/09-ingest-locate.md`, R24.
 5. **Accounting vocabulary differs by country.** Saudi filings write assets as `الموجودات` and
    liabilities as `المطلوبات`; Egyptian filings write `الأصول` and `الالتزامات`. The Arabic
    lexicon carries both regional variants per canonical item.
@@ -55,7 +60,11 @@ measured traits and checksum for each file.
    statement page took 24.7 seconds and returned clean labels. The same page in fast mode
    returned `FlxdAyel` for Fixed Assets and corrupted digits, so fast mode cannot be used for
    statements. Budget roughly 3 to 4 minutes of OCR per scanned filing, against seconds for a
-   digital one.
+   digital one. Correction, 2026-09-27: most of the 24.7 seconds was the model loading, once per
+   language per process. Warm accurate mode reads a whole scanned page at 100 dpi in about
+   0.25 s; English pages take about 0.45 s because Vision reads only in the first language it
+   is given, so each page is read in Arabic first and again in English when that finds no
+   Arabic (R21). A 60-page scanned filing takes 11 to 15 s in Arabic and about 30 s in English.
 
 ## Rules for adding documents
 

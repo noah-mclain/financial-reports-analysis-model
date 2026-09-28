@@ -1,0 +1,29 @@
+[project]
+name = "fra-ingest"
+version = "0.1.0"
+description = "Ingest: per-page text and OCR, statement page location, conversion and structuring."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fra-core",
+  "pillow>=11.0",
+  "pydantic>=2.11",
+  "pypdfium2>=5.13",
+  "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+# Apple Vision OCR. Linux and Docker run without it until the week 2 engines land.
+mac = ["ocrmac>=1.0.1; sys_platform == 'darwin'"]
+
+[project.scripts]
+fra-ingest = "fra_ingest.cli:main"
+
+[tool.uv.sources]
+fra-core = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fra_ingest"]

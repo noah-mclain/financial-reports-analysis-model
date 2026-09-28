@@ -1,0 +1,179 @@
+# Phrases for the statement page locator. Compared after fra_core.labels.normalize_label, so
+# case, punctuation, hamza forms, ta marbuta and diacritics do not matter. Titles are matched
+# in the page header only; body cues anywhere on the page.
+
+titles:
+  balance:
+    - statement of financial position
+    - balance sheet
+    - قائمة المركز المالي
+    - بيان المركز المالي
+    - الميزانية العمومية
+  income:
+    - statement of profit or loss
+    - statement of profit and loss
+    - income statement
+    - statement of income
+    - statement of profit or loss and other comprehensive income
+    - قائمة الدخل
+    - قائمة الأرباح أو الخسائر
+    - قائمة الربح أو الخسارة
+    - بيان الربح أو الخسارة
+    - بيان الدخل
+    - قائمة الربح أو الخسارة والدخل الشامل الآخر
+  comprehensive_income:
+    - statement of comprehensive income
+    - statement of profit or loss and other comprehensive income
+    - قائمة الدخل الشامل
+    - بيان الدخل الشامل
+    - قائمة الربح أو الخسارة والدخل الشامل الآخر
+  cash_flow:
+    - statement of cash flows
+    - cash flow statement
+    - قائمة التدفقات النقدية
+    - بيان التدفقات النقدية
+  equity:
+    - statement of changes in equity
+    - statement of changes in shareholders equity
+    - قائمة التغيرات في حقوق الملكية
+    - قائمة التغير في حقوق الملكية
+    - قائمة التغيرات في حقوق المساهمين
+    - بيان التغيرات في حقوق الملكية
+
+# Titles without their first word: OCR often garbles قائمة (فائمة, خاامة). Counted only on
+# header lines without figures, since line items reuse these words (the OCI reserve).
+title_stems:
+  balance:
+    - المركز المالي
+  income:
+    - الربح أو الخسارة
+    - الأرباح أو الخسائر
+  comprehensive_income:
+    - الدخل الشامل
+  cash_flow:
+    - التدفقات النقدية
+  equity:
+    - التغيرات في حقوق الملكية
+    - التغير في حقوق الملكية
+
+# Line items that show the type of a page whose title is missing or unreadable.
+body_cues:
+  balance:
+    - total assets
+    - total equity and liabilities
+    - total liabilities and equity
+    - total current assets
+    - total current liabilities
+    - إجمالي الأصول
+    - مجموع الأصول
+    - إجمالي الموجودات
+    - مجموع الموجودات
+    - إجمالي حقوق الملكية والالتزامات
+    - إجمالي المطلوبات وحقوق الملكية
+    - الأصول المتداولة
+    - الموجودات المتداولة
+  income:
+    - gross profit
+    - cost of sales
+    - cost of revenue
+    - earnings per share
+    - profit for the year
+    - profit for the period
+    - مجمل الربح
+    - تكلفة المبيعات
+    - تكلفة الإيرادات
+    - ربحية السهم
+    - نصيب السهم في الأرباح
+    - ربح السنة
+    - ربح الفترة
+  comprehensive_income:
+    - other comprehensive income
+    - total comprehensive income
+    - الدخل الشامل الآخر
+    - إجمالي الدخل الشامل
+  cash_flow:
+    - cash flows from operating activities
+    - net cash from operating activities
+    - investing activities
+    - financing activities
+    - التدفقات النقدية من الأنشطة التشغيلية
+    - الأنشطة الاستثمارية
+    - الأنشطة التمويلية
+  equity:
+    - balance at
+    - transfer to statutory reserve
+    - الرصيد في
+    - المحول إلى الاحتياطي النظامي
+
+# Revenue lines. A page titled only as comprehensive income that carries them is the income
+# statement as well: many Saudi filers title their single statement that way.
+revenue_lines:
+  - revenue
+  - revenues
+  - sales
+  - cost of sales
+  - cost of revenue
+  - gross profit
+  - الإيرادات
+  - إيرادات
+  - المبيعات
+  - تكلفة المبيعات
+  - تكلفة الإيرادات
+  - مجمل الربح
+  - إجمالي الربح
+
+continuation:
+  - continued
+  - cont'd
+  - تابع
+
+note_headers:
+  - note
+  - notes
+  - إيضاح
+  - إيضاحات
+
+period_words:
+  - december
+  - june
+  - march
+  - september
+  - ديسمبر
+  - يونيو
+  - مارس
+  - سبتمبر
+
+# Lines that end a statement ("the accompanying notes form an integral part"). They mention
+# notes, and on a short statement they fall inside the header region, so negatives skip them.
+footer_markers:
+  - integral part
+  - جزء لا يتجزأ
+  - جزءا لا يتجزأ
+  - جزءاً لا يتجزأ
+
+# Header wording of pages that quote statement titles without being statements.
+negatives:
+  auditor_report:
+    - independent auditor's report
+    - independent auditors' report
+    - report on the audit of the
+    - basis for opinion
+    - key audit matters
+    - تقرير مراجع الحسابات المستقل
+    - تقرير المراجع المستقل
+    - تقرير مراقب الحسابات
+    - تقرير مراجعي الحسابات
+    - أساس الرأي
+    - أمور المراجعة الرئيسية
+  contents:
+    - contents
+    - table of contents
+    - المحتويات
+    - الفهرس
+  notes:
+    # Stems: filers qualify the heading freely (standalone, separate, interim condensed).
+    - notes to the
+    - notes to and forming part of
+    - إيضاحات حول
+    - الإيضاحات المتممة
+    - إيضاحات متممة

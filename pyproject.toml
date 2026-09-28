@@ -6,6 +6,7 @@ version = "0.0.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "fra-core",
+  "fra-ingest[mac]",
 ]
 
 [tool.uv]
@@ -13,15 +14,16 @@ package = false
 
 [tool.uv.workspace]
 # Members are added on the day their package lands, so `uv sync` stays green at every commit.
-# Planned order (see docs/blueprint/07-build-plan.md):
-#   packages/ingest (day 3), packages/analytics (day 8), packages/modeling (day 11),
-#   apps/api (day 12), apps/worker (day 12)
+# Still to come (see docs/blueprint/08-revised-plan.md): packages/analytics,
+# packages/modeling, apps/api, apps/worker
 members = [
   "packages/core",
+  "packages/ingest",
 ]
 
 [tool.uv.sources]
 fra-core = { workspace = true }
+fra-ingest = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -39,6 +41,8 @@ dev = [
 line-length = 100
 target-version = "py312"
 src = ["packages/*/src", "apps/*/src", "scripts", "training/sources"]
+# Code blocks in docs are design sketches (aligned comments, elided bodies), not source.
+extend-exclude = ["docs"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
@@ -52,10 +56,10 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 python_version = "3.12"
 strict = true
 warn_unreachable = true
-mypy_path = "packages/core/src:packages/ingest/src:packages/analytics/src:packages/modeling/src"
+mypy_path = "packages/core/src:packages/ingest/src:packages/ingest/tests:packages/analytics/src:packages/modeling/src"
 
 [[tool.mypy.overrides]]
-module = ["docling.*", "docling_core.*", "mlx.*", "mlx_lm.*", "pypdfium2.*", "matplotlib.*"]
+module = ["docling.*", "docling_core.*", "mlx.*", "mlx_lm.*", "pypdfium2.*", "matplotlib.*", "ocrmac", "ocrmac.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
@@ -64,7 +68,7 @@ testpaths = ["packages", "tests"]
 # Keep in sync with workspace members. uv marks editable .pth files hidden on macOS and
 # Python 3.11+ skips hidden .pth files, so tests set the paths directly.
 # `make unhide-pth` fixes it for scripts and `uv run python`.
-pythonpath = ["packages/core/src", "scripts", "training/sources"]
+pythonpath = ["packages/core/src", "packages/ingest/src", "scripts", "training/sources", "eval"]
 addopts = "-q --strict-markers"
 markers = [
   "slow: needs model weights or OCR, excluded from the default run",
