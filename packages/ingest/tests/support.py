@@ -8,9 +8,10 @@ from pathlib import Path
 import pypdfium2 as pdfium
 from PIL import Image
 
-from fra_core.schemas import PageMode, TextSource
+from fra_core.schemas import Document, PageMode, PageProfile, TextSource
+from fra_ingest.locate import LOCATE_VERSION
 from fra_ingest.ocr import OcrLine
-from fra_ingest.results import PageText
+from fra_ingest.results import IndustrySignal, LocateResult, PageText
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 GOLDEN_DIR = REPO_ROOT / "eval" / "golden" / "documents"
@@ -72,3 +73,37 @@ def text_page(header: str, body: str = "", *, page_no: int = 1, visual: bool = F
 def numbers_block(rows: int = 25, label: str = "Line") -> str:
     """Statement-like rows with two period columns of values in the thousands."""
     return "\n".join(f"{label} {i} {1000 + i * 37:,} {900 + i * 29:,}" for i in range(rows))
+
+
+def located(
+    modes: Sequence[PageMode],
+    ranges: Sequence[tuple[int, int]],
+    *,
+    language: str = "en",
+    sha256: str = "0" * 64,
+) -> LocateResult:
+    """A locate result over pages of the given modes, with the given convert ranges."""
+    document = Document(
+        sha256=sha256,
+        filename="doc.pdf",
+        page_count=len(modes),
+        pages=[
+            PageProfile(
+                page_no=i + 1,
+                mode=mode,
+                char_count=0 if mode is PageMode.IMAGE else 500,
+                width_pt=595,
+                height_pt=842,
+            )
+            for i, mode in enumerate(modes)
+        ],
+        language=language,
+    )
+    return LocateResult(
+        version=LOCATE_VERSION,
+        document=document,
+        pages=[],
+        ranges=[],
+        convert_ranges=list(ranges),
+        industry=IndustrySignal(kind="corporate"),
+    )
