@@ -80,3 +80,18 @@ def test_a_bank_is_flagged() -> None:
     ]
     result = locate(pages, IngestConfig(), sha256=SHA, filename="bank.pdf")
     assert "likely_bank" in result.flags
+
+
+def test_failed_ocr_pages_are_reported(tmp_path: Path) -> None:
+    config = IngestConfig(artifact_root=tmp_path / "artifacts")
+    result = locate_pdf(make_blank_pdf(tmp_path / "scan.pdf", pages=3), config, FakeOcr(fail=True))
+    assert "ocr_failed_pages:3" in result.flags
+
+
+def test_a_run_from_cache_reports_no_ocr_time(tmp_path: Path) -> None:
+    config = IngestConfig(artifact_root=tmp_path / "artifacts")
+    pdf = make_blank_pdf(tmp_path / "scan.pdf", pages=2)
+    locate_pdf(pdf, config, FakeOcr())
+    again = locate_pdf(pdf, config, FakeOcr())
+    assert again.timings["ocr"] == 0.0
+    assert again.timings["text"] >= 0.0

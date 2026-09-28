@@ -9,8 +9,6 @@ titles:
     - قائمة المركز المالي
     - بيان المركز المالي
     - الميزانية العمومية
-    # The title without its first word: OCR often garbles قائمة (فائمة, خاامة).
-    - المركز المالي
   income:
     - statement of profit or loss
     - statement of profit and loss
@@ -23,21 +21,17 @@ titles:
     - بيان الربح أو الخسارة
     - بيان الدخل
     - قائمة الربح أو الخسارة والدخل الشامل الآخر
-    - الربح أو الخسارة
-    - الأرباح أو الخسائر
   comprehensive_income:
     - statement of comprehensive income
     - statement of profit or loss and other comprehensive income
     - قائمة الدخل الشامل
     - بيان الدخل الشامل
     - قائمة الربح أو الخسارة والدخل الشامل الآخر
-    - الدخل الشامل
   cash_flow:
     - statement of cash flows
     - cash flow statement
     - قائمة التدفقات النقدية
     - بيان التدفقات النقدية
-    - التدفقات النقدية
   equity:
     - statement of changes in equity
     - statement of changes in shareholders equity
@@ -45,6 +39,20 @@ titles:
     - قائمة التغير في حقوق الملكية
     - قائمة التغيرات في حقوق المساهمين
     - بيان التغيرات في حقوق الملكية
+
+# Titles without their first word: OCR often garbles قائمة (فائمة, خاامة). Counted only on
+# header lines without figures, since line items reuse these words (the OCI reserve).
+title_stems:
+  balance:
+    - المركز المالي
+  income:
+    - الربح أو الخسارة
+    - الأرباح أو الخسائر
+  comprehensive_income:
+    - الدخل الشامل
+  cash_flow:
+    - التدفقات النقدية
+  equity:
     - التغيرات في حقوق الملكية
     - التغير في حقوق الملكية
 

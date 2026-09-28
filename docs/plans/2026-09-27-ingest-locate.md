@@ -29,7 +29,7 @@ only, optional), PyYAML, Pillow, pytest, mypy strict, ruff.
   `--checkpoint`.
 - No PDFs committed outside `eval/golden/documents/`. Test PDFs are generated at test time.
 - Commits are authored as the owner; messages in the owner's plain style, no trailers.
-- No mention of AI assistance anywhere in code, comments, docs or commit messages.
+- Repository hygiene rules in the root instructions file apply to every commit and document.
 
 ## Review Focus
 

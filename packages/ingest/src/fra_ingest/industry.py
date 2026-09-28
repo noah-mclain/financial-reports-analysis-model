@@ -65,7 +65,9 @@ def detect_industry(
     pages: list[PageText], ranges: list[StatementRange], book: IndustryBook
 ) -> IndustrySignal:
     readable = [page for page in pages if page.text.strip()]
-    if not readable:
+    unread = sum(1 for page in pages if "ocr_unavailable" in page.flags)
+    if not readable or unread > len(pages) / 2:
+        # Most of the document was never read: no verdict rather than a guess of corporate.
         return IndustrySignal(kind="unknown")
 
     statement_pages = {

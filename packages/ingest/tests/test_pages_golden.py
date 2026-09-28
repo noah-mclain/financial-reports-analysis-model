@@ -43,3 +43,11 @@ def test_english_statement_header_holds_the_title(golden: Callable[[str], Path])
 def test_scanned_arabic_is_never_marked_visual(golden: Callable[[str], Path]) -> None:
     pages = read_pages(golden("juhayna-2025-ar-standalone.pdf"), IngestConfig(), FakeOcr())
     assert not any(page.visual_arabic for page in pages)  # OCR gives logical order
+
+
+def test_a_rotated_page_is_split_without_losing_text(golden: Callable[[str], Path]) -> None:
+    # Edita p36 carries /Rotate 90: the header and body together must hold the whole page.
+    pages = read_pages(golden("edita-2025-ar-consolidated-eas.pdf"), IngestConfig(), None)
+    page = pages[35]
+    split = len((page.header_text + page.body_text).replace(" ", "").replace("\n", ""))
+    assert split >= 0.97 * page.char_count

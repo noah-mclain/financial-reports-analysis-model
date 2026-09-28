@@ -15,6 +15,7 @@ import argparse
 import json
 import statistics
 import sys
+import time
 from collections import Counter
 from typing import Any
 
@@ -88,7 +89,7 @@ def verdict_label(result: LocateResult) -> str:
     return f"{kind}/{result.industry.subkind or 'other'}" if kind == "other_financial" else kind
 
 
-def run_golden(no_ocr: bool) -> dict[str, Any]:
+def run_golden(no_ocr: bool, fresh: bool = False) -> dict[str, Any]:
     config = load_config()
     engine = None if no_ocr else default_engine()
     enabled = set(config.enabled_types)
@@ -98,11 +99,12 @@ def run_golden(no_ocr: bool) -> dict[str, Any]:
         if not pages:
             print(f"skip {doc['id']}: not labelled")
             continue
-        result = locate_pdf(MANIFEST.parent / doc["file"], config, engine)
+        started = time.perf_counter()
+        result = locate_pdf(MANIFEST.parent / doc["file"], config, engine, use_cache=not fresh)
         row: dict[str, Any] = {
             "id": doc["id"],
             "share": result.candidate_share,
-            "seconds": sum(result.timings.values()),
+            "seconds": time.perf_counter() - started,
             "recall": {},
         }
         for key, statement_type in MANIFEST_KEYS.items():
@@ -179,11 +181,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("target", help="golden, dev, train or model_test")
     parser.add_argument("--checkpoint", action="store_true")
     parser.add_argument("--no-ocr", action="store_true")
+    parser.add_argument(
+        "--fresh", action="store_true", help="ignore the page cache, so times include OCR"
+    )
     args = parser.parse_args(argv)
     check_target(args.target, args.checkpoint)
 
     report = (
-        run_golden(args.no_ocr) if args.target == "golden" else run_pool(args.target, args.no_ocr)
+        run_golden(args.no_ocr, args.fresh)
+        if args.target == "golden"
+        else run_pool(args.target, args.no_ocr)
     )
     OUT.mkdir(parents=True, exist_ok=True)
     out = OUT / f"locate-{args.target}.json"

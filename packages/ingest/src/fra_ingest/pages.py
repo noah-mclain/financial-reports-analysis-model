@@ -6,6 +6,7 @@ version and every setting that changes what is read (ADR 0005).
 
 from __future__ import annotations
 
+import ctypes
 import hashlib
 import json
 import os
@@ -15,6 +16,8 @@ from pathlib import Path
 from typing import Any
 
 import pypdfium2 as pdfium
+import pypdfium2.raw as pdfium_c
+from pydantic import ValidationError
 
 from fra_core.numbers import strip_bidi
 from fra_core.schemas import PageMode, PageProfile, TextSource
@@ -24,7 +27,7 @@ from fra_ingest.ocr import OcrEngine, read_with_fallback
 from fra_ingest.results import PageText
 from fra_ingest.text_match import is_visual_arabic
 
-PAGES_STAGE_VERSION = "2"
+PAGES_STAGE_VERSION = "3"
 
 _FPDF_ERR_PASSWORD = 4
 _GARBLE_MIN_CHARS = 100
@@ -127,9 +130,9 @@ def _read_page(page: Any, page_no: int, config: IngestConfig, ocr: OcrEngine | N
         textpage = page.get_textpage()
         try:
             full = strip_bidi(textpage.get_text_range())
-            split_y = height * (1.0 - config.header_fraction)
-            header = strip_bidi(textpage.get_text_bounded(0, split_y, width, height))
-            body = strip_bidi(textpage.get_text_bounded(0, 0, width, split_y))
+            header_box, body_box = _regions(page, width, height, config.header_fraction)
+            header = strip_bidi(textpage.get_text_bounded(*header_box))
+            body = strip_bidi(textpage.get_text_bounded(*body_box))
         finally:
             textpage.close()
 
@@ -166,6 +169,49 @@ def _read_page(page: Any, page_no: int, config: IngestConfig, ocr: OcrEngine | N
         return _ocr_page(page, page_no, config, ocr, char_count, width, height)
     finally:
         page.close()
+
+
+def _regions(
+    page: Any, width: float, height: float, header_fraction: float
+) -> tuple[tuple[float, float, float, float], tuple[float, float, float, float]]:
+    """Header and body rectangles in page space, for ``get_text_bounded``.
+
+    The header is the top of the page as displayed. Text coordinates are in unrotated page
+    space while ``get_size`` gives the displayed size, so both rectangles are drawn in display
+    space and mapped back through pdfium, which also accounts for a mediabox that does not
+    start at the origin.
+    """
+    split = height * header_fraction
+    return (
+        _to_page_rect(page, width, height, (0.0, 0.0, width, split)),
+        _to_page_rect(page, width, height, (0.0, split, width, height)),
+    )
+
+
+def _to_page_rect(
+    page: Any, width: float, height: float, rect: tuple[float, float, float, float]
+) -> tuple[float, float, float, float]:
+    rotate = page.get_rotation() // 90
+    size_x, size_y = round(width), round(height)
+    xs: list[float] = []
+    ys: list[float] = []
+    for device_x, device_y in ((rect[0], rect[1]), (rect[2], rect[3])):
+        page_x, page_y = ctypes.c_double(), ctypes.c_double()
+        pdfium_c.FPDF_DeviceToPage(
+            page.raw,
+            0,
+            0,
+            size_x,
+            size_y,
+            rotate,
+            round(device_x),
+            round(device_y),
+            ctypes.byref(page_x),
+            ctypes.byref(page_y),
+        )
+        xs.append(page_x.value)
+        ys.append(page_y.value)
+    return min(xs), min(ys), max(xs), max(ys)
 
 
 def _ocr_page(
@@ -253,12 +299,19 @@ def _settings(config: IngestConfig, ocr: OcrEngine | None) -> dict[str, Any]:
     }
 
 
-def _usable(payload: dict[str, Any], settings: dict[str, Any]) -> bool:
+def _usable(payload: Any, settings: dict[str, Any]) -> bool:
     """Same text settings, and OCR at least as good as this run's: a cache with OCR also
-    serves a run without an engine, never the other way round."""
-    if payload.get("version") != PAGES_STAGE_VERSION:
+    serves a run without an engine, never the other way round. A cache holding a failed OCR
+    read is never reused while an engine is available, so a transient failure is retried."""
+    if not isinstance(payload, dict) or payload.get("version") != PAGES_STAGE_VERSION:
         return False
-    cached = payload.get("settings", {})
+    if settings["ocr_engine"] is not None and any(
+        "ocr_failed" in page.get("flags", []) for page in payload.get("pages", [])
+    ):
+        return False
+    cached = payload.get("settings")
+    if not isinstance(cached, dict):
+        return False
     if any(cached.get(key) != settings[key] for key in _TEXT_SETTINGS):
         return False
     engine, cached_engine = settings["ocr_engine"], cached.get("ocr_engine")
@@ -274,7 +327,12 @@ def _load_cache(path: Path, settings: dict[str, Any]) -> list[PageText] | None:
         return None
     if not _usable(payload, settings):
         return None
-    return [PageText.model_validate(page) for page in payload["pages"]]
+    try:
+        pages = [PageText.model_validate(page) for page in payload["pages"]]
+    except (KeyError, TypeError, ValidationError):
+        return None
+    # The cache stores text, not this run's cost: no OCR ran for these pages now.
+    return [page.model_copy(update={"ocr_seconds": 0.0}) for page in pages]
 
 
 def _write_cache(path: Path, settings: dict[str, Any], pages: Sequence[PageText]) -> None:

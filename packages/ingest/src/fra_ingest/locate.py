@@ -19,7 +19,7 @@ from typing import Any
 import yaml
 
 from fra_core.numbers import normalize_digits
-from fra_core.schemas import Document, StatementType
+from fra_core.schemas import Document, StatementType, TextSource
 from fra_core.units import detect_currency, detect_scale
 from fra_ingest.config import IngestConfig
 from fra_ingest.industry import IndustryBook, detect_industry, load_industry_book
@@ -44,8 +44,9 @@ NEGATIVE_WEIGHT = 4.0
 CANDIDATE_THRESHOLD = 4.5
 CONTINUATION_MIN_NUMBERS = 15
 
-LOCATE_VERSION = "1"
+LOCATE_VERSION = "2"
 
+_DIGIT = re.compile(r"\d")
 _YEAR = re.compile(r"(?<!\d)(?:19|20)\d{2}(?!\d)")
 _NUMBER = re.compile(r"\d{1,3}(?:[,٬. ]\d{3})+|\d{3,}")
 
@@ -53,6 +54,7 @@ _NUMBER = re.compile(r"\d{1,3}(?:[,٬. ]\d{3})+|\d{3,}")
 @dataclass(frozen=True)
 class TitleBook:
     titles: PhraseIndex
+    title_stems: PhraseIndex
     body_cues: PhraseIndex
     revenue_lines: PhraseIndex
     continuation: PhraseIndex
@@ -71,6 +73,7 @@ def load_title_book(path: Path | None = None) -> TitleBook:
     data: dict[str, Any] = yaml.safe_load(raw)
     return TitleBook(
         titles=PhraseIndex.build(data["titles"]),
+        title_stems=PhraseIndex.build(data["title_stems"]),
         body_cues=PhraseIndex.build(data["body_cues"]),
         revenue_lines=PhraseIndex.build({"revenue": data["revenue_lines"]}),
         continuation=PhraseIndex.build({"continued": data["continuation"]}),
@@ -91,6 +94,16 @@ def score_page(page: PageText, book: TitleBook) -> PageScore:
     whole = reading_variants(page.text, page.visual_arabic)
 
     title_hits = book.titles.find(header)
+    # Stems (a title without its first word) only count on a line without figures: a line item
+    # such as the other comprehensive income reserve carries the same words and its amounts.
+    stem_lines = [line for text in header for line in text.splitlines() if not _DIGIT.search(line)]
+    title_hits.update(
+        {
+            phrase: groups
+            for phrase, groups in book.title_stems.find(stem_lines).items()
+            if not any(phrase in hit for hit in title_hits)
+        }
+    )
     title_types = _types(title_hits.values())
     if (
         StatementType.COMPREHENSIVE_INCOME in title_types
@@ -231,6 +244,16 @@ def locate_flags(
     unread = sum(1 for page in pages if "ocr_unavailable" in page.flags)
     if unread:
         flags.append(f"image_pages_not_read:{unread}")
+    failed = sum(1 for page in pages if "ocr_failed" in page.flags)
+    if failed:
+        flags.append(f"ocr_failed_pages:{failed}")
+    garbled = sum(
+        1
+        for page in pages
+        if "garbled_text_layer" in page.flags and page.source is not TextSource.OCR
+    )
+    if garbled:
+        flags.append(f"garbled_text_layers_not_read:{garbled}")
     found = {r.type for r in ranges}
     flags.extend(f"statement_not_found:{t.value}" for t in config.enabled_types if t not in found)
     if not convert:

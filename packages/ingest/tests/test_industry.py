@@ -2,7 +2,7 @@
 
 from support import numbers_block, text_page
 
-from fra_core.schemas import StatementType
+from fra_core.schemas import PageMode, StatementType
 from fra_ingest.industry import detect_industry, load_industry_book
 from fra_ingest.results import PageText, StatementRange
 
@@ -154,3 +154,22 @@ def test_one_phrase_repeated_through_a_report_is_not_a_verdict() -> None:
         for n in range(2, 12)
     ]
     assert detect_industry(pages, ranges, BOOK).kind == "corporate"
+
+
+def test_a_mostly_unread_document_is_unknown() -> None:
+    # A scanned bank on a machine without OCR: a text cover page is not enough to call it
+    # corporate.
+    cover = text_page("Annual report 2025", "Chairman's statement " * 10, page_no=1)
+    unread = [
+        PageText(
+            page_no=n,
+            mode=PageMode.IMAGE,
+            source=None,
+            char_count=0,
+            width_pt=595,
+            height_pt=842,
+            flags=["ocr_unavailable"],
+        )
+        for n in range(2, 60)
+    ]
+    assert detect_industry([cover, *unread], [], BOOK).kind == "unknown"

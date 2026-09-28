@@ -154,3 +154,32 @@ def test_visual_order_arabic_is_detected(text: str, expected: bool) -> None:
 )
 def test_a_garbled_text_layer_is_recognised(text: str, garbled: bool) -> None:
     assert text_layer_is_garbled(text) is garbled
+
+
+# Review fixes, 2026-09-28.
+
+
+def test_a_failed_ocr_read_is_not_cached(tmp_path: Path) -> None:
+    pdf = make_blank_pdf(tmp_path / "scan.pdf")
+    read_pages(pdf, IngestConfig(), FakeOcr(fail=True), cache_dir=tmp_path / "cache")
+    working = FakeOcr(by_language={"en-US": [TITLE]})
+    pages = read_pages(pdf, IngestConfig(), working, cache_dir=tmp_path / "cache")
+    assert working.calls > 0
+    assert pages[0].header_text == TITLE.text
+
+
+@pytest.mark.parametrize("payload", ['{"version": "3", "settings": {}}', '{"version": "3"', "[]"])
+def test_a_corrupt_cache_is_a_miss(tmp_path: Path, payload: str) -> None:
+    pdf = make_blank_pdf(tmp_path / "scan.pdf")
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    (cache / "pages.v3.json").write_text(payload, encoding="utf-8")
+    pages = read_pages(pdf, IngestConfig(), FakeOcr([TITLE]), cache_dir=cache)
+    assert pages[0].source is TextSource.OCR
+
+
+def test_ocr_time_is_only_counted_when_ocr_ran(tmp_path: Path) -> None:
+    pdf = make_blank_pdf(tmp_path / "scan.pdf")
+    read_pages(pdf, IngestConfig(), FakeOcr([TITLE]), cache_dir=tmp_path / "cache")
+    cached = read_pages(pdf, IngestConfig(), FakeOcr([TITLE]), cache_dir=tmp_path / "cache")
+    assert cached[0].ocr_seconds == 0.0

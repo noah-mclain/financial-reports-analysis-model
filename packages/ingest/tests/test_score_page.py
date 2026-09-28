@@ -180,3 +180,17 @@ def test_notes_headers_with_a_qualifier_are_still_notes() -> None:
 def test_arabic_notes_headers_with_a_qualifier_are_still_notes() -> None:
     header = "إيضاحات حول القوائم المالية المستقلة المجمعة\nللسنة المنتهية في 31 ديسمبر 2025\nقائمة الدخل"
     assert "notes" in score_page(text_page(header, numbers_block(label="بند")), BOOK).negatives
+
+
+def test_a_title_stem_on_a_line_with_figures_is_a_line_item() -> None:
+    # Jazan and Al Dawaa: the balance sheet title is unreadable, and the equity section's
+    # "الدخل الشامل الآخر" reserve (with its amounts) sits in the header region.
+    header = (
+        "شركة مساهمة سعودية\nقائمة المركز المال الموحدة\nي\nكما في 31 ديسمبر 2024\n"
+        "إيضاح 31 ديسمبر 2024 31 ديسمبر 2023\nالموجودات المتداولة\n"
+        "احتياطي الدخل الشامل الآخر 12,345 11,002"
+    )
+    body = numbers_block(label="بند") + "\nمجموع الموجودات 224,688,071 205,309,339"
+    score = score_page(text_page(header, body), BOOK)
+    assert COMPREHENSIVE not in score.title_types
+    assert score.is_candidate(BALANCE)

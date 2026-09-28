@@ -26,14 +26,14 @@ def locate_pdf(
     started = time.perf_counter()
     pages = read_pages(pdf_path, config, ocr, cache_dir=out_dir if use_cache else None)
     read_seconds = time.perf_counter() - started
-    ocr_seconds = sum(page.ocr_seconds for page in pages)
+    ocr_seconds = min(sum(page.ocr_seconds for page in pages), read_seconds)
 
     result = locate(
         pages,
         config,
         sha256=sha256,
         filename=pdf_path.name,
-        timings={"read": read_seconds, "ocr": ocr_seconds},
+        timings={"read": read_seconds, "text": read_seconds - ocr_seconds, "ocr": ocr_seconds},
     )
     out_dir.mkdir(parents=True, exist_ok=True)
     temporary = out_dir / "locate.json.tmp"
