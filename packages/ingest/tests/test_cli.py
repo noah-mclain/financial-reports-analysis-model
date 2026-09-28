@@ -37,3 +37,14 @@ def test_an_unreadable_file_exits_with_its_reason(
     path.write_bytes(b"not a pdf")
     assert main(["locate", str(path), "--no-ocr", "--artifacts", str(tmp_path)]) == 2
     assert "unreadable_pdf" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("kind", ["missing", "directory"])
+def test_a_path_that_is_not_a_file_exits_with_its_reason(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], kind: str
+) -> None:
+    path = tmp_path / "nothing.pdf"
+    if kind == "directory":
+        path.mkdir()
+    assert main(["locate", str(path), "--no-ocr", "--artifacts", str(tmp_path / "a")]) == 2
+    assert "unreadable_pdf" in capsys.readouterr().err

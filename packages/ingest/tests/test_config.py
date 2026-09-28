@@ -53,3 +53,8 @@ def test_unknown_settings_are_rejected(tmp_path: Path) -> None:
 def test_relative_artifact_root_resolves_against_the_repository(tmp_path: Path) -> None:
     config = load_config(write(tmp_path, '[artifacts]\nroot = "var/elsewhere"\n'))
     assert config.artifact_root == REPO_ROOT / "var" / "elsewhere"
+
+
+def test_at_least_one_ocr_language_is_required(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="ocr_languages"):
+        load_config(write(tmp_path, "[ocr]\nlanguages = []\n"))

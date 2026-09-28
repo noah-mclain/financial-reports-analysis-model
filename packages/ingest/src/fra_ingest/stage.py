@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 from fra_ingest.config import IngestConfig
+from fra_ingest.errors import IngestError
 from fra_ingest.locate import locate
 from fra_ingest.ocr import OcrEngine
 from fra_ingest.pages import read_pages, sha256_file
@@ -20,6 +21,8 @@ def locate_pdf(
     *,
     use_cache: bool = True,
 ) -> LocateResult:
+    if not pdf_path.is_file():
+        raise IngestError("unreadable_pdf", f"{pdf_path}: not a file")
     sha256 = sha256_file(pdf_path)
     out_dir = config.artifact_root / sha256
 

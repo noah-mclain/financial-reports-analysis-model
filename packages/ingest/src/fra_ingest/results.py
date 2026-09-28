@@ -8,6 +8,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from fra_core.schemas import Document, PageMode, StatementType, TextSource
 
+# A page is a candidate for a type when it names the type and scores at least this much.
+CANDIDATE_THRESHOLD = 4.5
+
 
 class PageText(BaseModel):
     """The text of one page, split into the header region and the rest."""
@@ -58,7 +61,9 @@ class PageScore(BaseModel):
     negatives: list[str] = Field(default_factory=list)
     continuation: bool = False
 
-    def is_candidate(self, statement_type: StatementType, threshold: float = 4.5) -> bool:
+    def is_candidate(
+        self, statement_type: StatementType, threshold: float = CANDIDATE_THRESHOLD
+    ) -> bool:
         named = statement_type in self.title_types or statement_type in self.cue_types
         return named and self.type_scores.get(statement_type, 0.0) >= threshold
 

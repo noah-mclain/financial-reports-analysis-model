@@ -30,6 +30,9 @@ from fra_ingest.text_match import is_visual_arabic
 PAGES_STAGE_VERSION = "3"
 
 _FPDF_ERR_PASSWORD = 4
+# Errors that mean the code calling the engine is wrong, not that recognition failed. They are
+# raised, not recorded as ocr_failed, so a broken engine cannot pass as unreadable scans.
+_PROGRAMMING_ERRORS = (TypeError, AttributeError, NameError, IndexError, KeyError)
 _GARBLE_MIN_CHARS = 100
 _GARBLE_READABLE_SHARE = 0.9
 _TEXT_SETTINGS = ("min_text_chars", "header_fraction", "ocr_dpi", "ocr_languages")
@@ -227,6 +230,8 @@ def _ocr_page(
     started = time.perf_counter()
     try:
         lines, language = read_with_fallback(ocr, image, config.ocr_languages)
+    except _PROGRAMMING_ERRORS:
+        raise
     except Exception:  # Vision failures surface as assorted Objective-C bridge errors.
         return _page(
             page_no,

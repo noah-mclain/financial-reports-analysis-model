@@ -25,6 +25,7 @@ from fra_ingest.config import IngestConfig
 from fra_ingest.industry import IndustryBook, detect_industry, load_industry_book
 from fra_ingest.pages import document_language, profiles
 from fra_ingest.results import (
+    CANDIDATE_THRESHOLD,
     IndustrySignal,
     LocateResult,
     PageScore,
@@ -41,7 +42,6 @@ NUMERIC_WEIGHT = 2.0
 NUMERIC_FULL_AT = 30
 STRUCTURE_WEIGHT = 1.0
 NEGATIVE_WEIGHT = 4.0
-CANDIDATE_THRESHOLD = 4.5
 CONTINUATION_MIN_NUMBERS = 15
 TITLE_LINE_MAX_WORDS = 7
 
@@ -49,7 +49,9 @@ LOCATE_VERSION = "2"
 
 _DIGIT = re.compile(r"\d")
 _YEAR = re.compile(r"(?<!\d)(?:19|20)\d{2}(?!\d)")
-_NUMBER = re.compile(r"\d{1,3}(?:[,٬. ]\d{3})+|\d{3,}")
+# Thousands separators: comma, Arabic, dot, and plain, no-break, narrow no-break and thin spaces.
+_NUMBER = re.compile(r"\d{1,3}(?:[,\u066c. \u00a0\u202f\u2009]\d{3})+|\d{3,}")
+_TWO_YEARS = re.compile(r"(?:19|20)\d{2}(?:19|20)\d{2}")
 
 
 @dataclass(frozen=True)
@@ -87,7 +89,17 @@ def load_title_book(path: Path | None = None) -> TitleBook:
 def count_numeric_tokens(text: str) -> int:
     """Printed amounts with three or more digits. Years are not amounts."""
     digits, _ = normalize_digits(text)
-    return sum(1 for match in _NUMBER.finditer(digits) if not _YEAR.fullmatch(match.group(0)))
+    count = 0
+    for match in _NUMBER.finditer(digits):
+        token = match.group(0)
+        if _YEAR.fullmatch(token) or _TWO_YEARS.fullmatch(token):
+            continue
+        if token[0] == "0" and len(token) > 1 and not token[1].isdigit():
+            continue  # 0.123 is a ratio: no amount's leading group is a bare zero
+        if match.start() > 0 and digits[match.start() - 1] == ".":
+            continue  # the fractional part of a decimal such as 12.345
+        count += 1
+    return count
 
 
 def score_page(page: PageText, book: TitleBook) -> PageScore:

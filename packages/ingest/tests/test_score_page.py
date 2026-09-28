@@ -208,3 +208,15 @@ def test_a_title_stem_inside_a_long_line_item_is_not_a_title() -> None:
     score = score_page(text_page(header, body), BOOK)
     assert COMPREHENSIVE not in score.title_types
     assert score.is_candidate(BALANCE)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("1 234 567 2 345 678", 2),  # no-break and narrow no-break spaces
+        ("0.123 0.456", 0),  # ratios, not amounts
+        ("20242023", 0),  # two years run together
+    ],
+)
+def test_numeric_tokens_edge_cases(text: str, expected: int) -> None:
+    assert count_numeric_tokens(text) == expected

@@ -41,7 +41,7 @@ class IngestConfig(BaseModel):
     min_text_chars: int = Field(default=50, ge=0)
     header_fraction: float = Field(default=0.35, gt=0.0, lt=1.0)
     ocr_dpi: int = Field(default=100, ge=36, le=300)
-    ocr_languages: tuple[str, ...] = ("ar-SA", "en-US")
+    ocr_languages: tuple[str, ...] = Field(default=("ar-SA", "en-US"), min_length=1)
     pad_pages: int = Field(default=1, ge=0)
     low_selectivity_share: float = Field(default=0.25, gt=0.0, le=1.0)
     artifact_root: Path = REPO_ROOT / "var" / "artifacts"

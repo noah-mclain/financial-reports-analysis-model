@@ -183,3 +183,18 @@ def test_ocr_time_is_only_counted_when_ocr_ran(tmp_path: Path) -> None:
     read_pages(pdf, IngestConfig(), FakeOcr([TITLE]), cache_dir=tmp_path / "cache")
     cached = read_pages(pdf, IngestConfig(), FakeOcr([TITLE]), cache_dir=tmp_path / "cache")
     assert cached[0].ocr_seconds == 0.0
+
+
+class BrokenEngine:
+    """An engine with a programming error, not a recognition failure."""
+
+    name = "broken"
+
+    def recognize(self, image: object, languages: object) -> list[OcrLine]:
+        msg = "unexpected argument"
+        raise TypeError(msg)
+
+
+def test_a_programming_error_in_an_engine_is_not_hidden_as_an_ocr_failure(tmp_path: Path) -> None:
+    with pytest.raises(TypeError):
+        read_pages(make_blank_pdf(tmp_path / "scan.pdf"), IngestConfig(), BrokenEngine())
