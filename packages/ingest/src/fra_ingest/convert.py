@@ -64,6 +64,10 @@ def convert_pdf(
     if use_cache and (cached := _cached(out_dir, digest)) is not None:
         return cached
 
+    # Removed before the wipe below: if this run is killed mid-conversion (child_timeout_s,
+    # OOM), a stale convert.json must not survive next to files a later run half-wrote, or
+    # a later run with the same settings would trust it (ADR 0005).
+    (out_dir / "convert.json").unlink(missing_ok=True)
     for name in ("docling", "pages"):
         shutil.rmtree(out_dir / name, ignore_errors=True)
         (out_dir / name).mkdir(parents=True)
@@ -134,18 +138,36 @@ def _convert_range(
 
     flags = [f"convert_partial:{plan.label}", *errors] if output.status == "partial" else []
     docling_path = f"docling/p{plan.first_page}-{plan.last_page}.json"
-    output.write_json(out_dir / docling_path)
-    for page_no in range(plan.first_page, plan.last_page + 1):
-        if page_no not in output.page_images:
-            flags.append(f"page_not_converted:{page_no}")
-            continue
-        image = output.page_images[page_no]
-        if image is None:
-            flags.append(f"page_image_missing:{page_no}")
-            continue
-        relative = f"pages/{page_no}.png"
-        image.save(out_dir / relative)
-        page_images[page_no] = relative
+    written_images: dict[int, str] = {}
+    try:
+        output.write_json(out_dir / docling_path)
+        for page_no in range(plan.first_page, plan.last_page + 1):
+            if page_no not in output.page_images:
+                flags.append(f"page_not_converted:{page_no}")
+                continue
+            image = output.page_images[page_no]
+            if image is None:
+                flags.append(f"page_image_missing:{page_no}")
+                continue
+            relative = f"pages/{page_no}.png"
+            image.save(out_dir / relative)
+            written_images[page_no] = relative
+    except _PROGRAMMING_ERRORS:
+        raise
+    except Exception as exc:
+        # Writing a good result is not guaranteed once we hand off to docling/PIL. One bad
+        # range must not sink the document (spec 10, Failure handling): drop what it wrote
+        # and fail only this range.
+        (out_dir / docling_path).unlink(missing_ok=True)
+        for relative in written_images.values():
+            (out_dir / relative).unlink(missing_ok=True)
+        return _conversion(
+            plan,
+            "failed",
+            seconds=time.perf_counter() - started,
+            flags=[f"convert_failed:{plan.label}", _error(f"{type(exc).__name__}: {exc}")],
+        )
+    page_images.update(written_images)
     return _conversion(
         plan,
         output.status,

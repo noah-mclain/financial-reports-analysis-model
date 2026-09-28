@@ -116,7 +116,9 @@ def located(
 
 class FakeRunner:
     """Stands in for DoclingRunner. ``behaviour`` maps a range label such as "2-3" to one of
-    ok, partial, failed, raise, outside, no_image or short; unlisted ranges are ok."""
+    ok, partial, failed, raise, interrupt, outside, no_image, short or write_fails; unlisted
+    ranges are ok. ``interrupt`` raises ``KeyboardInterrupt``, a ``BaseException`` the stage
+    must let through rather than turn into a failed range."""
 
     def __init__(self, behaviour: Mapping[str, str] | None = None) -> None:
         self.behaviour = dict(behaviour or {})
@@ -129,6 +131,8 @@ class FakeRunner:
         if kind == "raise":
             msg = "docling stopped"
             raise RuntimeError(msg)
+        if kind == "interrupt":
+            raise KeyboardInterrupt
         pages = list(range(plan.first_page, plan.last_page + 1))
         if kind == "outside":
             pages = [n + 100 for n in pages]
@@ -148,12 +152,17 @@ class FakeRunner:
             page_images=images,
             tables=1,
             errors=[] if status == "ok" else ["page 3: document timeout exceeded"],
-            write_json=_write_stub_json,
+            write_json=_write_failing_json if kind == "write_fails" else _write_stub_json,
         )
 
 
 def _write_stub_json(path: Path) -> None:
     path.write_text("{}", encoding="utf-8")
+
+
+def _write_failing_json(path: Path) -> None:
+    msg = "disk full"
+    raise OSError(msg)
 
 
 def run_python(code: str) -> subprocess.CompletedProcess[str]:

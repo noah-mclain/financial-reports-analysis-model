@@ -147,6 +147,34 @@ def test_a_range_that_raises_fails_alone(tmp_path: Path) -> None:
     assert not result.all_failed
 
 
+def test_a_failed_write_fails_only_that_range_and_leaves_nothing_behind(tmp_path: Path) -> None:
+    result = run(tmp_path, FakeRunner({"2-3": "write_fails"}), doc([(2, 3), (5, 5)]))
+    failed, ok = result.ranges
+    out = tmp_path / SHA
+
+    assert failed.status == "failed"
+    assert failed.docling_path is None
+    assert "convert_failed:2-3" in failed.flags
+    assert any(f.startswith("error:OSError") for f in failed.flags)
+    assert not (out / "docling" / "p2-3.json").is_file()
+    assert not (out / "pages" / "2.png").is_file()
+    assert not (out / "pages" / "3.png").is_file()
+    assert ok.status == "ok"
+    assert result.page_images == {5: "pages/5.png"}
+    assert not result.all_failed
+
+
+def test_a_killed_run_does_not_leave_a_stale_convert_json_to_trust(tmp_path: Path) -> None:
+    run(tmp_path, FakeRunner(), doc([(2, 3)]))
+    interrupted = FakeRunner({"2-3": "interrupt"})
+    with pytest.raises(KeyboardInterrupt):
+        run(tmp_path, interrupted, doc([(2, 3)]), images_scale=1.0)
+
+    again = FakeRunner()
+    run(tmp_path, again, doc([(2, 3)]))
+    assert len(again.calls) == 1
+
+
 def test_a_partial_range_keeps_its_output_and_says_why(tmp_path: Path) -> None:
     result = run(tmp_path, FakeRunner({"2-3": "partial"}), doc([(2, 3)]))
     (partial,) = result.ranges
