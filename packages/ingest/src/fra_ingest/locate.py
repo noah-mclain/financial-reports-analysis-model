@@ -43,6 +43,7 @@ STRUCTURE_WEIGHT = 1.0
 NEGATIVE_WEIGHT = 4.0
 CANDIDATE_THRESHOLD = 4.5
 CONTINUATION_MIN_NUMBERS = 15
+TITLE_LINE_MAX_WORDS = 7
 
 LOCATE_VERSION = "2"
 
@@ -94,9 +95,15 @@ def score_page(page: PageText, book: TitleBook) -> PageScore:
     whole = reading_variants(page.text, page.visual_arabic)
 
     title_hits = book.titles.find(header)
-    # Stems (a title without its first word) only count on a line without figures: a line item
-    # such as the other comprehensive income reserve carries the same words and its amounts.
-    stem_lines = [line for text in header for line in text.splitlines() if not _DIGIT.search(line)]
+    # Stems (a title without its first word) only count on a short line without figures, as
+    # titles are: line items reuse the words (the other comprehensive income reserve), with
+    # their amounts beside them or, in OCR output, on a line of their own.
+    stem_lines = [
+        line
+        for text in header
+        for line in text.splitlines()
+        if not _DIGIT.search(line) and len(line.split()) <= TITLE_LINE_MAX_WORDS
+    ]
     title_hits.update(
         {
             phrase: groups

@@ -194,3 +194,17 @@ def test_a_title_stem_on_a_line_with_figures_is_a_line_item() -> None:
     score = score_page(text_page(header, body), BOOK)
     assert COMPREHENSIVE not in score.title_types
     assert score.is_candidate(BALANCE)
+
+
+def test_a_title_stem_inside_a_long_line_item_is_not_a_title() -> None:
+    # Al Dawaa 2025 (OCR): amounts sit on their own lines, so the equity instruments line
+    # carries no figures, but it is far longer than any title.
+    header = (
+        "شركة الدواء للخدمات الطبية\nقائمة الكز ال اللية المة المة\nكما في ٣٠ يونيو ٢٠٢٥م\n"
+        "إيضاح\nالموجودات\nالموجودات المتداولة\n"
+        "أدوات حقوق ملكية مصنفة بالقيمة العادلة من خلال الدخل الشامل الآخر\n٦٣,٩٠٠,٠٠٠"
+    )
+    body = numbers_block(label="بند") + "\nمجموع الموجودات"
+    score = score_page(text_page(header, body), BOOK)
+    assert COMPREHENSIVE not in score.title_types
+    assert score.is_candidate(BALANCE)
