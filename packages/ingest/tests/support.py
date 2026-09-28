@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -106,4 +109,14 @@ def located(
         ranges=[],
         convert_ranges=list(ranges),
         industry=IndustrySignal(kind="corporate"),
+    )
+
+
+def run_python(code: str) -> subprocess.CompletedProcess[str]:
+    """Run code in a fresh interpreter that sees the same packages as the tests. uv writes the
+    workspace .pth files hidden on this machine and Python skips hidden .pth files, so the
+    path is passed explicitly."""
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)}
+    return subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, env=env, check=True
     )
