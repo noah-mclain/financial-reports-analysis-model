@@ -220,3 +220,24 @@ def test_a_title_stem_inside_a_long_line_item_is_not_a_title() -> None:
 )
 def test_numeric_tokens_edge_cases(text: str, expected: int) -> None:
     assert count_numeric_tokens(text) == expected
+
+
+def test_a_notes_footer_on_a_short_statement_is_not_a_notes_heading() -> None:
+    # Egyptian filings end each statement with "the accompanying notes form an integral part";
+    # on a short statement that line falls inside the header region.
+    header = (
+        "قائمة الدخل الشامل المستقلة\nعن السنة المالية المنتهية في ٣١ ديسمبر ٢٠٢٥\n"
+        "إيضاح ٢٠٢٥ ٢٠٢٤\nجنيه مصري\nصافي ربح العام ١ ٢٩٢ ٠٢٠ ٦٤٦ ٢١ ٥٢٧ ٦٢٥\n"
+        "الإيضاحات المتممة من (١) إلى (٣٠) جزء لا يتجزأ من القوائم المالية"
+    )
+    score = score_page(text_page(header, numbers_block(rows=8, label="بند")), BOOK)
+    assert "notes" not in score.negatives
+    assert score.is_candidate(COMPREHENSIVE)
+
+
+def test_an_english_integral_part_footer_is_not_a_notes_heading() -> None:
+    header = (
+        "Statement of comprehensive income\nNote 2025 2024\nEGP '000\n"
+        "The accompanying notes to the financial statements form an integral part of them."
+    )
+    assert "notes" not in score_page(text_page(header, numbers_block(rows=8)), BOOK).negatives

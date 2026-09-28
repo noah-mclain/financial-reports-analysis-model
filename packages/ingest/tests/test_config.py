@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from fra_core.schemas import StatementType
-from fra_ingest.config import REPO_ROOT, IngestConfig, load_config
+from fra_ingest.config import REPO_ROOT, IngestConfig, find_repo_root, load_config
 
 
 def write(tmp_path: Path, text: str) -> Path:
@@ -58,3 +58,22 @@ def test_relative_artifact_root_resolves_against_the_repository(tmp_path: Path) 
 def test_at_least_one_ocr_language_is_required(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="ocr_languages"):
         load_config(write(tmp_path, "[ocr]\nlanguages = []\n"))
+
+
+def test_the_repository_root_can_be_set_for_installed_copies(tmp_path: Path) -> None:
+    source = tmp_path / "site-packages"  # an installed copy: no configs/ next to the code
+    assert find_repo_root({"FRA_ROOT": str(tmp_path / "app")}, source, tmp_path) == tmp_path / "app"
+    assert find_repo_root({}, source, tmp_path / "cwd") == tmp_path / "cwd"
+
+
+def test_the_source_checkout_is_the_root_when_it_has_the_config(tmp_path: Path) -> None:
+    (tmp_path / "configs").mkdir()
+    (tmp_path / "configs" / "ingest.toml").write_text("", encoding="utf-8")
+    assert find_repo_root({}, tmp_path, tmp_path / "elsewhere") == tmp_path
+
+
+def test_the_config_file_can_be_named_in_the_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FRA_INGEST_CONFIG", str(write(tmp_path, "[locate]\npad_pages = 2\n")))
+    assert load_config().pad_pages == 2

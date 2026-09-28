@@ -64,6 +64,7 @@ class TitleBook:
     note_headers: PhraseIndex
     period_words: PhraseIndex
     negatives: PhraseIndex
+    footer_markers: PhraseIndex
 
 
 def load_title_book(path: Path | None = None) -> TitleBook:
@@ -83,6 +84,7 @@ def load_title_book(path: Path | None = None) -> TitleBook:
         note_headers=PhraseIndex.build({"note": data["note_headers"]}),
         period_words=PhraseIndex.build({"period": data["period_words"]}),
         negatives=PhraseIndex.build(data["negatives"]),
+        footer_markers=PhraseIndex.build({"footer": data["footer_markers"]}),
     )
 
 
@@ -132,7 +134,16 @@ def score_page(page: PageText, book: TitleBook) -> PageScore:
         # A single statement titled comprehensive income that carries revenue.
         title_types = [t for t in StatementType if t in {*title_types, StatementType.INCOME}]
     cue_types = [] if title_types else _types(book.body_cues.find(whole).values())
-    negatives = sorted({kind for kinds in book.negatives.find(header).values() for kind in kinds})
+    # A statement's closing line mentions its notes; it is not a notes heading.
+    heading_lines = [
+        line
+        for text in header
+        for line in text.splitlines()
+        if not book.footer_markers.find([line])
+    ]
+    negatives = sorted(
+        {kind for kinds in book.negatives.find(heading_lines).values() for kind in kinds}
+    )
     numeric = count_numeric_tokens(page.text)
     structure = _structure(page, header, book)
 

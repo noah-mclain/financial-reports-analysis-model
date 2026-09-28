@@ -41,6 +41,7 @@ class IndustryBook:
     exclude: PhraseIndex
     cues: PhraseIndex
     weights: dict[tuple[str, str], float]  # (group, canonical phrase) -> weight
+    order: tuple[str, ...]  # groups as listed in the cue file; ties go to the first
 
 
 def load_industry_book(path: Path | None = None) -> IndustryBook:
@@ -58,6 +59,7 @@ def load_industry_book(path: Path | None = None) -> IndustryBook:
             for group, cues in groups.items()
             for phrase, weight in cues.items()
         },
+        order=tuple(groups),
     )
 
 
@@ -89,7 +91,7 @@ def _verdict(
 ) -> IndustrySignal:
     totals: dict[str, float] = defaultdict(float)
     distinct: dict[str, set[str]] = defaultdict(set)
-    evidence: list[tuple[int, str]] = []
+    evidence: list[tuple[int, str, str]] = []  # (page, group, phrase)
     for page in pages:
         variants = [
             _without(book, text) for text in reading_variants(page.text, page.visual_arabic)
@@ -100,20 +102,21 @@ def _verdict(
                     continue
                 totals[group] += book.weights[(group, phrase)]
                 distinct[group].add(phrase)
-            evidence.append((page.page_no, phrase))
+                evidence.append((page.page_no, group, phrase))
 
     if not totals:
         return IndustrySignal(kind="corporate")
-    group, score = max(totals.items(), key=lambda item: item[1])
+    group, score = max(totals.items(), key=lambda item: (item[1], -book.order.index(item[0])))
+    shown = [(page_no, phrase) for page_no, g, phrase in evidence if g == group]
     too_narrow = whole_document and len(distinct[group]) < WHOLE_DOCUMENT_MIN_CUES
     if score < VERDICT_THRESHOLD or too_narrow:
-        return IndustrySignal(kind="corporate", score=score, evidence=evidence[:_EVIDENCE_LIMIT])
+        return IndustrySignal(kind="corporate", score=score, evidence=shown[:_EVIDENCE_LIMIT])
     kind, _, subkind = group.partition("/")
     return IndustrySignal(
         kind=cast(IndustryKind, kind),
         subkind=cast(IndustrySubkind, subkind) if subkind else None,
         score=score,
-        evidence=evidence[:_EVIDENCE_LIMIT],
+        evidence=shown[:_EVIDENCE_LIMIT],
     )
 
 

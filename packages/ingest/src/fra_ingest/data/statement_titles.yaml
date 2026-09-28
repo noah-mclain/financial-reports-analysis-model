@@ -143,6 +143,14 @@ period_words:
   - مارس
   - سبتمبر
 
+# Lines that end a statement ("the accompanying notes form an integral part"). They mention
+# notes, and on a short statement they fall inside the header region, so negatives skip them.
+footer_markers:
+  - integral part
+  - جزء لا يتجزأ
+  - جزءا لا يتجزأ
+  - جزءاً لا يتجزأ
+
 # Header wording of pages that quote statement titles without being statements.
 negatives:
   auditor_report:

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import tomllib
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +12,21 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from fra_core.schemas import StatementType
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+_SOURCE_ROOT = Path(__file__).resolve().parents[4]
+
+
+def find_repo_root(environ: Mapping[str, str], source_root: Path, cwd: Path) -> Path:
+    """Where configs/ and var/ live: ``FRA_ROOT`` when set (an installed copy, as in the
+    Docker image), else the source checkout when it holds the config, else the working
+    directory."""
+    if environ.get("FRA_ROOT"):
+        return Path(environ["FRA_ROOT"])
+    if (source_root / "configs" / "ingest.toml").is_file():
+        return source_root
+    return cwd
+
+
+REPO_ROOT = find_repo_root(os.environ, _SOURCE_ROOT, Path.cwd())
 DEFAULT_CONFIG_PATH = REPO_ROOT / "configs" / "ingest.toml"
 
 # (section, key) in the TOML file, to the field it sets.
@@ -57,7 +73,8 @@ class IngestConfig(BaseModel):
 
 def load_config(path: Path | None = None) -> IngestConfig:
     """Read settings, rejecting any key the model does not know."""
-    source = path or DEFAULT_CONFIG_PATH
+    named = os.environ.get("FRA_INGEST_CONFIG")
+    source = path or (Path(named) if named else DEFAULT_CONFIG_PATH)
     with source.open("rb") as handle:
         data = tomllib.load(handle)
 

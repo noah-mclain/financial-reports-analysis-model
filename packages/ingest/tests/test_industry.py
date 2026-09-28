@@ -173,3 +173,22 @@ def test_a_mostly_unread_document_is_unknown() -> None:
         for n in range(2, 60)
     ]
     assert detect_industry([cover, *unread], [], BOOK).kind == "unknown"
+
+
+def test_evidence_lists_only_the_winning_kind() -> None:
+    pages, ranges = on_statement_pages(
+        "Deposits from customers\nLoans and advances to customers\nBalances with the central bank\n"
+        "Brokerage commission"
+    )
+    signal = detect_industry(pages, ranges, BOOK)
+    assert signal.kind == "bank"
+    assert all("brokerage" not in cue for _, cue in signal.evidence)
+
+
+def test_a_tie_goes_to_the_kind_listed_first() -> None:
+    # Equal evidence for bank (3 + 3) and insurer (3 + 3): bank is listed first in the cues.
+    pages, ranges = on_statement_pages(
+        "Deposits from customers\nLoans and advances to customers\n"
+        "Insurance contract liabilities\nReinsurance contract assets"
+    )
+    assert detect_industry(pages, ranges, BOOK).kind == "bank"
