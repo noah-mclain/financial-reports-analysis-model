@@ -5,9 +5,11 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
+from support import make_blank_pdf
 
+from fra_ingest import cli
 from fra_ingest.cli import main
-from fra_ingest.results import LocateResult
+from fra_ingest.results import ConvertResult, LocateResult, RangeConversion
 
 
 @pytest.mark.golden
@@ -48,3 +50,77 @@ def test_a_path_that_is_not_a_file_exits_with_its_reason(
         path.mkdir()
     assert main(["locate", str(path), "--no-ocr", "--artifacts", str(tmp_path / "a")]) == 2
     assert "unreadable_pdf" in capsys.readouterr().err
+
+
+def canned(sha256: str, status: str) -> ConvertResult:
+    return ConvertResult.model_validate(
+        {
+            "version": "1",
+            "sha256": sha256,
+            "locate_version": "2",
+            "docling_version": "2.126.0",
+            "device": "mps",
+            "settings_hash": "h",
+            "ranges": [
+                RangeConversion.model_validate(
+                    {
+                        "first_page": 1,
+                        "last_page": 1,
+                        "ocr": "full_page",
+                        "ocr_language": "en-US",
+                        "status": status,
+                    }
+                )
+            ],
+            "peak_footprint_gb": 1.2,
+        }
+    )
+
+
+@pytest.mark.parametrize(("status", "code"), [("ok", 0), ("partial", 0), ("failed", 3)])
+def test_convert_exits_by_how_the_ranges_ended(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    status: str,
+    code: int,
+) -> None:
+    pdf = make_blank_pdf(tmp_path / "doc.pdf")
+    seen: dict[str, object] = {}
+
+    def fake_convert(
+        pdf_path: Path, located: object, languages: object, config: object, **kwargs: object
+    ) -> ConvertResult:
+        seen.update(kwargs)
+        return canned(located.document.sha256, status)  # type: ignore[attr-defined]
+
+    monkeypatch.setattr(cli, "convert_pdf", fake_convert)
+    argv = ["convert", str(pdf), "--no-ocr", "--artifacts", str(tmp_path / "a"), "--json"]
+    assert main(argv) == code
+    assert ConvertResult.model_validate_json(capsys.readouterr().out).ranges[0].status == status
+    assert seen["use_cache"] is True
+    assert "locate" in seen["timings"]  # type: ignore[operator]
+
+
+def test_convert_no_cache_reconverts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pdf = make_blank_pdf(tmp_path / "doc.pdf")
+    seen: dict[str, object] = {}
+
+    def fake_convert(
+        pdf_path: Path, located: object, languages: object, config: object, **kwargs: object
+    ) -> ConvertResult:
+        seen.update(kwargs)
+        return canned(located.document.sha256, "ok")  # type: ignore[attr-defined]
+
+    monkeypatch.setattr(cli, "convert_pdf", fake_convert)
+    main(["convert", str(pdf), "--no-ocr", "--no-cache", "--artifacts", str(tmp_path / "a")])
+    assert seen["use_cache"] is False
+
+
+def test_convert_of_an_unreadable_file_exits_with_its_reason(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "تقرير سنوي.pdf"
+    path.write_bytes(b"not a pdf")
+    assert main(["convert", str(path), "--no-ocr", "--artifacts", str(tmp_path / "a")]) == 2
+    assert capsys.readouterr().err.strip().splitlines()[-1].startswith(f"{path}: unreadable_pdf")
