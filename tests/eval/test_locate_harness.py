@@ -5,6 +5,7 @@ from harness.locate import (
     check_target,
     found_pages,
     labelled_ranges,
+    pool_summary,
     recall,
     truth_label,
     verdict_label,
@@ -70,3 +71,16 @@ def test_industry_labels_line_up() -> None:
         == "other_financial/brokerage"
     )
     assert verdict_label(result(kind="insurer")) == "insurer"
+
+
+def test_errored_and_missing_documents_are_counted_not_dropped() -> None:
+    rows = [
+        {"id": "a", "truth": "corporate", "verdict": "corporate", "covered": True},
+        {"id": "b", "truth": "corporate", "error": "unreadable_pdf"},
+        {"id": "c", "truth": "bank", "verdict": "bank", "covered": True},
+    ]
+    summary = pool_summary(rows, missing=["d"])
+    assert summary["coverage"] == 0.5  # the unreadable corporate counts as not covered
+    assert summary["uncovered"] == ["b"]
+    assert summary["errored"] == ["b"]
+    assert summary["missing"] == ["d"]

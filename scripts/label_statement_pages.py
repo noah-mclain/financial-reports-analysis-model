@@ -95,6 +95,31 @@ def disagreements(marked: set[int], suggested: set[int]) -> tuple[list[int], lis
     return sorted(suggested - marked), sorted(marked - suggested)
 
 
+def request_allowed(origin: str | None, content_type: str | None, *, port: int) -> bool:
+    """Only the sheet itself may save labels. A page on another site can post to a local
+    server, but it cannot set a JSON content type without a preflight this server never
+    answers, and a browser always names the page's origin."""
+    if not (content_type or "").startswith("application/json"):
+        return False
+    return origin is None or origin in {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
+
+
+def page_number(text: str, page_count: int) -> int:
+    """A 1-based page number within the document."""
+    if not text.isdigit() or not 1 <= int(text) <= page_count:
+        msg = f"no page {text!r} in a {page_count}-page document"
+        raise ValueError(msg)
+    return int(text)
+
+
+def check_labels(labels: dict[str, list[tuple[int, int]]], page_count: int) -> None:
+    for key, spans in labels.items():
+        for _first, last in spans:
+            if last > page_count:
+                msg = f"{key}: page {last} is past the end of a {page_count}-page document"
+                raise ValueError(msg)
+
+
 def _unlabelled() -> list[dict[str, Any]]:
     manifest = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
     return [doc for doc in manifest["documents"] if doc.get("statement_pages") is None]
@@ -152,7 +177,11 @@ figure{{margin:0;text-align:center}} img{{width:100%;border:1px solid #ddd}}
 document.getElementById('f').onsubmit = async (e) => {{
   e.preventDefault();
   const body = Object.fromEntries(new FormData(e.target));
-  const r = await fetch(location.pathname, {{method: 'POST', body: JSON.stringify(body)}});
+  const r = await fetch(location.pathname, {{
+    method: 'POST',
+    headers: {{'Content-Type': 'application/json'}},
+    body: JSON.stringify(body),
+  }});
   document.getElementById('s').textContent = r.ok ? 'saved' : await r.text();
 }};
 </script>"""
@@ -180,11 +209,18 @@ def cmd_serve(args: argparse.Namespace) -> int:
             elif len(parts) == 2 and parts[0] == "doc" and parts[1] in thumbs:
                 self._send(_sheet(docs[parts[1]], thumbs[parts[1]]))
             elif len(parts) == 3 and parts[0] == "page" and parts[1] in docs:
+                try:
+                    number = page_number(parts[2], len(thumbs[parts[1]]))
+                except ValueError as exc:
+                    self._send(str(exc), "text/plain", status=404)
+                    return
                 pdf = pdfium.PdfDocument(_pdf_path(docs[parts[1]]))
-                image = pdf[int(parts[2]) - 1].render(scale=100 / 72).to_pil().convert("RGB")
+                try:
+                    image = pdf[number - 1].render(scale=100 / 72).to_pil().convert("RGB")
+                finally:
+                    pdf.close()
                 buffer = io.BytesIO()
                 image.save(buffer, format="JPEG", quality=85)
-                pdf.close()
                 self._send(buffer.getvalue(), "image/jpeg")
             else:
                 self.send_error(404)
@@ -194,10 +230,20 @@ def cmd_serve(args: argparse.Namespace) -> int:
             if len(parts) != 2 or parts[1] not in docs:
                 self.send_error(404)
                 return
-            raw = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            if not request_allowed(
+                self.headers.get("Origin"), self.headers.get("Content-Type"), port=args.port
+            ):
+                self._send("refused: labels are saved from the sheet only", "text/plain", 403)
+                return
+            length = self.headers.get("Content-Length")
+            if not length or not length.isdigit():
+                self._send("Content-Length required", "text/plain", status=411)
+                return
             try:
-                labels = {key: parse_ranges(raw.get(key, "")) for key in KEYS}
-            except ValueError as exc:
+                raw = json.loads(self.rfile.read(int(length)))
+                labels = {key: parse_ranges(str(raw.get(key, ""))) for key in KEYS}
+                check_labels(labels, len(thumbs[parts[1]]))
+            except (ValueError, AttributeError) as exc:
                 self._send(str(exc), "text/plain", status=400)
                 return
             out = LABELS_DIR / f"{parts[1]}.json"

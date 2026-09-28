@@ -130,50 +130,66 @@ def run_golden(no_ocr: bool, fresh: bool = False) -> dict[str, Any]:
     return {"documents": rows, "median_share": median_share, "misses": misses}
 
 
+def pool_summary(rows: list[dict[str, Any]], missing: list[str]) -> dict[str, Any]:
+    """Coverage and industry table. A document that could not be read stays in the count as
+    not covered, and missing files are listed, so neither silently improves the numbers."""
+    corporates = [r for r in rows if r.get("truth") == "corporate"]
+    uncovered = [r["id"] for r in corporates if not r.get("covered")]
+    confusion = Counter[tuple[str, str]](
+        (r["truth"], r.get("verdict", "error")) for r in rows if "truth" in r
+    )
+    return {
+        "documents": rows,
+        "coverage": (len(corporates) - len(uncovered)) / len(corporates) if corporates else 0.0,
+        "uncovered": uncovered,
+        "errored": [r["id"] for r in rows if "error" in r],
+        "missing": missing,
+        "confusion": [[t, v, n] for (t, v), n in sorted(confusion.items())],
+    }
+
+
 def run_pool(pool: str, no_ocr: bool) -> dict[str, Any]:
     config = load_config()
     engine = None if no_ocr else default_engine()
     entries = yaml.safe_load(CANDIDATES.read_text(encoding="utf-8"))["documents"]
-    rows, confusion, uncovered = [], Counter[tuple[str, str]](), []
+    rows: list[dict[str, Any]] = []
+    missing: list[str] = []
     for entry in (e for e in entries if e.get("pool") == pool):
         path = CORPUS / pool / f"{entry['id']}.pdf"
         if not path.exists():
+            missing.append(entry["id"])
             continue
+        truth = truth_label(entry)
         try:
             result = locate_pdf(path, config, engine)
         except IngestError as exc:
-            rows.append({"id": entry["id"], "error": exc.reason})
+            rows.append({"id": entry["id"], "truth": truth, "error": exc.reason})
             continue
         types = {r.type for r in result.ranges}
-        covered = {StatementType.BALANCE, StatementType.INCOME} <= types
-        truth, verdict = truth_label(entry), verdict_label(result)
-        confusion[(truth, verdict)] += 1
-        if truth == "corporate" and not covered:
-            uncovered.append(entry["id"])
         rows.append(
             {
                 "id": entry["id"],
-                "covered": covered,
+                "covered": {StatementType.BALANCE, StatementType.INCOME} <= types,
                 "share": result.candidate_share,
                 "truth": truth,
-                "verdict": verdict,
+                "verdict": verdict_label(result),
                 "flags": result.flags,
             }
         )
 
-    corporates = [r for r in rows if r.get("truth") == "corporate"]
-    coverage = sum(r["covered"] for r in corporates) / len(corporates) if corporates else 0.0
-    print(f"{pool}: {len(rows)} documents, corporate coverage {coverage:.1%} (target 95%)")
-    print("not covered: " + (", ".join(uncovered) or "none"))
+    summary = pool_summary(rows, missing)
+    corporates = sum(1 for r in rows if r.get("truth") == "corporate")
+    print(
+        f"{pool}: {len(rows)} documents, corporate coverage {summary['coverage']:.1%} of "
+        f"{corporates} (target 95%)"
+    )
+    print("not covered: " + (", ".join(summary["uncovered"]) or "none"))
+    print("unreadable: " + (", ".join(summary["errored"]) or "none"))
+    print(f"missing files: {len(missing)}" + (f" ({', '.join(missing)})" if missing else ""))
     print("industry (truth -> verdict):")
-    for (truth, verdict), n in sorted(confusion.items()):
+    for truth, verdict, n in summary["confusion"]:
         print(f"  {truth:34} -> {verdict:34} {n}")
-    return {
-        "documents": rows,
-        "coverage": coverage,
-        "uncovered": uncovered,
-        "confusion": [[t, v, n] for (t, v), n in sorted(confusion.items())],
-    }
+    return summary
 
 
 def main(argv: list[str] | None = None) -> int:
