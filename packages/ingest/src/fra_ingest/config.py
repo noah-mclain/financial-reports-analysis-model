@@ -6,7 +6,7 @@ import os
 import tomllib
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -39,6 +39,14 @@ _TOML_FIELDS: dict[tuple[str, str], str] = {
     ("ocr", "languages"): "ocr_languages",
     ("locate", "pad_pages"): "pad_pages",
     ("locate", "low_selectivity_share"): "low_selectivity_share",
+    ("convert", "device"): "device",
+    ("convert", "ocr_engine"): "convert_ocr",
+    ("convert", "images_scale"): "images_scale",
+    ("convert", "batch_size"): "batch_size",
+    ("convert", "do_cell_matching"): "do_cell_matching",
+    ("convert", "document_timeout_s"): "document_timeout_s",
+    ("convert", "child_timeout_s"): "child_timeout_s",
+    ("convert", "memory_budget_gb"): "memory_budget_gb",
     ("artifacts", "root"): "artifact_root",
 }
 
@@ -60,6 +68,14 @@ class IngestConfig(BaseModel):
     ocr_languages: tuple[str, ...] = Field(default=("ar-SA", "en-US"), min_length=1)
     pad_pages: int = Field(default=1, ge=0)
     low_selectivity_share: float = Field(default=0.25, gt=0.0, le=1.0)
+    device: Literal["mps", "cpu", "auto"] = "mps"
+    convert_ocr: Literal["ocrmac", "none"] = "ocrmac"
+    images_scale: float = Field(default=2.0, gt=0.0, le=4.0)
+    batch_size: int = Field(default=2, ge=1)
+    do_cell_matching: bool = True
+    document_timeout_s: float = Field(default=600.0, gt=0.0)
+    child_timeout_s: float = Field(default=900.0, gt=0.0)
+    memory_budget_gb: float = Field(default=3.0, gt=0.0)
     artifact_root: Path = REPO_ROOT / "var" / "artifacts"
 
     @model_validator(mode="after")
