@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import subprocess
 import sys
@@ -20,6 +21,11 @@ from fra_ingest.results import IndustrySignal, LocateResult, PageText, RangePlan
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 GOLDEN_DIR = REPO_ROOT / "eval" / "golden" / "documents"
+
+
+def artifact_dir(pdf: Path) -> Path:
+    """Where Part 2 left this document's artifacts, under the repository's var/artifacts."""
+    return REPO_ROOT / "var" / "artifacts" / hashlib.sha256(pdf.read_bytes()).hexdigest()
 
 
 class FakeOcr:
