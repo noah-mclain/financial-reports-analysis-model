@@ -242,7 +242,8 @@ Tests are written before the code they cover (repository rule).
 is scored only on documents that label it: comprehensive income printed inside the profit or
 loss page has no key of its own and is covered by `income`. A labelled page counts as found
 when it falls inside a padded range of its own type; for enabled types that range must also be
-inside `convert_ranges`.
+inside `convert_ranges`. The report also gives recall and page share for converting only each
+type's top-ranked range, the measurement behind keeping every candidate (10, Decisions).
 
 **Corpus pools**, which have no page labels: for each corporate document, whether at least one
 `balance` and one `income` range was found; candidate share; and industry verdicts against
