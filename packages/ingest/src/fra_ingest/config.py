@@ -75,7 +75,7 @@ class IngestConfig(BaseModel):
     do_cell_matching: bool = True
     document_timeout_s: float = Field(default=600.0, gt=0.0)
     child_timeout_s: float = Field(default=900.0, gt=0.0)
-    memory_budget_gb: float = Field(default=3.0, gt=0.0)
+    memory_budget_gb: float = Field(default=3.5, gt=0.0)
     artifact_root: Path = REPO_ROOT / "var" / "artifacts"
 
     @model_validator(mode="after")

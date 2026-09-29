@@ -119,7 +119,7 @@ class ConvertResult(BaseModel):      # written to <artifact root>/<sha256>/conve
 | `do_cell_matching` | `true` | Task 1.9 compares it with `false` |
 | `document_timeout_s` | `600` | docling's own limit per `convert` call |
 | `child_timeout_s` | `900` | The parent kills the child after this |
-| `memory_budget_gb` | `3.0` | Above it the result is flagged, not failed (01, ingest child peak) |
+| `memory_budget_gb` | `3.5` | Above it the result is flagged, not failed (01, ingest child peak). Raised from the 3.0 estimate after the golden run; see Decisions |
 
 ## Data flow
 
@@ -205,7 +205,7 @@ statuses and tables per range, and the flags.
 |---------|--------|
 | docling contract smoke test | passes against 2.126.0 |
 | Golden documents converted with every range `ok` | 12 of 12 |
-| Peak footprint of the child, every golden document | 3.0 GB or less |
+| Peak footprint of the child, every golden document | 3.5 GB or less (3.0 GB before the decision below) |
 | Seconds per candidate page | recorded; the budget in 08 (1 minute digital, 2 to 4 minutes scanned, whole pipeline) is checked in Part 3 |
 
 The measurements go into a Results section here, as they did for Part 1.
@@ -249,9 +249,39 @@ Measured 2026-09-29 on the worktree/phase2-extraction branch, `make eval-convert
 |---------|--------|--------|
 | docling contract smoke test | passes against 2.126.0 | passes; Task 1 found no renames against 2.126.0 with docling-core 2.96.0 and docling-ibm-models 4.0.2 pinned |
 | Golden documents with every range `ok` | 12 of 12 | 12 of 12 (every range of every document converted `ok`) |
-| Peak footprint of the child | 3.0 GB or less | 3.19 GB on `edita-2025-en-consolidated-eas`; every other document stayed at 2.81 GB or less |
+| Peak footprint of the child | 3.0 GB, then 3.5 GB | 3.19 GB on `edita-2025-en-consolidated-eas`, over the original 3.0 GB; every other document 2.81 GB or less. All within 3.5 GB |
 | Seconds per candidate page | recorded | median digital (pdf_aware) 2.475 s/page (almarai EN and AR); median scanned (full_page) 4.497 s/page (the other ten documents) |
 
-### Misses
+### Decisions after the golden run
 
-- `edita-2025-en-consolidated-eas`: peak footprint 3.19 GB, over the 3.0 GB budget by about 0.19 GB. Every range still converted `ok`. The document is scanned, so both its ranges (pages 4-9 and 58-60, 9 pages total) run `full_page` OCR in `en-US`; both ranges share one OCR mode and language, so `DoclingRunner` builds a single converter for the document, not two (`packages/ingest/src/fra_ingest/converter.py`, `_converter` keys on `(ocr, ocr_language)`) — the elevated 11.22 s "models" timing for this document is not explained by an extra converter build. Comparing it against the other eleven `full_page` and `pdf_aware` documents, the one structural outlier is table count: 11 tables over 9 pages, the highest absolute table count of any `full_page`-OCR document in the set (the next highest is 10 tables on `juhayna-2024-ar-consolidated`, which peaked at 2.29 GB). `do_table_structure` runs in `TableFormerMode.ACCURATE` (04, 1.2) on every range, and `full_page` OCR is already the heavier of the two OCR modes because it OCRs the whole page rather than only non-text regions (R28); the combination of full-page OCR and the set's densest table extraction is the most likely driver of the peak, though the margin over budget is small and no code change was made to chase it. Left to the owner to decide whether to raise the budget slightly, split the table-heavy range, or accept the miss.
+**Memory budget raised to 3.5 GB** (owner, 2026-09-29). `edita-2025-en-consolidated-eas` went
+over the 3.0 GB planning estimate, and the overrun is the conversion itself:
+
+| Run of `edita-2025-en-consolidated-eas` | Peak | Convert time |
+|------------------------------------------|------|--------------|
+| Golden run, in a child that also ran locate with Vision OCR | 3.19 GB | 57.4 s |
+| Convert only, locate cached, `batch_size = 2` | 3.28 GB | 59.4 s |
+| Convert only, locate cached, `batch_size = 1` | 3.21 GB | 56.6 s |
+
+Locate sharing the process is not the cause, and a smaller batch neither lowers the peak nor
+changes the time, so the budget follows the measurement instead: 3.5 GB, about 7% above the
+highest peak seen. Only one converter is built for this document (both ranges are `full_page`,
+`en-US`), and the 11 s of model loading also occurs on `juhayna-2025-en-consolidated` with a
+single range. The one visible difference is density: pages 58 to 60 hold 6 tables on 3
+scanned pages, the most in the set. 01, 1.3 and the G1 and G3 rows of 04 carry the new figure;
+the demo headroom falls from 5.2 to 4.7 GB.
+
+**Every candidate range stays converted** (owner, 2026-09-29). Locate converts all ranked
+candidates of the enabled types, and on Almarai's annual reports that is 32 and 39 pages for
+10 pages of primary statements, about 85 and 113 s. `make eval-locate` now also reports recall
+and page share when only each type's top-ranked range would be converted:
+
+| Golden set | All candidates (current) | Top-ranked range only |
+|------------|--------------------------|-----------------------|
+| Recall, enabled types | 100% | misses `juhayna-2025-ar-consolidated` balance, page 5 |
+| Median page share | 10.7% | 8.9% (Almarai EN and AR: 2.9%) |
+
+Top-ranked-only loses a primary statement on a set the locator was tuned against, so it would
+do no better on unseen filings, and the owner's rule was to keep every candidate unless the top
+range is enough. The time cost falls on long annual reports; converting a lower-ranked range
+only when Part 3 rejects the top one remains the way to recover it.

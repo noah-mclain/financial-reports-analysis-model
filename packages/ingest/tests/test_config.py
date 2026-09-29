@@ -89,7 +89,7 @@ def test_convert_defaults() -> None:
     assert config.do_cell_matching is True
     assert config.document_timeout_s == 600.0
     assert config.child_timeout_s == 900.0
-    assert config.memory_budget_gb == 3.0
+    assert config.memory_budget_gb == 3.5
 
 
 def test_convert_settings_load(tmp_path: Path) -> None:

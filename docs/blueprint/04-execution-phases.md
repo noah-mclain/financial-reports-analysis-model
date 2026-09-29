@@ -237,7 +237,7 @@ and no pandas. It is used only by T3 and T4.
 | Sign accuracy | 99.9% or higher |
 | Balance sheet identity passes or is flagged with the correct reason | 100% of golden documents |
 | Registry vs reference implementation | No relative difference above 1e-9 |
-| Ingest process peak memory | 3.0 GB or less |
+| Ingest process peak memory | 3.5 GB or less |
 | Seconds per candidate page | No more than 1.2x the Phase 0 baseline |
 | Owner decisions D1 to D7 | Signed |
 
@@ -455,7 +455,7 @@ lora_parameters:
 | Correction round trip to recomputed metrics | Under 1 s |
 | axe serious or critical violations | 0 |
 | Contract tests (T7) | Pass |
-| Demo rehearsal (V10): 3 documents back to back, all other apps closed | Peak 12.8 GB or less, no swap growth |
+| Demo rehearsal (V10): 3 documents back to back, all other apps closed | Peak 13.3 GB or less, no swap growth |
 | Upload to finished narrative, demo profile, 200-page annual report | Recorded; initial target 3 min, reset from Phase 0 measurements |
 
 ---

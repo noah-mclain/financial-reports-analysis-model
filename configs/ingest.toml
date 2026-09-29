@@ -37,8 +37,9 @@ do_cell_matching = true
 # docling's own limit per range, and the parent's limit on the whole child.
 document_timeout_s = 600
 child_timeout_s = 900
-# The ingest child's peak (01, 1.3). Above it the result is flagged, not failed.
-memory_budget_gb = 3.0
+# The ingest child's peak (01, 1.3). Above it the result is flagged, not failed. Raised from
+# the 3.0 estimate after measuring 3.19 to 3.28 GB on edita-2025-en-consolidated-eas (spec 10).
+memory_budget_gb = 3.5
 
 [artifacts]
 root = "var/artifacts"
