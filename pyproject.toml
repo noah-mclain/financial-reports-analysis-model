@@ -62,6 +62,11 @@ mypy_path = "packages/core/src:packages/ingest/src:packages/ingest/tests:package
 module = ["docling.*", "docling_core.*", "mlx.*", "mlx_lm.*", "pypdfium2.*", "matplotlib.*", "ocrmac", "ocrmac.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# docling_core.types.doc re-exports ImageRefMode (and others) without an __all__ entry.
+module = "docling_core.types.doc"
+implicit_reexport = true
+
 [tool.pytest.ini_options]
 # Extend as apps/ lands.
 testpaths = ["packages", "tests"]

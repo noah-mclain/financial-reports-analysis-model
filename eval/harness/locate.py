@@ -50,14 +50,22 @@ def labelled_ranges(value: Any) -> list[tuple[int, int]]:
     return [(int(value[0]), int(value[1]))]
 
 
-def found_pages(result: LocateResult, statement_type: StatementType, pad: int) -> set[int]:
+def found_pages(
+    result: LocateResult, statement_type: StatementType, pad: int, max_rank: int | None = None
+) -> set[int]:
     count = result.document.page_count
     return {
         page
         for r in result.ranges
-        if r.type is statement_type
+        if r.type is statement_type and (max_rank is None or r.rank <= max_rank)
         for page in range(r.padded(pad, count)[0], r.padded(pad, count)[1] + 1)
     }
+
+
+def top_share(result: LocateResult, enabled: set[StatementType], pad: int) -> float:
+    """Pages docling would read if only each enabled type's top-ranked range were converted."""
+    pages = set().union(*(found_pages(result, t, pad, max_rank=1) for t in enabled))
+    return len(pages) / result.document.page_count
 
 
 def recall(labelled: set[int], found: set[int]) -> float:
@@ -93,7 +101,7 @@ def run_golden(no_ocr: bool, fresh: bool = False) -> dict[str, Any]:
     config = load_config()
     engine = None if no_ocr else default_engine()
     enabled = set(config.enabled_types)
-    rows, shares, misses = [], [], []
+    rows, shares, top_shares, misses, top_misses = [], [], [], [], []
     for doc in yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))["documents"]:
         pages = doc.get("statement_pages")
         if not pages:
@@ -106,28 +114,50 @@ def run_golden(no_ocr: bool, fresh: bool = False) -> dict[str, Any]:
             "share": result.candidate_share,
             "seconds": time.perf_counter() - started,
             "recall": {},
+            "top_recall": {},
+            "top_share": top_share(result, enabled, config.pad_pages),
         }
         for key, statement_type in MANIFEST_KEYS.items():
             labelled = {p for a, b in labelled_ranges(pages.get(key)) for p in range(a, b + 1)}
             if not labelled:
                 continue
             found = found_pages(result, statement_type, config.pad_pages)
+            top = found_pages(result, statement_type, config.pad_pages, max_rank=1)
             row["recall"][statement_type.value] = recall(labelled, found)
+            row["top_recall"][statement_type.value] = recall(labelled, top)
             if statement_type in enabled and labelled - found:
                 misses.append(
                     f"{doc['id']} {statement_type.value} pages {sorted(labelled - found)}"
                 )
+            if statement_type in enabled and labelled - top:
+                top_misses.append(
+                    f"{doc['id']} {statement_type.value} pages {sorted(labelled - top)}"
+                )
         rows.append(row)
         shares.append(result.candidate_share)
+        top_shares.append(row["top_share"])
         print(
-            f"{doc['id']:34} share {result.candidate_share:5.1%}  {row['seconds']:6.1f}s  "
+            f"{doc['id']:34} share {result.candidate_share:5.1%} (top only "
+            f"{row['top_share']:5.1%})  {row['seconds']:6.1f}s  "
             + "  ".join(f"{k} {v:.0%}" for k, v in row["recall"].items())
         )
 
     median_share = statistics.median(shares) if shares else 0.0
+    median_top = statistics.median(top_shares) if top_shares else 0.0
     print(f"\nmedian candidate share {median_share:.1%} (target 15% or less)")
+    print(f"median share, top-ranked range per type only {median_top:.1%}")
     print("enabled-type misses: " + ("none" if not misses else "\n  " + "\n  ".join(misses)))
-    return {"documents": rows, "median_share": median_share, "misses": misses}
+    print(
+        "enabled-type misses, top-ranked range only: "
+        + ("none" if not top_misses else "\n  " + "\n  ".join(top_misses))
+    )
+    return {
+        "documents": rows,
+        "median_share": median_share,
+        "median_top_share": median_top,
+        "misses": misses,
+        "top_misses": top_misses,
+    }
 
 
 def pool_summary(rows: list[dict[str, Any]], missing: list[str]) -> dict[str, Any]:

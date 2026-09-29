@@ -7,6 +7,7 @@ from harness.locate import (
     labelled_ranges,
     pool_summary,
     recall,
+    top_share,
     truth_label,
     verdict_label,
 )
@@ -15,6 +16,7 @@ from fra_core.schemas import Document, StatementType
 from fra_ingest.results import IndustrySignal, LocateResult, StatementRange
 
 B = StatementType.BALANCE
+INC = StatementType.INCOME
 
 
 def result(
@@ -41,6 +43,27 @@ def test_a_labelled_page_is_found_inside_a_padded_range() -> None:
     assert found_pages(located, B, pad=1) == {5, 6, 7}
     assert recall({5, 6}, found_pages(located, B, pad=1)) == 1.0
     assert recall({5, 9}, found_pages(located, B, pad=1)) == 0.5
+
+
+def test_top_ranked_pages_ignore_lower_candidates() -> None:
+    located = result(
+        StatementRange(type=B, first_page=6, last_page=6, score=8, rank=1),
+        StatementRange(type=B, first_page=15, last_page=15, score=5, rank=2),
+    )
+    assert found_pages(located, B, pad=1, max_rank=1) == {5, 6, 7}
+    assert found_pages(located, B, pad=1) == {5, 6, 7, 14, 15, 16}
+    assert recall({15}, found_pages(located, B, pad=1, max_rank=1)) == 0.0
+
+
+def test_top_share_counts_merged_top_ranges_of_enabled_types() -> None:
+    located = result(
+        StatementRange(type=B, first_page=6, last_page=6, score=8, rank=1),
+        StatementRange(type=INC, first_page=7, last_page=7, score=8, rank=1),
+        StatementRange(type=B, first_page=15, last_page=15, score=5, rank=2),
+        StatementRange(type=StatementType.CASH_FLOW, first_page=10, last_page=10, score=8, rank=1),
+    )
+    # pages 5-8 once each: the balance and income ranges overlap after padding
+    assert top_share(located, {B, INC}, pad=1) == 4 / 20
 
 
 def test_blind_is_refused() -> None:

@@ -56,10 +56,10 @@ profile's thresholds are not met.
 | Editor and browser | 2.5 GB |
 | `fra-api` (FastAPI, SQLite) | 0.3 GB |
 | Vite dev server | 0.3 GB |
-| Ingest child peak (docling Heron layout, TableFormer, ocrmac, batch size 2) | 3.0 GB |
+| Ingest child peak (docling Heron layout, TableFormer, ocrmac, batch size 2; measured up to 3.28 GB, spec 10) | 3.5 GB |
 | Analysis worker peak (Qwen2.5-7B 4-bit, 8k KV, MLX cache capped at 1 GB) | 6.0 GB |
-| **Serialized peak (N3 holds)** | **13.1 GB** |
-| Unserialized peak (both heavy runtimes at once, not allowed) | 16.1 GB |
+| **Serialized peak (N3 holds)** | **13.6 GB** |
+| Unserialized peak (both heavy runtimes at once, not allowed) | 16.6 GB |
 
 Both runtimes release memory between jobs (section 02, 2.2). `fra_worker.memory_guard` refuses
 to start a heavy stage when system free memory is below `heavy_stage_min_free_gb` (5.0 in this
@@ -72,11 +72,11 @@ profile) and puts the job back in the queue.
 | macOS and background services | 4.0 GB |
 | One browser window showing the app | 1.0 GB |
 | `fra-api` serving the production web build (no Vite) | 0.3 GB |
-| Ingest process with docling models loaded: idle / converting | 1.5 / 3.0 GB |
+| Ingest process with docling models loaded: idle / converting | 1.5 / 3.5 GB |
 | Analysis worker with the model loaded: idle / generating | 4.5 / 6.0 GB |
-| **Peak while converting** (model idle) | **12.8 GB** |
+| **Peak while converting** (model idle) | **13.3 GB** |
 | **Peak while generating** (ingest idle) | **12.8 GB** |
-| Headroom | 5.2 GB |
+| Headroom | 4.7 GB |
 
 Both runtimes stay loaded, so no customer-facing step waits for a model to load. The heavy
 lease still keeps their compute apart (N3). Preflight threshold: `demo_min_free_percent`

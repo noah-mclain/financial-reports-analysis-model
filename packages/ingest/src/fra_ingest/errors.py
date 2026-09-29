@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from typing import Literal
 
-IngestErrorReason = Literal["unreadable_pdf", "encrypted_pdf", "empty_pdf"]
+IngestErrorReason = Literal[
+    "unreadable_pdf",
+    "encrypted_pdf",
+    "empty_pdf",
+    "convert_failed",
+    "convert_timeout",
+    "convert_crashed",
+]
 
 
 class IngestError(Exception):

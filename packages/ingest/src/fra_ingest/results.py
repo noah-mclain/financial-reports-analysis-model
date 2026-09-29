@@ -1,10 +1,11 @@
-"""What the locate stage produces. Everything here is serialised to the artifact store."""
+"""What the locate and convert stages produce. Everything here is serialised to the artifact
+store."""
 
 from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from fra_core.schemas import Document, PageMode, StatementType, TextSource
 
@@ -127,3 +128,74 @@ class LocateResult(BaseModel):
     def candidate_share(self) -> float:
         pages = sum(last - first + 1 for first, last in self.convert_ranges)
         return pages / self.document.page_count
+
+
+RangeOcr = Literal["pdf_aware", "full_page", "skipped"]
+RangeStatus = Literal["ok", "partial", "failed", "skipped"]
+
+
+class RangePlan(BaseModel):
+    """How docling reads one range of ``convert_ranges``."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    first_page: int = Field(ge=1)
+    last_page: int = Field(ge=1)
+    ocr: RangeOcr
+    ocr_language: str | None = Field(
+        description="One language: Vision reads only the first it is given (R21). None when "
+        "the range is skipped or no OCR engine is configured"
+    )
+    image_pages: tuple[int, ...] = ()
+
+    @model_validator(mode="after")
+    def _ordered(self) -> RangePlan:
+        if self.last_page < self.first_page:
+            msg = f"range {self.first_page}-{self.last_page} ends before it starts"
+            raise ValueError(msg)
+        return self
+
+    @property
+    def label(self) -> str:
+        return f"{self.first_page}-{self.last_page}"
+
+
+class RangeConversion(BaseModel):
+    """What happened to one range."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    first_page: int = Field(ge=1)
+    last_page: int = Field(ge=1)
+    ocr: RangeOcr
+    ocr_language: str | None
+    docling_path: str | None = Field(
+        default=None, description="Relative to the artifact directory; None when nothing was saved"
+    )
+    tables: int = Field(default=0, ge=0)
+    seconds: float = Field(default=0.0, ge=0.0)
+    status: RangeStatus
+    flags: list[str] = Field(default_factory=list)
+
+
+class ConvertResult(BaseModel):
+    """Output of the convert stage, written to ``<artifact root>/<sha256>/convert.json``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: str
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    locate_version: str
+    docling_version: str
+    device: str
+    settings_hash: str
+    ranges: list[RangeConversion]
+    page_images: dict[int, str] = Field(default_factory=dict)
+    peak_footprint_gb: float | None = None
+    flags: list[str] = Field(default_factory=list)
+    timings: dict[str, float] = Field(default_factory=dict)
+
+    @property
+    def all_failed(self) -> bool:
+        attempted = [r for r in self.ranges if r.status != "skipped"]
+        return bool(attempted) and all(r.status == "failed" for r in attempted)

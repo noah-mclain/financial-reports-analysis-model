@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from fra_core.schemas import StatementType
 from fra_ingest.config import REPO_ROOT, IngestConfig, find_repo_root, load_config
@@ -77,3 +78,39 @@ def test_the_config_file_can_be_named_in_the_environment(
 ) -> None:
     monkeypatch.setenv("FRA_INGEST_CONFIG", str(write(tmp_path, "[locate]\npad_pages = 2\n")))
     assert load_config().pad_pages == 2
+
+
+def test_convert_defaults() -> None:
+    config = IngestConfig()
+    assert config.device == "mps"
+    assert config.convert_ocr == "ocrmac"
+    assert config.images_scale == 2.0
+    assert config.batch_size == 2
+    assert config.do_cell_matching is True
+    assert config.document_timeout_s == 600.0
+    assert config.child_timeout_s == 900.0
+    assert config.memory_budget_gb == 3.5
+
+
+def test_convert_settings_load(tmp_path: Path) -> None:
+    config = load_config(
+        write(
+            tmp_path,
+            '[convert]\ndevice = "cpu"\nocr_engine = "none"\nimages_scale = 1.5\n'
+            "child_timeout_s = 60\n",
+        )
+    )
+    assert config.device == "cpu"
+    assert config.convert_ocr == "none"
+    assert config.images_scale == 1.5
+    assert config.child_timeout_s == 60.0
+
+
+def test_an_unknown_convert_key_is_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match=r"unknown setting convert\.dpi"):
+        load_config(write(tmp_path, "[convert]\ndpi = 2\n"))
+
+
+def test_an_unknown_device_is_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError):
+        load_config(write(tmp_path, '[convert]\ndevice = "cuda"\n'))
