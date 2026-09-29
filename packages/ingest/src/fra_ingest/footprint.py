@@ -63,12 +63,21 @@ class _RusageInfoV4(ctypes.Structure):
     ]
 
 
-def peak_footprint_gb() -> float:
+def peak_footprint_reading() -> tuple[float, bool]:
+    """The current figure, and whether it came from the RSS fallback rather than the footprint
+    read. Only macOS has a footprint read to fall back from; elsewhere ``ru_maxrss`` is always
+    the answer, so the flag is always False there."""
     if sys.platform == "darwin":
         info = _RusageInfoV4()
         libsystem = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
         if libsystem.proc_pid_rusage(os.getpid(), _RUSAGE_INFO_V4, ctypes.byref(info)) == 0:
-            return float(info.ri_lifetime_max_phys_footprint) / _GIB
+            return float(info.ri_lifetime_max_phys_footprint) / _GIB, False
+    # Reached on Linux, or on macOS when proc_pid_rusage failed: there, this undercounts MPS
+    # memory, so the caller needs to know it came from the fallback (R26).
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    # ru_maxrss is bytes on macOS and kilobytes on Linux.
-    return peak / _GIB if sys.platform == "darwin" else peak * 1024 / _GIB
+    on_macos = sys.platform == "darwin"
+    return (peak / _GIB if on_macos else peak * 1024 / _GIB), on_macos
+
+
+def peak_footprint_gb() -> float:
+    return peak_footprint_reading()[0]

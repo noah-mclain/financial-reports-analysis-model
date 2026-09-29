@@ -1,4 +1,5 @@
-"""What the locate stage produces. Everything here is serialised to the artifact store."""
+"""What the locate and convert stages produce. Everything here is serialised to the artifact
+store."""
 
 from __future__ import annotations
 

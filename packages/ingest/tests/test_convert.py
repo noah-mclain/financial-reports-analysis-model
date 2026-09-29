@@ -9,6 +9,7 @@ import pytest
 from support import FakeRunner, located
 
 from fra_core.schemas import PageMode
+from fra_ingest import convert
 from fra_ingest.config import IngestConfig
 from fra_ingest.convert import CONVERT_VERSION, convert_pdf, settings_hash
 from fra_ingest.converter import RangeRunner
@@ -203,14 +204,39 @@ def test_pages_outside_the_range_fail_it(tmp_path: Path) -> None:
 
 def test_a_page_without_an_image_is_flagged(tmp_path: Path) -> None:
     result = run(tmp_path, FakeRunner({"2-3": "no_image"}), doc([(2, 3)]))
-    assert {"page_image_missing:2", "page_image_missing:3"} <= set(result.ranges[0].flags)
+    (partial,) = result.ranges
+    assert partial.status == "partial"
+    assert partial.flags[0] == "convert_partial:2-3"
+    assert {"page_image_missing:2", "page_image_missing:3"} <= set(partial.flags)
     assert result.page_images == {}
 
 
 def test_a_page_docling_did_not_return_is_flagged(tmp_path: Path) -> None:
     result = run(tmp_path, FakeRunner({"2-3": "short"}), doc([(2, 3)]))
-    assert "page_not_converted:3" in result.ranges[0].flags
+    (partial,) = result.ranges
+    assert partial.status == "partial"
+    assert partial.flags[0] == "convert_partial:2-3"
+    assert "page_not_converted:3" in partial.flags
     assert result.page_images == {2: "pages/2.png"}
+
+
+def test_a_range_with_zero_pages_fails_and_writes_nothing(tmp_path: Path) -> None:
+    result = run(tmp_path, FakeRunner({"2-3": "zero_pages"}), doc([(2, 3)]))
+    (failed,) = result.ranges
+    out = tmp_path / SHA
+
+    assert failed.status == "failed"
+    assert "convert_failed:2-3" in failed.flags
+    assert failed.docling_path is None
+    assert not (out / "docling" / "p2-3.json").is_file()
+    assert result.page_images == {}
+
+
+def test_a_cached_result_with_a_partial_range_is_retried(tmp_path: Path) -> None:
+    run(tmp_path, FakeRunner({"2-3": "short"}), doc([(2, 3), (5, 5)]))
+    again = FakeRunner()
+    run(tmp_path, again, doc([(2, 3), (5, 5)]))
+    assert [p.label for p in again.calls] == ["2-3", "5-5"]
 
 
 def test_without_an_ocr_engine_image_ranges_are_skipped_and_docling_never_loads(
@@ -233,6 +259,30 @@ def test_without_an_ocr_engine_image_ranges_are_skipped_and_docling_never_loads(
 def test_a_peak_above_the_budget_is_flagged(tmp_path: Path) -> None:
     result = run(tmp_path, FakeRunner(), doc([(2, 3)]), memory_budget_gb=0.001)
     assert "memory_over_budget" in result.flags
+
+
+def test_a_cache_hit_recomputes_the_budget_flag_for_the_current_budget(tmp_path: Path) -> None:
+    tight = run(tmp_path, FakeRunner(), doc([(2, 3)]), memory_budget_gb=0.001)
+    assert "memory_over_budget" in tight.flags
+
+    again = FakeRunner()
+    served = run(tmp_path, again, doc([(2, 3)]))
+    assert again.calls == []
+    assert "memory_over_budget" not in served.flags
+
+
+def test_the_rss_fallback_is_flagged(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(convert, "peak_footprint_reading", lambda: (0.5, True))
+    result = run(tmp_path, FakeRunner(), doc([(2, 3)]))
+    assert "peak_footprint_rss_fallback" in result.flags
+
+
+def test_no_fallback_flag_when_the_footprint_reader_succeeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(convert, "peak_footprint_reading", lambda: (0.5, False))
+    result = run(tmp_path, FakeRunner(), doc([(2, 3)]))
+    assert "peak_footprint_rss_fallback" not in result.flags
 
 
 def test_timings_passed_in_are_kept(tmp_path: Path) -> None:

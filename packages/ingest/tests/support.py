@@ -116,9 +116,9 @@ def located(
 
 class FakeRunner:
     """Stands in for DoclingRunner. ``behaviour`` maps a range label such as "2-3" to one of
-    ok, partial, failed, raise, interrupt, outside, no_image, short or write_fails; unlisted
-    ranges are ok. ``interrupt`` raises ``KeyboardInterrupt``, a ``BaseException`` the stage
-    must let through rather than turn into a failed range."""
+    ok, partial, failed, raise, interrupt, outside, no_image, short, zero_pages or write_fails;
+    unlisted ranges are ok. ``interrupt`` raises ``KeyboardInterrupt``, a ``BaseException`` the
+    stage must let through rather than turn into a failed range."""
 
     def __init__(self, behaviour: Mapping[str, str] | None = None) -> None:
         self.behaviour = dict(behaviour or {})
@@ -138,6 +138,8 @@ class FakeRunner:
             pages = [n + 100 for n in pages]
         if kind == "short":
             pages = pages[:1]
+        if kind == "zero_pages":
+            pages = []
         images: dict[int, Image.Image | None] = {
             n: None if kind == "no_image" else Image.new("RGB", (20, 30), "white") for n in pages
         }

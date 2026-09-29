@@ -35,6 +35,9 @@ def convert_in_child(
     extra_args: Sequence[str] = (),
     command: Sequence[str] | None = None,
 ) -> ConvertResult:
+    """Only ``artifact_root`` and ``child_timeout_s`` from ``config`` reach the child; every
+    other setting comes from the TOML file the child loads (``config_path``, else
+    ``FRA_INGEST_CONFIG``, else the repository default)."""
     if not pdf.is_file():
         raise IngestError("unreadable_pdf", f"{pdf}: not a file")
     sha256 = sha256_file(pdf)

@@ -158,12 +158,14 @@ In the parent, `convert_in_child` returns the `ConvertResult` read from disk, or
 | docling raises on one range | That range `failed`, flag `convert_failed:<a>-<b>`; the other ranges go on |
 | docling returns `PARTIAL_SUCCESS` (its own timeout, a page it could not read) | That range `partial`, flag `convert_partial:<a>-<b>` with docling's error text in the flag list |
 | docling returns a page outside the range | That range `failed`, flag `page_outside_range:<a>-<b>` |
+| docling returns `ok` but a page of the range is missing from its output, or has no image; docling returned zero pages | That range `partial`, flag `convert_partial:<a>-<b>` plus `page_not_converted:<n>` / `page_image_missing:<n>` per page; zero pages: `failed`, flag `convert_failed:<a>-<b>`, nothing written |
 | Every range failed | The child writes `convert.json` and exits 3; the parent raises `IngestError("convert_failed")` |
 | The child outlives `child_timeout_s` | Killed; `IngestError("convert_timeout")` |
 | The child ends on a signal (out-of-memory kill) | `IngestError("convert_crashed", "signal <n>")` |
 | The child exits with no `convert.json` | `IngestError("convert_crashed", <last lines of stderr>)` |
 | An image range with `ocr_engine = "none"` | `skipped`, flag `ocr_unavailable:<a>-<b>` |
 | Peak footprint above `memory_budget_gb` | `memory_over_budget`; the result is kept |
+| The macOS footprint read fails and RSS is used instead | flag `peak_footprint_rss_fallback`; the result is kept |
 | No `convert_ranges` | `no_statements_found`, exit 0, docling never loads |
 
 ## Peak memory

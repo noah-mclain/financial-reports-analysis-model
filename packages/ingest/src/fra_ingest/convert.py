@@ -15,14 +15,15 @@ from pydantic import ValidationError
 
 from fra_ingest.config import IngestConfig
 from fra_ingest.converter import DoclingRunner, RangeRunner, docling_version
-from fra_ingest.footprint import peak_footprint_gb
+from fra_ingest.footprint import peak_footprint_reading
 from fra_ingest.ocr_policy import plan_ranges
 from fra_ingest.results import ConvertResult, LocateResult, RangeConversion, RangePlan
 
 CONVERT_VERSION = "1"
 
-# Errors that mean our code is wrong, not that docling could not read the pages. They are
-# raised, as in the pages stage, so a broken adapter cannot pass as unreadable ranges.
+# Errors that mean our code is wrong, not that docling could not read the pages. IndexError and
+# KeyError are left out, unlike in the pages stage: docling internals can raise them on unusual
+# PDFs, and one bad range must not sink the document.
 _PROGRAMMING_ERRORS = (TypeError, AttributeError, NameError)
 _ERROR_CHARS = 200
 
@@ -62,7 +63,7 @@ def convert_pdf(
     release = docling or docling_version()
     digest = settings_hash(config, plans, release, located.version)
     if use_cache and (cached := _cached(out_dir, digest)) is not None:
-        return cached
+        return _with_current_budget_flag(cached, config)
 
     # Removed before the wipe below: if this run is killed mid-conversion (child_timeout_s,
     # OOM), a stale convert.json must not survive next to files a later run half-wrote, or
@@ -105,6 +106,17 @@ def convert_pdf(
     return _write(out_dir, result, config)
 
 
+def _with_current_budget_flag(result: ConvertResult, config: IngestConfig) -> ConvertResult:
+    """``memory_budget_gb`` is left out of ``settings_hash`` on purpose, so a cache hit must
+    judge the stored peak against today's budget rather than serve a stale verdict."""
+    flags = [f for f in result.flags if f != "memory_over_budget"]
+    if result.peak_footprint_gb is not None and result.peak_footprint_gb > config.memory_budget_gb:
+        flags.append("memory_over_budget")
+    if flags == result.flags:
+        return result
+    return result.model_copy(update={"flags": flags})
+
+
 def _convert_range(
     runner: RangeRunner,
     pdf: Path,
@@ -132,6 +144,10 @@ def _convert_range(
             plan, "failed", seconds=seconds, flags=[f"page_outside_range:{plan.label}"]
         )
     if output.status == "failed":
+        return _conversion(
+            plan, "failed", seconds=seconds, flags=[f"convert_failed:{plan.label}", *errors]
+        )
+    if output.status == "ok" and not output.page_numbers:
         return _conversion(
             plan, "failed", seconds=seconds, flags=[f"convert_failed:{plan.label}", *errors]
         )
@@ -168,9 +184,16 @@ def _convert_range(
             flags=[f"convert_failed:{plan.label}", _error(f"{type(exc).__name__}: {exc}")],
         )
     page_images.update(written_images)
+    status = output.status
+    has_page_flags = any(
+        f.startswith(("page_not_converted:", "page_image_missing:")) for f in flags
+    )
+    if status == "ok" and has_page_flags:
+        status = "partial"
+        flags = [f"convert_partial:{plan.label}", *flags]
     return _conversion(
         plan,
-        output.status,
+        status,
         seconds=time.perf_counter() - started,
         docling_path=docling_path,
         tables=output.tables,
@@ -230,10 +253,12 @@ def _cached(out_dir: Path, digest: str) -> ConvertResult | None:
 
 def _write(out_dir: Path, result: ConvertResult, config: IngestConfig) -> ConvertResult:
     started = time.perf_counter()
-    peak = peak_footprint_gb()
+    peak, used_rss_fallback = peak_footprint_reading()
     flags = list(result.flags)
     if peak > config.memory_budget_gb:
         flags.append("memory_over_budget")
+    if used_rss_fallback:
+        flags.append("peak_footprint_rss_fallback")
     out_dir.mkdir(parents=True, exist_ok=True)
     final = result.model_copy(update={"peak_footprint_gb": peak, "flags": flags})
     final.timings["write"] = time.perf_counter() - started
