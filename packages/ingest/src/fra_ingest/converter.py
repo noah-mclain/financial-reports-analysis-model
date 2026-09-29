@@ -79,7 +79,9 @@ def pipeline_options(config: IngestConfig, plan: RangePlan) -> Any:
     )
     if plan.ocr_language is not None:
         mode = OcrMode.FULL_PAGE if plan.ocr == "full_page" else OcrMode.PDF_AWARE_LAYOUT_REGIONS
-        options.ocr_options = OcrMacOptions(lang=[plan.ocr_language], mode=mode)
+        options.ocr_options = OcrMacOptions(
+            lang=[plan.ocr_language], mode=mode, scale=config.ocr_scale
+        )
     return options
 
 

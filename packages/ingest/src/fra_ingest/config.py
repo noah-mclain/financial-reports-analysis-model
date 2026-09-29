@@ -42,6 +42,7 @@ _TOML_FIELDS: dict[tuple[str, str], str] = {
     ("convert", "device"): "device",
     ("convert", "ocr_engine"): "convert_ocr",
     ("convert", "images_scale"): "images_scale",
+    ("convert", "ocr_scale"): "ocr_scale",
     ("convert", "batch_size"): "batch_size",
     ("convert", "do_cell_matching"): "do_cell_matching",
     ("convert", "document_timeout_s"): "document_timeout_s",
@@ -71,6 +72,7 @@ class IngestConfig(BaseModel):
     device: Literal["mps", "cpu", "auto"] = "mps"
     convert_ocr: Literal["ocrmac", "none"] = "ocrmac"
     images_scale: float = Field(default=2.0, gt=0.0, le=4.0)
+    ocr_scale: float = Field(default=3.0, gt=0.0, le=6.0)
     batch_size: int = Field(default=2, ge=1)
     do_cell_matching: bool = True
     document_timeout_s: float = Field(default=600.0, gt=0.0)

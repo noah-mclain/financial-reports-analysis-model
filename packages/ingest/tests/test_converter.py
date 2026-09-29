@@ -29,12 +29,13 @@ def test_the_docling_version_is_the_pinned_one() -> None:
 
 @pytest.mark.slow
 def test_options_follow_the_plan_and_the_settings() -> None:
-    config = IngestConfig(device="cpu", images_scale=1.5, batch_size=3)
+    config = IngestConfig(device="cpu", images_scale=1.5, batch_size=3, ocr_scale=4.0)
     scanned = RangePlan(first_page=5, last_page=5, ocr="full_page", ocr_language="ar-SA")
     options = pipeline_options(config, scanned)
     assert options.do_ocr is True
     assert options.ocr_options.lang == ["ar-SA"]
     assert options.ocr_options.mode.name == "FULL_PAGE"
+    assert options.ocr_options.scale == 4.0
     assert options.generate_page_images is True
     assert options.images_scale == 1.5
     assert (options.ocr_batch_size, options.layout_batch_size, options.table_batch_size) == (
