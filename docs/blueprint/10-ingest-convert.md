@@ -223,3 +223,33 @@ of 01, 1.4.
 | R26 | RSS misses MPS allocations, so the memory gate passes on a figure that is too low | The child records its lifetime peak physical footprint, which includes them |
 | R27 | docling passes its OCR languages to Vision in order, and Vision reads only the first (R21) | One language per range, taken from Part 1's reads of those pages |
 | R28 | A range mixing scanned and text pages is OCR'd whole, costing time on its text pages | Recorded per range; if the golden set shows it matters, split mixed ranges at mode changes |
+
+## Results
+
+Measured 2026-09-29 on the worktree/phase2-extraction branch, `make eval-convert FRESH=1`, other apps closed.
+
+| Document | Pages | Ranges (mode, language) | Tables | s/page | Models | Wall | Peak |
+|----------|-------|--------------------------|--------|--------|--------|------|------|
+| almarai-2025-en | 32 | 26-30, 155-164, 192-196, 201-212 (pdf_aware, en-US) | 53 | 2.391 | 5.64s | 84.70s | 2.59 GB |
+| almarai-2025-ar | 39 | 28-30, 155-164, 182-189, 194-211 (pdf_aware, ar-SA) | 69 | 2.559 | 5.66s | 112.80s | 2.81 GB |
+| juhayna-2025-ar-standalone | 6 | 4-9 (full_page, ar-SA) | 5 | 3.420 | 5.74s | 47.04s | 2.24 GB |
+| juhayna-2025-ar-consolidated | 9 | 4-9, 31-33 (full_page, ar-SA) | 8 | 3.055 | 5.66s | 57.41s | 2.24 GB |
+| juhayna-2025-en-consolidated | 5 | 4-8 (full_page, en-US) | 4 | 5.973 | 12.38s | 47.59s | 2.23 GB |
+| juhayna-2024-ar-consolidated | 10 | 4-9, 29-32 (full_page, ar-SA) | 10 | 2.764 | 5.62s | 48.55s | 2.29 GB |
+| juhayna-2024-en-consolidated | 8 | 4-8, 28-30 (full_page, en-US) | 9 | 2.339 | 5.54s | 49.27s | 2.24 GB |
+| edita-2025-ar-consolidated | 6 | 4-9 (full_page, ar-SA) | 5 | 2.529 | 5.59s | 38.74s | 2.29 GB |
+| edita-2025-en-consolidated-eas | 9 | 4-9, 58-60 (full_page, en-US) | 11 | 6.382 | 11.22s | 102.90s | 3.19 GB |
+| edita-2025-en-consolidated-ifrs | 7 | 7-13 (full_page, en-US) | 6 | 6.763 | 5.83s | 94.42s | 2.32 GB |
+| edita-2024-ar-consolidated | 6 | 4-9 (full_page, ar-SA) | 5 | 9.193 | 6.20s | 87.76s | 2.27 GB |
+| juhayna-2025-en-standalone | 5 | 4-8 (full_page, en-US) | 4 | 5.573 | 5.59s | 39.10s | 2.17 GB |
+
+| Measure | Target | Result |
+|---------|--------|--------|
+| docling contract smoke test | passes against 2.126.0 | passes; Task 1 found no renames against 2.126.0 with docling-core 2.96.0 and docling-ibm-models 4.0.2 pinned |
+| Golden documents with every range `ok` | 12 of 12 | 12 of 12 (every range of every document converted `ok`) |
+| Peak footprint of the child | 3.0 GB or less | 3.19 GB on `edita-2025-en-consolidated-eas`; every other document stayed at 2.81 GB or less |
+| Seconds per candidate page | recorded | median digital (pdf_aware) 2.475 s/page (almarai EN and AR); median scanned (full_page) 4.497 s/page (the other ten documents) |
+
+### Misses
+
+- `edita-2025-en-consolidated-eas`: peak footprint 3.19 GB, over the 3.0 GB budget by about 0.19 GB. Every range still converted `ok`. The document is scanned, so both its ranges (pages 4-9 and 58-60, 9 pages total) run `full_page` OCR in `en-US`; both ranges share one OCR mode and language, so `DoclingRunner` builds a single converter for the document, not two (`packages/ingest/src/fra_ingest/converter.py`, `_converter` keys on `(ocr, ocr_language)`) — the elevated 11.22 s "models" timing for this document is not explained by an extra converter build. Comparing it against the other eleven `full_page` and `pdf_aware` documents, the one structural outlier is table count: 11 tables over 9 pages, the highest absolute table count of any `full_page`-OCR document in the set (the next highest is 10 tables on `juhayna-2024-ar-consolidated`, which peaked at 2.29 GB). `do_table_structure` runs in `TableFormerMode.ACCURATE` (04, 1.2) on every range, and `full_page` OCR is already the heavier of the two OCR modes because it OCRs the whole page rather than only non-text regions (R28); the combination of full-page OCR and the set's densest table extraction is the most likely driver of the peak, though the margin over budget is small and no code change was made to chase it. Left to the owner to decide whether to raise the budget slightly, split the table-heavy range, or accept the miss.
