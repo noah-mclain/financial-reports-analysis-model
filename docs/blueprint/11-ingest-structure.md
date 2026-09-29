@@ -28,14 +28,16 @@ Read from the golden docling output of Part 2 (2026-09-29):
 |----------|--------------------|-------------|
 | Almarai EN, p156 | 20 x 4 grid; header `31 December 2025 X '000`; section rows (`ASSETS`) marked | Header text binds periods and scale; `X` is the riyal glyph, so currency is not in the header |
 | Almarai EN, p159 | Header split over two rows: `For the year ended` / `31 December 2025 X '000` | Header rows are joined per column before parsing |
-| Almarai AR, p156 | 17 x 4 grid, label column on the right, section rows missing; every number with its digits reversed (`٢٤٣,٠٥٧,٢٢` for 22,750,342), note references too (`٠١` for 10), header years reversed | Visual-order repair on pages Part 1 marked `visual_arabic`; English and Arabic rows are matched by values, never by row index |
-| Juhayna EN and AR, p5 (scanned) | 13 and 17 numeric cells where about 50 are printed; Vision at 100 dpi in Part 1 also read almost none | The figures are small and blurred with space separators. Task 1 measures a higher OCR resolution; until then these statements come out with visible gaps |
+| Almarai AR, p156 | 17 x 4 grid, label column on the right. Every number has its digits reversed (`٢٤٣,٠٥٧,٢٢` for 22,750,342), note references too (`٠١` for 10), header years too, with Arabic-Indic and Extended Arabic-Indic digits mixed (`۱۳` beside `٥٢٠٢`). Letters are in reading order but separated by single spaces, so word boundaries are lost (`إ ج م ا ل ي ا ل م و ج و د ا ت`, total assets). The first row's label cell holds both section headings and the first line item, which is why there are three fewer rows than in English | Digit repair only on pages Part 1 marked `visual_arabic`; spaced letters joined wherever they occur; English and Arabic rows matched by values, never by row index |
+| Juhayna EN and AR, p5 (scanned) | 13 and 17 numeric cells where about 50 are printed; Vision at 100 dpi in Part 1 also read almost none | The figures are small and blurred with space separators. docling already OCRs at 3x (216 dpi, `OcrMacOptions.scale`). Task 1 measures higher scales and cell matching off; until then these statements come out with visible gaps |
 | Edita AR EAS, p5 (scanned) | 76 numeric cells | Scans of normal print are read |
 
 The core parsers already handle the text: `parse_period` reads English and Arabic dates, the
-"Restated" marker and duration against instant; `detect_scale` reads `'000` and `ألف`;
+"Restated" marker and duration against instant; `detect_scale` reads `'000`, `ألف` and `آلاف`, also inside a joined run such as `مبآلاف`;
 `parse_number` reads both digit systems, space separators, parentheses and dashes. A reversed
-Arabic number fails to parse (`unparsed`) until its digits are restored.
+Arabic number fails to parse (`unparsed`) until its digits are restored. After the repair below,
+the Almarai AR header `۱۳ د ي س م ب ر ٥٢٠٢ م ب آ لا ف X` reads `31 ديسمبر 2025 مبآلاف X`,
+which parses to 2025-12-31 with scale 1000.
 
 ## Scope
 
@@ -62,7 +64,7 @@ fields it uses; a golden contract test fails if docling's JSON stops matching th
 |------|----------------|
 | `fra_ingest/docling_json.py` | Pydantic models for the docling JSON fields structure reads (tables, cells, boxes, provenance, texts) and a loader |
 | `fra_ingest/table_grid.py` | `build_grid(table, page_height) -> Grid` |
-| `fra_ingest/visual_order.py` | Digit and bracket restoration on `visual_arabic` pages; label letter restoration through Part 1's `text_match` |
+| `fra_ingest/visual_order.py` | Digit and bracket restoration on `visual_arabic` pages; joining of spaced letters on any page |
 | `fra_ingest/classify.py` | `classify(grid, context) -> Classification` |
 | `fra_ingest/header.py` | `parse_header(grid, statement_type, context) -> HeaderLayout` |
 | `fra_ingest/metadata.py` | `detect_metadata(...) -> Metadata`: scale, currency, entity, consolidated, conflicts |
@@ -171,21 +173,30 @@ class StructureResult(BaseModel):   # statements.raw.json
    settings hash is returned (ADR 0005).
 2. **Grids.** One `Grid` per docling table. Boxes are converted to a top-left origin with the
    page height from the docling JSON.
-3. **Visual order.** On `visual_arabic` pages, every numeric token has its digits reversed back
-   and mirrored brackets swapped (`)123(` to `(321)`); labels are restored with Part 1's letter
-   restoration. Each repaired cell carries `digits_reversed` or `letters_restored`. Nothing is
-   repaired on other pages.
+3. **Visual order.**
+   - Digits, only on `visual_arabic` pages: every token made of digits and separators is
+     reversed back, and a bracket pair around it that came out mirrored (`)123(`) is swapped.
+     Tokens are whitespace-separated, so dates and years in headers are repaired the same way.
+     The cell carries `digits_reversed`. Nothing is reversed on other pages.
+   - Spaced letters, on any page: in a cell where most tokens are single Arabic letters, each
+     run of single-letter tokens is joined into one word; tokens of two or more characters
+     (numbers, `X`, the `لا` ligature is treated as one letter) stay separate. Word boundaries
+     inside a run cannot be recovered, so the joined label is kept as is and flagged
+     `letters_spaced`. Comparisons with taxonomy aliases and cue words on such text ignore
+     spaces on both sides. Readable Arabic labels for these documents are left to week 2's
+     label work.
 4. **Classification.** Evidence for each grid:
    - locate's title and cue types for the grid's page (`locate.json`, `PageScore`);
-   - row labels found in the taxonomy's aliases for each type (`Taxonomy.lookup`);
+   - row labels found in the taxonomy's aliases for each type (`Taxonomy.lookup`, space-free
+     comparison for `letters_spaced` labels);
    - the heading text above the table on its page.
 
    Negative evidence: a note heading (`Note`, `إيضاح` followed by a number) above the table,
    fewer than three taxonomy hits, or no period header. A grid is a statement when its best
    type reaches `min_confidence` (0.5, `[structure]` in `configs/ingest.toml`); every decision
    and its evidence goes into `StructureResult.tables`.
-5. **Header.** The header rows are those flagged `column_header` plus any leading rows with no
-   numeric cells. They are joined per column top to bottom and parsed with `parse_period`, with
+5. **Header.** The header rows are those flagged `column_header` plus any leading rows that
+   hold no amounts (a cell that parses as a date or a year is header text, not an amount). They are joined per column top to bottom and parsed with `parse_period`, with
    `default_kind` instant for balance and duration for income and comprehensive income. A
    column whose header is only a year takes the day and month from the statement's own date
    line (caption or header text). The note column is the column of small integers or a
@@ -194,8 +205,8 @@ class StructureResult(BaseModel):   # statements.raw.json
    periods by their header text, never by position.
 6. **Metadata.** Scale from the header text, then the caption, then the page text; per-share
    rows are exempt. Currency the same way; when none of those name one (Almarai's glyph), the
-   currency named most often in the document's statement pages is used and flagged
-   `currency_inferred`. Disagreeing signals set `conflict` and a flag.
+   currency named most often in the text of the converted pages is used, then in the text of
+   the whole document from Part 1's page cache, and flagged `currency_inferred`. Disagreeing signals set `conflict` and a flag.
 7. **Line items.** One per data row: label text, note reference, and a `Cell` per bound period
    with `reported` from `parse_number`, `raw_text`, parser flags, and provenance (page, box,
    table ref, row, column, source text or OCR from the page mode).
@@ -207,8 +218,12 @@ class StructureResult(BaseModel):   # statements.raw.json
    language or it follows a rule of rows ending at a section. Parent is the nearest section
    row above with smaller depth.
 10. **Checks.**
-    - Subtotal: each subtotal row against the sum of the rows between it and the previous
-      subtotal or section start, per period, with tolerance n x 0.5 reported units (D6).
+    - Subtotal: a subtotal row that directly closes a run of two or more plain rows (since
+      the section start or the previous subtotal) is checked against their sum, per period,
+      with tolerance n x 0.5 reported units, n the number of rows summed (D6). Other
+      subtotals, such as total assets over two section subtotals or Almarai AR's rows whose
+      section headings are merged, are `skipped` with `subtotal_scope_unknown`; 3b's
+      sum-based hierarchy checks them.
     - Balance sheet identity: total assets against the printed total of liabilities and
       equity when the statement has one, otherwise against total liabilities plus total
       equity, per period. The totals are found by taxonomy lookup of their labels
@@ -241,13 +256,13 @@ Tests are written before the code they cover.
 |------|-------|--------|
 | docling JSON contract | The models load every table and text of Almarai EN pages 155-164 and Juhayna AR pages 4-9 | `golden` |
 | `build_grid` | Boxes converted from bottom-left to top-left; spans; header flags | fast |
-| `visual_order` | Digits reversed back in numbers and note references; brackets swapped; only on `visual_arabic` pages; `-` untouched | fast |
+| `visual_order` | Digits reversed back in numbers, note references and header years with mixed digit sets; brackets swapped; only on `visual_arabic` pages; `-` untouched; spaced letters joined into runs with numbers and `X` kept apart | fast |
 | `parse_header` | Two-row header; mirrored Arabic columns; note column by header and by small integers; year-only header; restated column | fast |
 | `classify` | Balance and income from labels in both languages; a notes table with statement labels rejected | fast |
 | `detect_metadata` | `'000` and `ألف`; glyph currency inferred from document text; conflicting signals flagged | fast |
 | `infer_hierarchy` | Depth from indentation; section rows; total and net cues in both languages | fast |
 | `merge_continuations` | Two parts merged; mismatched periods or columns kept apart; repeated header dropped | fast |
-| Checks | Subtotal pass and fail at the D6 tolerance; identity pass, fail, skipped | fast |
+| Checks | Subtotal pass and fail at the D6 tolerance; a subtotal over subtotals skipped; identity pass, fail, skipped; identity through a printed liabilities-and-equity total and through the two totals | fast |
 | End to end | Almarai EN balance sheet (156-158) and income statement (159): figures, periods, scale, currency; Almarai AR the same after repair | `golden` |
 
 ## Scoring
@@ -265,7 +280,7 @@ matched by their values in every period; a numeric row with no counterpart is a 
 | Almarai EN against AR, balance, income and comprehensive income | every numeric row has a counterpart with the same value in every period |
 | Scale and currency, golden set | 12 of 12 correct, or flagged |
 | Balance sheet identity, golden set | holds, or flagged with the correct reason |
-| Resolution test (task 1) | recorded; if a higher OCR resolution recovers Juhayna's balance-sheet figures, the Part 2 setting changes |
+| Resolution test (task 1) | recorded: numeric cells found on Juhayna EN and AR p5 at docling's OCR scale 3 (its default, 216 dpi), 4 and 5, and at scale 3 with cell matching off. If a setting brings the count near the printed figures, it becomes a `[convert]` setting (a Part 2 change with its own test) |
 
 Other bilingual pairs are reported, not gated, until the resolution question is settled.
 
@@ -273,8 +288,9 @@ Other bilingual pairs are reported, not gated, until the resolution question is 
 
 | ID | Risk | Mitigation |
 |----|------|------------|
-| R29 | Visual-order repair applied to a page that is not visual, or missed on one that is | Repair only on `visual_arabic` pages from Part 1; the bilingual pair check catches a wrong or missing repair on Almarai |
-| R30 | Scanned figures too small for OCR at the converted resolution (Juhayna) | Task 1 measures a higher resolution; the gaps are flagged `numbers_missing` and the identity fails visibly |
+| R29 | Digit reversal applied to a page that is not visual, or missed on one that is | Reversal only on `visual_arabic` pages from Part 1; the bilingual pair check catches a wrong or missing repair on Almarai |
+| R34 | Arabic labels with lost word boundaries weaken classification and the identity's total lookup | Space-free comparison; locate's title types as classification evidence; a missing total skips the identity with its reason instead of failing it |
+| R30 | Scanned figures too small for OCR at the converted resolution (Juhayna), or read but lost when docling matches words to cells | Task 1 measures OCR scale 4 and 5 and cell matching off; the gaps are flagged `numbers_missing` and the identity fails visibly |
 | R31 | docling's JSON changes shape between versions | Our own models of the fields used, and a golden contract test; docling is pinned |
 | R32 | A notes table taken for a primary statement | Note headings, taxonomy hits and period headers as evidence, every decision recorded in `tables`, and the balance identity as a backstop |
 | R33 | Glyph currencies with no currency word near the statement | Document-level inference, flagged `currency_inferred`; the manifest scores it |
