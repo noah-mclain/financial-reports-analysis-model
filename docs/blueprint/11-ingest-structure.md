@@ -311,3 +311,42 @@ Other bilingual pairs are reported, not gated, until the resolution question is 
 | R31 | docling's JSON changes shape between versions | Our own models of the fields used, and a golden contract test; docling is pinned |
 | R32 | A notes table taken for a primary statement | Note headings, taxonomy hits and period headers as evidence, every decision recorded in `tables`, and the balance identity as a backstop |
 | R33 | Glyph currencies with no currency word near the statement | Country of incorporation from the earliest page naming it, flagged `currency_from_domicile`; else document-level inference, flagged `currency_inferred`; the manifest scores it |
+
+## Results
+
+Measured 2026-10-01 on the `ingest-structure` branch (`worktree/phase2-extraction`), `make eval-structure`. Lines are line items of the first statement of each type; identity is the balance sheet identity.
+
+| Document | Balance | Income | Comprehensive income | Scale and currency | Identity |
+|----------|---------|--------|----------------------|--------------------|----------|
+| almarai-2025-en | 46 lines | 21 lines | 13 lines | ok (1000 SAR) | ok |
+| almarai-2025-ar | 40 lines | 21 lines | 11 lines | ok (1000 SAR) | ok |
+| juhayna-2025-ar-standalone | not extracted | 14 lines | not extracted | currency ok, scale flagged | no balance sheet |
+| juhayna-2025-ar-consolidated | not extracted | 27 lines | not extracted | currency ok, scale flagged | no balance sheet |
+| juhayna-2025-en-consolidated | 23 lines | 21 lines | 8 lines | currency ok, scale flagged | skipped (totals not found, 3 cells with numbers missing) |
+| juhayna-2024-ar-consolidated | 39 lines | not extracted | not extracted | currency ok (from domicile), scale flagged | skipped (totals not found) |
+| juhayna-2024-en-consolidated | 43 lines | 20 lines | 8 lines | currency ok, scale flagged | skipped (totals not found, 2 cells with numbers missing) |
+| edita-2025-ar-consolidated | 39 lines | 22 lines | 7 lines | currency ok, scale flagged | skipped (totals not found) |
+| edita-2025-en-consolidated-eas | 45 lines | 21 lines | 11 lines | currency ok, scale flagged | ok |
+| edita-2025-en-consolidated-ifrs | 42 lines | 22 lines | 11 lines | currency ok, scale flagged | ok |
+| edita-2024-ar-consolidated | 37 lines | 19 lines | 7 lines | currency ok, scale flagged | failed (5 cells with numbers missing) |
+| juhayna-2025-en-standalone | not extracted | 14 lines | 4 lines | currency ok, scale flagged | no balance sheet |
+
+The manifest records `scale: unconfirmed` for the ten Juhayna and Edita documents, so the harness scores only their currency; a statement that could not read a scale carries `scale_missing` and stays at 1.
+
+Unmatched numeric rows in each language edition of a pair (first edition, second edition):
+
+| Pair | Balance | Income | Comprehensive income |
+|------|---------|--------|----------------------|
+| Almarai 2025 EN / AR (gated) | 0 / 0 | 0 / 0 | 0 / 0 |
+| Juhayna 2025 consolidated EN / AR | no AR balance sheet | 9 / 13 | no AR statement |
+| Juhayna 2024 consolidated EN / AR | 38 / 23 | no AR statement | no AR statement |
+| Edita 2025 EAS EN / AR | 37 / 36 | 4 / 3 | 3 / 3 |
+
+| Measure | Target | Result |
+|---------|--------|--------|
+| Almarai EN against AR | every numeric row matched | met: 0 unmatched rows on balance, income and comprehensive income in both editions |
+| Scale and currency, golden set | 12 of 12 correct or flagged | met for the 29 statements extracted: currency correct in every one, scale 1000 correct on Almarai, scale flagged `scale_missing` on the ten documents whose manifest scale is unconfirmed |
+| Balance sheet identity, golden set | holds, or flagged with the correct reason | met where a balance sheet was extracted: holds on Almarai, Edita EAS and Edita IFRS; skipped with `identity_totals_not_found` on four Juhayna and Edita statements; failed on edita-2024-ar-consolidated with `numbers_missing` cells and `subtotal_failed`. Not met in coverage: no balance sheet was extracted for three Juhayna documents |
+| Resolution test (task 1) | recorded | OCR scale 4 and 5 and cell matching off found no more numeric cells on Juhayna p5 than docling's default scale 3 (13 and 17 cells at 3; fewer at 4 and 5; none with matching off), so `ocr_scale` stays 3.0 and `do_cell_matching` stays on |
+
+Not gated and not solved: the Juhayna and Edita pairs differ because the scanned statements lose cells (`numbers_missing`), periods stay unbound on several Arabic statements (`period_unbound`), and three Juhayna documents lack a statement of a type that the other edition has.
