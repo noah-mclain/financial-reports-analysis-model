@@ -44,5 +44,9 @@ child_timeout_s = 900
 # the 3.0 estimate after measuring 3.19 to 3.28 GB on edita-2025-en-consolidated-eas (spec 10).
 memory_budget_gb = 3.5
 
+[structure]
+# A table is a statement when its best statement type reaches this confidence (spec 11).
+min_confidence = 0.5
+
 [artifacts]
 root = "var/artifacts"
