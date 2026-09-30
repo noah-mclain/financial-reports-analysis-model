@@ -1,0 +1,207 @@
+"""The structure stage end to end on a hand-made docling document (spec 11, Data flow)."""
+
+from __future__ import annotations
+
+from decimal import Decimal
+
+from fra_core.schemas import PageMode, StatementType
+from fra_ingest.config import IngestConfig
+from fra_ingest.docling_json import DlDocument
+from fra_ingest.results import ConvertResult, RangeConversion
+from fra_ingest.structure import StructureInputs, structure_document
+
+SHA = "b" * 64
+
+
+def cells(rows: list[list[str]], x0: float = 60) -> list[dict[str, object]]:
+    out = []
+    for r, row in enumerate(rows):
+        for c, text in enumerate(row):
+            if not text:
+                continue
+            left = x0 + 150 * c
+            out.append(
+                {
+                    "text": text,
+                    "start_row_offset_idx": r,
+                    "end_row_offset_idx": r + 1,
+                    "start_col_offset_idx": c,
+                    "end_col_offset_idx": c + 1,
+                    "column_header": r == 0,
+                    "bbox": {
+                        "l": left,
+                        "t": 100 + 20 * r,
+                        "r": left + 120,
+                        "b": 112 + 20 * r,
+                        "coord_origin": "TOPLEFT",
+                    },
+                }
+            )
+    return out
+
+
+def table(ref: int, page: int, rows: list[list[str]]) -> dict[str, object]:
+    return {
+        "self_ref": f"#/tables/{ref}",
+        "prov": [
+            {
+                "page_no": page,
+                "bbox": {"l": 50, "t": 700, "r": 700, "b": 300, "coord_origin": "BOTTOMLEFT"},
+            }
+        ],
+        "data": {"num_rows": len(rows), "num_cols": 4, "table_cells": cells(rows)},
+    }
+
+
+HEADER = ["", "Notes", "31 December 2025 SAR '000", "31 December 2024 SAR '000"]
+PAGE_1 = [
+    HEADER,
+    ["Inventories", "19", "10", "8"],
+    ["Cash", "21", "5", "4"],
+    ["Total current assets", "", "15", "12"],
+    ["Total assets", "", "15", "12"],
+]
+PAGE_2 = [
+    HEADER,
+    ["Trade payables", "", "6", "5"],
+    ["Total liabilities", "", "6", "5"],
+    ["Share capital", "", "9", "7"],
+    ["Total equity", "", "9", "7"],
+]
+SIGNATURES = [["Chief Financial Officer", "Chief Executive Officer", "Chairman", ""]]
+
+
+def inputs(documents: list[tuple[str, DlDocument]]) -> StructureInputs:
+    convert = ConvertResult(
+        version="1",
+        sha256=SHA,
+        locate_version="2",
+        docling_version="2.126.0",
+        device="mps",
+        settings_hash="h",
+        ranges=[
+            RangeConversion(
+                first_page=1,
+                last_page=2,
+                ocr="pdf_aware",
+                ocr_language="en-US",
+                docling_path="docling/p1-2.json",
+                status="ok",
+            )
+        ],
+    )
+    return StructureInputs(
+        sha256=SHA,
+        language="en",
+        industry_flags=(),
+        page_modes={1: PageMode.TEXT, 2: PageMode.TEXT},
+        visual_pages=set(),
+        page_texts={1: "Statement of financial position", 2: ""},
+        title_types={1: (StatementType.BALANCE,), 2: (StatementType.BALANCE,)},
+        cue_types={},
+        documents=documents,
+        convert=convert,
+    )
+
+
+def document() -> DlDocument:
+    return DlDocument.model_validate(
+        {
+            "tables": [table(0, 1, PAGE_1), table(1, 2, PAGE_2), table(2, 2, SIGNATURES)],
+            "texts": [],
+            "pages": {
+                "1": {"page_no": 1, "size": {"width": 800, "height": 1000}},
+                "2": {"page_no": 2, "size": {"width": 800, "height": 1000}},
+            },
+        }
+    )
+
+
+def test_a_balance_sheet_over_two_pages_becomes_one_checked_statement() -> None:
+    result, checks = structure_document(inputs([("docling/p1-2.json", document())]), IngestConfig())
+    assert len(result.statements) == 1
+    statement = result.statements[0]
+    assert statement.type is StatementType.BALANCE
+    assert (statement.currency, statement.scale) == ("SAR", 1000)
+    assert statement.source_pages == [1, 2]
+    assert [p.key for p in statement.periods] == ["2025-12-31", "2024-12-31"]
+    labels = [i.raw_label for i in statement.line_items]
+    assert labels[0] == "Inventories" and labels[-1] == "Total equity"
+    assert statement.line_items[0].cells[0].reported == Decimal("10")
+    identity = [c for c in checks if c.kind == "balance_identity"]
+    assert {c.status for c in identity} == {"pass"}
+    signature = [t for t in result.tables if t.table_ref == "#/tables/2"]
+    assert signature and signature[0].type is None
+
+
+def test_decisions_name_the_statement_each_table_became() -> None:
+    result, _ = structure_document(inputs([("docling/p1-2.json", document())]), IngestConfig())
+    statement_id = result.statements[0].id
+    kept = {t.table_ref: t.statement_id for t in result.tables}
+    assert kept == {"#/tables/0": statement_id, "#/tables/1": statement_id, "#/tables/2": None}
+
+
+def test_two_balance_sheets_on_one_page_are_flagged_ambiguous() -> None:
+    doubled = DlDocument.model_validate(
+        {
+            "tables": [table(0, 1, PAGE_1), table(1, 1, PAGE_1)],
+            "texts": [],
+            "pages": {"1": {"page_no": 1, "size": {"width": 800, "height": 1000}}},
+        }
+    )
+    result, _ = structure_document(inputs([("docling/p1-2.json", doubled)]), IngestConfig())
+    balance = [s for s in result.statements if s.type is StatementType.BALANCE]
+    assert len(balance) == 2
+    assert all("ambiguous_statement:balance" in s.flags for s in balance)
+
+
+def test_a_missing_enabled_type_is_flagged() -> None:
+    result, _ = structure_document(inputs([("docling/p1-2.json", document())]), IngestConfig())
+    assert "statement_not_extracted:income" in result.flags
+
+
+INCOME_HEADER = ["", "Notes", "2025 SAR '000", "2024 SAR '000"]
+INCOME_1 = [
+    INCOME_HEADER,
+    ["Revenue", "5", "100", "90"],
+    ["Cost of sales", "", "(60)", "(55)"],
+    ["Gross profit", "", "40", "35"],
+]
+INCOME_2 = [
+    INCOME_HEADER,
+    ["Profit for the year", "", "40", "35"],
+    ["Basic earnings per share", "", "0.4", "0.35"],
+]
+
+
+def test_a_tail_page_below_confidence_continues_the_statement_before_it() -> None:
+    income = DlDocument.model_validate(
+        {
+            "tables": [table(0, 1, INCOME_1), table(1, 2, INCOME_2)],
+            "texts": [],
+            "pages": {
+                "1": {"page_no": 1, "size": {"width": 800, "height": 1000}},
+                "2": {"page_no": 2, "size": {"width": 800, "height": 1000}},
+            },
+        }
+    )
+    base = inputs([("docling/p1-2.json", income)])
+    tail = base.model_copy(
+        update={
+            "page_texts": {1: "Statement of profit or loss", 2: ""},
+            "title_types": {1: (StatementType.INCOME,), 2: ()},
+            "cue_types": {2: (StatementType.INCOME,)},
+        }
+    )
+    result, _ = structure_document(tail, IngestConfig())
+    statements = [s for s in result.statements if s.type is StatementType.INCOME]
+    assert len(statements) == 1
+    assert statements[0].source_pages == [1, 2]
+    assert [i.raw_label for i in statements[0].line_items][-2:] == [
+        "Profit for the year",
+        "Basic earnings per share",
+    ]
+    decision = next(t for t in result.tables if t.table_ref == "#/tables/1")
+    assert decision.type is StatementType.INCOME
+    assert "continuation_of:income" in decision.evidence
+    assert decision.statement_id == statements[0].id

@@ -2,9 +2,11 @@
 
 fra-ingest locate <pdf> [--json] [--no-ocr] [--no-cache] [--config PATH] [--artifacts DIR]
 fra-ingest convert <pdf> [--json] [--no-ocr] [--no-cache] [--config PATH] [--artifacts DIR]
+fra-ingest structure <pdf> [--json] [--no-ocr] [--no-cache] [--config PATH] [--artifacts DIR]
 
 convert exits 0 when it wrote a result, 2 on an ingest error and 3 when every range it
-attempted failed. It is the child process of convert_in_child (spec 10).
+attempted failed. It is the child process of convert_in_child (spec 10). structure exits 0
+when it wrote a result and 2 on an ingest error.
 """
 
 from __future__ import annotations
@@ -18,8 +20,9 @@ from fra_ingest.config import IngestConfig, load_config
 from fra_ingest.convert import convert_pdf
 from fra_ingest.errors import IngestError
 from fra_ingest.ocr import OcrEngine, default_engine
-from fra_ingest.results import ConvertResult, LocateResult
+from fra_ingest.results import ConvertResult, LocateResult, StructureResult
 from fra_ingest.stage import load_or_locate, locate_pdf, page_ocr_languages
+from fra_ingest.structure import structure_pdf
 
 EXIT_ERROR = 2
 EXIT_ALL_FAILED = 3
@@ -31,6 +34,7 @@ def main(argv: list[str] | None = None) -> int:
     for name, text in (
         ("locate", "find the statement pages of a PDF"),
         ("convert", "convert the located statement pages with docling"),
+        ("structure", "structure the converted statements"),
     ):
         command = commands.add_parser(name, help=text)
         command.add_argument("pdf", type=Path)
@@ -39,7 +43,8 @@ def main(argv: list[str] | None = None) -> int:
         command.add_argument(
             "--no-cache",
             action="store_true",
-            help="locate: ignore the page text cache; convert: convert again",
+            help="locate: ignore the page text cache; convert: convert again; "
+            "structure: structure again",
         )
         command.add_argument("--config", type=Path, default=None)
         command.add_argument("--artifacts", type=Path, default=None, help="artifact root override")
@@ -53,6 +58,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "convert":
             return _convert(args, config, engine)
+        if args.command == "structure":
+            result_s = structure_pdf(args.pdf, config, engine, use_cache=not args.no_cache)
+            print(result_s.model_dump_json(indent=2) if args.json else _structure_summary(result_s))
+            return 0
         result = locate_pdf(args.pdf, config, engine, use_cache=not args.no_cache)
     except IngestError as exc:
         print(f"{args.pdf}: {exc.reason} {exc.detail}".rstrip(), file=sys.stderr)
@@ -112,6 +121,21 @@ def _convert_summary(result: ConvertResult) -> str:
     lines.append(f"pages  {len(result.page_images)} images  peak {peak}")
     lines.append(f"flags  {', '.join(result.flags) or 'none'}")
     lines.append("time  " + "  ".join(f"{k} {v:.1f}s" for k, v in result.timings.items()))
+    return "\n".join(lines)
+
+
+def _structure_summary(result: StructureResult) -> str:
+    lines = [f"{result.sha256[:12]}  structure {result.version}"]
+    for s in result.statements:
+        periods = ", ".join(p.key for p in s.periods)
+        lines.append(
+            f"  {s.type.value:22} pp. {s.source_pages[0]}-{s.source_pages[-1]}  "
+            f"{len(s.line_items)} lines  "
+            f"{s.currency} x{s.scale}  [{periods}]  {', '.join(s.flags) or 'ok'}"
+        )
+    rejected = sum(1 for t in result.tables if t.type is None)
+    lines.append(f"tables  {len(result.tables)} ({rejected} not statements)")
+    lines.append(f"flags  {', '.join(result.flags) or 'none'}")
     return "\n".join(lines)
 
 
