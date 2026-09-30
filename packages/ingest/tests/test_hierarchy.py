@@ -52,3 +52,15 @@ def test_depth_at_nearest_level() -> None:
         ]
     )
     assert [n.depth for n in nodes] == [0, 0, 1]
+
+
+def test_a_row_with_values_and_no_label_is_a_subtotal() -> None:
+    nodes = infer_hierarchy(
+        [
+            row(0, "Inventories", 60, True),
+            row(1, "Cash", 60, True),
+            row(2, "", None, True),
+            row(3, "", None, False),
+        ]
+    )
+    assert [n.is_subtotal for n in nodes] == [False, False, True, False]

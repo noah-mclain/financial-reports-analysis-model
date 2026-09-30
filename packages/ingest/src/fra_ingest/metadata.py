@@ -1,8 +1,10 @@
 """Scale, currency, entity and consolidation for one statement (spec 11, Data flow step 6).
 
 Each is read from the header first, then from the text around the table. Currency alone falls
-back to the currency named most often in the document, flagged ``currency_inferred``, because
-some filings print the currency as a font glyph (Almarai's riyal sign extracts as ``X``).
+back further, because some filings print the currency as a font glyph (Almarai's riyal sign
+extracts as ``X``): to the country of incorporation ("a Saudi Joint Stock Company"), flagged
+``currency_from_domicile``, then to the currency named most often in the document, flagged
+``currency_inferred``.
 """
 
 from __future__ import annotations
@@ -28,6 +30,57 @@ _STANDALONE_PHRASES = (
 _ENTITY_LATIN = ("company", "corporation", "s.a.e", "plc", "limited", "ltd")
 _ENTITY_ARABIC = "شركة"
 _EXCLUDED_ENTITY_STARTS = ("statement", "notes", "the", "these", "for", "as")
+
+_COUNTRY_CURRENCY = {
+    "saudi": "SAR",
+    "egyptian": "EGP",
+    "emirati": "AED",
+    "uae": "AED",
+    "kuwaiti": "KWD",
+    "qatari": "QAR",
+    "bahraini": "BHD",
+    "omani": "OMR",
+}
+# A country adjective, at most two words, then a company form: "a Saudi Joint Stock Company".
+_DOMICILE_LATIN = re.compile(
+    r"\b(" + "|".join(_COUNTRY_CURRENCY) + r")\s+(?:[a-z]+\s+){0,2}?"
+    r"(?:closed\s+)?(?:joint\s+stock\s+company|public\s+shareholding\s+company|public\s+company)\b"
+)
+_SAE = re.compile(r"(?<![\w.])s\.a\.e\b")
+_COUNTRY_CURRENCY_ARABIC = {
+    squash(adjective): currency
+    for adjective, currency in (
+        ("سعودية", "SAR"),
+        ("مصرية", "EGP"),
+        ("إماراتية", "AED"),
+        ("كويتية", "KWD"),
+        ("قطرية", "QAR"),
+        ("بحرينية", "BHD"),
+        ("عمانية", "OMR"),
+    )
+}
+# Space-free: "مساهمة", optionally "عامة" or "مقفلة", then the country adjective.
+_DOMICILE_ARABIC = re.compile(
+    squash("مساهمة")
+    + "(?:"
+    + "|".join((squash("عامة"), squash("مقفلة")))
+    + ")?("
+    + "|".join(_COUNTRY_CURRENCY_ARABIC)
+    + ")"
+)
+
+
+def domicile_currency(text: str) -> str | None:
+    """The currency of the country a company is incorporated in, from a phrase such as
+    "a Saudi Joint Stock Company", "S.A.E." or "شركة مساهمة سعودية"."""
+    lowered = text.casefold()
+    latin = _DOMICILE_LATIN.search(lowered)
+    if latin:
+        return _COUNTRY_CURRENCY[latin.group(1)]
+    if _SAE.search(lowered):
+        return "EGP"
+    arabic = _DOMICILE_ARABIC.search(squash(text))
+    return _COUNTRY_CURRENCY_ARABIC[arabic.group(1)] if arabic else None
 
 
 def _has_entity_marker(text: str) -> bool:
@@ -63,7 +116,11 @@ class Metadata(BaseModel):
 
 
 def detect_metadata(
-    *, header_text: str, context_texts: Sequence[str], document_texts: Sequence[str]
+    *,
+    header_text: str,
+    context_texts: Sequence[str],
+    document_texts: Sequence[str],
+    domicile_texts: Sequence[str] = (),
 ) -> Metadata:
     meta = Metadata()
 
@@ -92,6 +149,10 @@ def detect_metadata(
     elif context_currency is not None:
         meta.currency = context_currency
         meta.signals.append("currency:context")
+    elif domiciles := Counter(c for t in domicile_texts if (c := domicile_currency(t))):
+        meta.currency = domiciles.most_common(1)[0][0]
+        meta.signals.append("currency:domicile")
+        meta.flags.append("currency_from_domicile")
     else:
         counts = Counter(c for t in document_texts if (c := detect_currency(t)))
         if counts:

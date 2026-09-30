@@ -126,3 +126,58 @@ def test_consolidated_only_from_specific_phrases() -> None:
         header_text="", context_texts=["المستقلةالقوائمالمالية"], document_texts=[]
     )
     assert meta.consolidated is False
+
+
+GLYPH_HEADER = "31 December 2025 X '000"
+USD_DOCUMENT = [
+    "issued a USD 500 million Sukuk",
+    "USD 500 million international sukuk",
+    "SAR million",
+]
+
+
+def test_a_domicile_phrase_decides_a_glyph_currency_before_the_document_majority() -> None:
+    meta = detect_metadata(
+        header_text=GLYPH_HEADER,
+        context_texts=["Consolidated Statement of Financial Position"],
+        document_texts=USD_DOCUMENT,
+        domicile_texts=["Almarai Company (the Company) is a Saudi Joint Stock Company, which was"],
+    )
+    assert meta.currency == "SAR"
+    assert "currency:domicile" in meta.signals
+    assert "currency_from_domicile" in meta.flags
+    assert "currency_inferred" not in meta.flags
+
+
+def test_an_arabic_domicile_phrase_is_read_space_free() -> None:
+    meta = detect_metadata(
+        header_text=GLYPH_HEADER,
+        context_texts=[],
+        document_texts=USD_DOCUMENT,
+        domicile_texts=["شركةالمراعي (شركةمساهمةسعودية)"],
+    )
+    assert (meta.currency, meta.flags) == ("SAR", ["currency_from_domicile"])
+
+
+def test_an_egyptian_sae_company_is_in_pounds() -> None:
+    meta = detect_metadata(
+        header_text="2025",
+        context_texts=[],
+        document_texts=USD_DOCUMENT,
+        domicile_texts=["Juhayna Food Industries (S.A.E.)"],
+    )
+    assert meta.currency == "EGP"
+
+
+def test_a_country_name_alone_is_not_a_domicile() -> None:
+    meta = detect_metadata(
+        header_text=GLYPH_HEADER,
+        context_texts=[],
+        document_texts=USD_DOCUMENT,
+        domicile_texts=[
+            "Membership of Joint Stock Companies Inside and Outside of the Kingdom of Saudi Arabia",
+            "operates in Saudi Arabia",
+        ],
+    )
+    assert meta.currency == "USD"
+    assert "currency_inferred" in meta.flags

@@ -55,7 +55,10 @@ def infer_hierarchy(rows: Sequence[RowInput]) -> list[RowNode]:
     for r in rows:
         depth = _depth(r.indent, levels)
         is_section = bool(r.label) and not r.has_values
-        is_subtotal = r.has_values and (r.subtotal_hint or has_subtotal_cue(r.label))
+        # A printed total without a label (a sum under a rule) is a subtotal too.
+        is_subtotal = r.has_values and (
+            r.subtotal_hint or not r.label.strip() or has_subtotal_cue(r.label)
+        )
         if is_section:
             parent = next((s.row for s in reversed(sections) if s.depth < depth), None)
         else:
