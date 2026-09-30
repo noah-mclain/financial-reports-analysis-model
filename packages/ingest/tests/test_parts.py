@@ -114,3 +114,77 @@ def test_column_centre_is_the_mean_of_its_cells() -> None:
     g = grid(ROWS)
     assert column_centre(g, 2, [2, 3]) == 250.0
     assert column_centre(g, 2, [1]) is None
+
+
+def test_a_spanning_value_stays_in_its_own_column() -> None:
+    rows = [r[:] for r in ROWS[:3]]
+    rows[2][3] = ""
+    g = grid(rows)
+    cells = tuple(
+        c.model_copy(update={"col_span": 2}) if (c.row, c.col) == (2, 2) else c for c in g.cells
+    )
+    g = g.model_copy(update={"cells": cells})
+    layout = parse_header(g, StatementType.BALANCE, None)
+    p = build_part(
+        g,
+        layout,
+        Classification(type=StatementType.BALANCE, confidence=0.8),
+        source=TextSource.TEXT,
+    )
+    first, second = p.line_items[1].cells
+    assert first.reported == Decimal("26058632") and first.provenance.col == 2
+    assert second.reported is None and second.raw_text == ""
+    assert "spanned_cell" in second.flags and "numbers_missing" in second.flags
+
+
+def test_a_value_without_any_box_is_recorded_on_the_part() -> None:
+    g = grid(ROWS)
+    g = g.model_copy(update={"cells": tuple(c.model_copy(update={"bbox": None}) for c in g.cells)})
+    layout = parse_header(g, StatementType.BALANCE, None)
+    p = build_part(
+        g,
+        layout,
+        Classification(type=StatementType.BALANCE, confidence=0.8),
+        source=TextSource.TEXT,
+    )
+    assert "value_without_box:r2c2" in p.flags and "value_without_box:r2c3" in p.flags
+    assert p.line_items[1].cells == []
+
+
+def test_right_aligned_labels_indent_from_the_right_edge() -> None:
+    rows = [["31 December 2025", "31 December 2024", "Notes", ""]] + [
+        [v1, v2, "", label]
+        for label, v1, v2 in (("Assets", "", ""), ("Inventories", "10", "20"), ("Cash", "30", "40"))
+    ]
+    g = grid(rows)
+    cells = tuple(
+        c.model_copy(
+            update={
+                "bbox": BBox(
+                    left=c.bbox.left,
+                    top=c.bbox.top,
+                    right=c.bbox.right - (15 if (c.col == 3 and c.row == 2) else 0),
+                    bottom=c.bbox.bottom,
+                )
+            }
+        )
+        if c.bbox is not None
+        else c
+        for c in g.cells
+    )
+    g = g.model_copy(update={"cells": cells})
+    layout = parse_header(g, StatementType.BALANCE, None)
+    assert layout.label_col == 3
+    p = build_part(
+        g,
+        layout,
+        Classification(type=StatementType.BALANCE, confidence=0.8),
+        source=TextSource.TEXT,
+    )
+    right = g.right_edge()
+    assert right == 390
+    assert (
+        p.indents["p156-t0-r1"] == 0
+        and p.indents["p156-t0-r2"] == 15
+        and p.indents["p156-t0-r3"] == 0
+    )

@@ -109,7 +109,13 @@ def build_part(
         if not note:
             label, split = split_note(label)
             note = split or ""
-        texts = {col: grid.text(row, col) for col in layout.value_cols}
+        covering = {col: grid.cell(row, col) for col in layout.value_cols}
+        # A value belongs only to the column it starts in; the rest of a span is empty.
+        starts = {
+            col: c if c is not None and (c.row, c.col) == (row, col) else None
+            for col, c in covering.items()
+        }
+        texts = {col: c.text if c is not None else "" for col, c in starts.items()}
         if not label and not any(texts.values()):
             continue
         item_id = f"p{grid.page_no}-{grid.table_index}-r{row}"
@@ -119,12 +125,14 @@ def build_part(
         for col, period in layout.value_cols.items():
             if not has_values:
                 break
-            grid_cell = grid.cell(row, col)
+            grid_cell = starts[col]
             text = texts[col]
             parsed = parse_number(text) if text else None
             flags = list(parsed.flags) if parsed else ["numbers_missing"]
             if grid_cell is not None:
                 flags.extend(grid_cell.flags)
+            elif covering[col] is not None:
+                flags.append("spanned_cell")
             if per_share:
                 flags.append("per_share")
             bbox = (
@@ -133,7 +141,8 @@ def build_part(
                 else _synthesized_box(grid, row, col)
             )
             if bbox is None:
-                flags.append("no_box")
+                if text:
+                    part.flags.append(f"value_without_box:r{row}c{col}")
                 continue
             if grid_cell is None or grid_cell.bbox is None:
                 flags.append("bbox_synthesized")
