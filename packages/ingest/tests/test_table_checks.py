@@ -166,11 +166,9 @@ def test_a_plain_row_equal_to_the_rows_before_it_is_an_implicit_subtotal() -> No
             ]
         )
     )
-    assert [(c.status, c.detail) for c in checks] == [
-        ("pass", "implicit_subtotal"),
-        ("skipped", "subtotal_scope_unknown"),
-    ]
+    assert [(c.status, c.detail) for c in checks] == [("pass", "implicit_subtotal"), ("pass", "")]
     assert checks[0].line_item_ids == ["r2", "r3", "r4"]
+    assert checks[1].line_item_ids == ["r4", "r5", "r6"]
 
 
 def test_a_single_matching_row_is_not_an_implicit_subtotal() -> None:
@@ -234,3 +232,37 @@ def test_a_clearly_wrong_subtotal_at_the_start_still_fails() -> None:
         )
     )
     assert [(c.status, c.detail) for c in checks] == [("fail", "")]
+
+
+def test_an_implicit_subtotal_of_the_last_rows_replaces_them_in_the_run() -> None:
+    checks = check_subtotals(
+        statement(
+            [
+                item(1, "Profit for the year", "100"),
+                item(2, "Actuarial loss", "-3"),
+                item(3, "Translation", "5"),
+                item(4, "Hedges", "7"),
+                item(5, "Other comprehensive income", "9"),
+                item(6, "Total comprehensive income", "109", subtotal=True),
+            ],
+            StatementType.COMPREHENSIVE_INCOME,
+        )
+    )
+    assert [(c.status, c.detail) for c in checks] == [("pass", "implicit_subtotal"), ("pass", "")]
+    assert checks[0].line_item_ids == ["r2", "r3", "r4", "r5"]
+    assert checks[1].line_item_ids == ["r1", "r5", "r6"]
+
+
+def test_a_row_equal_to_no_sum_of_the_last_rows_stays_plain() -> None:
+    checks = check_subtotals(
+        statement(
+            [
+                item(1, "Inventories", "10"),
+                item(2, "Receivables", "4"),
+                item(3, "Cash", "5"),
+                item(4, "Total current assets", "19", subtotal=True),
+            ]
+        )
+    )
+    assert [(c.status, c.detail) for c in checks] == [("pass", "")]
+    assert checks[0].line_item_ids == ["r1", "r2", "r3", "r4"]

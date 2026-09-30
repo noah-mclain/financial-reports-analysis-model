@@ -6,8 +6,9 @@ their sum, or against their sum plus the previous subtotal (a running total such
 profit after gross profit). A heading row starts a new run but keeps the previous subtotal; a
 subtotal whose run began at a heading and that misses both sums is skipped as
 ``subtotal_scope_uncertain``, since the heading may have cut rows it covers. A plain row equal
-to the sum of the two or more plain rows before it in every period is an implicit subtotal: it
-passes and closes the run. Other subtotals are skipped for Part 3b's sum-based hierarchy.
+to the sum of the last two or more rows of the run in every period is an implicit subtotal: it
+passes and replaces those rows in the run as one addend. Other subtotals are skipped for Part
+3b's sum-based hierarchy.
 """
 
 from __future__ import annotations
@@ -39,19 +40,16 @@ def _result(
     )
 
 
-def _implicit_subtotal(
-    statement: Statement, item: LineItem, run: list[LineItem]
+def _suffix_sum(
+    statement: Statement, item: LineItem, addends: list[LineItem]
 ) -> list[CheckResult] | None:
-    """Pass results when a plain row equals the sum of the two or more plain rows before it in
-    every period, else None."""
-    if len(run) < 2:
-        return None
-    tolerance = _HALF * len(run)
+    """Pass results when ``item`` equals the sum of ``addends`` in every period, else None."""
+    tolerance = _HALF * len(addends)
     results = []
     for period in statement.periods:
         key = period.key
         actual = _value(item, key)
-        values = [_value(i, key) for i in run]
+        values = [_value(i, key) for i in addends]
         if actual is None or any(v is None for v in values):
             return None
         expected = sum((v for v in values if v is not None), Decimal(0))
@@ -68,11 +66,23 @@ def _implicit_subtotal(
                 actual=actual,
                 difference=actual - expected,
                 tolerance=tolerance,
-                line_item_ids=[*(i.id for i in run), item.id],
+                line_item_ids=[*(i.id for i in addends), item.id],
                 detail="implicit_subtotal",
             )
         )
     return results
+
+
+def _implicit_subtotal(
+    statement: Statement, item: LineItem, run: list[LineItem]
+) -> tuple[int, list[CheckResult]] | None:
+    """The length of the shortest suffix of two or more rows of ``run`` that ``item`` equals in
+    every period, with its pass results, else None."""
+    for length in range(2, len(run) + 1):
+        results = _suffix_sum(statement, item, run[-length:])
+        if results is not None:
+            return length, results
+    return None
 
 
 def check_subtotals(statement: Statement) -> list[CheckResult]:
@@ -87,11 +97,12 @@ def check_subtotals(statement: Statement) -> list[CheckResult]:
             continue
         if not item.is_subtotal:
             implicit = _implicit_subtotal(statement, item, run)
-            if implicit is None:
-                run.append(item)
-            else:
-                results.extend(implicit)
-                run, previous, after_heading = [], item, False
+            if implicit is not None:
+                # The implicit subtotal stands in for the rows it sums.
+                length, found = implicit
+                results.extend(found)
+                del run[-length:]
+            run.append(item)
             continue
         for period in statement.periods:
             key = period.key

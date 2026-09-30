@@ -231,9 +231,11 @@ class StructureResult(BaseModel):   # statements.raw.json
       plus the previous subtotal (a running total), per period, with tolerance n x 0.5
       reported units, n the number of rows summed (D6). A heading row (no values) starts a
       new run but keeps the previous subtotal as the running-total candidate. A plain row
-      that equals the sum of the two or more plain rows before it in every period (Almarai's
-      "Equity Attributable to Equity Holders of the Company") is an implicit subtotal: it
-      passes with `implicit_subtotal` and closes the run. A subtotal whose run began right
+      that equals, in every period and within the same tolerance, the sum of the last two or
+      more rows of the run (the shortest such suffix) is an implicit subtotal, such as
+      Almarai's "Equity Attributable to Equity Holders of the Company" or Almarai AR's "other
+      comprehensive income for the year": it passes with `implicit_subtotal` and replaces
+      those rows in the run as one addend, so the explicit total after it stays checkable. A subtotal whose run began right
       after a heading and that misses both candidates is `skipped` with
       `subtotal_scope_uncertain`, since the heading may have cut rows it covers. Other
       subtotals, such as total assets over two section subtotals or Almarai AR's rows whose
