@@ -188,3 +188,20 @@ def test_right_aligned_labels_indent_from_the_right_edge() -> None:
         and p.indents["p156-t0-r2"] == 15
         and p.indents["p156-t0-r3"] == 0
     )
+
+
+def test_a_value_beyond_ten_to_the_fifteen_is_flagged_implausible() -> None:
+    rows = [
+        ROWS[0],
+        ["Merged digits", "", "2,077,685,182,000,000", "(1,000,000,000,000,001)"],
+        ["Largest plausible", "", "1,000,000,000,000,000", "5"],
+    ]
+    g = grid(rows)
+    p = build_part(
+        g,
+        parse_header(g, StatementType.BALANCE, None),
+        Classification(type=StatementType.BALANCE, confidence=0.8),
+        source=TextSource.TEXT,
+    )
+    flagged = [["implausible_magnitude" in c.flags for c in item.cells] for item in p.line_items]
+    assert flagged == [[True, True], [False, False]]

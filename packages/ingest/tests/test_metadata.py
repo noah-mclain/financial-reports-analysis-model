@@ -196,3 +196,28 @@ def test_the_earliest_domicile_phrase_wins_over_later_subsidiaries() -> None:
     )
     assert meta.currency == "SAR"
     assert "currency_from_domicile" in meta.flags
+
+
+def _entity(*lines: str) -> str | None:
+    return detect_metadata(header_text="", context_texts=list(lines), document_texts=[]).entity_name
+
+
+def test_an_arabic_entity_line_starts_with_the_company_marker() -> None:
+    assert _entity("حوكمةالشركة") is None
+    assert _entity("حوكمة الشركة") is None
+    assert _entity("شركة المراعي") == "شركة المراعي"
+    assert _entity("شركةجهينةللصناعاتالغذائية") == "شركةجهينةللصناعاتالغذائية"
+
+
+def test_a_domicile_line_is_not_an_entity_name() -> None:
+    assert _entity("(An Egyptian Joint Stock Company)") is None
+    assert _entity("An Egyptian Joint Stock Company") is None
+    assert _entity("a Saudi Joint Stock Company") is None
+    assert _entity("(شركة مساهمة مصرية)") is None
+    assert _entity("شركة مساهمة مصرية") is None
+
+
+def test_the_entity_line_is_kept_when_a_domicile_line_follows_it() -> None:
+    lines = ("Juhayna Food Industries S.A.E.", "(An Egyptian Joint Stock Company)")
+    assert _entity(*lines) == "Juhayna Food Industries S.A.E."
+    assert _entity(*reversed(lines)) == "Juhayna Food Industries S.A.E."

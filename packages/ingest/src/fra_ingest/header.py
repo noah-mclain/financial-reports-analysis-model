@@ -22,7 +22,11 @@ _YEAR = re.compile(r"(?<!\d)(19|20)\d{2}(?!\d)")
 _NOTE = re.compile(
     r"^\(?\d{1,2}(\s*[-.]\s*\d{1,2})?\)?(\s*[-,]\s*\(?\d{1,2}(\s*[-.]\s*\d{1,2})?\)?)*$"
 )
-_NOTE_HEADERS = frozenset(squash(w) for w in ("note", "notes", "إيضاح", "إيضاحات"))
+_NOTE_HEADERS = frozenset(
+    squash(w) for w in ("note", "notes", "note no.", "إيضاح", "إيضاحات", "إيضاح رقم")
+)
+# Digit groups after the first are thousands groups: "2 077 685 182", "٢٠٧٧ ٦٨٥ ١٨٢".
+_GROUPED = re.compile(r"[(\-]?\d+(?:[\s,\u066c\u060c]\d{3})+(?:\.\d+)?\)?")
 _LETTER = re.compile(r"[^\W\d_]", re.UNICODE)
 _MARKERS = frozenset({"restated", "audited", "unaudited", "معدلة", "مدققة", "غير", "'000"})
 _DURATION_TYPES = frozenset(
@@ -43,9 +47,18 @@ def is_note_ref(text: str) -> bool:
     return bool(text) and _NOTE.match(_plain(text)) is not None
 
 
+def _grouped_amount(text: str) -> bool:
+    """A number printed in digit groups, which OCR can make look like a year and more."""
+    return _GROUPED.fullmatch(_plain(text)) is not None and parse_number(text).value is not None
+
+
 def is_amount(text: str) -> bool:
     """A value: parses as a number and is neither a date nor a bare year."""
-    if not text or parse_period(text) is not None or _YEAR.fullmatch(_plain(text)):
+    if not text:
+        return False
+    if _grouped_amount(text):
+        return True
+    if parse_period(text) is not None or _YEAR.fullmatch(_plain(text)):
         return False
     return parse_number(text).value is not None
 
@@ -78,6 +91,8 @@ def _row_has_amount(grid: Grid, row: int) -> bool:
 
 
 def _is_header_text(text: str) -> bool:
+    if _grouped_amount(text):
+        return False
     return parse_period(text) is not None or squash(text) in _NOTE_HEADERS
 
 

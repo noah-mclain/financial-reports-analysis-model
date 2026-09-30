@@ -38,14 +38,18 @@ def item(n: int, label: str, value: str | None, subtotal: bool = False) -> LineI
     return LineItem(id=f"r{n}", raw_label=label, is_subtotal=subtotal, cells=cells)
 
 
-def statement(items: list[LineItem], kind: StatementType = StatementType.BALANCE) -> Statement:
+def statement(
+    items: list[LineItem],
+    kind: StatementType = StatementType.BALANCE,
+    periods: list[Period] | None = None,
+) -> Statement:
     return Statement(
         id="s",
         document_sha256="a" * 64,
         type=kind,
         currency="SAR",
         scale=1000,
-        periods=[P],
+        periods=periods or [P],
         line_items=items,
     )
 
@@ -266,3 +270,58 @@ def test_a_row_equal_to_no_sum_of_the_last_rows_stays_plain() -> None:
     )
     assert [(c.status, c.detail) for c in checks] == [("pass", "")]
     assert checks[0].line_item_ids == ["r1", "r2", "r3", "r4"]
+
+
+def test_a_wrong_total_right_under_its_heading_fails() -> None:
+    checks = check_subtotals(
+        statement(
+            [
+                item(1, "Current assets", None),
+                item(2, "Inventories", "10"),
+                item(3, "Cash", "5"),
+                item(4, "Total current assets", "20015", subtotal=True),
+            ]
+        )
+    )
+    assert [(c.status, c.detail) for c in checks] == [("fail", "")]
+
+
+def test_a_missing_value_under_a_heading_is_skipped_as_missing() -> None:
+    checks = check_subtotals(
+        statement(
+            [
+                item(1, "Current assets", None),
+                item(2, "Inventories", "10"),
+                item(3, "Cash", "?"),
+                item(4, "Total current assets", "15", subtotal=True),
+            ]
+        )
+    )
+    assert [(c.status, c.detail) for c in checks] == [("skipped", "missing_values")]
+
+
+def test_each_period_under_a_heading_is_judged_on_its_own() -> None:
+    prior = Period(key="2024-12-31", end_date=date(2024, 12, 31), kind=PeriodKind.INSTANT)
+
+    def two(n: int, label: str, values: tuple[str, str] | None, subtotal: bool = False) -> LineItem:
+        base = item(n, label, None, subtotal)
+        if values is None:
+            return base
+        cells = [
+            item(n, label, v).cells[0].model_copy(update={"period_key": key})
+            for key, v in zip((P.key, prior.key), values, strict=True)
+        ]
+        return base.model_copy(update={"cells": cells})
+
+    checks = check_subtotals(
+        statement(
+            [
+                two(1, "Current assets", None),
+                two(2, "Inventories", ("10", "8")),
+                two(3, "Cash", ("5", "4")),
+                two(4, "Total current assets", ("15", "20"), subtotal=True),
+            ],
+            periods=[P, prior],
+        )
+    )
+    assert [(c.period_key, c.status) for c in checks] == [(P.key, "pass"), (prior.key, "fail")]

@@ -84,23 +84,28 @@ def domicile_currency(text: str) -> str | None:
 
 
 def _has_entity_marker(text: str) -> bool:
-    """Check if text contains an entity marker with appropriate boundaries."""
+    """A Latin company form on word boundaries, or a line whose first token starts with
+    "شركة" (so a joined running header such as "حوكمةالشركة" is not one)."""
     lowered = text.casefold()
-    # Check Latin markers with word boundaries
     latin_pattern = r"(?<![\w.])(company|corporation|plc|ltd|limited|s\.a\.e)(?![\w])"
     if re.search(latin_pattern, lowered, re.IGNORECASE):
         return True
-    # Check Arabic marker as substring
-    return _ENTITY_ARABIC in text
+    words = text.split()
+    return bool(words) and words[0].startswith(_ENTITY_ARABIC)
 
 
 def _is_entity_shaped(text: str) -> bool:
-    """Check if text resembles an entity name: at most 10 words, no excluded first word."""
+    """At most 10 words, no excluded first word, and not a domicile line such as
+    "(An Egyptian Joint Stock Company)"."""
     words = text.split()
-    if len(words) > 10:
+    if not words or len(words) > 10:
         return False
-    first_word = words[0].casefold() if words else ""
-    return first_word not in _EXCLUDED_ENTITY_STARTS
+    stripped = text.strip()
+    if stripped.startswith("(") or re.match(r"an?\s", stripped, re.IGNORECASE):
+        return False
+    if _DOMICILE_LATIN.search(stripped.casefold()) or _DOMICILE_ARABIC.search(squash(stripped)):
+        return False
+    return words[0].casefold() not in _EXCLUDED_ENTITY_STARTS
 
 
 class Metadata(BaseModel):

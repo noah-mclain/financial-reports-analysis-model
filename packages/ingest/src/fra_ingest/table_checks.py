@@ -4,11 +4,11 @@ Tolerance is rounding-aware (D6): n x 0.5 reported units, n the number of addend
 is checked only when it directly closes a run of two or more plain rows; it passes against
 their sum, or against their sum plus the previous subtotal (a running total such as operating
 profit after gross profit). A heading row starts a new run but keeps the previous subtotal; a
-subtotal whose run began at a heading and that misses both sums is skipped as
-``subtotal_scope_uncertain``, since the heading may have cut rows it covers. A plain row equal
-to the sum of the last two or more rows of the run in every period is an implicit subtotal: it
-passes and replaces those rows in the run as one addend. Other subtotals are skipped for Part
-3b's sum-based hierarchy.
+subtotal whose run began at a heading that cut rows off the run before it, and that misses both
+sums, is skipped as ``subtotal_scope_uncertain``, since those rows may belong to it. A plain row
+equal to the sum of the last two or more rows of the run in every period is an implicit
+subtotal: it passes and replaces those rows in the run as one addend. Other subtotals are
+skipped for Part 3b's sum-based hierarchy.
 """
 
 from __future__ import annotations
@@ -92,8 +92,10 @@ def check_subtotals(statement: Statement) -> list[CheckResult]:
     after_heading = False
     for item in statement.line_items:
         if not item.cells:
-            # A heading starts a new run; a running total carries across it.
-            run, after_heading = [], True
+            # A heading starts a new run; a running total carries across it. Only a heading
+            # that cut rows off the run makes the next subtotal's scope uncertain.
+            after_heading = after_heading or bool(run)
+            run = []
             continue
         if not item.is_subtotal:
             implicit = _implicit_subtotal(statement, item, run)

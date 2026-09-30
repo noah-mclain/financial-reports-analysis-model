@@ -18,6 +18,8 @@ from fra_ingest.header import HeaderLayout, split_note
 from fra_ingest.label_match import squash
 from fra_ingest.table_grid import Grid
 
+# Larger than any printed statement figure, before scale: merged digit groups (OCR).
+IMPLAUSIBLE = 10**15
 _PER_SHARE = tuple(squash(w) for w in ("per share", "للسهم", "ربحية السهم"))
 
 
@@ -129,6 +131,8 @@ def build_part(
             text = texts[col]
             parsed = parse_number(text) if text else None
             flags = list(parsed.flags) if parsed else ["numbers_missing"]
+            if parsed and parsed.value is not None and abs(parsed.value) > IMPLAUSIBLE:
+                flags.append("implausible_magnitude")
             if grid_cell is not None:
                 flags.extend(grid_cell.flags)
             elif covering[col] is not None:

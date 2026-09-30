@@ -279,3 +279,42 @@ def test_a_duplicate_period_column_is_listed_as_unbound() -> None:
     assert list(layout.value_cols) == [1]
     assert layout.unbound_cols == [2]
     assert "duplicate_period:2:2025-12-31" in layout.evidence
+
+
+def test_an_amount_whose_digit_groups_ocr_merged_is_never_a_date() -> None:
+    assert is_amount("٢٠٧٧ ٦٨٥ ١٨٢") and is_amount("5 175 562 196")
+    assert not is_amount("31 December 2025") and not is_amount("2025")
+    assert not is_amount("٣١ ديسمبر ٢٠٢٤")
+
+
+def test_a_row_of_grouped_amounts_is_data_not_a_header() -> None:
+    layout = parse_header(
+        grid(
+            [
+                ["٣١ ديسمبر ٢٠٢٤", "٣١ ديسمبر ٢٠٢٣", ""],
+                ["٢٠٧٧ ٦٨٥ ١٨٢", "", "إجمالي الأصول"],
+                ["١٠", "٢٠", "النقدية"],
+            ]
+        ),
+        BALANCE,
+        None,
+    )
+    assert layout.header_rows == [0]
+    assert sorted(p.key for p in layout.value_cols.values()) == ["2023-12-31", "2024-12-31"]
+
+
+def test_numbered_note_headers_name_the_note_column() -> None:
+    for header in ("إيضاح رقم", "Note No."):
+        layout = parse_header(
+            grid(
+                [
+                    ["", "31 December 2025", "31 December 2024", header],
+                    ["Cash", "1,200", "1,100", "5"],
+                    ["Inventories", "300", "250", "6"],
+                ]
+            ),
+            BALANCE,
+            None,
+        )
+        assert layout.note_col == 3, header
+        assert sorted(layout.value_cols) == [1, 2] and layout.unbound_cols == []
