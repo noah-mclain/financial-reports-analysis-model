@@ -190,10 +190,13 @@ class StructureResult(BaseModel):   # statements.raw.json
    - locate's title and cue types for the grid's page (`locate.json`, `PageScore`);
    - row labels found in the taxonomy's aliases for each type (`Taxonomy.lookup`, space-free
      comparison for `letters_spaced` labels);
+   - comprehensive-income cue words (`other comprehensive income`, `will not be reclassified`
+     and the like) count as label evidence for that type, because the taxonomy has no
+     comprehensive-income items until week 2;
    - the heading text above the table on its page.
 
    Negative evidence: a note heading (`Note`, `إيضاح` followed by a number) above the table,
-   fewer than three taxonomy hits, or no period header. A grid is a statement when its best
+   or no period header. A grid is a statement when its best
    type reaches `min_confidence` (0.5, `[structure]` in `configs/ingest.toml`); every decision
    and its evidence goes into `StructureResult.tables`.
 5. **Header.** The header rows are those flagged `column_header` plus any leading rows that

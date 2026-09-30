@@ -108,3 +108,53 @@ def test_industry_flags_pass_through() -> None:
     assert classify(g, parse_header(g, BALANCE, None), context, INDEX, 0.5).industry_flags == [
         "likely_bank"
     ]
+
+
+COMPREHENSIVE = StatementType.COMPREHENSIVE_INCOME
+TWO_TITLES = TableContext(
+    title_types=(INCOME, COMPREHENSIVE), cue_types=(), heading_texts=(), industry_flags=()
+)
+
+
+def test_comprehensive_income_by_its_cue_words() -> None:
+    rows = [
+        HEADER,
+        ["Profit for the year", "", "40", "35"],
+        ["Other comprehensive income", "", "3", "2"],
+        ["Items that will not be reclassified to profit or loss", "", "1", "1"],
+        ["Total comprehensive income for the year", "", "43", "37"],
+    ]
+    assert run(rows, TWO_TITLES) is COMPREHENSIVE
+
+
+def test_arabic_comprehensive_income_by_its_cue_words() -> None:
+    rows = [
+        HEADER,
+        ["الدخلالشاملالآخر", "", "3", "2"],
+        ["بنودلنيعادتصنيفها", "", "1", "1"],
+        ["إجماليالدخلالشامل", "", "43", "37"],
+    ]
+    assert run(rows, TWO_TITLES) is COMPREHENSIVE
+
+
+def test_an_income_statement_stays_income_on_a_two_title_page() -> None:
+    rows = [
+        HEADER,
+        ["Revenue", "", "100", "90"],
+        ["Cost of sales", "", "(60)", "(50)"],
+        ["Gross profit", "", "40", "40"],
+        ["Finance costs", "", "(5)", "(4)"],
+        ["Profit for the year", "", "35", "36"],
+    ]
+    assert run(rows, TWO_TITLES) is INCOME
+
+
+def test_a_tie_goes_to_the_first_title_type() -> None:
+    rows = [HEADER, ["Unrelated row", "", "1", "1"]]
+    low = 0.3
+    first_comprehensive = TableContext(title_types=(COMPREHENSIVE, INCOME))
+    first_income = TableContext(title_types=(INCOME, COMPREHENSIVE))
+    g = grid(rows)
+    layout = parse_header(g, BALANCE, None)
+    assert classify(g, layout, first_comprehensive, INDEX, low).type is COMPREHENSIVE
+    assert classify(g, layout, first_income, INDEX, low).type is INCOME

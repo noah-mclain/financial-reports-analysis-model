@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from fra_core.schemas import StatementType
 from fra_ingest.header import HeaderLayout
-from fra_ingest.label_match import LabelIndex
+from fra_ingest.label_match import LabelIndex, squash
 from fra_ingest.table_grid import Grid
 
 _NOTE_HEADING = re.compile(r"^\s*(note|notes|إيضاح|ايضاح)\s*[\d٠-٩]", re.IGNORECASE)
@@ -23,6 +23,19 @@ _LABEL_SATURATION = 6
 _TITLE_WEIGHT = 0.3
 _CUE_WEIGHT = 0.15
 _PERIOD_WEIGHT = 0.1
+# The taxonomy has no comprehensive-income items yet, so these cue words stand in as label hits.
+_COMPREHENSIVE_CUES = tuple(
+    squash(cue)
+    for cue in (
+        "other comprehensive income",
+        "comprehensive income",
+        "will not be reclassified",
+        "may be reclassified",
+        "reclassified subsequently",
+        "الدخل الشامل",
+        "يعاد تصنيفها",
+    )
+)
 
 
 class TableContext(BaseModel):
@@ -41,6 +54,22 @@ class Classification(BaseModel):
     confidence: float = 0.0
     evidence: list[str] = Field(default_factory=list)
     industry_flags: list[str] = Field(default_factory=list)
+
+
+def _cue_hits(labels: list[str]) -> int:
+    squashed = [squash(label) for label in labels]
+    return sum(any(cue in label for cue in _COMPREHENSIVE_CUES) for label in squashed)
+
+
+def _tie_rank(statement: StatementType, context: TableContext) -> tuple[int, int, int]:
+    """Higher wins: earlier in the page's titles, then its cues, then enum order."""
+    titles, cues = context.title_types, context.cue_types
+    members = list(StatementType)
+    return (
+        -titles.index(statement) if statement in titles else -len(titles) - 1,
+        -cues.index(statement) if statement in cues else -len(cues) - 1,
+        -members.index(statement),
+    )
 
 
 def classify(
@@ -65,6 +94,8 @@ def classify(
     evidence: list[str] = []
     for statement in StatementType:
         hits = index.hits(labels, statement)
+        if statement is StatementType.COMPREHENSIVE_INCOME:
+            hits += _cue_hits(labels)
         score = _LABEL_WEIGHT * min(hits, _LABEL_SATURATION) / _LABEL_SATURATION + _PERIOD_WEIGHT
         if statement in context.title_types:
             score += _TITLE_WEIGHT
@@ -73,7 +104,7 @@ def classify(
         scores[statement] = round(score, 3)
         evidence.append(f"{statement.value}:hits={hits}:score={score:.2f}")
 
-    best = max(scores, key=lambda s: scores[s])
+    best = max(scores, key=lambda s: (scores[s], *_tie_rank(s, context)))
     if scores[best] < min_confidence:
         return Classification(
             type=None,
