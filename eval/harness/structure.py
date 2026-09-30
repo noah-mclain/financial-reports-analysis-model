@@ -3,8 +3,9 @@
     uv run python eval/harness/structure.py
 
 Per document: statements per enabled type, scale and currency against the manifest, identity
-status and flags. Per language pair: numeric rows without a counterpart. Only the Almarai pair
-is gated. Writes var/eval/structure-golden.json.
+status (from the balance identity checks in table_checks.json) and flags. Per language pair:
+numeric rows without a counterpart. Only the Almarai pair is gated. Writes
+var/eval/structure-golden.json.
 """
 
 from __future__ import annotations
@@ -32,7 +33,8 @@ PAIRS = (
     ("juhayna-2024-en-consolidated", "juhayna-2024-ar-consolidated", False),
     ("edita-2025-en-consolidated-eas", "edita-2025-ar-consolidated", False),
 )
-_FLAGGED = {"scale_missing", "scale_conflict", "currency_missing", "currency_conflict"}
+_SCALE_FLAGS = {"scale_missing", "scale_conflict"}
+_CURRENCY_FLAGS = {"currency_missing", "currency_conflict"}
 
 
 def value_rows(statement: Statement) -> Counter[tuple[tuple[str, Decimal], ...]]:
@@ -56,11 +58,28 @@ def pair_misses(a: Statement, b: Statement) -> tuple[int, int]:
 
 
 def metadata_ok(statement: Statement, expected_scale: object, expected_currency: str) -> bool:
-    """A manifest scale of exactly "unconfirmed" is not scored; only the currency is."""
-    scale_ok = expected_scale == "unconfirmed" or statement.scale == expected_scale
-    if scale_ok and statement.currency == expected_currency:
-        return True
-    return bool(_FLAGGED & set(statement.flags))
+    """Scale and currency are each right or flagged unsure by their own flags. A manifest scale
+    of exactly "unconfirmed" is not scored."""
+    flags = set(statement.flags)
+    scale_ok = (
+        expected_scale == "unconfirmed"
+        or statement.scale == expected_scale
+        or bool(_SCALE_FLAGS & flags)
+    )
+    currency_ok = statement.currency == expected_currency or bool(_CURRENCY_FLAGS & flags)
+    return scale_ok and currency_ok
+
+
+def identity_status(checks: list[CheckResult]) -> tuple[str, str]:
+    """ "failed" when any balance identity check failed, "ok" when at least one passed and none
+    failed, else "skipped" with the skipped checks' details ("not_checked" when there were none)."""
+    identity = [c for c in checks if c.kind == "balance_identity"]
+    if any(c.status == "fail" for c in identity):
+        return "failed", ""
+    if any(c.status == "pass" for c in identity):
+        return "ok", ""
+    details = sorted({c.detail for c in identity if c.detail})
+    return "skipped", ",".join(details) or "not_checked"
 
 
 def identity_excuses(
@@ -122,12 +141,10 @@ def main(argv: list[str] | None = None) -> int:
                 row["statements"][statement_type.value] = None
                 continue
             ok = metadata_ok(s, entry["scale"], str(entry["currency"]))
-            identity = (
-                "failed"
-                if "identity_failed" in s.flags
-                else "skipped"
-                if "identity_totals_not_found" in s.flags
-                else "ok"
+            identity, identity_detail = (
+                identity_status(checks.get(s.id, []))
+                if s.type is StatementType.BALANCE
+                else ("n/a", "")
             )
             row["statements"][statement_type.value] = {
                 "pages": s.source_pages,
@@ -136,6 +153,7 @@ def main(argv: list[str] | None = None) -> int:
                 "currency": s.currency,
                 "metadata_ok": ok,
                 "identity": identity,
+                "identity_detail": identity_detail,
                 "flags": s.flags,
             }
             if not ok:
@@ -175,7 +193,8 @@ def main(argv: list[str] | None = None) -> int:
                 f"{misses if misses is not None else 'missing statement'}"
             )
             if gated and misses != (0, 0):
-                reasons.append(f"{left}/{right} {statement_type.value}: {misses}")
+                found_text = "missing statement" if misses is None else str(misses)
+                reasons.append(f"{left}/{right} {statement_type.value}: {found_text}")
     print("PASS" if not reasons else "FAIL\n  " + "\n  ".join(reasons))
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "structure-golden.json").write_text(

@@ -1,9 +1,19 @@
 """The structure eval's arithmetic (spec 11, Scoring)."""
 
+import json
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
-from harness.structure import identity_excuses, metadata_ok, pair_misses, value_rows
+import pytest
+from harness import structure as harness
+from harness.structure import (
+    identity_excuses,
+    identity_status,
+    metadata_ok,
+    pair_misses,
+    value_rows,
+)
 
 from fra_core.schemas import (
     BBox,
@@ -16,6 +26,8 @@ from fra_core.schemas import (
     Statement,
     StatementType,
 )
+from fra_ingest.config import IngestConfig
+from fra_ingest.results import StructureResult
 
 P = Period(key="2025-12-31", end_date=date(2025, 12, 31), kind=PeriodKind.INSTANT)
 BOX = BBox(left=1, top=1, right=2, bottom=2)
@@ -112,3 +124,113 @@ def test_identity_failure_is_not_excused_by_an_unrelated_row() -> None:
     check = _identity_check(["r0", "r1"])
     assert identity_excuses(_with_missing_cell(2), [check]) is None
     assert identity_excuses(statement(["1"]), []) == []
+
+
+def test_each_metadata_field_is_excused_only_by_its_own_flag() -> None:
+    usd = statement(["1"], scale=1, currency="USD", flags=["scale_missing"])
+    assert not metadata_ok(usd, "unconfirmed", "EGP")
+    assert not metadata_ok(usd, 1, "EGP")
+    wrong_scale = statement(["1"], scale=1, currency="EGP", flags=["currency_missing"])
+    assert not metadata_ok(wrong_scale, 1000, "EGP")
+    assert metadata_ok(statement(["1"], scale=1, flags=["scale_conflict"]), 1000, "SAR")
+    assert metadata_ok(statement(["1"], currency="XXX", flags=["currency_conflict"]), 1000, "SAR")
+
+
+def _check(status: str, detail: str = "", kind: str = "balance_identity") -> CheckResult:
+    return CheckResult(
+        id=f"c-{status}-{kind}",
+        statement_id="s",
+        kind=kind,
+        period_key=P.key,
+        status=status,
+        detail=detail,
+    )
+
+
+def test_identity_status_comes_from_the_identity_checks() -> None:
+    assert identity_status([_check("pass"), _check("skipped", "missing_values")]) == ("ok", "")
+    assert identity_status([_check("pass"), _check("fail")]) == ("failed", "")
+    assert identity_status([_check("skipped", "missing_values")]) == ("skipped", "missing_values")
+    assert identity_status([_check("pass", kind="subtotal")]) == ("skipped", "not_checked")
+    assert identity_status([]) == ("skipped", "not_checked")
+
+
+def _run_main(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    found: dict[str, tuple[list[Statement], list[CheckResult]]],
+) -> tuple[int, dict[str, object]]:
+    manifest = tmp_path / "golden" / "manifest.yaml"
+    manifest.parent.mkdir()
+    manifest.write_text(
+        json.dumps(
+            {
+                "documents": [
+                    {"id": key, "file": f"{key}.pdf", "scale": 1000, "currency": "SAR"}
+                    for key in found
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = IngestConfig(artifact_root=tmp_path / "artifacts", enabled_types=(P_TYPE,))
+
+    def fake_structure(pdf: Path, *_args: object, **_kw: object) -> StructureResult:
+        statements, checks = found[pdf.stem]
+        sha = format(abs(hash(pdf.stem)), "x").rjust(64, "0")[:64]
+        out = config.artifact_root / sha
+        out.mkdir(parents=True, exist_ok=True)
+        (out / "table_checks.json").write_text(
+            json.dumps([c.model_dump(mode="json") for c in checks]), encoding="utf-8"
+        )
+        return StructureResult(
+            version="2", sha256=sha, convert_version="1", settings_hash="", statements=statements
+        )
+
+    monkeypatch.setattr(harness, "MANIFEST", manifest)
+    monkeypatch.setattr(harness, "OUT", tmp_path / "eval")
+    monkeypatch.setattr(harness, "load_config", lambda: config)
+    monkeypatch.setattr(harness, "structure_pdf", fake_structure)
+    monkeypatch.setattr(harness, "PAIRS", (("en", "ar", True),))
+    code = harness.main([])
+    written = json.loads((tmp_path / "eval" / "structure-golden.json").read_text("utf-8"))
+    return code, written
+
+
+P_TYPE = StatementType.BALANCE
+
+
+def test_an_identity_failure_with_every_value_present_fails_the_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    good = statement(["10", "10"])
+    failed = statement(["10", "9"], flags=["identity_failed"])
+    check = _identity_check(["r0", "r1"])
+    code, written = _run_main(
+        tmp_path, monkeypatch, {"en": ([good], []), "ar": ([failed], [check])}
+    )
+    assert code == 1
+    assert "ar: identity failed with every value present" in written["reasons"]
+    documents = {d["id"]: d for d in written["documents"]}
+    assert documents["ar"]["statements"]["balance"]["identity"] == "failed"
+    assert documents["en"]["statements"]["balance"]["identity"] == "skipped"
+
+
+def test_a_gated_pair_missing_a_statement_fails_the_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    code, written = _run_main(
+        tmp_path, monkeypatch, {"en": ([statement(["10"])], []), "ar": ([], [])}
+    )
+    assert code == 1
+    assert "en/ar balance: missing statement" in written["reasons"]
+
+
+def test_a_clean_run_passes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    passed = _check("pass")
+    code, written = _run_main(
+        tmp_path,
+        monkeypatch,
+        {"en": ([statement(["10"])], [passed]), "ar": ([statement(["10"])], [passed])},
+    )
+    assert code == 0 and written["reasons"] == []
