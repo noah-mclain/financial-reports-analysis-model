@@ -239,7 +239,7 @@ def test_a_restated_sub_row_marks_the_second_column_without_a_duplicate() -> Non
     layout = parse_header(
         grid(
             [
-                ["", "2025", "2025"],
+                ["", "2025", "2024"],
                 ["", "", "(Restated)"],
                 ["Cash", "5", "4"],
             ],
@@ -249,8 +249,25 @@ def test_a_restated_sub_row_marks_the_second_column_without_a_duplicate() -> Non
         None,
     )
     assert layout.header_rows == [0, 1]
-    assert [p.restated for p in layout.value_cols.values()] == [False, True]
-    assert not any(e.startswith("duplicate_period") for e in layout.evidence)
+    assert {p.key: p.restated for p in layout.value_cols.values()} == {
+        "2025-12-31": False,
+        "2024-12-31": True,
+    }
+    assert layout.unbound_cols == []
+
+
+def test_a_same_date_restated_column_is_listed_as_unbound() -> None:
+    layout = parse_header(
+        grid(
+            [["", "31 December 2025", "31 December 2025 (Restated)"], ["Cash", "5", "4"]],
+            header_rows=1,
+        ),
+        BALANCE,
+        None,
+    )
+    assert list(layout.value_cols) == [1]
+    assert layout.unbound_cols == [2]
+    assert "restated_duplicate:2:2025-12-31" in layout.evidence
 
 
 def test_a_duplicate_period_column_is_listed_as_unbound() -> None:

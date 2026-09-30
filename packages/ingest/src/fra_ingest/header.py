@@ -199,11 +199,13 @@ def parse_header(grid: Grid, statement_type: StatementType, date_hint: str | Non
             layout.evidence.append(f"period_unbound:{col}")
             continue
         period = _with_date_hint(period, header, hint)
-        if any(
-            (p.key, p.restated) == (period.key, period.restated) for p in layout.value_cols.values()
-        ):
+        bound = next((p for p in layout.value_cols.values() if p.key == period.key), None)
+        if bound is not None:
+            twin = period.restated or bound.restated
             layout.unbound_cols.append(col)
-            layout.evidence.append(f"duplicate_period:{col}:{period.key}")
+            layout.evidence.append(
+                f"{'restated_duplicate' if twin else 'duplicate_period'}:{col}:{period.key}"
+            )
             continue
         layout.value_cols[col] = period
     return layout
