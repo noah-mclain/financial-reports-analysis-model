@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 UV ?= uv
 
-.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert
+.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -51,6 +51,10 @@ eval-locate: ## Score the locator (TARGET=golden, or TARGET=train / dev; model_t
 eval-convert: ## Convert the golden set, a child process per document; records time and peak memory
 	@$(MAKE) --no-print-directory unhide-pth
 	$(UV) run python eval/harness/convert.py $(if $(ONLY),--only $(ONLY)) $(if $(FRESH),--no-cache)
+
+eval-structure: ## Structure the golden set: statements, scale and currency, identity, language pairs
+	@$(MAKE) --no-print-directory unhide-pth
+	$(UV) run python eval/harness/structure.py
 
 corpus-check: ## Validate the corpus pool split (no network)
 	$(UV) run python scripts/corpus.py check
