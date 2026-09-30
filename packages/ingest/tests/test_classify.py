@@ -1,0 +1,110 @@
+"""Tables to statement types (spec 11, Data flow step 4)."""
+
+from fra_core.schemas import StatementType
+from fra_core.taxonomy.loader import load_taxonomy
+from fra_ingest.classify import TableContext, classify
+from fra_ingest.header import parse_header
+from fra_ingest.label_match import LabelIndex
+from fra_ingest.table_grid import Grid, GridCell
+
+INDEX = LabelIndex(load_taxonomy())
+BALANCE, INCOME = StatementType.BALANCE, StatementType.INCOME
+
+
+def grid(rows: list[list[str]]) -> Grid:
+    cells = tuple(
+        GridCell(text=t, row=r, col=c, bbox=None, page_no=1, is_column_header=r == 0)
+        for r, row in enumerate(rows)
+        for c, t in enumerate(row)
+        if t
+    )
+    return Grid(
+        table_ref="#/tables/0",
+        docling_path="d",
+        page_no=1,
+        page_width=600,
+        num_rows=len(rows),
+        num_cols=4,
+        cells=cells,
+    )
+
+
+def run(rows: list[list[str]], context: TableContext) -> StatementType | None:
+    g = grid(rows)
+    return classify(g, parse_header(g, BALANCE, None), context, INDEX, 0.5).type
+
+
+NO_TITLE = TableContext(title_types=(), cue_types=(), heading_texts=(), industry_flags=())
+BALANCE_PAGE = TableContext(
+    title_types=(BALANCE,), cue_types=(), heading_texts=(), industry_flags=()
+)
+HEADER = ["", "Notes", "2025", "2024"]
+
+
+def test_an_income_statement_by_its_labels() -> None:
+    rows = [
+        HEADER,
+        ["Revenue", "33", "100", "90"],
+        ["Cost of sales", "27", "(60)", "(50)"],
+        ["Gross profit", "", "40", "40"],
+        ["Finance costs", "", "(5)", "(4)"],
+    ]
+    assert run(rows, NO_TITLE) is INCOME
+
+
+def test_a_balance_sheet_by_labels_and_page_title() -> None:
+    rows = [HEADER, ["Inventories", "19", "5", "4"], ["Total assets", "", "50", "40"]]
+    assert run(rows, BALANCE_PAGE) is BALANCE
+
+
+def test_arabic_labels_without_word_boundaries_count() -> None:
+    rows = [
+        HEADER,
+        ["الإيرادات", "", "100", "90"],
+        ["تكلفةالمبيعات", "", "(60)", "(50)"],
+        ["مجملالربح", "", "40", "40"],
+        ["تكاليف التمويل", "", "(5)", "(4)"],
+    ]
+    assert run(rows, NO_TITLE) is INCOME
+
+
+def test_a_table_without_a_period_header_is_not_a_statement() -> None:
+    rows = [["Danko Maras", "Fawaz", "Prince Naif", ""], ["CFO", "CEO", "Chairman", ""]]
+    g = grid(rows)
+    result = classify(g, parse_header(g, BALANCE, None), BALANCE_PAGE, INDEX, 0.5)
+    assert result.type is None and "no_period_header" in result.evidence
+
+
+def test_a_notes_table_under_a_note_heading_is_rejected() -> None:
+    rows = [
+        HEADER,
+        ["Inventories", "", "5", "4"],
+        ["Total assets", "", "50", "40"],
+        ["Revenue", "", "1", "1"],
+    ]
+    context = TableContext(
+        title_types=(BALANCE,),
+        cue_types=(),
+        heading_texts=("12. Property, plant and equipment",),
+        industry_flags=(),
+    )
+    g = grid(rows)
+    note_heading = TableContext(
+        title_types=(BALANCE,),
+        cue_types=(),
+        heading_texts=("Note 12 Property, plant and equipment",),
+        industry_flags=(),
+    )
+    assert classify(g, parse_header(g, BALANCE, None), note_heading, INDEX, 0.5).type is None
+    assert classify(g, parse_header(g, BALANCE, None), context, INDEX, 0.5).type is BALANCE
+
+
+def test_industry_flags_pass_through() -> None:
+    rows = [HEADER, ["Inventories", "19", "5", "4"], ["Total assets", "", "50", "40"]]
+    context = TableContext(
+        title_types=(BALANCE,), cue_types=(), heading_texts=(), industry_flags=("likely_bank",)
+    )
+    g = grid(rows)
+    assert classify(g, parse_header(g, BALANCE, None), context, INDEX, 0.5).industry_flags == [
+        "likely_bank"
+    ]
