@@ -209,8 +209,12 @@ class StructureResult(BaseModel):   # statements.raw.json
    periods by their header text, never by position.
 6. **Metadata.** Scale from the header text, then the caption, then the page text; per-share
    rows are exempt. Currency the same way; when none of those name one (Almarai's glyph), the
-   currency named most often in the text of the converted pages is used, then in the text of
-   the whole document from Part 1's page cache, and flagged `currency_inferred`. Disagreeing signals set `conflict` and a flag.
+   country of incorporation decides: the earliest page with a phrase such as "a Saudi Joint
+   Stock Company", "S.A.E." or "شركة مساهمة سعودية" (Part 1's page text with its reading
+   variants, and the docling texts) gives that country's currency, flagged
+   `currency_from_domicile`. Only when no page names one is the currency named most often in
+   the document used, flagged `currency_inferred`. Disagreeing signals set `conflict` and a
+   flag.
 7. **Line items.** One per data row: label text, note reference, and a `Cell` per bound period
    with `reported` from `parse_number`, `raw_text`, parser flags, and provenance (page, box,
    table ref, row, column, source text or OCR from the page mode).
@@ -223,8 +227,15 @@ class StructureResult(BaseModel):   # statements.raw.json
    row above with smaller depth.
 10. **Checks.**
     - Subtotal: a subtotal row that directly closes a run of two or more plain rows (since
-      the section start or the previous subtotal) is checked against their sum, per period,
-      with tolerance n x 0.5 reported units, n the number of rows summed (D6). Other
+      the section start or the previous subtotal) is checked against their sum, or their sum
+      plus the previous subtotal (a running total), per period, with tolerance n x 0.5
+      reported units, n the number of rows summed (D6). A heading row (no values) starts a
+      new run but keeps the previous subtotal as the running-total candidate. A plain row
+      that equals the sum of the two or more plain rows before it in every period (Almarai's
+      "Equity Attributable to Equity Holders of the Company") is an implicit subtotal: it
+      passes with `implicit_subtotal` and closes the run. A subtotal whose run began right
+      after a heading and that misses both candidates is `skipped` with
+      `subtotal_scope_uncertain`, since the heading may have cut rows it covers. Other
       subtotals, such as total assets over two section subtotals or Almarai AR's rows whose
       section headings are merged, are `skipped` with `subtotal_scope_unknown`; 3b's
       sum-based hierarchy checks them.
@@ -297,4 +308,4 @@ Other bilingual pairs are reported, not gated, until the resolution question is 
 | R30 | Scanned figures too small for OCR at the converted resolution (Juhayna), or read but lost when docling matches words to cells | Task 1 measures OCR scale 4 and 5 and cell matching off; the gaps are flagged `numbers_missing` and the identity fails visibly |
 | R31 | docling's JSON changes shape between versions | Our own models of the fields used, and a golden contract test; docling is pinned |
 | R32 | A notes table taken for a primary statement | Note headings, taxonomy hits and period headers as evidence, every decision recorded in `tables`, and the balance identity as a backstop |
-| R33 | Glyph currencies with no currency word near the statement | Document-level inference, flagged `currency_inferred`; the manifest scores it |
+| R33 | Glyph currencies with no currency word near the statement | Country of incorporation from the earliest page naming it, flagged `currency_from_domicile`; else document-level inference, flagged `currency_inferred`; the manifest scores it |

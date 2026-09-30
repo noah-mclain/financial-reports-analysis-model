@@ -151,3 +151,86 @@ def test_run_checks_flags_the_statement() -> None:
     checked, results = run_checks(s, INDEX)
     assert "subtotal_failed" in checked.flags and "identity_totals_not_found" in checked.flags
     assert results
+
+
+def test_a_plain_row_equal_to_the_rows_before_it_is_an_implicit_subtotal() -> None:
+    checks = check_subtotals(
+        statement(
+            [
+                item(1, "Equity and liabilities", None),
+                item(2, "Share capital", "10"),
+                item(3, "Retained earnings", "6"),
+                item(4, "Equity attributable to owners", "16"),
+                item(5, "Non-controlling interest", "2"),
+                item(6, "Total equity", "18", subtotal=True),
+            ]
+        )
+    )
+    assert [(c.status, c.detail) for c in checks] == [
+        ("pass", "implicit_subtotal"),
+        ("skipped", "subtotal_scope_unknown"),
+    ]
+    assert checks[0].line_item_ids == ["r2", "r3", "r4"]
+
+
+def test_a_single_matching_row_is_not_an_implicit_subtotal() -> None:
+    checks = check_subtotals(
+        statement(
+            [
+                item(1, "Cash", "5"),
+                item(2, "Deposits", "5"),
+                item(3, "Other", "7"),
+                item(4, "Total", "17", subtotal=True),
+            ]
+        )
+    )
+    assert [c.status for c in checks] == ["pass"]
+    assert checks[0].line_item_ids == ["r1", "r2", "r3", "r4"]
+
+
+def test_a_heading_keeps_the_running_total() -> None:
+    income = statement(
+        [
+            item(1, "Revenue", "100"),
+            item(2, "Cost of sales", "-60"),
+            item(3, "Gross profit", "40", subtotal=True),
+            item(4, "Operating expenses", None),
+            item(5, "Selling", "-10"),
+            item(6, "Admin", "-5"),
+            item(7, "Operating profit", "25", subtotal=True),
+        ],
+        StatementType.INCOME,
+    )
+    checks = check_subtotals(income)
+    assert [c.status for c in checks] == ["pass", "pass"]
+    assert checks[1].line_item_ids == ["r3", "r5", "r6", "r7"]
+
+
+def test_a_subtotal_after_a_heading_that_misses_both_candidates_is_uncertain() -> None:
+    checks = check_subtotals(
+        statement(
+            [
+                item(1, "Profit", "100"),
+                item(2, "Items that may be reclassified", None),
+                item(3, "Translation", "5"),
+                item(4, "Hedges", "7"),
+                item(5, "Total comprehensive income", "112", subtotal=True),
+            ],
+            StatementType.COMPREHENSIVE_INCOME,
+        )
+    )
+    assert [(c.status, c.detail) for c in checks] == [("skipped", "subtotal_scope_uncertain")]
+    assert checks[0].expected == Decimal("12") and checks[0].actual == Decimal("112")
+
+
+def test_a_clearly_wrong_subtotal_at_the_start_still_fails() -> None:
+    checks = check_subtotals(
+        statement(
+            [
+                item(1, "Inventories", "10"),
+                item(2, "Cash", "5"),
+                item(3, "Total current assets", "40", subtotal=True),
+            ]
+        )
+    )
+    assert [(c.status, c.detail) for c in checks] == [("fail", "")]

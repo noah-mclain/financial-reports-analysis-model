@@ -17,14 +17,12 @@ from fra_ingest.structure import structure_pdf
 pytestmark = pytest.mark.golden
 
 
-def statements(
-    golden: Callable[[str], Path], name: str, tmp_path: Path
-) -> dict[StatementType, Statement]:
+def statements(golden: Callable[[str], Path], name: str) -> dict[StatementType, Statement]:
     pdf = golden(name)
     if not (artifact_dir(pdf) / "convert.json").exists():
         pytest.skip("run make eval-convert first")
     config = load_config()
-    result = structure_pdf(pdf, config, None)
+    result = structure_pdf(pdf, config, None, use_cache=False)
     found: dict[StatementType, Statement] = {}
     for s in result.statements:
         found.setdefault(s.type, s)
@@ -46,8 +44,8 @@ def value_rows(statement: Statement) -> Counter[tuple[tuple[str, Decimal], ...]]
     return rows
 
 
-def test_almarai_en_balance_sheet(golden: Callable[[str], Path], tmp_path: Path) -> None:
-    found = statements(golden, "almarai-2025-en-annualreport.pdf", tmp_path)
+def test_almarai_en_balance_sheet(golden: Callable[[str], Path]) -> None:
+    found = statements(golden, "almarai-2025-en-annualreport.pdf")
     balance = found[StatementType.BALANCE]
     assert balance.source_pages == [156, 157, 158]
     assert (balance.currency, balance.scale) == ("SAR", 1000)
@@ -62,10 +60,10 @@ def test_almarai_en_balance_sheet(golden: Callable[[str], Path], tmp_path: Path)
     [StatementType.BALANCE, StatementType.INCOME, StatementType.COMPREHENSIVE_INCOME],
 )
 def test_almarai_english_and_arabic_figures_match(
-    golden: Callable[[str], Path], tmp_path: Path, statement_type: StatementType
+    golden: Callable[[str], Path], statement_type: StatementType
 ) -> None:
-    english = statements(golden, "almarai-2025-en-annualreport.pdf", tmp_path)[statement_type]
-    arabic = statements(golden, "almarai-2025-ar-annualreport.pdf", tmp_path)[statement_type]
+    english = statements(golden, "almarai-2025-en-annualreport.pdf")[statement_type]
+    arabic = statements(golden, "almarai-2025-ar-annualreport.pdf")[statement_type]
     en_rows, ar_rows = value_rows(english), value_rows(arabic)
     assert en_rows - ar_rows == Counter(), (
         f"English rows without an Arabic counterpart: {en_rows - ar_rows}"

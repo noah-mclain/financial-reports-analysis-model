@@ -3,8 +3,8 @@
 Each is read from the header first, then from the text around the table. Currency alone falls
 back further, because some filings print the currency as a font glyph (Almarai's riyal sign
 extracts as ``X``): to the country of incorporation ("a Saudi Joint Stock Company"), flagged
-``currency_from_domicile``, then to the currency named most often in the document, flagged
-``currency_inferred``.
+``currency_from_domicile`` (the earliest page naming one), then to the currency named most
+often in the document, flagged ``currency_inferred``.
 """
 
 from __future__ import annotations
@@ -122,6 +122,8 @@ def detect_metadata(
     document_texts: Sequence[str],
     domicile_texts: Sequence[str] = (),
 ) -> Metadata:
+    """``domicile_texts`` come in page order: the first one naming a country of incorporation
+    decides, since the reporting company comes before its subsidiaries."""
     meta = Metadata()
 
     header_scale = detect_scale(header_text)
@@ -149,8 +151,8 @@ def detect_metadata(
     elif context_currency is not None:
         meta.currency = context_currency
         meta.signals.append("currency:context")
-    elif domiciles := Counter(c for t in domicile_texts if (c := domicile_currency(t))):
-        meta.currency = domiciles.most_common(1)[0][0]
+    elif domicile := next((c for t in domicile_texts if (c := domicile_currency(t))), None):
+        meta.currency = domicile
         meta.signals.append("currency:domicile")
         meta.flags.append("currency_from_domicile")
     else:

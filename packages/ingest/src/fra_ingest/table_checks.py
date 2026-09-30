@@ -3,7 +3,11 @@
 Tolerance is rounding-aware (D6): n x 0.5 reported units, n the number of addends. A subtotal
 is checked only when it directly closes a run of two or more plain rows; it passes against
 their sum, or against their sum plus the previous subtotal (a running total such as operating
-profit after gross profit). Other subtotals are skipped for Part 3b's sum-based hierarchy.
+profit after gross profit). A heading row starts a new run but keeps the previous subtotal; a
+subtotal whose run began at a heading and that misses both sums is skipped as
+``subtotal_scope_uncertain``, since the heading may have cut rows it covers. A plain row equal
+to the sum of the two or more plain rows before it in every period is an implicit subtotal: it
+passes and closes the run. Other subtotals are skipped for Part 3b's sum-based hierarchy.
 """
 
 from __future__ import annotations
@@ -35,16 +39,59 @@ def _result(
     )
 
 
+def _implicit_subtotal(
+    statement: Statement, item: LineItem, run: list[LineItem]
+) -> list[CheckResult] | None:
+    """Pass results when a plain row equals the sum of the two or more plain rows before it in
+    every period, else None."""
+    if len(run) < 2:
+        return None
+    tolerance = _HALF * len(run)
+    results = []
+    for period in statement.periods:
+        key = period.key
+        actual = _value(item, key)
+        values = [_value(i, key) for i in run]
+        if actual is None or any(v is None for v in values):
+            return None
+        expected = sum((v for v in values if v is not None), Decimal(0))
+        if abs(actual - expected) > tolerance:
+            return None
+        results.append(
+            _result(
+                statement,
+                "subtotal",
+                key,
+                item.id,
+                "pass",
+                expected=expected,
+                actual=actual,
+                difference=actual - expected,
+                tolerance=tolerance,
+                line_item_ids=[*(i.id for i in run), item.id],
+                detail="implicit_subtotal",
+            )
+        )
+    return results
+
+
 def check_subtotals(statement: Statement) -> list[CheckResult]:
     results: list[CheckResult] = []
     run: list[LineItem] = []
     previous: LineItem | None = None
+    after_heading = False
     for item in statement.line_items:
         if not item.cells:
-            run, previous = [], None
+            # A heading starts a new run; a running total carries across it.
+            run, after_heading = [], True
             continue
         if not item.is_subtotal:
-            run.append(item)
+            implicit = _implicit_subtotal(statement, item, run)
+            if implicit is None:
+                run.append(item)
+            else:
+                results.extend(implicit)
+                run, previous, after_heading = [], item, False
             continue
         for period in statement.periods:
             key = period.key
@@ -86,7 +133,10 @@ def check_subtotals(statement: Statement) -> list[CheckResult]:
             expected, addends, ids = min(candidates, key=lambda c: abs(actual - c[0]))
             tolerance = _HALF * addends
             difference = actual - expected
-            status = "pass" if abs(difference) <= tolerance else "fail"
+            status, detail = ("pass", "") if abs(difference) <= tolerance else ("fail", "")
+            if status == "fail" and after_heading:
+                # The heading may have cut rows the subtotal covers (items above it).
+                status, detail = "skipped", "subtotal_scope_uncertain"
             results.append(
                 _result(
                     statement,
@@ -99,9 +149,10 @@ def check_subtotals(statement: Statement) -> list[CheckResult]:
                     difference=difference,
                     tolerance=tolerance,
                     line_item_ids=[*ids, item.id],
+                    detail=detail,
                 )
             )
-        run, previous = [], item
+        run, previous, after_heading = [], item, False
     return results
 
 

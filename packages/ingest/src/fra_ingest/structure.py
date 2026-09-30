@@ -41,7 +41,7 @@ from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
 from fra_ingest.visual_order import repair_grid, repair_text
 
-STRUCTURE_VERSION = "1"
+STRUCTURE_VERSION = "1"  # bump whenever structure's output can change
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -61,7 +61,9 @@ class StructureInputs(BaseModel):
     cue_types: dict[int, tuple[StatementType, ...]]
     documents: list[tuple[str, DlDocument]]
     convert: ConvertResult
-    domicile_texts: list[str] = Field(default_factory=list)
+    domicile_texts: dict[int, list[str]] = Field(
+        default_factory=dict, description="Part 1's page texts and their reading variants, by page"
+    )
 
 
 def _headings(document: DlDocument, grid: Grid, visual: bool) -> list[str]:
@@ -195,6 +197,12 @@ def structure_document(
         if t.prov and t.text
     ]
     document_texts = [*docling_texts, *(t for t in inputs.page_texts.values() if t)]
+    by_page: dict[int, list[str]] = {n: list(t) for n, t in inputs.domicile_texts.items()}
+    for _, document in inputs.documents:
+        for t in document.texts:
+            if t.prov and t.text:
+                by_page.setdefault(t.prov[0].page_no, []).append(t.text)
+    domicile_texts = [text for n in sorted(by_page) for text in by_page[n]]
 
     parts: list[PartialStatement] = []
     metas: dict[tuple[StatementType, int], Metadata] = {}
@@ -237,7 +245,7 @@ def structure_document(
                 header_text=part.header_text,
                 context_texts=[*candidate.headings, inputs.page_texts.get(grid.page_no, "")],
                 document_texts=document_texts,
-                domicile_texts=[*inputs.domicile_texts, *docling_texts],
+                domicile_texts=domicile_texts,
             ),
         )
 
@@ -286,6 +294,7 @@ def _settings_hash(config: IngestConfig, convert: ConvertResult) -> str:
         "structure": STRUCTURE_VERSION,
         "convert": convert.settings_hash,
         "min_confidence": config.min_confidence,
+        "enabled_types": sorted(t.value for t in config.enabled_types),
         "taxonomy": load_taxonomy().version,
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
@@ -355,7 +364,7 @@ def structure_pdf(
             if r.docling_path
         ],
         convert=converted,
-        domicile_texts=[v for p in pages for v in reading_variants(p.text, p.visual_arabic)],
+        domicile_texts={p.page_no: reading_variants(p.text, p.visual_arabic) for p in pages},
     )
     result, checks = structure_document(inputs, config)
     result = result.model_copy(

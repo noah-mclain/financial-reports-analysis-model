@@ -181,3 +181,18 @@ def test_a_country_name_alone_is_not_a_domicile() -> None:
     )
     assert meta.currency == "USD"
     assert "currency_inferred" in meta.flags
+
+
+def test_the_earliest_domicile_phrase_wins_over_later_subsidiaries() -> None:
+    meta = detect_metadata(
+        header_text=GLYPH_HEADER,
+        context_texts=[],
+        document_texts=USD_DOCUMENT,
+        domicile_texts=[
+            "Almarai Company is a Saudi Joint Stock Company",
+            "Beyti Company (S.A.E.), a subsidiary",
+            "International Dairy and Juice (Egypt) S.A.E.",
+        ],
+    )
+    assert meta.currency == "SAR"
+    assert "currency_from_domicile" in meta.flags
