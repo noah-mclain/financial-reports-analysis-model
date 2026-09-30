@@ -40,7 +40,7 @@ def cells(rows: list[list[str]], x0: float = 60) -> list[dict[str, object]]:
     return out
 
 
-def table(ref: int, page: int, rows: list[list[str]]) -> dict[str, object]:
+def table(ref: int, page: int, rows: list[list[str]], x0: float = 60) -> dict[str, object]:
     return {
         "self_ref": f"#/tables/{ref}",
         "prov": [
@@ -49,7 +49,7 @@ def table(ref: int, page: int, rows: list[list[str]]) -> dict[str, object]:
                 "bbox": {"l": 50, "t": 700, "r": 700, "b": 300, "coord_origin": "BOTTOMLEFT"},
             }
         ],
-        "data": {"num_rows": len(rows), "num_cols": 4, "table_cells": cells(rows)},
+        "data": {"num_rows": len(rows), "num_cols": 4, "table_cells": cells(rows, x0)},
     }
 
 
@@ -142,9 +142,10 @@ def test_decisions_name_the_statement_each_table_became() -> None:
 
 
 def test_two_balance_sheets_on_one_page_are_flagged_ambiguous() -> None:
+    # Columns that do not line up keep the second table from continuing the first.
     doubled = DlDocument.model_validate(
         {
-            "tables": [table(0, 1, PAGE_1), table(1, 1, PAGE_1)],
+            "tables": [table(0, 1, PAGE_1), table(1, 1, PAGE_1, x0=160)],
             "texts": [],
             "pages": {"1": {"page_no": 1, "size": {"width": 800, "height": 1000}}},
         }
@@ -205,3 +206,68 @@ def test_a_tail_page_below_confidence_continues_the_statement_before_it() -> Non
     assert decision.type is StatementType.INCOME
     assert "continuation_of:income" in decision.evidence
     assert decision.statement_id == statements[0].id
+
+
+def _income_pages(second: list[list[str]], second_page: int = 2, x0: float = 60) -> DlDocument:
+    pages = sorted({1, second_page})
+    return DlDocument.model_validate(
+        {
+            "tables": [table(0, 1, INCOME_1), table(1, second_page, second, x0)],
+            "texts": [],
+            "pages": {
+                str(n): {"page_no": n, "size": {"width": 800, "height": 1000}} for n in pages
+            },
+        }
+    )
+
+
+def _income_inputs(
+    document: DlDocument, titles: dict[int, tuple[StatementType, ...]]
+) -> StructureInputs:
+    base = inputs([("docling/p1-2.json", document)])
+    return base.model_copy(
+        update={
+            "page_texts": {1: "Statement of profit or loss"},
+            "title_types": {1: (StatementType.INCOME,), **titles},
+            "cue_types": {n: (StatementType.INCOME,) for n in titles},
+            "page_modes": {n: PageMode.TEXT for n in (1, *titles)},
+        }
+    )
+
+
+def _tail_decision(
+    document: DlDocument, titles: dict[int, tuple[StatementType, ...]]
+) -> tuple[list[int], list[str], StatementType | None]:
+    result, _ = structure_document(_income_inputs(document, titles), IngestConfig())
+    income = [s for s in result.statements if s.type is StatementType.INCOME]
+    assert len(income) == 1
+    decision = next(t for t in result.tables if t.table_ref == "#/tables/1")
+    return income[0].source_pages, decision.evidence, decision.type
+
+
+def test_a_tail_page_titled_as_another_statement_does_not_continue() -> None:
+    pages, evidence, kind = _tail_decision(
+        _income_pages(INCOME_2), {2: (StatementType.COMPREHENSIVE_INCOME,)}
+    )
+    assert pages == [1]
+    assert not any(e.startswith("continuation_of:") for e in evidence)
+    assert kind is not StatementType.INCOME
+
+
+def test_a_tail_page_with_other_periods_stays_unattached() -> None:
+    other = [["", "Notes", "2023 SAR '000", "2022 SAR '000"], *INCOME_2[1:]]
+    pages, evidence, kind = _tail_decision(_income_pages(other), {2: ()})
+    assert pages == [1]
+    assert kind is None and "continuation_of:income" not in evidence
+
+
+def test_a_tail_page_with_shifted_columns_stays_unattached() -> None:
+    pages, evidence, kind = _tail_decision(_income_pages(INCOME_2, x0=160), {2: ()})
+    assert pages == [1]
+    assert kind is None and "continuation_of:income" not in evidence
+
+
+def test_a_tail_page_two_pages_after_the_part_stays_unattached() -> None:
+    pages, evidence, kind = _tail_decision(_income_pages(INCOME_2, second_page=3), {3: ()})
+    assert pages == [1]
+    assert kind is None and "continuation_of:income" not in evidence

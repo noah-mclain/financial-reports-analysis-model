@@ -25,23 +25,26 @@ from fra_ingest.child import convert_in_child
 from fra_ingest.classify import Classification, TableContext, classify
 from fra_ingest.config import IngestConfig
 from fra_ingest.continuation import continues_part, inherit_periods, merge_continuations
-from fra_ingest.convert import CONVERT_VERSION
+from fra_ingest.convert import CONVERT_VERSION, settings_hash
+from fra_ingest.converter import docling_version
 from fra_ingest.docling_json import DlDocument, load_docling_json
+from fra_ingest.errors import IngestError
 from fra_ingest.header import parse_header
 from fra_ingest.hierarchy import RowInput, infer_hierarchy
 from fra_ingest.label_match import LabelIndex
 from fra_ingest.metadata import Metadata, detect_metadata
 from fra_ingest.ocr import OcrEngine
+from fra_ingest.ocr_policy import plan_ranges
 from fra_ingest.pages import read_pages
 from fra_ingest.parts import PartialStatement, build_part
-from fra_ingest.results import ConvertResult, StructureResult, TableDecision
-from fra_ingest.stage import load_or_locate
+from fra_ingest.results import ConvertResult, LocateResult, StructureResult, TableDecision
+from fra_ingest.stage import load_or_locate, page_ocr_languages
 from fra_ingest.table_checks import run_checks
 from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
 from fra_ingest.visual_order import repair_grid, repair_text
 
-STRUCTURE_VERSION = "1"  # bump whenever structure's output can change
+STRUCTURE_VERSION = "2"  # bump whenever structure's output can change
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -137,16 +140,20 @@ def _only_below_confidence(result: Classification) -> bool:
 
 
 def _continued_part(
-    grid: Grid, hint: str | None, parts: Sequence[PartialStatement]
+    grid: Grid,
+    hint: str | None,
+    parts: Sequence[PartialStatement],
+    titles: Sequence[StatementType],
 ) -> PartialStatement | None:
     """The statement part a low-confidence grid continues: the latest part ending on its page
-    or the page before, whose periods and value columns the grid matches."""
+    or the page before, whose periods and value columns the grid matches. A page titled as
+    other statements only (``titles``, from locate) continues nothing."""
     previous = next(
         (p for p in reversed(parts) if p.last_page in (grid.page_no, grid.page_no - 1)), None
     )
-    if previous is None or not continues_part(
-        parse_header(grid, previous.type, hint), grid, previous
-    ):
+    if previous is None or (titles and previous.type not in titles):
+        return None
+    if not continues_part(parse_header(grid, previous.type, hint), grid, previous):
         return None
     return previous
 
@@ -209,7 +216,8 @@ def structure_document(
     for candidate in sorted(candidates, key=lambda c: c.grid.page_no):
         grid, result, hint = candidate.grid, candidate.result, candidate.hint
         if result.type is None:
-            continued = _continued_part(grid, hint, parts)
+            titles = inputs.title_types.get(grid.page_no, ())
+            continued = _continued_part(grid, hint, parts, titles)
             if continued is None:
                 continue
             evidence = f"continuation_of:{continued.type.value}"
@@ -310,14 +318,47 @@ def _convert(pdf: Path, config: IngestConfig) -> ConvertResult:
     return convert_in_child(pdf, config)
 
 
-def _stored_convert(path: Path) -> ConvertResult | None:
+def _missing_docling(out_dir: Path, result: ConvertResult) -> list[str]:
+    return [
+        r.docling_path
+        for r in result.ranges
+        if r.docling_path and not (out_dir / r.docling_path).is_file()
+    ]
+
+
+def _stored_convert(out_dir: Path, digest: str) -> ConvertResult | None:
+    """``convert.json`` when convert would write the same today and its docling files exist."""
+    path = out_dir / "convert.json"
     if not path.is_file():
         return None
     try:
         stored = ConvertResult.model_validate_json(path.read_text(encoding="utf-8"))
     except ValidationError:
         return None
-    return stored if stored.version == CONVERT_VERSION else None
+    if stored.version != CONVERT_VERSION or stored.settings_hash != digest:
+        return None
+    return None if _missing_docling(out_dir, stored) else stored
+
+
+def current_convert(
+    pdf: Path,
+    config: IngestConfig,
+    ocr: OcrEngine | None,
+    located: LocateResult,
+    convert: Callable[[Path, IngestConfig], ConvertResult],
+) -> ConvertResult:
+    """The stored convert result when it is current and complete, else a fresh conversion."""
+    out_dir = config.artifact_root / located.document.sha256
+    plans = plan_ranges(located, page_ocr_languages(pdf, config, ocr), config)
+    digest = settings_hash(config, plans, docling_version(), located.version)
+    stored = _stored_convert(out_dir, digest)
+    if stored is not None:
+        return stored
+    converted = convert(pdf, config)
+    missing = _missing_docling(out_dir, converted)
+    if missing:
+        raise IngestError("convert_failed", f"docling output missing: {', '.join(missing)}")
+    return converted
 
 
 def structure_pdf(
@@ -331,7 +372,7 @@ def structure_pdf(
     started = time.perf_counter()
     located = load_or_locate(pdf, config, ocr)
     out_dir = config.artifact_root / located.document.sha256
-    converted = _stored_convert(out_dir / "convert.json") or convert(pdf, config)
+    converted = current_convert(pdf, config, ocr, located, convert)
 
     digest = _settings_hash(config, converted)
     target = out_dir / "statements.raw.json"
@@ -371,9 +412,10 @@ def structure_pdf(
         update={"settings_hash": digest, "timings": {"structure": time.perf_counter() - started}}
     )
     out_dir.mkdir(parents=True, exist_ok=True)
-    _write(target, result.model_dump_json(indent=2))
+    # Checks first: a present statements.raw.json promises the checks beside it are current.
     _write(
         out_dir / "table_checks.json",
         json.dumps([c.model_dump(mode="json") for c in checks], indent=2, ensure_ascii=False),
     )
+    _write(target, result.model_dump_json(indent=2))
     return result

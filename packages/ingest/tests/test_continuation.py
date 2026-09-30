@@ -208,3 +208,30 @@ def test_a_period_with_no_column_centre_in_either_part_stays_apart() -> None:
     base_missing = part(159, [FY25, FY24], {"FY2025": 250}, ["Revenue"])
     full = part(160, [FY25, FY24], {"FY2025": 250, "FY2024": 350}, ["x"])
     assert len(merge_continuations([base_missing, full])) == 2
+
+
+def test_a_tail_table_on_the_same_page_merges_in_table_order() -> None:
+    first = part(160, [FY25, FY24], {"FY2025": 250, "FY2024": 350}, ["Revenue"])
+    first = first.model_copy(update={"table_refs": ["d#/tables/3"]})
+    tail = part(160, [FY25, FY24], {"FY2025": 252, "FY2024": 349}, ["Earnings per share"])
+    tail = tail.model_copy(update={"table_refs": ["d#/tables/12"]})
+    merged = merge_continuations([tail, first])
+    assert len(merged) == 1
+    assert [i.raw_label for i in merged[0].line_items] == ["Revenue", "Earnings per share"]
+    assert merged[0].table_refs == ["d#/tables/3", "d#/tables/12"]
+    assert (merged[0].first_page, merged[0].last_page) == (160, 160)
+
+
+def test_an_inherited_column_is_no_longer_reported_unbound() -> None:
+    grid = _grid(
+        160, [["", "31 December 2025", "thousands X"], ["Profit", "10", "9"]], (100, 252, 351)
+    )
+    layout = HeaderLayout(
+        header_rows=[0],
+        label_col=0,
+        value_cols={1: FY25},
+        unbound_cols=[2],
+        evidence=["period_unbound:2"],
+    )
+    previous = part(159, [FY25, FY24], {"FY2025": 250, "FY2024": 350}, ["Revenue"])
+    assert "period_unbound:2" not in inherit_periods(layout, grid, previous).evidence

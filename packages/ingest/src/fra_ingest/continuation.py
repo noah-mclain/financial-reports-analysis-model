@@ -1,6 +1,6 @@
 """Statements continued across pages (spec 11, Data flow step 8).
 
-Parts of one type on consecutive pages merge when their periods match and their value
+Parts of one type on the same or consecutive pages merge when their periods match and their value
 columns line up. A continuation page whose header leaves a value column without a date
 (Almarai AR, p160) takes that column's period from the previous page, by position.
 """
@@ -46,6 +46,7 @@ def inherit_periods(layout: HeaderLayout, grid: Grid, previous: PartialStatement
             continue
         value_cols[col] = match
         bound_keys.add(match.key)
+        evidence = [e for e in evidence if e != f"period_unbound:{col}"]
         evidence.append(f"inherited:{col}:{match.key}")
     return layout.model_copy(
         update={
@@ -77,7 +78,10 @@ def continues_part(layout: HeaderLayout, grid: Grid, previous: PartialStatement)
 
 
 def _continues(first: PartialStatement, second: PartialStatement) -> bool:
-    if second.type is not first.type or second.first_page != first.last_page + 1:
+    if second.type is not first.type or second.first_page not in (
+        first.last_page,
+        first.last_page + 1,
+    ):
         return False
     keys = {p.key for p in second.periods}
     if keys != {p.key for p in first.periods}:
@@ -91,8 +95,17 @@ def _continues(first: PartialStatement, second: PartialStatement) -> bool:
     return True
 
 
+def _table_index(part: PartialStatement) -> int:
+    """N of the first table's "...#/tables/N"; -1 when it has none."""
+    ref = part.table_refs[0] if part.table_refs else ""
+    tail = ref.rpartition("/tables/")[2]
+    return int(tail) if tail.isdigit() else -1
+
+
 def merge_continuations(parts: Sequence[PartialStatement]) -> list[PartialStatement]:
-    ordered = sorted(parts, key=lambda p: (p.type.value, p.first_page))
+    """Parts of one type in page order, then table order on a page, each merged into the one
+    before it when it starts on that part's last page or the next and its columns line up."""
+    ordered = sorted(parts, key=lambda p: (p.type.value, p.first_page, _table_index(p)))
     merged: list[PartialStatement] = []
     for part in ordered:
         if merged and _continues(merged[-1], part):
