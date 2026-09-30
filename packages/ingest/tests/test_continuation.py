@@ -2,10 +2,11 @@
 
 from datetime import date
 
-from fra_core.schemas import BBox, LineItem, Period, PeriodKind, StatementType
+from fra_core.schemas import BBox, LineItem, Period, PeriodKind, StatementType, TextSource
+from fra_ingest.classify import Classification
 from fra_ingest.continuation import continues_part, inherit_periods, merge_continuations
 from fra_ingest.header import HeaderLayout
-from fra_ingest.parts import PartialStatement
+from fra_ingest.parts import PartialStatement, build_part
 from fra_ingest.table_grid import Grid, GridCell
 
 FY25 = Period(key="FY2025", end_date=date(2025, 12, 31), kind=PeriodKind.DURATION, months=12)
@@ -174,3 +175,36 @@ def test_a_grid_with_no_bound_columns_does_not_continue() -> None:
     previous = part(159, [FY25, FY24], {"FY2025": 250, "FY2024": 350}, ["Revenue"])
     layout, grid = _tail(160, (255, 348), ())
     assert not continues_part(layout, grid, previous)
+
+
+def test_an_inherited_column_keeps_position_order_and_the_parts_still_merge() -> None:
+    previous = part(159, [FY24, FY25], {"FY2024": 250, "FY2025": 350}, ["Revenue"])
+    grid = _grid(160, [["", "", "31 December 2025"], ["Profit", "10", "9"]], (100, 250, 350))
+    layout = HeaderLayout(
+        header_rows=[0],
+        label_col=0,
+        value_cols={2: FY25},
+        unbound_cols=[1],
+        evidence=["period_unbound:1"],
+    )
+    inherited = inherit_periods(layout, grid, previous)
+    assert list(inherited.value_cols) == [1, 2]
+    assert [p.key for p in inherited.value_cols.values()] == ["FY2024", "FY2025"]
+    tail = build_part(
+        grid,
+        inherited,
+        Classification(type=INCOME, confidence=0.8),
+        source=TextSource.TEXT,
+    )
+    merged = merge_continuations([previous, tail])
+    assert len(merged) == 1
+    assert (merged[0].first_page, merged[0].last_page) == (159, 160)
+
+
+def test_a_period_with_no_column_centre_in_either_part_stays_apart() -> None:
+    base = part(159, [FY25, FY24], {"FY2025": 250, "FY2024": 350}, ["Revenue"])
+    no_centre = part(160, [FY25, FY24], {"FY2025": 250}, ["x"])
+    assert len(merge_continuations([base, no_centre])) == 2
+    base_missing = part(159, [FY25, FY24], {"FY2025": 250}, ["Revenue"])
+    full = part(160, [FY25, FY24], {"FY2025": 250, "FY2024": 350}, ["x"])
+    assert len(merge_continuations([base_missing, full])) == 2

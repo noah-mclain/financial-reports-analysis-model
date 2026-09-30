@@ -48,7 +48,11 @@ def inherit_periods(layout: HeaderLayout, grid: Grid, previous: PartialStatement
         bound_keys.add(match.key)
         evidence.append(f"inherited:{col}:{match.key}")
     return layout.model_copy(
-        update={"value_cols": value_cols, "unbound_cols": unbound, "evidence": evidence}
+        update={
+            "value_cols": dict(sorted(value_cols.items())),
+            "unbound_cols": unbound,
+            "evidence": evidence,
+        }
     )
 
 
@@ -75,11 +79,14 @@ def continues_part(layout: HeaderLayout, grid: Grid, previous: PartialStatement)
 def _continues(first: PartialStatement, second: PartialStatement) -> bool:
     if second.type is not first.type or second.first_page != first.last_page + 1:
         return False
-    if [p.key for p in first.periods] != [p.key for p in second.periods]:
+    keys = {p.key for p in second.periods}
+    if keys != {p.key for p in first.periods}:
         return False
     tolerance = COLUMN_TOLERANCE * first.page_width
-    for key, centre in second.column_centres.items():
-        if key in first.column_centres and abs(first.column_centres[key] - centre) > tolerance:
+    for key in keys:
+        if key not in first.column_centres or key not in second.column_centres:
+            return False
+        if abs(first.column_centres[key] - second.column_centres[key]) > tolerance:
             return False
     return True
 
