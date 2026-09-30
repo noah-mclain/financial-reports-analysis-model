@@ -38,3 +38,7 @@ def test_subtotal_cues_in_both_languages() -> None:
     assert has_subtotal_cue("مجموع حقوق الملكية")
     assert has_subtotal_cue("إجماليالموجودات")
     assert not has_subtotal_cue("Inventories")
+    assert not has_subtotal_cue("مجموعة الشركات")
+    assert not has_subtotal_cue("مجموعةالشركات")
+    assert not has_subtotal_cue("Totality of assets")
+    assert has_subtotal_cue("مجموعالموجودات")

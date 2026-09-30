@@ -43,9 +43,9 @@ def _levels(indents: Sequence[float]) -> list[float]:
 
 
 def _depth(indent: float | None, levels: Sequence[float]) -> int:
-    if indent is None:
+    if indent is None or not levels:
         return 0
-    return max(i for i, level in enumerate(levels) if indent >= level - _INDENT_TOLERANCE)
+    return min(range(len(levels)), key=lambda i: abs(indent - levels[i]))
 
 
 def infer_hierarchy(rows: Sequence[RowInput]) -> list[RowNode]:

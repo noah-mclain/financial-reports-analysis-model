@@ -41,3 +41,14 @@ def test_sections_subtotals_and_parents() -> None:
 def test_rows_without_boxes_sit_at_depth_zero() -> None:
     nodes = infer_hierarchy([row(1, "Revenue", None), row(2, "Cost of sales", None)])
     assert [n.depth for n in nodes] == [0, 0]
+
+
+def test_depth_at_nearest_level() -> None:
+    nodes = infer_hierarchy(
+        [
+            row(1, "A", 50),
+            row(2, "B", 52),
+            row(3, "C", 55),
+        ]
+    )
+    assert [n.depth for n in nodes] == [0, 0, 1]

@@ -20,8 +20,21 @@ def squash(text: str) -> str:
 
 
 def has_subtotal_cue(label: str) -> bool:
-    squashed = squash(label)
-    return any(squashed.startswith(cue) for cue in SUBTOTAL_CUES)
+    tokens = normalize_label(label).split()
+    if not tokens:
+        return False
+    # First token is exactly a cue
+    if tokens[0] in SUBTOTAL_CUES:
+        return True
+    # Single token: check if starts with cue but not a feminine/plural variant
+    if len(tokens) == 1:
+        token = tokens[0]
+        for cue in SUBTOTAL_CUES:
+            if token.startswith(cue):
+                is_feminine = cue == "مجموع" and len(token) > len(cue) and token[len(cue)] == "ه"
+                is_plural = cue == "total" and len(token) > len(cue) and token[len(cue)] == "s"
+                return not (is_feminine or is_plural)
+    return False
 
 
 class LabelIndex:
