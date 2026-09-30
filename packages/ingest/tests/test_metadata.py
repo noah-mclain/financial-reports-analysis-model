@@ -62,3 +62,67 @@ def test_entity_and_consolidation_from_headings() -> None:
         header_text="", context_texts=["Standalone statement of profit or loss"], document_texts=[]
     )
     assert standalone.consolidated is False
+
+
+def test_entity_markers_must_match_word_boundaries() -> None:
+    # "company" inside "accompanying" should not match
+    meta = detect_metadata(header_text="", context_texts=["Accompanying notes"], document_texts=[])
+    assert meta.entity_name is None
+
+    # "Statement of financial position of the company" starts with "statement"
+    meta = detect_metadata(
+        header_text="",
+        context_texts=["Statement of financial position of the company"],
+        document_texts=[],
+    )
+    assert meta.entity_name is None
+
+    # "The accompanying notes are an integral part of these financial statements"
+    # starts with "the" and has "notes"
+    meta = detect_metadata(
+        header_text="",
+        context_texts=["The accompanying notes are an integral part of these financial statements"],
+        document_texts=[],
+    )
+    assert meta.entity_name is None
+
+
+def test_consolidated_only_from_specific_phrases() -> None:
+    # "Separate components of equity" alone should give None (not a full phrase)
+    meta = detect_metadata(
+        header_text="", context_texts=["Separate components of equity"], document_texts=[]
+    )
+    assert meta.consolidated is None
+
+    # "Separate financial statements" is a specific phrase -> False
+    meta = detect_metadata(
+        header_text="", context_texts=["Separate financial statements"], document_texts=[]
+    )
+    assert meta.consolidated is False
+
+    # "Separate statement" is a specific phrase -> False
+    meta = detect_metadata(header_text="", context_texts=["Separate statement"], document_texts=[])
+    assert meta.consolidated is False
+
+    # "Stand-alone statement" -> False
+    meta = detect_metadata(
+        header_text="", context_texts=["Stand-alone statement"], document_texts=[]
+    )
+    assert meta.consolidated is False
+
+    # Consolidated marker in any text wins over standalone in another
+    meta = detect_metadata(
+        header_text="",
+        context_texts=[
+            "Separate components of equity",
+            "Consolidated statement of financial position",
+        ],
+        document_texts=[],
+    )
+    assert meta.consolidated is True
+
+    # Arabic standalone phrase -> False
+    meta = detect_metadata(
+        header_text="", context_texts=["المستقلةالقوائمالمالية"], document_texts=[]
+    )
+    assert meta.consolidated is False

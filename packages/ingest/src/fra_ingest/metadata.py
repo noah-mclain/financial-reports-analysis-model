@@ -7,6 +7,7 @@ some filings print the currency as a font glyph (Almarai's riyal sign extracts a
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from collections.abc import Sequence
 
@@ -16,8 +17,37 @@ from fra_core.units import detect_currency, detect_scale
 from fra_ingest.label_match import squash
 
 _CONSOLIDATED = ("consolidated", "المجمع", "الموحد")
-_STANDALONE = ("standalone", "separate", "المستقل", "المنفصل")
-_ENTITY = ("company", "corporation", "s.a.e", "plc", "limited", "ltd", "شركة")
+_STANDALONE_PHRASES = (
+    "separate financial statements",
+    "separate statement",
+    "standalone",
+    "stand-alone",
+    "المستقلة",
+    "المنفصلة",
+)
+_ENTITY_LATIN = ("company", "corporation", "s.a.e", "plc", "limited", "ltd")
+_ENTITY_ARABIC = "شركة"
+_EXCLUDED_ENTITY_STARTS = ("statement", "notes", "the", "these", "for", "as")
+
+
+def _has_entity_marker(text: str) -> bool:
+    """Check if text contains an entity marker with appropriate boundaries."""
+    lowered = text.casefold()
+    # Check Latin markers with word boundaries
+    latin_pattern = r"(?<![\w.])(company|corporation|plc|ltd|limited|s\.a\.e)(?![\w])"
+    if re.search(latin_pattern, lowered, re.IGNORECASE):
+        return True
+    # Check Arabic marker as substring
+    return _ENTITY_ARABIC in text
+
+
+def _is_entity_shaped(text: str) -> bool:
+    """Check if text resembles an entity name: at most 10 words, no excluded first word."""
+    words = text.split()
+    if len(words) > 10:
+        return False
+    first_word = words[0].casefold() if words else ""
+    return first_word not in _EXCLUDED_ENTITY_STARTS
 
 
 class Metadata(BaseModel):
@@ -71,13 +101,23 @@ def detect_metadata(
         else:
             meta.flags.append("currency_missing")
 
+    # Check all context texts for consolidated markers first
+    has_consolidated = any(
+        any(squash(m) in squash(text) for m in _CONSOLIDATED) for text in context_texts
+    )
+    if has_consolidated:
+        meta.consolidated = True
+
     for text in context_texts:
-        lowered = text.casefold()
-        if meta.entity_name is None and any(marker in lowered for marker in _ENTITY):
+        # Extract entity name
+        if meta.entity_name is None and _has_entity_marker(text) and _is_entity_shaped(text):
             meta.entity_name = " ".join(text.split())
-        squashed = squash(text)
-        if meta.consolidated is None and any(squash(m) in squashed for m in _CONSOLIDATED):
-            meta.consolidated = True
-        elif meta.consolidated is None and any(squash(m) in squashed for m in _STANDALONE):
-            meta.consolidated = False
+
+        # Extract consolidation status only if not already set to True
+        if meta.consolidated is None:
+            lowered = text.casefold()
+            # Check for standalone phrases
+            if any(phrase.casefold() in lowered for phrase in _STANDALONE_PHRASES):
+                meta.consolidated = False
+
     return meta
