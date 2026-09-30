@@ -186,3 +186,79 @@ def test_a_table_with_no_amounts_has_no_value_columns() -> None:
         None,
     )
     assert layout.value_cols == {} and layout.unbound_cols == []
+
+
+def _moved(header: str) -> str:
+    layout = parse_header(
+        grid([["", header], ["Revenue", "100"]], header_rows=1), BALANCE, "As at 30 June 2025"
+    )
+    return next(iter(layout.value_cols.values())).end_date.isoformat()
+
+
+def test_a_header_naming_a_month_or_a_full_date_is_never_re_dated() -> None:
+    for header in ("31 Dec 2024", "31 May 2024", "31 ديسمبر 2024", "31/12/2024", "2024-12-31"):
+        assert _moved(header) == header_date(header), header
+
+
+def header_date(header: str) -> str:
+    return {"31 May 2024": "2024-05-31"}.get(header, "2024-12-31")
+
+
+def test_year_only_headers_with_currency_or_restated_markers_move() -> None:
+    for header in ("2024", "2024 EGP", "2024 (Restated) EGP", "2024 ألف جنيه"):
+        assert _moved(header) == "2024-06-30", header
+
+
+def test_two_comparatives_keep_their_own_dates_under_a_hint() -> None:
+    layout = parse_header(
+        grid([["", "30 June 2025", "31 Dec 2024"], ["Cash", "5", "4"]], header_rows=1),
+        BALANCE,
+        "As at 30 June 2025",
+    )
+    assert [p.key for p in layout.value_cols.values()] == ["2025-06-30", "2024-12-31"]
+
+
+def test_a_scale_and_currency_sub_row_joins_the_header() -> None:
+    layout = parse_header(
+        grid(
+            [
+                ["", "", "31 December 2025", "31 December 2024"],
+                ["", "", "EGP '000", "EGP '000"],
+                ["Revenue", "33", "22,064,876", "20,979,512"],
+            ],
+            header_rows=1,
+        ),
+        BALANCE,
+        None,
+    )
+    assert layout.header_rows == [0, 1]
+    assert "EGP '000" in layout.header_texts[2]
+
+
+def test_a_restated_sub_row_marks_the_second_column_without_a_duplicate() -> None:
+    layout = parse_header(
+        grid(
+            [
+                ["", "2025", "2025"],
+                ["", "", "(Restated)"],
+                ["Cash", "5", "4"],
+            ],
+            header_rows=1,
+        ),
+        BALANCE,
+        None,
+    )
+    assert layout.header_rows == [0, 1]
+    assert [p.restated for p in layout.value_cols.values()] == [False, True]
+    assert not any(e.startswith("duplicate_period") for e in layout.evidence)
+
+
+def test_a_duplicate_period_column_is_listed_as_unbound() -> None:
+    layout = parse_header(
+        grid([["", "31 December 2025", "31 December 2025"], ["Cash", "5", "4"]], header_rows=1),
+        BALANCE,
+        None,
+    )
+    assert list(layout.value_cols) == [1]
+    assert layout.unbound_cols == [2]
+    assert "duplicate_period:2:2025-12-31" in layout.evidence

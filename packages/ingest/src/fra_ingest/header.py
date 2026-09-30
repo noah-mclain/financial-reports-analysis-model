@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from fra_core.numbers import normalize_digits, parse_number
 from fra_core.periods import parse_period
 from fra_core.schemas import Period, PeriodKind, StatementType
+from fra_core.units import detect_currency, detect_scale
 from fra_ingest.label_match import squash
 from fra_ingest.table_grid import Grid
 
@@ -23,9 +24,7 @@ _NOTE = re.compile(
 )
 _NOTE_HEADERS = frozenset(squash(w) for w in ("note", "notes", "إيضاح", "إيضاحات"))
 _LETTER = re.compile(r"[^\W\d_]", re.UNICODE)
-_NOT_A_MONTH = re.compile(
-    r"restated|audited|unaudited|\b[a-z]{3}\b|[\u0600-\u06ff]+|['()\s.,]", re.IGNORECASE
-)
+_MARKERS = frozenset({"restated", "audited", "unaudited", "معدلة", "مدققة", "غير", "'000"})
 _DURATION_TYPES = frozenset(
     {
         StatementType.INCOME,
@@ -82,21 +81,61 @@ def _is_header_text(text: str) -> bool:
     return parse_period(text) is not None or squash(text) in _NOTE_HEADERS
 
 
+def _is_marker(token: str) -> bool:
+    bare = token.strip("()[]\"'.,:").lower()
+    return (
+        token.lower() in _MARKERS
+        or bare in _MARKERS
+        or detect_currency(token) is not None
+        or detect_scale(token) is not None
+    )
+
+
+def _is_sub_header_text(text: str) -> bool:
+    """Scale, currency or restated/audited wording, as printed under a date row."""
+    if detect_scale(text) is not None or detect_currency(text) is not None:
+        return True
+    tokens = text.split()
+    return bool(tokens) and all(_is_marker(t) for t in tokens)
+
+
 def _header_rows(grid: Grid) -> list[int]:
     """Rows docling flags as column headers, plus rows above the first amount that carry a
-    date or a notes heading. A section row such as "Non-current assets" is not a header."""
+    date or a notes heading, and sub-rows of scale, currency or restated wording below one.
+    A section row such as "Non-current assets" is not a header."""
     rows = {c.row for c in grid.cells if c.is_column_header}
+    label = _label_guess(grid)
     for row in range(grid.num_rows):
         if _row_has_amount(grid, row):
             break
-        if any(_is_header_text(grid.text(row, col)) for col in range(grid.num_cols)):
+        cells = [grid.text(row, c) for c in range(grid.num_cols) if c != label]
+        texts = [t for t in cells if t]
+        if any(_is_header_text(grid.text(row, c)) for c in range(grid.num_cols)) or (
+            rows and texts and all(_is_sub_header_text(t) for t in texts)
+        ):
             rows.add(row)
     return sorted(r for r in rows if not _row_has_amount(grid, r))
 
 
+def _label_guess(grid: Grid) -> int | None:
+    """The column with the most text; only used to ignore labels when testing sub-rows."""
+    counts = {
+        c: sum(
+            1
+            for r in range(grid.num_rows)
+            if _LETTER.search(grid.text(r, c)) and not is_amount(grid.text(r, c))
+        )
+        for c in range(grid.num_cols)
+    }
+    return max(counts, key=lambda c: counts[c]) if any(counts.values()) else None
+
+
 def _year_only(header: str) -> bool:
-    return bool(_YEAR.search(_plain(header))) and not _LETTER.search(
-        _NOT_A_MONTH.sub("", _YEAR.sub("", _plain(header)))
+    """True when, besides the year, the header holds only currency, scale or status markers."""
+    rest = _YEAR.sub(" ", _plain(header), count=1)
+    tokens = [t for t in rest.split() if not _is_marker(t)]
+    return bool(_YEAR.search(_plain(header))) and not re.search(
+        r"[^\W_]", "".join(tokens).strip("()[]\"'.,:")
     )
 
 
@@ -160,7 +199,10 @@ def parse_header(grid: Grid, statement_type: StatementType, date_hint: str | Non
             layout.evidence.append(f"period_unbound:{col}")
             continue
         period = _with_date_hint(period, header, hint)
-        if any(p.key == period.key for p in layout.value_cols.values()):
+        if any(
+            (p.key, p.restated) == (period.key, period.restated) for p in layout.value_cols.values()
+        ):
+            layout.unbound_cols.append(col)
             layout.evidence.append(f"duplicate_period:{col}:{period.key}")
             continue
         layout.value_cols[col] = period
