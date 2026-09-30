@@ -14,11 +14,12 @@ import json
 import sys
 from collections import Counter
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import yaml
 
-from fra_core.schemas import Statement, StatementType
+from fra_core.schemas import CheckResult, Statement, StatementType
 from fra_ingest.config import REPO_ROOT, load_config
 from fra_ingest.errors import IngestError
 from fra_ingest.structure import structure_pdf
@@ -54,12 +55,43 @@ def pair_misses(a: Statement, b: Statement) -> tuple[int, int]:
     return sum((left - right).values()), sum((right - left).values())
 
 
-def metadata_ok(statement: Statement, expected_scale: int | None, expected_currency: str) -> bool:
-    """An unconfirmed manifest scale (None) is not scored; only the currency is."""
-    scale_ok = expected_scale is None or statement.scale == expected_scale
+def metadata_ok(statement: Statement, expected_scale: object, expected_currency: str) -> bool:
+    """A manifest scale of exactly "unconfirmed" is not scored; only the currency is."""
+    scale_ok = expected_scale == "unconfirmed" or statement.scale == expected_scale
     if scale_ok and statement.currency == expected_currency:
         return True
     return bool(_FLAGGED & set(statement.flags))
+
+
+def identity_excuses(
+    statement: Statement, checks: list[CheckResult]
+) -> list[dict[str, str]] | None:
+    """The cells with ``numbers_missing`` on rows of each failed identity check; None when a
+    failed check has no such cell, so its failure is not excused."""
+    excuses: list[dict[str, str]] = []
+    for check in checks:
+        if check.kind != "balance_identity" or check.status != "fail":
+            continue
+        rows = set(check.line_item_ids)
+        found = [
+            {"item": item.id, "period": cell.period_key}
+            for item in statement.line_items
+            if item.id in rows
+            for cell in item.cells
+            if "numbers_missing" in cell.flags
+        ]
+        if not found:
+            return None
+        excuses.extend(found)
+    return excuses
+
+
+def _load_checks(path: Path) -> dict[str, list[CheckResult]]:
+    by_statement: dict[str, list[CheckResult]] = {}
+    for raw in json.loads(path.read_text(encoding="utf-8")):
+        check = CheckResult.model_validate(raw)
+        by_statement.setdefault(check.statement_id, []).append(check)
+    return by_statement
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -78,6 +110,7 @@ def main(argv: list[str] | None = None) -> int:
             rows.append({"id": entry["id"], "error": f"{exc.reason} {exc.detail}".strip()})
             reasons.append(f"{entry['id']}: {exc.reason}")
             continue
+        checks = _load_checks(config.artifact_root / result.sha256 / "table_checks.json")
         found: dict[StatementType, Statement] = {}
         for s in result.statements:
             found.setdefault(s.type, s)
@@ -88,8 +121,7 @@ def main(argv: list[str] | None = None) -> int:
             if s is None:
                 row["statements"][statement_type.value] = None
                 continue
-            expected_scale = entry["scale"] if isinstance(entry["scale"], int) else None
-            ok = metadata_ok(s, expected_scale, str(entry["currency"]))
+            ok = metadata_ok(s, entry["scale"], str(entry["currency"]))
             identity = (
                 "failed"
                 if "identity_failed" in s.flags
@@ -111,13 +143,11 @@ def main(argv: list[str] | None = None) -> int:
                     f"{entry['id']} {statement_type.value}: scale/currency {s.scale} {s.currency} "
                     f"against {entry['scale']} {entry['currency']}"
                 )
-            if (
-                statement_type is StatementType.BALANCE
-                and identity == "failed"
-                and not {"numbers_missing"}
-                & {f for i in s.line_items for c in i.cells for f in c.flags}
-            ):
-                reasons.append(f"{entry['id']}: identity failed with every value present")
+            if identity == "failed":
+                excuses = identity_excuses(s, checks.get(s.id, []))
+                row["statements"][statement_type.value]["identity_excused_by"] = excuses
+                if excuses is None:
+                    reasons.append(f"{entry['id']}: identity failed with every value present")
         rows.append(row)
         print(
             f"{entry['id']:34} "

@@ -3,11 +3,12 @@
 from datetime import date
 from decimal import Decimal
 
-from harness.structure import metadata_ok, pair_misses, value_rows
+from harness.structure import identity_excuses, metadata_ok, pair_misses, value_rows
 
 from fra_core.schemas import (
     BBox,
     Cell,
+    CheckResult,
     LineItem,
     Period,
     PeriodKind,
@@ -75,5 +76,39 @@ def test_metadata_is_correct_or_flagged() -> None:
 
 
 def test_unconfirmed_manifest_scale_is_not_scored() -> None:
-    assert metadata_ok(statement(["1"], scale=1), None, "SAR")
-    assert not metadata_ok(statement(["1"], scale=1, currency="EGP"), None, "SAR")
+    assert metadata_ok(statement(["1"], scale=1), "unconfirmed", "SAR")
+    assert not metadata_ok(statement(["1"], scale=1, currency="EGP"), "unconfirmed", "SAR")
+
+
+def test_unconfirmed_is_matched_exactly() -> None:
+    assert not metadata_ok(statement(["1"], scale=1), "tbd", "SAR")
+    assert not metadata_ok(statement(["1"], scale=1), None, "SAR")
+
+
+def _identity_check(item_ids: list[str]) -> CheckResult:
+    return CheckResult(
+        id="c",
+        statement_id="s",
+        kind="balance_identity",
+        period_key=P.key,
+        status="fail",
+        line_item_ids=item_ids,
+    )
+
+
+def _with_missing_cell(row: int, total: int = 3) -> Statement:
+    base = statement([str(i + 1) for i in range(total)])
+    for item in base.line_items:
+        item.cells[0].flags = ["numbers_missing"] if item.id == f"r{row}" else []
+    return base
+
+
+def test_identity_failure_is_excused_by_a_missing_cell_on_its_own_rows() -> None:
+    check = _identity_check(["r0", "r1"])
+    assert identity_excuses(_with_missing_cell(1), [check]) == [{"item": "r1", "period": P.key}]
+
+
+def test_identity_failure_is_not_excused_by_an_unrelated_row() -> None:
+    check = _identity_check(["r0", "r1"])
+    assert identity_excuses(_with_missing_cell(2), [check]) is None
+    assert identity_excuses(statement(["1"]), []) == []
