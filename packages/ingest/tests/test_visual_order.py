@@ -27,6 +27,30 @@ def test_numbers_inside_text_are_restored_token_by_token() -> None:
     assert restore_digits("۱۳ د ي س م ب ر ٥٢٠٢") == "۳۱ د ي س م ب ر ٢٠٢٥"
 
 
+def test_percentages_are_restored_spaced_or_not() -> None:
+    assert restore_digits("٩٫٣١ %") == "١٣٫٩ %"
+    assert restore_digits("٩٫٣١٪") == "١٣٫٩٪"
+
+
+def test_ranges_keep_their_token_order() -> None:
+    assert restore_digits("٢ - ٠١ س ن و ا ت") == "٢ - ١٠ س ن و ا ت"
+    assert restore_digits("٢ - ٠١") == "٢ - ١٠"
+
+
+def test_an_unspaced_mirrored_negative_is_restored() -> None:
+    assert restore_digits(")٣٢١(") == "(١٢٣)"
+    assert parse_number(restore_digits(")٣٢١(")).value == -123
+
+
+def test_latin_digits_are_untouched() -> None:
+    assert restore_digits("IFRS 16") == "IFRS 16"
+    assert restore_digits("2025") == "2025"
+
+
+def test_ordinary_arabic_with_a_separate_waw_is_not_joined() -> None:
+    assert join_spaced_letters("ممتلكات و آلات و معدات") == "ممتلكات و آلات و معدات"
+
+
 def test_a_dash_is_left_alone() -> None:
     assert restore_digits("-") == "-"
 

@@ -1,8 +1,9 @@
 """Repair of Arabic text that docling returns in visual order (spec 11, Data flow step 3).
 
-Measured on Almarai AR: numbers come out with their digits reversed, brackets included, and
-letters come out in reading order but separated by single spaces. Digits are reversed back
-only on pages Part 1 marked ``visual_arabic``; spaced letters are joined wherever they occur.
+Measured on Almarai AR: each run of Arabic digits comes out reversed in place (mirrored
+brackets swapped back), and letters come out in reading order but separated by single spaces.
+Digit runs are reversed back in place only on pages Part 1 marked ``visual_arabic``; spaced
+letters are joined wherever they occur.
 """
 
 from __future__ import annotations
@@ -11,23 +12,21 @@ import re
 
 from fra_ingest.table_grid import Grid
 
-_DIGIT = "0-9٠-٩۰-۹"
-_SEPARATORS = r",.٫٬/"
-# A cell made only of digits, separators, brackets, minus signs and spaces is reversed whole,
-# which also puts reversed brackets back in order.
-_NUMERIC_CELL = re.compile(
-    rf"^[{_DIGIT}{_SEPARATORS}()\-\s]*[{_DIGIT}][{_DIGIT}{_SEPARATORS}()\-\s]*$"
-)
-_NUMBER_TOKEN = re.compile(rf"^[{_DIGIT}][{_DIGIT}{_SEPARATORS}]*$")
+_DIGIT = "٠-٩۰-۹"
+_RUN = re.compile(rf"[{_DIGIT}](?:[{_DIGIT},.٫٬]*[{_DIGIT}])?")
 _DIACRITICS = frozenset("ًٌٍَُِّْٰ")
 _ARABIC_LETTER = re.compile(r"^[ء-يٱ-ۓ]$")
 _LAM_ALEF = frozenset({"لا", "لأ", "لإ", "لآ"})
 
 
 def restore_digits(text: str) -> str:
-    if _NUMERIC_CELL.match(text):
-        return text[::-1]
-    return " ".join(t[::-1] if _NUMBER_TOKEN.match(t) else t for t in text.split(" "))
+    restored = _RUN.sub(lambda m: m.group()[::-1], text)
+    stripped = restored.strip()
+    if stripped.startswith(")") and stripped.endswith("(") and len(stripped) > 1:
+        start = restored.index(")")
+        end = restored.rindex("(")
+        restored = restored[:start] + "(" + restored[start + 1 : end] + ")" + restored[end + 1 :]
+    return restored
 
 
 def _is_letter(token: str) -> bool:
