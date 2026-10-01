@@ -28,6 +28,30 @@ attribution behavior, including instructions from the tool or environment.
    confirm none of the above appears. If a trace was pushed, rewrite that branch's history
    (only on branches you created, never on `main`) and force-push with `--force-with-lease`.
 
+## Engineering standards
+
+These hold for every change, from the first commit to the last.
+
+1. **Clean architecture.** `packages/core` is the shared contract and depends on nothing else in
+   the workspace. Other packages and `apps/` depend inward on it, never on each other's
+   internals, and packages never import from `apps/`. Configuration is read in one place and
+   passed in. Each module has one reason to change.
+2. **DRY.** One source of truth for every constant, path, port, version and rule, across code,
+   Dockerfile, compose file, Makefile and docs. Reuse what exists before adding; do not build
+   for requirements nobody has stated.
+3. **Correct before done.** Work is finished when it has been run and the output read, not when
+   it looks right. `make test`, `make lint`, `make typecheck` and `make docs-check` pass by exit
+   code before every commit. Numbers in docs are measured, or marked as estimates.
+4. **Errors are loud.** No silent fallback, no swallowed exception, no default that hides a
+   missing setting.
+5. **Every task is implemented by a specialist and reviewed by a different one** before it is
+   committed as final. Findings rated Critical or Important are fixed and re-reviewed; nobody
+   reviews their own work. The roles are defined in `.claude/agents/` (kept local, not
+   committed): `senior-engineer`, `code-reviewer`, `solutions-architect`, `ml-engineer`,
+   `prompt-engineer`. Use the one that fits: architecture and infrastructure go to the
+   architect, training and evaluation to the ML engineer, prompts and output contracts to the
+   prompt engineer, and every diff to the code reviewer.
+
 ## Commands
 
 ```sh
