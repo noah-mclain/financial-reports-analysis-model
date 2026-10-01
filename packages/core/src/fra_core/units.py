@@ -71,13 +71,23 @@ _CURRENCY_WORDS: dict[str, str] = {
     "جنيه": "EGP",
     "egp": "EGP",
     "l.e.": "EGP",
-    "le": "EGP",
     "ج.م": "EGP",
     "us dollar": "USD",
+    "us dollars": "USD",
     "u.s. dollar": "USD",
-    "dollars": "USD",
+    "u.s. dollars": "USD",
+    "united states dollar": "USD",
+    "united states dollars": "USD",
     "دولار": "USD",
     "usd": "USD",
+    "pound sterling": "GBP",
+    "pounds sterling": "GBP",
+    "جنيه إسترليني": "GBP",
+    "جنيه استرليني": "GBP",
+    "gbp": "GBP",
+    "kuwaiti dinar": "KWD",
+    "kuwaiti dinars": "KWD",
+    "دينار كويتي": "KWD",
     "euro": "EUR",
     "eur": "EUR",
     "يورو": "EUR",
@@ -88,7 +98,13 @@ _CURRENCY_WORDS: dict[str, str] = {
 }
 _CURRENCY_NAMES_BY_LENGTH = sorted(_CURRENCY_WORDS, key=len, reverse=True)
 
-_ISO_CODE = re.compile(r"(?<![A-Za-z])(SAR|EGP|USD|EUR|AED|KWD|QAR|BHD|OMR|JOD)(?![A-Za-z])")
+# Two-letter abbreviations are currencies only as printed in capitals: "LE" and "SR" in a
+# statement header, not "le" or "Sr." in running text.
+_CAPITAL_ABBREVIATIONS: dict[str, str] = {"LE": "EGP", "SR": "SAR", "KD": "KWD"}
+# Checked last: a sign says less than a code or a currency word elsewhere in the text.
+_CURRENCY_SIGNS: dict[str, str] = {"£": "GBP", "$": "USD"}
+
+_ISO_CODE = re.compile(r"(?<![A-Za-z])(SAR|EGP|USD|GBP|EUR|AED|KWD|QAR|BHD|OMR|JOD)(?![A-Za-z])")
 
 
 @dataclass(frozen=True)
@@ -130,7 +146,8 @@ def detect_scale(text: str) -> ScaleSignal | None:
 
 
 def detect_currency(text: str) -> str | None:
-    """Find an ISO 4217 code, a currency code written in the text, or a currency word."""
+    """Find an ISO 4217 code, a currency word, a capital abbreviation or a currency sign, in
+    that order."""
     if not text or not text.strip():
         return None
 
@@ -144,16 +161,22 @@ def detect_currency(text: str) -> str | None:
     for name in _CURRENCY_NAMES_BY_LENGTH:
         if _mentions_currency(name, lowered):
             return _CURRENCY_WORDS[name]
+    for abbreviation, currency in _CAPITAL_ABBREVIATIONS.items():
+        if re.search(rf"(?<![A-Za-z]){abbreviation}(?![A-Za-z])", cleaned):
+            return currency
+    for sign, currency in _CURRENCY_SIGNS.items():
+        if sign in cleaned:
+            return currency
     return None
 
 
 def _mentions_currency(name: str, text: str) -> bool:
     """Whether ``name`` appears in ``text`` as a currency reference.
 
-    Latin abbreviations need word boundaries: Juhayna writes Egyptian pounds as "LE", which
-    also sits inside "sales" and "scale". Arabic can't use boundaries since the article
-    and plural endings attach directly to the stem: ريال appears inside الريالات with word
-    characters on both sides, so a boundary test would reject a correct match.
+    Latin names need word boundaries: "sar" also sits inside "necessary". Arabic can't use
+    boundaries since the article and plural endings attach directly to the stem: ريال appears
+    inside الريالات with word characters on both sides, so a boundary test would reject a
+    correct match.
     """
     if name.isascii():
         return re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text) is not None
