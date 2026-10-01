@@ -274,3 +274,15 @@ def test_a_large_fraction_or_one_beside_a_whole_amount_is_flagged() -> None:
         if "fraction_among_whole" in c.flags
     ]
     assert found == [("r6", P1.key), ("r7", P2.key)]
+
+
+def test_a_statement_in_decimals_with_some_round_figures_is_not_flagged() -> None:
+    rows = [
+        item(1, "Revenue", "234.5", "200.2"),
+        item(2, "Cost of sales", "-60.0", "-50.1"),
+        item(3, "Gross profit", "174.5", "150.1"),
+        item(4, "Selling expenses", "-30.2", "-28.0"),
+        item(5, "Operating profit", "144.3", "122.1"),
+    ]
+    flagged = flag_fractions(statement(rows))
+    assert not any("fraction_among_whole" in c.flags for i in flagged.line_items for c in i.cells)

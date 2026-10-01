@@ -155,6 +155,8 @@ def _run_outcomes(
                     addend_ids=(previous.id, run[0].id),
                     expected=prior + only,
                     actual=actual,
+                    # With nothing added, this too is one figure printed twice.
+                    detail="" if only else "single_addend",
                 )
                 continue
         if len(run) < 2:

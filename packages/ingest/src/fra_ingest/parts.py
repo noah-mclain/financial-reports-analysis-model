@@ -29,12 +29,19 @@ IMPLAUSIBLE = 10**15
 # many times the median of its own column, given enough values to have a median.
 IMPLAUSIBLE_RATIO = 10**4
 _MIN_COLUMN_VALUES = 5
-# "صيب السهم" is "نصيب السهم" with or without its first letter, which OCR drops.
-_PER_SHARE = tuple(squash(w) for w in ("per share", "للسهم", "ربحية السهم", "صيب السهم", "لكل سهم"))
+# Arabic cues are matched with spaces ignored, as these labels often lose theirs. "صيب السهم"
+# is "نصيب السهم" with or without its first letter, which OCR drops.
+_PER_SHARE = tuple(
+    squash(w) for w in ("للسهم", "ربحية السهم", "صيب السهم", "لكل سهم", "على السهم", "حصة السهم")
+)
 _PER_SHARE_WORDS = frozenset({"eps", "dps"})
-_THE_SHARE = normalize_label("السهم")
-# The rows a per-share heading reaches: "- Basic", "- Diluted", "الأساسية", "المخفضة".
-_BASIC_DILUTED = tuple(squash(w) for w in ("basic", "diluted", "أساسي", "مخفض"))
+# "per share", "per ordinary share": at most one word between.
+_PER_SHARE_BETWEEN = frozenset({"ordinary", "common", "basic", "diluted"})
+# The rows a per-share heading reaches, and no others.
+_UNDER_HEADING = tuple(
+    squash(w)
+    for w in ("basic", "diluted", "continuing", "discontinued", "أساسي", "مخفض", "المستمرة")
+)
 
 
 class PartialStatement(BaseModel):
@@ -59,12 +66,19 @@ def is_per_share(label: str) -> bool:
     words = normalize_label(label).split()
     if _PER_SHARE_WORDS & set(words) or any(cue in squash(label) for cue in _PER_SHARE):
         return True
-    # "per ordinary share"; and "السهم", the share, which no line of amounts is named by.
-    return ("per" in words and "share" in words[words.index("per") :]) or _THE_SHARE in words
+    for position, word in enumerate(words[:-1]):
+        if word != "per":
+            continue
+        after = words[position + 1 : position + 3]
+        if after[0] == "share" or (
+            len(after) == 2 and after[0] in _PER_SHARE_BETWEEN and after[1] == "share"
+        ):
+            return True
+    return False
 
 
-def _basic_or_diluted(label: str) -> bool:
-    return any(cue in squash(label) for cue in _BASIC_DILUTED)
+def _under_per_share_heading(label: str) -> bool:
+    return any(cue in squash(label) for cue in _UNDER_HEADING)
 
 
 def column_centre(grid: Grid, col: int, rows: Sequence[int]) -> float | None:
@@ -183,7 +197,7 @@ def build_part(
         has_values = any(texts.values()) or (known is not None and has_subtotal_cue(label))
         if not has_values:
             under_per_share = named_per_share
-        per_share = named_per_share or (under_per_share and _basic_or_diluted(label))
+        per_share = named_per_share or (under_per_share and _under_per_share_heading(label))
         cells = []
         for col, period in layout.value_cols.items():
             if not has_values:

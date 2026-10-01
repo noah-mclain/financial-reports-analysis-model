@@ -178,3 +178,22 @@ def test_a_one_row_equality_alone_vouches_for_nothing() -> None:
     only = [check("subtotal", "pass", ["r1", "r3"], "single_addend")]
     assert review_statement(statement(ROWS), only, primary=True).reasons == ["unchecked"]
     assert review_statement(statement(ROWS), [*PASSING, *only], primary=True).status == "passed"
+
+
+def test_a_figure_printed_three_times_is_not_a_check() -> None:
+    from fra_core.taxonomy.loader import load_taxonomy
+    from fra_ingest.label_match import LabelIndex
+    from fra_ingest.table_checks import run_checks
+
+    def row(n: int, label: str, value: str | None, total: bool = False) -> LineItem:
+        base = item(n, value) if value is not None else LineItem(id=f"r{n}", raw_label=label)
+        return base.model_copy(update={"raw_label": label, "is_subtotal": total})
+
+    rows = [
+        row(1, "Profit", "160"),
+        row(2, "Total profit", "160", total=True),
+        row(3, "Other comprehensive income", "0"),
+        row(4, "Total comprehensive income", "160", total=True),
+    ]
+    checked, checks = run_checks(statement(rows), LabelIndex(load_taxonomy()))
+    assert review_statement(checked, checks, primary=True).reasons == ["unchecked"]

@@ -188,10 +188,13 @@ Steps 1 to 6 of spec 11 are unchanged. Step numbers below continue spec 11's.
         confirms no suffix.
       - A total with exactly one row above it in its run passes with `single_addend` when the
         two are exactly equal (one addend rounds nothing), and passes as a running total when
-        it is that row plus the total before it. Otherwise it is skipped as before.
-      - Per-share rows are those whose label says so (`per ... share`, `EPS`, `DPS`, `السهم`,
-        `لكل سهم`), and the basic and diluted rows under a heading that says so. The heading
-        reaches no other row.
+        it is that row plus the total before it; when that row is zero this too is
+        `single_addend`. Otherwise it is skipped as before.
+      - Per-share rows are those whose label says so (`per share` with at most one word
+        between, `EPS`, `DPS`, and the Arabic phrases `للسهم`, `ربحية السهم`, `نصيب السهم`,
+        `لكل سهم`, `على السهم`, `حصة السهم`, matched with spaces ignored), and the rows under a
+        heading that says so that are named basic, diluted, continuing or discontinued. The
+        heading reaches no other row.
     - **Identity**, as in spec 11.
     - **Net profit tie.** When a document has an income statement and a comprehensive income
       statement, the first valued row of comprehensive income must equal one row of the income
@@ -213,8 +216,8 @@ Steps 1 to 6 of spec 11 are unchanged. Step numbers below continue spec 11's.
       at most a fifth of the amounts have one, carries `fraction_among_whole`: a decimal mark
       OCR put into a number. It must stand beside a whole amount in its row or be 1,000 or
       more: a row of small fractions alone is a per-share figure or a ratio the label cues
-      missed. Per-share and percentage cells are not amounts; a statement printed with
-      decimals throughout is left alone.
+      missed. Per-share and percentage cells are not amounts. A statement where more than a
+      fifth of all amounts are fractional is printed with decimals and is left alone.
 10a. **Review.** A statement is `passed` when all of these hold, else `needs_review` with one
    reason per rule broken:
    - no check on it failed (`subtotal_failed`, `identity_failed`, `tie_failed`);
@@ -364,8 +367,8 @@ block headed provisional. Unconfirmed cells are counted and left out of both blo
 Measured 2026-10-01 on the `ingest-structure` branch, structure version 4, with
 `make eval-structure` and `make eval-extraction` on the stored conversions of the golden set.
 Structure version 5 adds unit caveats ([13-unit-caveats.md](13-unit-caveats.md)), and versions
-6 to 8 the fixes from the review of this branch. The review table and the extraction figures
-below are from version 8; no value, check or review status differs from version 4.
+6 to 9 the fixes from the review of this branch. The review table and the extraction figures
+below are from version 9; no value, check or review status differs from version 4.
 
 ### Against Done when
 

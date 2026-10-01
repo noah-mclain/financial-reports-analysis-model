@@ -353,3 +353,33 @@ def test_per_share_wording_with_words_between_and_the_arabic_singular() -> None:
         assert is_per_share(label), label
     for label in ("Share of profit of associates", "رأس المال السهمي", "أسهم خزينة"):
         assert not is_per_share(label), label
+
+
+def test_per_share_cues_do_not_take_amounts_and_survive_lost_spaces() -> None:
+    for label in (
+        "Expenses per function: share-based payment",
+        "Cost per employee share scheme",
+        "رأس المال المصدر - القيمة الاسمية 10 جنيه السهم",
+    ):
+        assert not is_per_share(label), label
+    for label in ("العائدعلىالسهم", "Earnings per common share", "Loss per share - diluted"):
+        assert is_per_share(label), label
+
+
+def test_a_per_share_heading_reaches_continuing_and_discontinued_rows() -> None:
+    rows = [
+        ["", "Notes", "31 December 2025 X '000", "31 December 2024 X '000"],
+        ["Profit for the year", "", "2,456,673", "2,313,667"],
+        ["Earnings per share", "", "", ""],
+        ["From continuing operations", "32", "2.00", "2.48"],
+        ["From discontinued operations", "32", "0.10", "0.12"],
+    ]
+    g = grid(rows)
+    layout = parse_header(g, StatementType.INCOME, None)
+    classification = Classification(type=StatementType.INCOME, confidence=0.8)
+    p = build_part(g, layout, classification, source=TextSource.TEXT)
+    assert [all("per_share" in c.flags for c in i.cells) for i in p.line_items if i.cells] == [
+        False,
+        True,
+        True,
+    ]

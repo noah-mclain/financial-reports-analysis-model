@@ -147,7 +147,7 @@ def flag_fractions(statement: Statement) -> Statement:
     row of small fractions with no whole amount beside them: that is a per-share figure or a
     ratio the label cues did not name, not a misread."""
     fractions: set[tuple[str, str]] = set()
-    total = 0
+    total = fractional = 0
     for item in statement.line_items:
         amounts = [
             c
@@ -156,11 +156,13 @@ def flag_fractions(statement: Statement) -> Statement:
         ]
         total += len(amounts)
         parts = [c for c in amounts if c.reported is not None and c.reported % 1 != 0]
+        fractional += len(parts)
         beside_whole = len(parts) < len(amounts)
         for c in parts:
             if beside_whole or (c.reported is not None and abs(c.reported) >= _LARGE_FRACTION):
                 fractions.add((item.id, c.period_key))
-    if len(fractions) > FRACTION_SHARE * total:
+    # Printed with decimals: judged on every fractional amount, not only those picked out.
+    if fractional > FRACTION_SHARE * total:
         return statement
     return _with_flag(statement, fractions, "fraction_among_whole")
 
