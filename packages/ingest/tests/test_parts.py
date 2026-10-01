@@ -254,3 +254,20 @@ def test_a_value_far_beyond_its_column_is_flagged_implausible() -> None:
         if "implausible_magnitude" in c.flags
     ]
     assert flagged == [("Prepayments", "2024-12-31")]
+
+
+def test_a_moved_cell_keeps_its_docling_row_and_merged_labels_are_flagged() -> None:
+    g = grid(ROWS, pads={2: 10, 3: 10, 4: 10})
+    cells = tuple(
+        c.model_copy(update={"source_row": 9, "flags": ("row_realigned",)})
+        if (c.row, c.col) == (2, 2)
+        else c
+        for c in g.cells
+    )
+    g = g.model_copy(update={"cells": cells})
+    layout = parse_header(g, StatementType.BALANCE, None)
+    classification = Classification(type=StatementType.BALANCE, confidence=0.8)
+    p = build_part(g, layout, classification, source=TextSource.TEXT, merged_rows=[3])
+    moved = p.line_items[1].cells[0]
+    assert moved.provenance.row == 9 and "row_realigned" in moved.flags
+    assert all("label_merged" in c.flags for c in p.line_items[2].cells)

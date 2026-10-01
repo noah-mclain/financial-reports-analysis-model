@@ -10,7 +10,7 @@ gap. A section heading the taxonomy also knows (``Current assets``) stays a head
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from statistics import median
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -112,6 +112,7 @@ def build_part(
     *,
     source: TextSource,
     index: LabelIndex | None = None,
+    merged_rows: Collection[int] = (),
 ) -> PartialStatement:
     if classification.type is None:
         msg = "only a classified grid becomes part of a statement"
@@ -176,6 +177,8 @@ def build_part(
                 flags.append("spanned_cell")
             if per_share:
                 flags.append("per_share")
+            if row in merged_rows:
+                flags.append("label_merged")
             bbox = (
                 grid_cell.bbox
                 if grid_cell is not None and grid_cell.bbox is not None
@@ -196,7 +199,9 @@ def build_part(
                         page_no=grid.page_no,
                         bbox=bbox,
                         table_ref=grid.table_ref,
-                        row=row,
+                        row=grid_cell.source_row
+                        if grid_cell is not None and grid_cell.source_row is not None
+                        else row,
                         col=col,
                         source=source,
                     ),

@@ -38,6 +38,7 @@ from fra_ingest.ocr_policy import plan_ranges
 from fra_ingest.pages import read_pages
 from fra_ingest.parts import PartialStatement, build_part
 from fra_ingest.results import ConvertResult, LocateResult, StructureResult, TableDecision
+from fra_ingest.row_alignment import realign_rows
 from fra_ingest.stage import load_or_locate, page_ocr_languages
 from fra_ingest.table_checks import run_checks
 from fra_ingest.table_grid import Grid, build_grid
@@ -247,7 +248,19 @@ def structure_document(
             if inputs.page_modes.get(grid.page_no) is PageMode.IMAGE
             else TextSource.TEXT
         )
-        part = build_part(grid, layout, result, source=source, index=index)
+        realigned = realign_rows(grid, layout)
+        part = build_part(
+            realigned.grid,
+            layout,
+            result,
+            source=source,
+            index=index,
+            merged_rows=realigned.merged_labels,
+        )
+        if realigned.moved:
+            part.flags.append("rows_realigned")
+        if realigned.unresolved:
+            part.flags.append("row_alignment_unresolved")
         parts.append(part)
         metas.setdefault(
             (part.type, part.first_page),

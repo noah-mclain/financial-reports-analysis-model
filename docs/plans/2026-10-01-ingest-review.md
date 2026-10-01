@@ -667,7 +667,7 @@ git commit -m "Find each total's rows by the sums, across headings and blanks"
 """Values put back on their label's line by geometry (spec 12, Data flow step 6a)."""
 
 from fra_core.schemas import BBox, StatementType
-from fra_ingest.header import parse_header
+from fra_ingest.header import HeaderLayout, parse_header
 from fra_ingest.row_alignment import realign_rows
 from fra_ingest.table_grid import Grid, GridCell
 
@@ -714,7 +714,7 @@ def aligned() -> Grid:
     )
 
 
-def layout(g: Grid):  # type: ignore[no-untyped-def]
+def layout(g: Grid) -> HeaderLayout:
     return parse_header(g, StatementType.BALANCE, None)
 
 
@@ -880,6 +880,7 @@ them, and anything that cannot be placed is left where it was and flagged.
 
 from __future__ import annotations
 
+from itertools import pairwise
 from statistics import median
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -960,8 +961,8 @@ def realign_rows(grid: Grid, layout: HeaderLayout) -> Realignment:
         if holds[row] is None:
             holds[row] = row
     placed = [(row, at[source]) for row, source in sorted(holds.items()) if source is not None]
-    in_order = all(a[1] <= b[1] + slack for a, b in zip(placed, placed[1:], strict=False))
-    lost = {s for s in groups} - {s for s in holds.values() if s is not None}
+    in_order = all(a[1] <= b[1] + slack for a, b in pairwise(placed))
+    lost = set(groups) - {s for s in holds.values() if s is not None}
     if not in_order or lost:
         # A repair that would reorder or drop figures is no repair: leave the grid, flag it.
         holds = {r: (r if r in groups else None) for r in rows}

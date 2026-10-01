@@ -21,6 +21,7 @@ class GridCell(BaseModel):
     is_row_header: bool = False
     is_row_section: bool = False
     page_no: int
+    source_row: int | None = None  # the docling row of a cell that row alignment moved
     flags: tuple[str, ...] = ()
 
 

@@ -90,3 +90,18 @@ def test_edita_ifrs_total_equity_passes(golden: Callable[[str], Path]) -> None:
     checks = json.loads((artifact_dir(pdf) / "table_checks.json").read_text(encoding="utf-8"))
     equity = [c for c in checks if c["id"].startswith(f"{balance.id}:subtotal:p8-t0-r26:")]
     assert [c["status"] for c in equity] == ["pass", "pass"]
+
+
+def test_edita_2024_ar_equity_and_borrowings_sit_on_their_labels(
+    golden: Callable[[str], Path],
+) -> None:
+    balance = statements(golden, "edita-2024-ar-consolidated-eas.pdf")[StatementType.BALANCE]
+    rows = {i.id: i for i in balance.line_items}
+    assert "rows_realigned" in balance.flags
+    assert rows["p5-t0-r22"].value_for("2024-12-31") == Decimal("4157569146")
+    assert rows["p5-t0-r21"].value_for("2024-12-31") == Decimal("102084427")
+    assert not rows["p5-t0-r23"].cells
+    assert rows["p5-t0-r24"].value_for("2024-12-31") == Decimal("2282057066")
+    assert rows["p5-t0-r25"].value_for("2024-12-31") == Decimal("19343101")
+    moved = next(c for c in rows["p5-t0-r22"].cells if c.period_key == "2024-12-31")
+    assert moved.provenance.row == 21 and "row_realigned" in moved.flags
