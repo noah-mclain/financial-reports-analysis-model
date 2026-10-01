@@ -2,7 +2,7 @@
 
 Oct 1, 2026 · @n
 
-The week 1 extraction goal is met. Almarai's English and Arabic annual reports now come out as structured balance sheets, income statements and comprehensive income statements with identical figures, and every value traces to a page and box. Clean digital filings are in good shape. Scanned Egyptian filings are the weak spot: OCR loses too many balance-sheet numbers on Juhayna, and one Edita sheet has its labels shifted against its values. That is the main problem week 2 must solve.
+The week 1 extraction goal is met. Almarai's English and Arabic annual reports now come out as structured balance sheets, income statements and comprehensive income statements with identical figures, and every value traces to a page and box. Almarai, the only digital filing in the golden set, is fully clean, and the English Edita scans hold the balance-sheet identity. The Arabic and Juhayna scans are the weak spot: OCR loses too many balance-sheet numbers on Juhayna, and one Edita sheet has misread digits and its labels shifted against its values. That is the main problem week 2 must solve.
 
 ## Completed
 
@@ -24,10 +24,10 @@ All three ingest parts are built and reviewed. Parts 1 and 2 are merged; part 3a
 | Converter peak memory | Within budget | 3.19 GB at most, within the 3.5 GB budget (raised from 3.0 GB after measuring) |
 | Conversion time per page | Recorded | About 2.5 s on digital pages, 4.5 s on scanned pages (median) |
 | Balance sheets extracted, golden set | All 12 | 8 of 12; four scanned Juhayna filings yield none |
-| Balance-sheet identity, golden set | Holds where values are present | Holds on 4 (Almarai EN and AR, Edita EAS and IFRS); skipped on 3 where totals were not found; fails on Edita 2024 AR |
-| Fast tests | Pass | 553 pass; lint and type checks clean |
+| Balance-sheet identity, golden set | Holds where values are present | Holds on 4 (Almarai EN and AR, Edita 2025 EN under EAS and under IFRS); skipped on 3 where totals were not found; fails on Edita 2024 AR. Both Edita EN sheets also fail a subtotal check, one on a real 20,000 misread, so "holds" there does not mean every figure is right |
+| Fast tests | Pass | 585 pass; lint and type checks clean |
 
-The structure eval exits FAIL for one reason, and that result is correct. On Edita 2024 AR, OCR shifted the labels one row against their values, so the row labelled "total equity" holds the non-controlling interests figure. The statement is flagged as unsure; nothing passes as correct when it is not.
+The structure eval exits FAIL for one reason, and that result is correct. On Edita 2024 AR, total assets and the printed total of equity and liabilities agree exactly for 2024 but differ by 5 for 2023: OCR read one digit differently in two cells that print the same figure. The same sheet has its labels shifted one row against their values, so the row labelled "total equity" holds the non-controlling interests figure. The statement is flagged as unsure, so the failure is visible, not hidden. A misread that breaks no check would still pass unseen.
 
 ## What the reviews caught
 
@@ -39,6 +39,16 @@ Every task was reviewed on its own, and the whole branch was reviewed again befo
 - The eval gave credit for a wrong currency, and for a balance-sheet identity it never checked.
 - Company names were read from page headers.
 - Stale conversion results were trusted.
+- A gated language pair with a missing statement was not reported as such.
+
+A logic check of the code after that found four more mistakes, none of which had changed a golden figure, and they are fixed with tests:
+
+- A continuation page that classification was unsure of could not borrow a missing column date from the page before, so it was dropped.
+- A total whose values OCR lost entirely was read as a section heading, and the identity check then said the total was not found. It is now reported as values missing.
+- Labels ending in "(IFRS 16)" or "Level 3" lost that number to the note column.
+- A row equal to the row above it across a dash row was taken for a subtotal, leaving the real total unchecked.
+
+Smaller hardening went in with them: per-share rows stay out of subtotal sums, merged figures far beyond their column are flagged, interim year-only headers keep their length, and currency detection now reads sterling, dollar signs, KD and SR.
 
 ## Next (week 2, Oct 3 to 9)
 

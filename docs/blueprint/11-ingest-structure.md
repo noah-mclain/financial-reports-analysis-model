@@ -196,14 +196,16 @@ class StructureResult(BaseModel):   # statements.raw.json
    - the heading text above the table on its page.
 
    Negative evidence: a note heading (`Note`, `إيضاح` followed by a number) above the table,
-   or no period header. A grid is a statement when its best
+   or no period header. A line that also reads as a period (`Notes 31 December 2025`, a column
+   header docling left above the table) is not a note heading. A grid is a statement when its best
    type reaches `min_confidence` (0.5, `[structure]` in `configs/ingest.toml`); every decision
    and its evidence goes into `StructureResult.tables`.
 5. **Header.** The header rows are those flagged `column_header` plus any leading rows that
    hold no amounts (a cell that parses as a date or a year is header text, not an amount). They are joined per column top to bottom and parsed with `parse_period`, with
    `default_kind` instant for balance and duration for income and comprehensive income. A
    column whose header is only a year takes the day and month from the statement's own date
-   line (caption or header text). The note column is the column of small integers or a
+   line (caption or header text), and for a duration its length too: a year, or the three, six
+   or nine months that line names. The note column is the column of small integers or a
    `Notes` / `إيضاح` header; the label column is the one with the most non-numeric text,
    wherever it sits, so mirrored Arabic tables need no special case. Columns are bound to
    periods by their header text, never by position.
@@ -217,13 +219,22 @@ class StructureResult(BaseModel):   # statements.raw.json
    flag.
 7. **Line items.** One per data row: label text, note reference, and a `Cell` per bound period
    with `reported` from `parse_number`, `raw_text`, parser flags, and provenance (page, box,
-   table ref, row, column, source text or OCR from the page mode).
+   table ref, row, column, source text or OCR from the page mode). A label ending in a note
+   number gives it up as the note reference, unless the number closes a bracket opened earlier
+   or follows a word such as IFRS, IAS or Level. A row with no values is a heading, except a
+   row whose label opens with a total cue and names a taxonomy item (`Total assets`): its
+   cells are kept, each `numbers_missing`, so a total OCR lost is reported as missing rather
+   than read as a heading. A value above 10^15 as printed, or more than 10^4 times the median
+   of its column (five values or more), carries `implausible_magnitude`.
 8. **Continuation.** Parts of one type on consecutive pages merge when their period keys match
    and their value columns line up (centre x within 5% of page width); repeated header rows
-   are dropped.
+   are dropped. A column whose header carries no date takes its period from the previous
+   page by position before that test, on a page classified in its own right and on a tail
+   page below confidence alike.
 9. **Hierarchy (light).** Depth from clustering label left edges; a row is a section when it
-   has a label and no values, a subtotal when its label has a total or net cue in either
-   language or it follows a rule of rows ending at a section. Parent is the nearest section
+   has a label and no values, a subtotal when its label opens with a total cue in either
+   language (`total`, `إجمالي`, `مجموع`), the taxonomy marks its item as a subtotal, or it has
+   values and no label. "Net" is not a cue: net receivables is a plain row. Parent is the nearest section
    row above with smaller depth.
 10. **Checks.**
     - Subtotal: a subtotal row that directly closes a run of two or more plain rows (since
@@ -235,7 +246,10 @@ class StructureResult(BaseModel):   # statements.raw.json
       more rows of the run (the shortest such suffix) is an implicit subtotal, such as
       Almarai's "Equity Attributable to Equity Holders of the Company" or Almarai AR's "other
       comprehensive income for the year": it passes with `implicit_subtotal` and replaces
-      those rows in the run as one addend, so the explicit total after it stays checkable. A subtotal whose run began right
+      those rows in the run as one addend, so the explicit total after it stays checkable. At
+      least two of the rows summed must hold a value other than zero, so a row that merely
+      equals the row above it across a dash is not taken for a sum. Per-share rows join no
+      run and no sum. A subtotal whose run began right
       after a heading and that misses both candidates is `skipped` with
       `subtotal_scope_uncertain`, since the heading may have cut rows it covers. Other
       subtotals, such as total assets over two section subtotals or Almarai AR's rows whose
@@ -255,6 +269,7 @@ class StructureResult(BaseModel):   # statements.raw.json
 | Situation | Behaviour |
 |-----------|-----------|
 | A value cell is empty where the row has values in other periods | Cell with `reported` None and `numbers_missing` |
+| A known total (`Total assets`) has no value in any period | Its cells kept with `numbers_missing`; the checks on it are `skipped` with `missing_values` |
 | A value does not parse | `reported` None, `raw_text` kept, parser flags on the cell |
 | A header column does not bind to a period | That column dropped, `period_unbound:<col>` on the statement; with no bound column, no statement and `statement_not_extracted:<type>` |
 | An enabled type has no classified table | `statement_not_extracted:<type>` on the result |
@@ -315,7 +330,7 @@ Other bilingual pairs are reported, not gated, until the resolution question is 
 
 ## Results
 
-Measured 2026-10-01 on the `ingest-structure` branch (`worktree/phase2-extraction`), `make eval-structure`, after the final review fixes. Lines are line items of the first statement of each type. Identity is the balance sheet identity, read from the `balance_identity` results in `table_checks.json`: ok needs at least one pass and no fail, failed means any fail, and skipped carries the skipped checks' detail.
+Measured 2026-10-01 on the `ingest-structure` branch (`worktree/phase2-extraction`), `make eval-structure`, after the final review fixes, and measured again the same day after the logic fixes listed at the end of this section. Lines are line items of the first statement of each type. Identity is the balance sheet identity, read from the `balance_identity` results in `table_checks.json`: ok needs at least one pass and no fail, failed means any fail, and skipped carries the skipped checks' detail.
 
 | Document | Balance | Income | Comprehensive income | Scale and currency | Identity |
 |----------|---------|--------|----------------------|--------------------|----------|
@@ -323,7 +338,7 @@ Measured 2026-10-01 on the `ingest-structure` branch (`worktree/phase2-extractio
 | almarai-2025-ar | 40 lines | 21 lines | 11 lines | ok (1000 SAR) | ok |
 | juhayna-2025-ar-standalone | not extracted | 14 lines | not extracted | currency ok, scale flagged | no balance sheet |
 | juhayna-2025-ar-consolidated | not extracted | 20 lines | not extracted | currency ok, scale flagged | no balance sheet |
-| juhayna-2025-en-consolidated | 23 lines | 21 lines | 8 lines | currency ok, scale flagged | skipped (`identity_totals_not_found`; 3 cells with numbers missing) |
+| juhayna-2025-en-consolidated | 23 lines | 21 lines | 8 lines | currency ok, scale flagged | skipped (`identity_totals_not_found`; 5 cells with numbers missing) |
 | juhayna-2024-ar-consolidated | not extracted | not extracted | 8 lines | currency ok, scale flagged | no balance sheet |
 | juhayna-2024-en-consolidated | 43 lines | 20 lines | 8 lines | currency ok, scale flagged | skipped (`identity_totals_not_found`; 2 cells with numbers missing) |
 | edita-2025-ar-consolidated | 39 lines | 22 lines | 7 lines | currency ok, scale flagged | skipped (`identity_totals_not_found`) |
@@ -349,10 +364,10 @@ Unmatched numeric rows in each language edition of a pair (first edition, second
 |---------|--------|--------|
 | Almarai EN against AR | every numeric row matched | met: 0 unmatched rows on balance, income and comprehensive income in both editions |
 | Scale and currency, golden set | 12 of 12 correct or flagged | met for the 29 statements extracted: currency correct in every one, scale 1000 correct on Almarai, scale flagged `scale_missing` on the ten documents whose manifest scale is unconfirmed |
-| Balance sheet identity, golden set | holds, or flagged with the correct reason | not met: `make eval-structure` prints FAIL. Holds on Almarai EN and AR, Edita EAS and Edita IFRS; skipped with `identity_totals_not_found` on three Juhayna and Edita statements; failed on edita-2024-ar-consolidated with every value of its own rows present (below). No balance sheet was extracted for four Juhayna documents |
+| Balance sheet identity, golden set | holds, or flagged with the correct reason | not met: `make eval-structure` prints FAIL. Holds on Almarai EN and AR, Edita EAS and Edita IFRS; skipped with `identity_totals_not_found` on three Juhayna and Edita statements; failed on edita-2024-ar-consolidated in 2023-12-31 with every value of its own rows present, and holds there in 2024-12-31 (below). No balance sheet was extracted for four Juhayna documents |
 | Resolution test (task 1) | recorded | OCR scale 4 and 5 and cell matching off found no more numeric cells on Juhayna p5 than docling's default scale 3 (13 and 17 cells at 3; fewer at 4 and 5; none with matching off), so `ocr_scale` stays 3.0 and `do_cell_matching` stays on |
 
-Identity failure, edita-2024-ar-consolidated, balance sheet p5, period 2024-12-31: total assets `p5-t0-r14` 10,241,537,800, total liabilities `p5-t0-r38` 6,083,968,654 and the row labelled total equity `p5-t0-r22` 102,084,427 (printed `١٠٢ ٠٨٤ ٤٢٧`). The liabilities and that equity sum to 6,186,053,081, 4,055,484,719 below the assets. None of the three rows carries `numbers_missing`; the five cells that do are on other rows (`p5-t0-r24`, `r26`, `r30`, `r31` in 2023-12-31 and `r36` in 2024-12-31), so nothing excuses the failure. On this scanned table docling shifted labels against values by one row: the row labelled total equity (r22) holds 102,084,427, non-controlling interests, while total equity 4,157,569,146 sits on the unlabelled r21; and merged cells give impossible magnitudes (r35 3,692,047,248,382,615 in 2024-12-31; r37 108,179,492,720,929,919 in 2023-12-31), which now carry `implausible_magnitude`. Row-alignment repair is left to Part 3b and the week-2 OCR work.
+Identity failure, edita-2024-ar-consolidated, balance sheet p5. The identity is read against the printed closing total, `p5-t0-r39` "إجمالي حقوق الملكية والالتزامات". In 2024-12-31 it holds exactly: total assets `p5-t0-r14` 10,241,537,800 against 10,241,537,800. In 2023-12-31 it fails by 5: total assets 7,743,342,656 (printed `٧٧٤٣٣٤٢٦٥٦`) against 7,743,342,651 (`٧٧٤٣٣٤٢٦٥١`), one digit read differently in two cells that print the same figure. Neither row carries `numbers_missing`; the five cells that do are on other rows (`p5-t0-r24`, `r26`, `r30`, `r31` in 2023-12-31 and `r36` in 2024-12-31), so nothing excuses the failure. The table has a second fault the identity no longer leans on: docling shifted labels against values by one row, so the row labelled total equity (r22) holds 102,084,427, non-controlling interests, while total equity 4,157,569,146 sits on the unlabelled r21; and merged cells give impossible magnitudes (r35 3,692,047,248,382,615 in 2024-12-31; r37 108,179,492,720,929,919 in 2023-12-31), which carry `implausible_magnitude`. Those show as `subtotal_failed`. Row-alignment repair is left to Part 3b and the week-2 OCR work.
 
 Not gated, causes per pair from the eval JSON (the differences coincide with these flags and gaps, not with scans alone):
 
@@ -361,3 +376,14 @@ Not gated, causes per pair from the eval JSON (the differences coincide with the
 - Edita 2025, balance (37 / 36): the AR balance sheet has 0 `numbers_missing` cells; its flags are `period_unbound:0`, `subtotal_failed` and a skipped identity. The EAS balance sheet has 3 `numbers_missing` cells, 3 `implausible_magnitude` cells and `subtotal_failed`.
 - Edita 2025, income (4 / 3): the AR and EAS income statements each have 1 `numbers_missing` cell; the EAS one carries `ambiguous_statement:income`.
 - Edita 2025, comprehensive income (3 / 3): the AR statement carries `subtotal_failed`; neither edition has a cell marked `numbers_missing` that explains the rows.
+
+Logic fixes after the results above, each with its test, and what they changed on the golden set:
+
+- A tail page below confidence now takes an undated column's period from the page before, as a classified page already did. No golden change.
+- A known total with every value lost keeps its cells as `numbers_missing`. With the closing-total wording "total equity and total liabilities" and "إجمالي حقوق الملكية والالتزامات" added to the taxonomy, juhayna-2025-en-consolidated's closing total `p5-t0-r35` is now a row with two missing values, not a heading (3 to 5 `numbers_missing` cells), and edita-2024-ar-consolidated's identity is read against its printed closing total (above). Its identity still fails, so the eval still prints FAIL for that one reason.
+- A label ending in "(IFRS 16)" or "Level 3" keeps its number. No golden change.
+- An implicit subtotal needs two rows that are not zero; per-share rows join no sum; a value more than 10^4 times its column's median is `implausible_magnitude`; a heading that reads as a period is not a note heading; a year-only header under an interim date line keeps the interim length. No golden change.
+- In `fra_core`: a month count in digits ("6 months ended 30 June 2025") is no longer read as the day; currency detection reads GBP, `£`, `$`, `US$`, KD and SR, reads LE only in capitals, and no longer takes "dollars" alone as USD. No golden change.
+- A cached `statements.raw.json` is used only when `table_checks.json` is beside it. `STRUCTURE_VERSION` is 3.
+
+Every other statement, check and flag on the twelve documents is identical before and after.
