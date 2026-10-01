@@ -74,7 +74,7 @@ python_version = "3.12"
 strict = true
 warn_unreachable = true
 # Keep in sync with workspace members.
-mypy_path = "apps/api/src:packages/core/src:packages/ingest/src:packages/ingest/tests:packages/analytics/src:packages/modeling/src"
+mypy_path = "apps/api/src:packages/core/src:packages/ingest/src:packages/ingest/tests"
 
 [[tool.mypy.overrides]]
 module = ["docling.*", "docling_core.*", "mlx.*", "mlx_lm.*", "pypdfium2.*", "matplotlib.*", "ocrmac", "ocrmac.*"]

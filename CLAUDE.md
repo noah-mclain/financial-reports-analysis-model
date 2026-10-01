@@ -58,7 +58,11 @@ These hold for every change, from the first commit to the last.
 make setup          # uv workspace into .venv
 make test           # fast tests; must pass before every commit
 make lint           # ruff format check and ruff check
-make typecheck      # mypy --strict over packages
+make typecheck      # mypy --strict over packages, apps and the eval harness
+make docs-check     # no placeholder left in docs
+make dev            # serve the API natively (profile native) on FRA_API_PORT
+make docker-up      # build and start the Docker profile (api and worker); needs Docker running
+make docker-health  # check the Docker profile's API from the host
 make corpus-check   # corpus pool split rules, no network
 make corpus-fetch   # download, measure and dedupe the corpus into var/corpus (run on the Mac)
 ```

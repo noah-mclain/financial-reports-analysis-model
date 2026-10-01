@@ -50,7 +50,7 @@ lint: ## Lint without fixing
 	$(UV) run ruff format --check .
 	$(UV) run ruff check .
 
-typecheck: ## Type check the packages and the eval harness
+typecheck: ## Type check the packages, the apps and the eval harness
 	@$(MAKE) --no-print-directory unhide-pth
 	$(UV) run mypy packages $(wildcard apps)
 	$(UV) run mypy eval/harness

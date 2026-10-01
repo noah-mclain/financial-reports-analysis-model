@@ -1,20 +1,22 @@
 """Helpers for the GGUF route spike (docs/blueprint/14-run-profiles.md).
 
-    uv run python scripts/spikes/gguf_spike.py data
+    uv run python scripts/spikes/gguf_spike.py data --work DIR
     uv run --with "mlx-lm[train]==0.31.3" python scripts/spikes/gguf_spike.py mlx \
-        --adapter DIR --out FILE
-    uv run python scripts/spikes/gguf_spike.py server --url http://127.0.0.1:8090 --out FILE
+        --work DIR --model REPO --adapter DIR --out FILE
+    uv run python scripts/spikes/gguf_spike.py server --work DIR --url URL --out FILE
     uv run python scripts/spikes/gguf_spike.py compare REFERENCE CANDIDATE
-    uv run python scripts/spikes/gguf_spike.py margins --url http://127.0.0.1:8090
+    uv run python scripts/spikes/gguf_spike.py margins --work DIR --url URL
 
-`data` writes a toy task under var/spikes/gguf/data: map a line-item label to its canonical id.
-The ten held-out labels are aliases the adapter never sees, for ids it does see, so an answer
-is either the right id or it is not. `mlx` and `server` answer the held-out labels with the
-same messages at temperature 0, and `compare` counts how many answers agree. `margins` prints,
-for each held-out label, the step where the served model's first and second choice are closest:
-an answer that flips between quantizations is only a finding if that step was not a near tie.
+`data` writes a toy task under DIR/data: map a line-item label to its canonical id. The ten
+held-out labels are aliases the adapter never sees, for ids it does see, so an answer is either
+the right id or it is not. `mlx` and `server` answer the held-out labels with the same messages
+at temperature 0, and `compare` counts how many answers agree. `margins` prints, for each
+held-out label, the step where the served model's first and second choice are closest, as
+probabilities and as the gap in log-odds: an answer that flips between quantizations is only a
+finding if that step was not a near tie.
 
-scripts/spikes/gguf_route.sh runs the whole route.
+scripts/spikes/gguf_route.sh runs the whole route. It owns the work directory, the base model
+and the server address and passes them in, so this file holds no copy of them.
 """
 
 from __future__ import annotations
@@ -24,23 +26,26 @@ import json
 import math
 import sys
 import urllib.request
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
-WORK = Path("var/spikes/gguf")
-DATA = WORK / "data"
-BASE_MODEL = "mlx-community/Qwen2.5-0.5B-Instruct-4bit"
 SYSTEM = "Map the financial statement line-item label to its canonical id. Reply with the id only."
 HELD_OUT = 10
 TRAIN = 40
 MAX_TOKENS = 16
+# The plan's bar: the candidate gives the reference's answer on at least 9 of 10 prompts.
+AGREEMENT_BAR = Fraction(9, 10)
+# compare's exit codes: 1 is a result (below the bar), 2 is two files that cannot be compared.
+BELOW_BAR = 1
+NOT_COMPARABLE = 2
 
 
 def messages(label: str) -> list[dict[str, str]]:
     return [{"role": "system", "content": SYSTEM}, {"role": "user", "content": label}]
 
 
-def write_data() -> None:
+def write_data(data: Path) -> None:
     from fra_core.taxonomy import load_taxonomy
 
     items = load_taxonomy().items
@@ -56,15 +61,15 @@ def write_data() -> None:
             train.append((item.aliases_for("en")[0], item.id))
     train = train[:TRAIN]
 
-    DATA.mkdir(parents=True, exist_ok=True)
-    _write_chat(DATA / "train.jsonl", train)
+    data.mkdir(parents=True, exist_ok=True)
+    _write_chat(data / "train.jsonl", train)
     # mlx_lm.lora wants a validation file; the toy task has nothing to tune, so it reuses
     # training rows and the loss it reports is not a held-out loss.
-    _write_chat(DATA / "valid.jsonl", train[:5])
-    (DATA / "heldout.jsonl").write_text(
+    _write_chat(data / "valid.jsonl", train[:5])
+    (data / "heldout.jsonl").write_text(
         "".join(json.dumps({"label": label, "id": cid}) + "\n" for label, cid in held)
     )
-    print(f"train {len(train)}, held out {len(held)} -> {DATA}")
+    print(f"train {len(train)}, held out {len(held)} -> {data}")
 
 
 def _write_chat(path: Path, rows: list[tuple[str, str]]) -> None:
@@ -75,47 +80,58 @@ def _write_chat(path: Path, rows: list[tuple[str, str]]) -> None:
     path.write_text("\n".join(lines) + "\n")
 
 
-def held_out() -> list[dict[str, str]]:
-    return [json.loads(line) for line in (DATA / "heldout.jsonl").read_text().splitlines()]
+def held_out(data: Path) -> list[dict[str, str]]:
+    return [json.loads(line) for line in (data / "heldout.jsonl").read_text().splitlines()]
 
 
-def answer_mlx(adapter: str | None, out: Path) -> None:
+def answer_mlx(data: Path, base_model: str, adapter: str | None, out: Path) -> None:
     from mlx_lm import generate, load  # type: ignore[import-not-found]
 
-    model, tokenizer = load(BASE_MODEL, adapter_path=adapter)
+    model, tokenizer = load(base_model, adapter_path=adapter)
     answers = []
-    for row in held_out():
+    for row in held_out(data):
         prompt = tokenizer.apply_chat_template(
             messages(row["label"]), add_generation_prompt=True, tokenize=False
         )
         # mlx_lm's default sampler is greedy, which is temperature 0.
         text = generate(model, tokenizer, prompt=prompt, max_tokens=MAX_TOKENS)
         answers.append({**row, "answer": text.strip()})
-    _save(out, {"backend": "mlx", "adapter": adapter, "answers": answers})
+    _save(out, {"backend": "mlx", "model": base_model, "adapter": adapter, "answers": answers})
 
 
-def answer_server(url: str, out: Path) -> None:
+def answer_server(data: Path, url: str, out: Path) -> None:
     answers = []
-    for row in held_out():
+    for row in held_out(data):
         reply = _chat(url, messages(row["label"]), MAX_TOKENS)
         answers.append({**row, "answer": reply["choices"][0]["message"]["content"].strip()})
 
     _save(out, {"backend": "llama-server", "answers": answers})
 
 
-def margins(url: str) -> None:
-    for row in held_out():
+def margins(data: Path, url: str) -> None:
+    for row in held_out(data):
         reply = _chat(url, messages(row["label"]), MAX_TOKENS, logprobs=True, top_logprobs=2)
         steps = [step["top_logprobs"] for step in reply["choices"][0]["logprobs"]["content"]]
         first, second = min(steps, key=lambda top: top[0]["logprob"] - top[1]["logprob"])[:2]
+        # The gap between two log-probabilities is the log-odds of the first choice over the
+        # second, in nats: 0 is a tie, and it does not shrink just because both are unlikely.
         print(
             f"{row['label']!r}: {first['token']!r} {math.exp(first['logprob']):.3f}"
             f" vs {second['token']!r} {math.exp(second['logprob']):.3f}"
+            f", log-odds {first['logprob'] - second['logprob']:.3f}"
         )
 
 
 def _chat(url: str, msgs: list[dict[str, str]], max_tokens: int, **extra: Any) -> dict[str, Any]:
-    payload = {"messages": msgs, "temperature": 0, "max_tokens": max_tokens, **extra}
+    # cache_prompt off: every request is evaluated from its first token, so an answer cannot
+    # depend on the request before it. llama-server reuses the shared prompt prefix by default.
+    payload = {
+        "messages": msgs,
+        "temperature": 0,
+        "max_tokens": max_tokens,
+        "cache_prompt": False,
+        **extra,
+    }
     body = json.dumps(payload).encode()
     request = urllib.request.Request(
         f"{url}/v1/chat/completions", data=body, headers={"Content-Type": "application/json"}
@@ -135,6 +151,16 @@ def _save(out: Path, payload: dict[str, Any]) -> None:
 def compare(reference: Path, candidate: Path) -> int:
     ref = json.loads(reference.read_text())["answers"]
     cand = json.loads(candidate.read_text())["answers"]
+    if not ref:
+        print(f"{reference} holds no answers: nothing to compare", file=sys.stderr)
+        return NOT_COMPARABLE
+    if [r["label"] for r in ref] != [c["label"] for c in cand]:
+        print(
+            f"{reference} and {candidate} do not hold the same labels in the same order"
+            f" ({len(ref)} and {len(cand)} answers): nothing to compare",
+            file=sys.stderr,
+        )
+        return NOT_COMPARABLE
     same = 0
     for r, c in zip(ref, cand, strict=True):
         agree = r["answer"] == c["answer"]
@@ -142,36 +168,40 @@ def compare(reference: Path, candidate: Path) -> int:
         mark = "same" if agree else "DIFF"
         print(f"{mark}  {r['label']!r}: {r['answer']!r} | {c['answer']!r}")
     print(f"agreement {same}/{len(ref)}")
-    return 0 if same >= len(ref) - 1 else 1
+    return 0 if Fraction(same, len(ref)) >= AGREEMENT_BAR else BELOW_BAR
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("data")
-    mlx = sub.add_parser("mlx")
+    work = argparse.ArgumentParser(add_help=False)
+    work.add_argument("--work", type=Path, required=True, help="the spike's work directory")
+    url = argparse.ArgumentParser(add_help=False)
+    url.add_argument("--url", required=True, help="llama-server's address")
+    sub.add_parser("data", parents=[work])
+    mlx = sub.add_parser("mlx", parents=[work])
+    mlx.add_argument("--model", required=True, help="the MLX base model")
     mlx.add_argument("--adapter")
     mlx.add_argument("--out", type=Path, required=True)
-    server = sub.add_parser("server")
-    server.add_argument("--url", default="http://127.0.0.1:8090")
+    server = sub.add_parser("server", parents=[work, url])
     server.add_argument("--out", type=Path, required=True)
-    margin_parser = sub.add_parser("margins")
-    margin_parser.add_argument("--url", default="http://127.0.0.1:8090")
+    sub.add_parser("margins", parents=[work, url])
     cmp_parser = sub.add_parser("compare")
     cmp_parser.add_argument("reference", type=Path)
     cmp_parser.add_argument("candidate", type=Path)
     args = parser.parse_args()
 
-    if args.command == "data":
-        write_data()
-    elif args.command == "mlx":
-        answer_mlx(args.adapter, args.out)
-    elif args.command == "server":
-        answer_server(args.url, args.out)
-    elif args.command == "margins":
-        margins(args.url)
-    else:
+    if args.command == "compare":
         return compare(args.reference, args.candidate)
+    data = args.work / "data"
+    if args.command == "data":
+        write_data(data)
+    elif args.command == "mlx":
+        answer_mlx(data, args.model, args.adapter, args.out)
+    elif args.command == "server":
+        answer_server(data, args.url, args.out)
+    else:
+        margins(data, args.url)
     return 0
 
 

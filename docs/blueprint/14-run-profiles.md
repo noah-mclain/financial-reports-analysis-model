@@ -1,8 +1,11 @@
-# 14. Run profiles: the model route from MLX to llama.cpp
+# 14. Run profiles: the model route from MLX to llama.cpp, and the Docker skeleton
 
-Status: v2, 2026-10-02. The GGUF spike is measured, and the Docker skeleton is built and
-measured (last section). This document closes R16 as a question
-([08-revised-plan.md](08-revised-plan.md)) and records a first number for R19.
+Status: v3, 2026-10-02. The GGUF spike is measured, on two runs, and the Docker skeleton is
+built and measured (last section). This document closes R16 as a question
+([08-revised-plan.md](08-revised-plan.md)): the route works on a small model. It does not yet
+clear the route for the 7B, because the route uses a step that
+[01-constraints.md](01-constraints.md) 1.4 forbids on this machine (see "Decision for week 3").
+It records a first number for R19.
 
 ## The question
 
@@ -14,40 +17,59 @@ works, and whether the converted model gives the same answers.
 
 ## What was run
 
-`scripts/spikes/gguf_route.sh` runs all of it in 2 minutes 12 seconds on the M3 Pro, after
-`brew install llama.cpp`. Outputs go to `var/spikes/gguf/` (3.9 GB, ignored).
+`scripts/spikes/gguf_route.sh` runs all of it, after `brew install llama.cpp`. It was run twice:
+once on 1 October, and again on 2 October after the script was changed to switch off
+`llama-server`'s prompt cache and to save the margins and the benchmark. The first run took 2
+minutes 12 seconds on the M3 Pro. So did the second, with the base model already in `var/hf`.
+The script also ran three more times, in part or in full, to prove its failure handling (port
+already taken, a failure midway, a TERM signal); only the last full run's outputs are kept.
+Where the two runs differ, both results are given. Outputs go to `var/spikes/gguf/`
+(4.08 GB, 4,084,671,488 bytes, ignored): the second run's logs and answers, and the first run's
+under `run1/`.
 
 | Piece | Value |
 |-------|-------|
-| Base model | `mlx-community/Qwen2.5-0.5B-Instruct-4bit`: same architecture as the planned 7B, minutes instead of an hour |
-| MLX | `mlx-lm[train]==0.31.3` in a throwaway environment (`uv run --with`); `uv.lock` unchanged |
+| Base model | `mlx-community/Qwen2.5-0.5B-Instruct-4bit`, revision `a5339a4131f135d0fdc6a5c8b5bbed2753bbe0f3`: same architecture as the planned 7B, minutes instead of an hour |
+| MLX | `mlx-lm[train]==0.31.3` in a throwaway environment (`uv run --with`); the spike leaves `uv.lock` unchanged. Only `mlx-lm` is pinned: the environment resolved `mlx` 0.32.3, not the 0.32.2 that [01-constraints.md](01-constraints.md) 1.5 pins |
+| Model cache | `HF_HOME=var/hf`, as 1.4 requires, set by the script (290 MB). The first run did not set it, and the model went to `~/.cache/huggingface` |
 | llama.cpp | 0.5.0, build 11146, commit `7fe450e`, from Homebrew; the converter from the same tag `b11146` |
 | Toy task | Map a line-item label to its canonical id, from the English aliases in `fra_core`'s taxonomy |
-| Training | 40 examples over 23 ids, 100 iterations, validation loss 6.39 to 0.20, peak memory 1.0 GB |
+| Training | 40 examples over 23 ids, 100 iterations, seed 0, peak memory 1.0 GB. Loss on five training rows, prompt tokens included (not held out), went from 6.39 to 0.20 |
 | Held out | 10 labels the adapter never saw, for ids it did see |
 
 The steps, in order:
 
 1. `mlx_lm lora` trains the adapter on the 4-bit base (11.8 MB).
-2. `mlx_lm fuse --dequantize` writes a full-precision model directory (988 MB, bfloat16).
+2. `mlx_lm fuse --dequantize` writes a float16 model directory (1.00 GB, of which
+   `model.safetensors` is 988 MB). The flag is required, not optional: without it
+   `LoRALinear.fuse` (`mlx_lm/tuner/lora.py`, 0.31.3) puts each fused layer back into 4 bits with
+   `nn.QuantizedLinear.from_linear`.
 3. `convert_hf_to_gguf.py --outtype f16` writes the f16 GGUF.
 4. `llama-quantize` writes Q4_K_M, Q5_K_M, Q6_K and Q8_0 from the f16 file.
 5. `llama-server -ngl 0 --jinja` serves each file on the CPU. The ten prompts go through
    `/v1/chat/completions` with the same system and user messages at temperature 0, using the
-   chat template stored in the GGUF.
+   chat template stored in the GGUF. In the second run every request also sends
+   `"cache_prompt": false`.
 
 ## Result
 
-The route works. The f16 GGUF gives the same answer as MLX on 10 of 10 prompts.
+The route works. The f16 GGUF gives the same answer as MLX on 10 of 10 prompts, in both runs.
 
-| Model | File | Same answer as MLX with the adapter |
-|-------|-----:|:-----------------------------------:|
-| MLX base, no adapter (control) | | 0 / 10 |
-| GGUF f16 | 960 MB | 10 / 10 |
-| GGUF Q8_0 | 521 MB | 9 / 10 |
-| GGUF Q6_K | 494 MB | 10 / 10 |
-| GGUF Q5_K_M | 410 MB | 9 / 10 |
-| GGUF Q4_K_M | 390 MB | 8 / 10 |
+What is compared: the MLX reference is the 4-bit base with the adapter loaded unfused. The GGUF
+is the dequantized base plus the adapter's delta, stored as 16-bit, then quantized again by
+`llama-quantize`.
+
+| Model | File | Bits per weight | Same answer as MLX, second run | First run |
+|-------|-----:|----------------:|:------------------------------:|:---------:|
+| MLX base, no adapter (control) | | | 0 / 10 | 0 / 10 |
+| GGUF f16 | 994 MB | 16.00 | 10 / 10 | 10 / 10 |
+| GGUF Q8_0 | 531 MB | 8.50 | 9 / 10 | 9 / 10 |
+| GGUF Q6_K | 506 MB | 8.09 | 10 / 10 | 10 / 10 |
+| GGUF Q5_K_M | 420 MB | 6.71 | 9 / 10 | 9 / 10 |
+| GGUF Q4_K_M | 398 MB | 6.35 | 7 / 10 | 8 / 10 |
+
+File sizes are byte counts in decimal MB, the same in both runs. Bits per weight are from
+`logs/quantize-*.log`.
 
 The control matters: the base model alone answers with strings of digits, so the agreement
 comes from the adapter having survived the fuse and the conversion, not from the base model
@@ -58,42 +80,121 @@ canonical id on 2 of the 10 unseen labels, and invents ids such as `cost_of_use`
 That is what 100 iterations on a 0.5B model buy, and it makes the comparison stricter, since
 invented answers are easier to disturb than memorized ones.
 
-### Why Q4_K_M misses, and why it is not a finding against the route
+### These files are not the levels their names say
 
-Only two prompts ever change, the same two at every level, and Q8_0 changes one that Q6_K does
-not. Loss that came from coarser quantization would grow as the files shrink. This does not.
+`llama-quantize` reports that 144 of 290 tensors needed fallback quantization for Q4_K_M, Q5_K_M
+and Q6_K. The K formats need a row length divisible by 256, and the 0.5B model's hidden size is
+896. The other 121 tensors are f32 and stay as they are. In the "Q4_K_M" file, the 169 quantized
+tensors are stored as 12 q4_K, 12 q6_K, 132 q5_0 and 13 q8_0: the 144 fallbacks are the 132 q5_0
+and 12 of the q8_0, and the 13th q8_0 is the token embedding. The result is 6.35 bits per weight,
+where a true Q4_K_M is about 4.9 (llama.cpp's figure, not measured here).
 
-The two prompts are near ties in the f16 model itself. At the step where its first and second
-choice are closest:
+So these files are finer than the same names will be on the 7B, and the table says nothing
+about a true Q4_K_M, Q5_K_M or Q6_K. The plan's premise, that the route depends on the
+architecture and not the size, holds for the fuse and the conversion. It does not hold for the
+quantize step.
 
-| Label | First choice | Second choice |
-|-------|--------------|---------------|
-| revenue from contracts with customers | `oper` 0.209 | `ppe` 0.206 |
-| profit for the period | `_tax` 0.418 | end of answer 0.412 |
-| the other eight, narrowest | 0.156 | 0.110 |
+### Which answers change
 
-At temperature 0 the model takes the first choice, so when two choices are 0.3 to 0.6 points
-apart any rounding of the weights can swap them. The eight prompts with a clear first choice
-hold at every level.
+| Level | Prompts that differ from MLX |
+|-------|------------------------------|
+| Q8_0 | "revenue from contracts with customers" only |
+| Q6_K | none |
+| Q5_K_M | "profit for the period" only |
+| Q4_K_M | both of those; in the second run also "investment income" |
 
-So the plan's bar of 9 in 10 is met by f16, Q8_0, Q6_K and Q5_K_M, and missed by Q4_K_M on two
-coin flips. An exact-match count over ten prompts cannot tell a tie from a real change; week 3
-needs a better measure (below).
+Every other answer is the same in the two runs, and so are the MLX answers.
+
+The table neither shows nor rules out a loss that grows as the bits fall. The order is not
+monotone: Q8_0 at 8.50 bits changes an answer that Q6_K at 8.09 does not. But the file with the
+fewest bits changes the most. Ten prompts cannot separate the two readings.
+
+### The prompt cache changes an answer on its own
+
+The first run left `llama-server`'s prompt cache on. Its logs show 37 prompt tokens evaluated
+for the first request and 7 to 12 for the rest, because the shared prefix was reused. The second
+run switched it off, and every request evaluated 33 to 38 tokens.
+
+Switching the cache reproduces the difference on the same file. The first run's GGUF files were
+not hashed, so that the two runs' files were otherwise identical is not shown. Serving the
+second run's files and asking the three prompts that ever change, with the cache on and then off
+(`logs/cache-probe.log`, two passes per setting): for the Q4_K_M file, with the cache on,
+"investment income" gets `investment_income`, as in the first run; with it off, `nip_income`. Each
+setting repeats itself exactly on a second pass. For the other four files the answers to those
+three prompts are the same with the cache on and off. The other seven prompts were not asked. So
+the same file, at temperature 0, gives two answers to one prompt
+depending on whether a prefix was cached.
+
+### Why the answers change: consistent with near ties, not shown
+
+The margins below are from the f16 GGUF in the second run (`logs/margins-f16.log`): for each
+prompt, the step where the first and second choice are closest. Log-odds is the natural log of
+the ratio of the two probabilities: 0 is a tie, 0.69 is twice as likely.
+
+| Label | First choice | Second choice | Log-odds | Changes at |
+|-------|--------------|---------------|---------:|------------|
+| profit for the period | `_tax` 0.417 | end of answer 0.413 | 0.008 | Q5_K_M, Q4_K_M |
+| revenue from contracts with customers | `oper` 0.209 | `ppe` 0.205 | 0.018 | Q8_0, Q4_K_M |
+| investment income | `investment` 0.380 | `nip` 0.285 | 0.289 | Q4_K_M, cache off |
+| borrowing costs | `ppe` 0.156 | `oper` 0.111 | 0.343 | |
+| depreciation | `isation` 0.602 | `ization` 0.393 | 0.428 | |
+| profit before zakat and income tax | `profit` 0.398 | `net` 0.174 | 0.828 | |
+| tax expense | end of answer 0.743 | `_exp` 0.244 | 1.113 | |
+| cost of goods sold | `_use` 0.600 | `_re` 0.162 | 1.308 | |
+| administrative expenses | `_costs` 0.683 | `_cost` 0.179 | 1.341 | |
+| operating income | `ating` 0.965 | `uted` 0.016 | 4.108 | |
+
+What supports the near-tie reading: the three prompts that ever change are the three with the
+narrowest margins, and the two that change at more than one level are within 0.02 of a tie.
+
+All three changed answers also begin with the f16 model's second choice at the step the table
+reports: `ppe_net` for "revenue from contracts with customers", `nip_income` for "investment
+income", and, for "profit for the period", an answer that ends after `profit_before`. That is
+the strongest support on disk for the near-tie reading.
+
+What it does not show:
+
+- The margins are from the f16 GGUF only. The bar is defined against the MLX reference, and its
+  margins were not read.
+- The third prompt is not a tie. At 0.289 its first choice is 1.3 times as likely as its
+  second, and it still changed. The next two, at 0.343 and 0.428, did not. Nine of the ten
+  margins are under 1.4, so on this adapter almost every answer is exposed, and there is no
+  clear line between a near tie and a safe answer.
+- The first run's margins were printed to the terminal and not saved. The three written down
+  then (0.209 against 0.206, 0.418 against 0.412, 0.156 against 0.110) are within 0.001 of the
+  second run's.
+
+What would show the reading is wrong: an answer that changes on a wide margin; a wide margin in
+MLX on a prompt that changes in GGUF; or, on a larger sample, a rate of change that rises as
+the level gets coarser.
+
+So the plan's bar of 9 in 10 is met by f16, Q8_0, Q6_K and Q5_K_M, and missed by the file named
+Q4_K_M, at 7 of 10 with the prompt cache off and 8 of 10 with it on. An exact-match count over
+ten prompts cannot tell a tie from a real change; week 3 needs a better measure (below).
 
 ## Speed
 
-`llama-bench` on the Q4_K_M file, 6 threads, 128 generated tokens, three repeats. The serving
-run cannot measure this, because the toy model answers in three tokens.
+`llama-bench` on the "Q4_K_M" file, which is the 6.35 bits per weight file above, not a true
+Q4_K_M: 6 threads, 512 prompt tokens, 128 generated tokens, three repeats. The serving run
+cannot measure this, because the toy model answers in three tokens.
 
 | Backend | Prompt, tokens/s | Generation, tokens/s |
 |---------|-----------------:|---------------------:|
-| CPU only (`-ngl 0`) | 367 | 79 |
-| Metal | 2,795 | 110 |
+| CPU only (`-ngl 0`) | 368 ± 31 | 58.5 ± 9.1 |
+| Metal | 3,956 ± 326 | 109.6 ± 11.7 |
+
+These are the second run's (`logs/bench.log`). The measurement is noisy. The first run, read
+from the terminal and not saved, gave 367 and 79 on the CPU and 2,795 and 110 with Metal. The
+same command a few minutes after the second run gave 423 ± 53 and 76.7 ± 17.7 on the CPU
+(`logs/bench-repeat.log`), with the machine's load average between 13 and 18 on 12 cores
+(observed at the time, not saved). CPU
+generation for the 0.5B model is somewhere between 59 and 79 tokens/s.
 
 This is the 0.5B model on the Mac's own CPU, not in a container. The 7B model has about 15
-times the parameters, and CPU generation scales roughly with size, so the Docker profile lands
-near the 5 tokens/s line of R19 before the VM takes its share. That is an estimate, not a
-measurement: R19 stays open until the 7B file is benchmarked inside the container.
+times the parameters, and CPU speed scales roughly with size, so the Docker profile lands
+about 4 to 5.3 tokens/s generating, on either side of the 5 tokens/s line of R19, and about 25
+tokens/s reading the prompt, before the VM takes its share. Those are estimates, not
+measurements: R19 stays open until the 7B file is benchmarked inside the container.
 
 ## What failed, and the fix
 
@@ -102,36 +203,87 @@ snapshot with `local_files_only=True`, but `mlx_lm` downloads only the model fil
 `README.md` and `.gitattributes` are missing and `huggingface_hub` refuses the snapshot. One
 call to `snapshot_download` for the base model before fusing completes it. The script does this.
 
-Nothing else failed. Qwen2's tokenizer and chat template convert without flags.
+Nothing else stopped the route. Qwen2's tokenizer and chat template convert without flags. Three
+warnings are in the logs:
+
+- Every server log: `control-looking token: 128247 '</s>' was not control-type; this is probably
+  a bug in the model. its type will be overridden`. The f16 file still agrees with MLX on 10 of
+  10, so it did not change these answers.
+- `convert.log`: `Unknown RoPE type: default`.
+- The quantize logs: the fallback warnings above.
 
 ## Not run
 
 Route B (the unfused base as GGUF, the adapter converted with `convert_lora_to_gguf.py` and
-loaded with `--lora`) was not tried, because route A agrees. It would first need the adapter
-rewritten: MLX writes `adapters.safetensors` with its own config, and llama.cpp's converter
-reads the PEFT layout. It is the fallback if a fused 7B model ever fails to convert.
+loaded with `--lora`) was not run. Route A agrees at f16. At Q4_K_M it scored 8 of 10 in the
+first run and 7 of 10 in the second, which under the plan's step 6 ("if A fails or disagrees")
+would have triggered route B. Whether B would do better is not measured. It would first need
+the adapter rewritten: MLX writes `adapters.safetensors` with its own config, and llama.cpp's
+converter reads the PEFT layout. It remains the fallback if the real adapter loses answers at
+the level that ships, or if a fused 7B model fails to convert.
 
 Nothing in the spike was run in Docker. The CPU-only figures come from `-ngl 0` on macOS.
 
 ## Decision for week 3
 
+**The route needs a standing rule amended, and that is the owner's decision.**
+[01-constraints.md](01-constraints.md) 1.4 says: "Never download full-precision weights. Never
+run `mlx_lm.fuse --dequantize` on this machine." The route is exactly that step. The spike ran
+`--dequantize` on the 0.5B model (about 1 GB). Until the rule is amended for the GGUF export
+only, the route is proven but not permitted for the 7B. What it costs at 7B:
+
+- **Disk, estimated:** about 15 GB for the dequantized directory and about 15 GB for the f16
+  GGUF (16-bit weights for 7.6 billion parameters), plus about 5 GB for the quantized file:
+  about 35 GB while all three exist. `df` showed about 68 GB free when measured on 2 October (it
+  moves by a few GB as caches grow; `logs/df-2026-10-02.log`), so about 33 GB would remain,
+  above the 15 GB floor in 1.4. But 1.4 also budgets about 25 GB for the bake-off's worst case,
+  and both at once would leave about 8 GB, under the floor. The intermediates can be deleted
+  once the quantized file is checked.
+- **Memory:** the peak of dequantizing and converting the 7B on 18 GB is not measured.
+
+If the rule is amended:
+
 - **Route:** train the QLoRA adapter on the 4-bit MLX base as planned, then `fuse --dequantize`,
-  `convert_hf_to_gguf.py` to f16, `llama-quantize`. No change to the training plan.
-- **Pin** llama.cpp's binaries and its converter to the same build tag.
+  `convert_hf_to_gguf.py` to f16, `llama-quantize`. The training itself does not change; the
+  export adds the disk above and a rehearsal (below).
+- **Pin** llama.cpp's binaries and its converter to the same build tag, and pin `mlx` as well as
+  `mlx-lm`.
 - **Complete the snapshot** before fusing.
+- **Send `"cache_prompt": false`** in any comparison between runtimes.
+
+Before and during week 3:
+
+- **Benchmark first.** Run an off-the-shelf Qwen2.5-7B-Instruct Q4_K_M GGUF in the container
+  before training anything. Speed does not depend on the adapter, and R19's mitigation, a
+  smaller model, needs its own training run.
+- **Rehearse the 7B route** with a throwaway adapter, and record peak memory, disk and any
+  quantize fallbacks.
 - **Quantization level is chosen by measurement, not assumed.** After the real adapter is
-  trained, compare MLX with Q4_K_M and Q5_K_M on at least 50 held-out labels, and record the
-  first-to-second margin for every answer that differs. A difference on a near tie is noise; a
-  confident answer that changes is a reason to move up a level. `gguf_spike.py margins` shows
-  how to read the margin from `llama-server`.
-- **Disk:** the dequantized 7B directory and its f16 GGUF are each about 15 GB (16-bit weights
-  for 7.6 billion parameters), next to the quantized file. They are intermediate and can be
-  deleted once the quantized file is checked.
+  trained, compare MLX with Q4_K_M and Q5_K_M on at least 50 held-out labels. Those labels come
+  from a validation split of `train` or `dev` issuers, never from `model_test` or `blind`.
+- **Fix the acceptance rule in advance:** a margin threshold in log-odds, read on both runtimes,
+  and task accuracy against gold, not only agreement with MLX. A change under the threshold is
+  noise; a confident answer that changes is a reason to move up a level. `gguf_spike.py margins`
+  shows how to read the margin from `llama-server`.
+- **Narration** is judged by the grounding checker's pass rate per profile. Exact match means
+  nothing for prose.
+- **Tokenizers:** compare `llama-server`'s `/tokenize` with the Hugging Face tokenizer on Arabic
+  labels.
 
 ## Open
 
+- The owner's decision on the `--dequantize` rule, above.
 - R19: generation speed of the 7B GGUF inside the container.
-- Whether agreement holds on Arabic labels. The toy task was English only.
+
+What the spike cannot have shown about the 7B:
+
+- Memory and time for the 7B dequantize and convert.
+- Safetensors split over several shards. The 0.5B model is one file.
+- True K-quant levels. The toy files fell back to finer formats.
+- Arabic. The toy task was English only, so neither agreement on Arabic labels nor tokenization
+  parity between the two runtimes was checked.
+- Long prompts and long generations. The prompts are under 40 tokens and the answers under 10.
+- Anything in Docker or on Linux for the model.
 
 ## The Docker skeleton
 
@@ -150,11 +302,11 @@ misspelled, the process stops and says so. `make dev` sets `native`, the image s
 Ports live in `.env` (`FRA_API_PORT`, `FRA_LLM_PORT`), which compose and the Makefile both read.
 The Makefile accepts only blank lines, `#` comments and `NAME=value` lines there (values of
 letters, digits and `. _ : / -`, each name once), and stops with the file and line number on
-anything else, or when the file or a port is missing. Compose
-passes a port to a container only through `environment` and the port mapping, both from the same
-variable, so `FRA_API_PORT=9000 docker compose up -d` (or `make docker-up`) maps, probes and
-listens on 9000. The health path and the rule for "healthy" live in `fra_api.healthcheck`, which
-compose runs inside the container and `make docker-health` runs from the host.
+anything else, or when the file or a port is missing. Compose passes a port to a container only
+through `environment` and the port mapping, both from the same variable, so
+`FRA_API_PORT=9000 docker compose up -d` (or `make docker-up`) maps, probes and listens on 9000.
+The health path and the rule for "healthy" live in `fra_api.healthcheck`, which compose runs
+inside the container and `make docker-health` runs from the host.
 
 ### Image
 
