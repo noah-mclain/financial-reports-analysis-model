@@ -314,47 +314,49 @@ Other bilingual pairs are reported, not gated, until the resolution question is 
 
 ## Results
 
-Measured 2026-10-01 on the `ingest-structure` branch (`worktree/phase2-extraction`), `make eval-structure`. Lines are line items of the first statement of each type; identity is the balance sheet identity.
+Measured 2026-10-01 on the `ingest-structure` branch (`worktree/phase2-extraction`), `make eval-structure`, after the final review fixes. Lines are line items of the first statement of each type. Identity is the balance sheet identity, read from the `balance_identity` results in `table_checks.json`: ok needs at least one pass and no fail, failed means any fail, and skipped carries the skipped checks' detail.
 
 | Document | Balance | Income | Comprehensive income | Scale and currency | Identity |
 |----------|---------|--------|----------------------|--------------------|----------|
 | almarai-2025-en | 46 lines | 21 lines | 13 lines | ok (1000 SAR) | ok |
 | almarai-2025-ar | 40 lines | 21 lines | 11 lines | ok (1000 SAR) | ok |
 | juhayna-2025-ar-standalone | not extracted | 14 lines | not extracted | currency ok, scale flagged | no balance sheet |
-| juhayna-2025-ar-consolidated | not extracted | 27 lines | not extracted | currency ok, scale flagged | no balance sheet |
-| juhayna-2025-en-consolidated | 23 lines | 21 lines | 8 lines | currency ok, scale flagged | skipped (totals not found, 3 cells with numbers missing) |
-| juhayna-2024-ar-consolidated | 39 lines | not extracted | not extracted | currency ok (from domicile), scale flagged | skipped (totals not found) |
-| juhayna-2024-en-consolidated | 43 lines | 20 lines | 8 lines | currency ok, scale flagged | skipped (totals not found, 2 cells with numbers missing) |
-| edita-2025-ar-consolidated | 39 lines | 22 lines | 7 lines | currency ok, scale flagged | skipped (totals not found) |
+| juhayna-2025-ar-consolidated | not extracted | 20 lines | not extracted | currency ok, scale flagged | no balance sheet |
+| juhayna-2025-en-consolidated | 23 lines | 21 lines | 8 lines | currency ok, scale flagged | skipped (`identity_totals_not_found`; 3 cells with numbers missing) |
+| juhayna-2024-ar-consolidated | not extracted | not extracted | 8 lines | currency ok, scale flagged | no balance sheet |
+| juhayna-2024-en-consolidated | 43 lines | 20 lines | 8 lines | currency ok, scale flagged | skipped (`identity_totals_not_found`; 2 cells with numbers missing) |
+| edita-2025-ar-consolidated | 39 lines | 22 lines | 7 lines | currency ok, scale flagged | skipped (`identity_totals_not_found`) |
 | edita-2025-en-consolidated-eas | 45 lines | 21 lines | 11 lines | currency ok, scale flagged | ok |
 | edita-2025-en-consolidated-ifrs | 42 lines | 22 lines | 11 lines | currency ok, scale flagged | ok |
-| edita-2024-ar-consolidated | 37 lines | 19 lines | 7 lines | currency ok, scale flagged | failed, not excused (below) |
+| edita-2024-ar-consolidated | 38 lines | 19 lines | 7 lines | currency ok, scale flagged | failed, not excused (below) |
 | juhayna-2025-en-standalone | not extracted | 14 lines | 4 lines | currency ok, scale flagged | no balance sheet |
 
-The manifest records `scale: unconfirmed` for the ten Juhayna and Edita documents, so the harness scores only their currency; a statement that could not read a scale carries `scale_missing` and stays at 1.
+The manifest records `scale: unconfirmed` for the ten Juhayna and Edita documents, so the harness scores only their currency; a statement that could not read a scale carries `scale_missing` and stays at 1. Scale and currency are judged separately: a wrong scale is excused only by `scale_missing` or `scale_conflict`, a wrong currency only by `currency_missing` or `currency_conflict`.
+
+A subtotal right under its section heading is now checked unless that heading cut rows off the run before it, so `subtotal_failed` newly appears on the Edita EAS and IFRS balance sheets, the Juhayna 2025 EN consolidated and standalone comprehensive income statements; each is a mismatch in the values as extracted (a 20,000 misread on the EAS 2024 non-current liabilities total, `implausible_magnitude` cells on the EAS balance sheet and Juhayna 2025 EN comprehensive income; the IFRS total equity and Juhayna standalone total comprehensive income misses are not yet traced). Cells above 10^15 as printed now carry `implausible_magnitude`: four on Juhayna 2025 EN comprehensive income, two on the Juhayna 2024 EN balance sheet p5, three on the Edita EAS balance sheet, three on edita-2024-ar-consolidated.
 
 Unmatched numeric rows in each language edition of a pair (first edition, second edition):
 
 | Pair | Balance | Income | Comprehensive income |
 |------|---------|--------|----------------------|
 | Almarai 2025 EN / AR (gated) | 0 / 0 | 0 / 0 | 0 / 0 |
-| Juhayna 2025 consolidated EN / AR | no AR balance sheet | 9 / 13 | no AR statement |
-| Juhayna 2024 consolidated EN / AR | 38 / 23 | no AR statement | no AR statement |
+| Juhayna 2025 consolidated EN / AR | no AR balance sheet | 9 / 8 | no AR statement |
+| Juhayna 2024 consolidated EN / AR | no AR balance sheet | no AR statement | 1 / 0 |
 | Edita 2025 EAS EN / AR | 37 / 36 | 4 / 3 | 3 / 3 |
 
 | Measure | Target | Result |
 |---------|--------|--------|
 | Almarai EN against AR | every numeric row matched | met: 0 unmatched rows on balance, income and comprehensive income in both editions |
 | Scale and currency, golden set | 12 of 12 correct or flagged | met for the 29 statements extracted: currency correct in every one, scale 1000 correct on Almarai, scale flagged `scale_missing` on the ten documents whose manifest scale is unconfirmed |
-| Balance sheet identity, golden set | holds, or flagged with the correct reason | not met: `make eval-structure` prints FAIL. Holds on Almarai EN and AR, Edita EAS and Edita IFRS; skipped with `identity_totals_not_found` on four Juhayna and Edita statements; failed on edita-2024-ar-consolidated with every value of its own rows present (below). No balance sheet was extracted for three Juhayna documents |
+| Balance sheet identity, golden set | holds, or flagged with the correct reason | not met: `make eval-structure` prints FAIL. Holds on Almarai EN and AR, Edita EAS and Edita IFRS; skipped with `identity_totals_not_found` on three Juhayna and Edita statements; failed on edita-2024-ar-consolidated with every value of its own rows present (below). No balance sheet was extracted for four Juhayna documents |
 | Resolution test (task 1) | recorded | OCR scale 4 and 5 and cell matching off found no more numeric cells on Juhayna p5 than docling's default scale 3 (13 and 17 cells at 3; fewer at 4 and 5; none with matching off), so `ocr_scale` stays 3.0 and `do_cell_matching` stays on |
 
-Identity failure, edita-2024-ar-consolidated, balance sheet p5, period 2024-12-31: total assets `p5-t0-r14` 10,241,537,800, total liabilities `p5-t0-r38` 6,083,968,654 and the row labelled total equity `p5-t0-r22` 102,084,427 (printed `١٠٢ ٠٨٤ ٤٢٧`). The liabilities and that equity sum to 6,186,053,081, 4,055,484,719 below the assets. None of the three rows carries `numbers_missing`; the five cells that do are on other rows (`p5-t0-r24`, `r26`, `r30`, `r31` in 2023-12-31 and `r36` in 2024-12-31), so nothing excuses the failure. On this scanned table docling shifted labels against values by one row: the row labelled total equity (r22) holds 102,084,427, non-controlling interests, while total equity 4,157,569,146 sits on the unlabelled r21; and merged cells give impossible magnitudes (r35 3,692,047,248,382,615; r37 108,179,492,720,929,919) with no flag. Row-alignment repair and a magnitude sanity check are left to Part 3b and the week-2 OCR work.
+Identity failure, edita-2024-ar-consolidated, balance sheet p5, period 2024-12-31: total assets `p5-t0-r14` 10,241,537,800, total liabilities `p5-t0-r38` 6,083,968,654 and the row labelled total equity `p5-t0-r22` 102,084,427 (printed `١٠٢ ٠٨٤ ٤٢٧`). The liabilities and that equity sum to 6,186,053,081, 4,055,484,719 below the assets. None of the three rows carries `numbers_missing`; the five cells that do are on other rows (`p5-t0-r24`, `r26`, `r30`, `r31` in 2023-12-31 and `r36` in 2024-12-31), so nothing excuses the failure. On this scanned table docling shifted labels against values by one row: the row labelled total equity (r22) holds 102,084,427, non-controlling interests, while total equity 4,157,569,146 sits on the unlabelled r21; and merged cells give impossible magnitudes (r35 3,692,047,248,382,615 in 2024-12-31; r37 108,179,492,720,929,919 in 2023-12-31), which now carry `implausible_magnitude`. Row-alignment repair is left to Part 3b and the week-2 OCR work.
 
 Not gated, causes per pair from the eval JSON (the differences coincide with these flags and gaps, not with scans alone):
 
-- Juhayna 2025 consolidated, income (9 / 13): the AR income statement has 4 `numbers_missing` cells and `period_unbound:2`, the EN one has 0 and only `scale_missing`; the AR edition has no balance sheet or comprehensive income statement, and the EN balance sheet has 3 cells with `numbers_missing`.
-- Juhayna 2024 consolidated, balance (38 / 23): the EN balance sheet has 2 `numbers_missing` cells, `ambiguous_statement:balance`, `subtotal_failed` and a skipped identity; the AR balance sheet has 0 `numbers_missing` cells and carries `period_unbound:1` and `period_unbound:2` and a skipped identity. The AR edition has no income or comprehensive income statement.
-- Edita 2025, balance (37 / 36): the AR balance sheet has 0 `numbers_missing` cells; its flags are `period_unbound:0`, `period_unbound:2`, `subtotal_failed` and a skipped identity. The EAS balance sheet has 3 `numbers_missing` cells.
-- Edita 2025, income (4 / 3): the AR income statement has 1 `numbers_missing` cell and `period_unbound:2`; the EAS one has 1 `numbers_missing` cell and `ambiguous_statement:income`.
+- Juhayna 2025 consolidated, income (9 / 8): the AR income statement is p6 alone, 20 lines, with 2 `numbers_missing` cells; the EN one has none and only `scale_missing`. The AR p7 comprehensive income table (comprehensive income 0.40, below confidence) is no longer absorbed into the income statement, because locate titles p7 as comprehensive income only; it stays a rejected table, so the AR edition has no comprehensive income statement and no balance sheet. The EN balance sheet has 3 cells with `numbers_missing`.
+- Juhayna 2024 consolidated, balance: the AR balance sheet is no longer extracted. Its only "period" was 2077-12-31, read from the OCR-merged amount `٢٠٧٧ ٦٨٥ ١٨٢`; that cell is now an amount, the p5 table has no date row left (`no_period_header`), and the document carries `statement_not_extracted:balance`. Its income statement p6 is rejected the same way. The comprehensive income statement p7 is now extracted (8 lines, 2 `numbers_missing` cells in FY2023), since its grouped amounts no longer pass as header rows; against the EN edition it leaves 1 / 0 unmatched rows, and the EN statement has 2 `numbers_missing` cells in FY2023 as well.
+- Edita 2025, balance (37 / 36): the AR balance sheet has 0 `numbers_missing` cells; its flags are `period_unbound:0`, `subtotal_failed` and a skipped identity. The EAS balance sheet has 3 `numbers_missing` cells, 3 `implausible_magnitude` cells and `subtotal_failed`.
+- Edita 2025, income (4 / 3): the AR and EAS income statements each have 1 `numbers_missing` cell; the EAS one carries `ambiguous_statement:income`.
 - Edita 2025, comprehensive income (3 / 3): the AR statement carries `subtotal_failed`; neither edition has a cell marked `numbers_missing` that explains the rows.
