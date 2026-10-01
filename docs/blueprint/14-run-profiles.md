@@ -1,7 +1,7 @@
 # 14. Run profiles: the model route from MLX to llama.cpp
 
-Status: v1, 2026-10-01. The GGUF spike is measured; the Docker skeleton is not built yet and
-gets its own section here when it is. This document closes R16 as a question
+Status: v2, 2026-10-02. The GGUF spike is measured, and the Docker skeleton is built and
+measured (last section). This document closes R16 as a question
 ([08-revised-plan.md](08-revised-plan.md)) and records a first number for R19.
 
 ## The question
@@ -111,7 +111,7 @@ loaded with `--lora`) was not tried, because route A agrees. It would first need
 rewritten: MLX writes `adapters.safetensors` with its own config, and llama.cpp's converter
 reads the PEFT layout. It is the fallback if a fused 7B model ever fails to convert.
 
-Nothing was run in Docker. The CPU-only figures come from `-ngl 0` on macOS.
+Nothing in the spike was run in Docker. The CPU-only figures come from `-ngl 0` on macOS.
 
 ## Decision for week 3
 
@@ -132,3 +132,74 @@ Nothing was run in Docker. The CPU-only figures come from `-ngl 0` on macOS.
 
 - R19: generation speed of the 7B GGUF inside the container.
 - Whether agreement holds on Arabic labels. The toy task was English only.
+
+## The Docker skeleton
+
+`make docker-up` (`docker compose up -d --build --wait`) starts two services from one image and
+fails if a service exits at start or the api does not turn healthy, and `make dev` serves the same
+API natively. Both answer `/health` with their own profile name. The profile comes from
+`FRA_PROFILE`, a closed set (`native`, `docker`) read once by `fra_core.profile`; unset or
+misspelled, the process stops and says so. `make dev` sets `native`, the image sets `docker`.
+
+| Service | Today | Later |
+|---------|-------|-------|
+| `api` | FastAPI 0.141.1 under uvicorn: `/health` (status, package version, profile) and a one-line HTML page at `/`, and no other route. The generated `/docs`, `/redoc` and `/openapi.json` are switched off and return with the real API in week 4. Healthy once `/health` answers with profile `docker` | Upload, job status, results (week 4) |
+| `worker` | The same image. Imports `fra_ingest`, prints the profile and sleeps. Proves the image carries docling and the locked dependencies | The job runner from `apps/worker` (week 4) |
+| `llm` | Defined, not started. `ghcr.io/ggml-org/llama.cpp:server` on the CPU, reading `var/models/model.gguf` from a read-only mount. Behind the `llm` compose profile, and `docker compose --profile llm config` validates | Serves the fused adapter as GGUF by the route in "Decision for week 3"; needs the file that week 3 produces |
+
+Ports live in `.env` (`FRA_API_PORT`, `FRA_LLM_PORT`), which compose and the Makefile both read.
+The Makefile accepts only blank lines, `#` comments and `NAME=value` lines there (values of
+letters, digits and `. _ : / -`, each name once), and stops with the file and line number on
+anything else, or when the file or a port is missing. Compose
+passes a port to a container only through `environment` and the port mapping, both from the same
+variable, so `FRA_API_PORT=9000 docker compose up -d` (or `make docker-up`) maps, probes and
+listens on 9000. The health path and the rule for "healthy" live in `fra_api.healthcheck`, which
+compose runs inside the container and `make docker-health` runs from the host.
+
+### Image
+
+The image is a frozen sync of `uv.lock`, so it holds the locked, hash-checked versions.
+
+| Piece | Value |
+|-------|-------|
+| Base | `python:3.12-slim`, multi-stage, non-root user |
+| mac extra | Not installed. The lock gives the `ocrmac` dependency the marker `sys_platform == 'darwin'`, so a Linux sync skips it and the pyobjc packages that only it pulls in; `import ocrmac` fails in the container |
+| torch | 2.14.0+cpu and torchvision 0.29.0+cpu on Linux, 2.14.0 and 0.29.0 on the Mac: the same versions on both profiles. The root `pyproject.toml` pins both and sends them to PyTorch's CPU index on Linux |
+| CUDA | Before this setting the lock held 19 packages the container cannot use (15 `nvidia-*`, 3 `cuda-*`, `triton`). It now holds none, and the image has none (checked: no installed distribution starts with `nvidia`, `cuda` or `triton`); `torch.cuda.is_available()` is `False` |
+| Size | 1.68 GB, 1,679,494,773 bytes (`docker image inspect`); most of it is the virtual environment, 1,620,584 KiB by `du -sk` |
+| Cold build | 148 s with `--no-cache` on the M3 Pro (Docker 27.3.1, aarch64, 12 CPUs, 14.1 GB for the VM per `docker info`), base images already pulled. The dependency layer is 90 s of it (wheel download 49 s, install 17 s, bytecode compile 18 s), and copying the environment into the final stage 29 s. A source-only change reuses the dependency layer |
+| Start | `docker compose up -d --wait` returned in 6.6 to 6.9 s over three runs, with the healthcheck interval at 5 s |
+| Stop | `docker compose down` with both services up takes 0.6 to 0.7 s; `docker compose stop worker` takes 0.3 s, because `init: true` forwards the stop signal to the sleeping process |
+
+The build context is an allowlist (`.dockerignore`): the workspace sources, the lockfile and
+`configs/`.
+
+### Deliberately missing
+
+- No job queue, database or upload page (week 4).
+- No `apps/worker` package; the worker service is a command in `compose.yaml`.
+- No model in the image. The `llm` service waits for a GGUF file and was never started.
+- No OCR engine in the image. The Apple Vision engine is Mac-only; the Linux engines arrive with
+  week 2, and the image must grow them then.
+- Not measured: the image on x86-64. The numbers above are aarch64; the lock does carry hashed
+  CPU wheels for x86-64, but nothing was built there.
+
+### Left for later
+
+- **Writable state.** `/app` is owned by root and `configs/ingest.toml` puts artifacts under
+  `var/artifacts`, so the `app` user cannot write there until a volume owned by uid 1000 is
+  mounted at `/app/var`, and another for the docling model cache.
+- **Memory limits** for the services.
+- **Pinned images.** `llama.cpp:server` and `python:3.12-slim` are floating tags; pin them by
+  digest when the model service first runs.
+- **Healthcheck cadence.** Use `start_interval` with a longer `interval` once the API does real
+  work.
+- **Build cache.** A uv cache mount for the dependency layer.
+- **Restart policy,** with the job queue.
+- **x86-64** is not built.
+- **OpenCV.** `import cv2` fails in the image: `ImportError: libxcb.so.1: cannot open shared
+  object file`. The lock has `opencv-python`, not the headless build. The slim base lacks
+  `libxcb.so.1`, and also `libGL.so.1`, `libglib-2.0.so.0`, `libSM.so.6` and `libXext.so.6`
+  (checked by file lookup, not by importing). The week 2 OCR work needs either the system
+  libraries or the headless wheel in the lock. `import docling` and `fra_ingest` work today,
+  and the taxonomy loads (47 items).

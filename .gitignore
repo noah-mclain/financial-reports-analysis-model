@@ -7,6 +7,9 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 
+# Local overrides and secrets (the tracked .env holds only ports)
+.env.*
+
 # Frontend
 node_modules/
 apps/web/dist/
