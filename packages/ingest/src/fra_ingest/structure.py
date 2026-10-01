@@ -39,6 +39,7 @@ from fra_ingest.ocr_policy import plan_ranges
 from fra_ingest.pages import read_pages
 from fra_ingest.parts import PartialStatement, build_part
 from fra_ingest.results import ConvertResult, LocateResult, StructureResult, TableDecision
+from fra_ingest.review import StatementReview, review_statement
 from fra_ingest.row_alignment import realign_rows
 from fra_ingest.stage import load_or_locate, page_ocr_languages
 from fra_ingest.table_checks import run_checks
@@ -307,6 +308,18 @@ def structure_document(
                 s = statements[position]
                 statements[position] = s.model_copy(update={"flags": [*s.flags, "tie_failed"]})
 
+    seen: set[StatementType] = set()
+    reviews: list[StatementReview] = []
+    for position, s in enumerate(statements):
+        own = [c for c in checks if c.statement_id == s.id]
+        if s.type is StatementType.INCOME and s.type not in seen:
+            own += ties  # recorded on comprehensive income; they vouch for this statement too
+        review = review_statement(s, own, primary=s.type not in seen)
+        seen.add(s.type)
+        reviews.append(review)
+        if review.status == "needs_review":
+            statements[position] = s.model_copy(update={"flags": [*s.flags, "needs_review"]})
+
     found = {s.type for s in statements}
     flags = [f"statement_not_extracted:{t.value}" for t in config.enabled_types if t not in found]
     flags += [
@@ -321,6 +334,7 @@ def structure_document(
         settings_hash="",
         statements=statements,
         tables=decisions,
+        reviews=reviews,
         flags=flags,
     )
     return structured, checks

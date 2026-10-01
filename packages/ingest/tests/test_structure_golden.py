@@ -13,6 +13,8 @@ from support import artifact_dir
 
 from fra_core.schemas import Statement, StatementType
 from fra_ingest.config import load_config
+from fra_ingest.results import StructureResult
+from fra_ingest.review import StatementReview
 from fra_ingest.structure import structure_pdf
 
 pytestmark = pytest.mark.golden
@@ -127,3 +129,33 @@ def test_almarai_net_profit_ties(golden: Callable[[str], Path]) -> None:
     checks = json.loads((artifact_dir(pdf) / "table_checks.json").read_text(encoding="utf-8"))
     ties = [c for c in checks if c["kind"] == "net_profit_tie"]
     assert [c["status"] for c in ties] == ["pass", "pass"]
+
+
+def reviews(golden: Callable[[str], Path], name: str) -> dict[str, StatementReview]:
+    pdf = golden(name)
+    statements(golden, name)
+    stored = StructureResult.model_validate_json(
+        (artifact_dir(pdf) / "statements.raw.json").read_text(encoding="utf-8")
+    )
+    return {r.statement_id: r for r in stored.reviews}
+
+
+def test_almarai_statements_pass_review(golden: Callable[[str], Path]) -> None:
+    for name in ("almarai-2025-en-annualreport.pdf", "almarai-2025-ar-annualreport.pdf"):
+        found = reviews(golden, name)
+        for kind in ("balance-1", "income-", "comprehensive_income-"):
+            first = next(
+                r for i, r in found.items() if kind in i and r.reasons != ["duplicate_statement"]
+            )
+            assert first.status == "passed", (name, first)
+
+
+def test_edita_2024_ar_balance_sheet_is_held_with_its_reasons(
+    golden: Callable[[str], Path],
+) -> None:
+    found = reviews(golden, "edita-2024-ar-consolidated-eas.pdf")
+    review = next(r for i, r in found.items() if "-balance-" in i)
+    assert review.status == "needs_review"
+    assert "identity_failed" in review.reasons
+    assert any(r.startswith("digit_suspect:") for r in review.reasons)
+    assert any(r.startswith("row_realigned:") for r in review.reasons)

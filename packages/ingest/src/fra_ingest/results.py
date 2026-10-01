@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from fra_core.schemas import Document, PageMode, Statement, StatementType, TextSource
+from fra_ingest.review import StatementReview
 
 # A page is a candidate for a type when it names the type and scores at least this much.
 CANDIDATE_THRESHOLD = 4.5
@@ -229,5 +230,6 @@ class StructureResult(BaseModel):
     settings_hash: str
     statements: list[Statement] = Field(default_factory=list)
     tables: list[TableDecision] = Field(default_factory=list)
+    reviews: list[StatementReview] = Field(default_factory=list)
     flags: list[str] = Field(default_factory=list)
     timings: dict[str, float] = Field(default_factory=dict)

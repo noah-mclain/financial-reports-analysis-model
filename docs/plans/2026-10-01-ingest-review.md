@@ -1536,7 +1536,7 @@ def statement(items: list[LineItem], kind: StatementType = StatementType.INCOME,
 
 def check(kind: str, status: str, ids: list[str], detail: str = "") -> CheckResult:
     return CheckResult.model_validate(
-        {"id": f"s:{kind}:{ids[-1]}:{P.key}", "statement_id": "s", "kind": kind,
+        {"id": f"s:{kind}:{ids[-1] if ids else 'none'}:{P.key}", "statement_id": "s", "kind": kind,
          "period_key": P.key, "status": status, "line_item_ids": ids, "detail": detail}
     )
 

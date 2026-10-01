@@ -14,6 +14,7 @@ from fra_core.schemas import (
     StatementType,
 )
 from fra_ingest.results import StructureResult, TableDecision
+from fra_ingest.review import StatementReview
 
 SHA = "e" * 64
 
@@ -62,3 +63,18 @@ def test_a_structure_result_round_trips() -> None:
     again = StructureResult.model_validate_json(result.model_dump_json())
     assert again == result
     assert again.statements[0].line_items[0].cells[0].reported == Decimal("-15177063")
+
+
+def test_reviews_default_to_none_and_round_trip() -> None:
+    bare = StructureResult(version="4", sha256=SHA, convert_version="1", settings_hash="h")
+    assert bare.reviews == []
+    review = StatementReview(
+        statement_id="s1",
+        status="needs_review",
+        reasons=["identity_failed"],
+        numeric_cells=10,
+        checked_cells=4,
+        flagged_cells=1,
+    )
+    stored = bare.model_copy(update={"reviews": [review]}).model_dump_json()
+    assert StructureResult.model_validate_json(stored).reviews == [review]

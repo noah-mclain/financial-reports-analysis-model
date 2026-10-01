@@ -126,6 +126,7 @@ def _convert_summary(result: ConvertResult) -> str:
 
 def _structure_summary(result: StructureResult) -> str:
     lines = [f"{result.sha256[:12]}  structure {result.version}"]
+    reviews = {r.statement_id: r for r in result.reviews}
     for s in result.statements:
         periods = ", ".join(p.key for p in s.periods)
         lines.append(
@@ -133,6 +134,12 @@ def _structure_summary(result: StructureResult) -> str:
             f"{len(s.line_items)} lines  "
             f"{s.currency} x{s.scale}  [{periods}]  {', '.join(s.flags) or 'ok'}"
         )
+        review = reviews.get(s.id)
+        if review is not None:
+            lines.append(
+                f"    {review.status}  {review.checked_cells} of {review.numeric_cells} cells "
+                f"checked  {', '.join(review.reasons)}".rstrip()
+            )
     rejected = sum(1 for t in result.tables if t.type is None)
     lines.append(f"tables  {len(result.tables)} ({rejected} not statements)")
     lines.append(f"flags  {', '.join(result.flags) or 'none'}")
