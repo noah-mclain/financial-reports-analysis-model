@@ -265,3 +265,69 @@ def test_blank_cells_of_a_statement_that_was_not_extracted_are_misses() -> None:
     blank = ExpectedRow(label="Treasury shares", values={P.key: None})
     score = score_statement(statement_of([blank, row("Total", "5")]), None)
     assert (score.cells, score.right) == (2, 0)
+
+
+CASH = [row("Cash", "10"), row("Cash and cash equivalents", "55"), row("Total equity", "40")]
+
+
+def test_a_figure_under_a_longer_label_that_contains_its_own_is_wrong() -> None:
+    shifted = extracted_of(
+        [
+            item(1, "Cash and cash equivalemts", "10"),
+            item(2, "Cash and cash equivalents", "55"),
+            item(3, "Total equity", "40"),
+        ]
+    )
+    score = score_statement(statement_of(CASH), shifted)
+    assert score.mislabelled == 1 and score.wrong[0]["label"] == "Cash"
+
+
+def test_a_noisy_long_label_is_not_taken_for_a_short_one_it_contains() -> None:
+    noisy = extracted_of(
+        [
+            item(1, "Cash", "10"),
+            item(2, "Cash and cosh equivalemts", "55"),
+            item(3, "Total equlty", "40"),
+        ]
+    )
+    score = score_statement(statement_of(CASH), noisy)
+    assert (score.cells, score.right, score.mislabelled) == (3, 3, 0)
+
+
+def test_a_cell_holding_two_rows_labels_keeps_both_figures_right() -> None:
+    expected = statement_of([row("Total equity", "40"), row("Non-controlling interests", "7")])
+    merged = "Total equity Non-controlling interests"
+    extracted = extracted_of([item(1, merged, "40"), item(2, merged, "7")])
+    score = score_statement(expected, extracted)
+    assert (score.cells, score.right, score.mislabelled) == (2, 2, 0)
+
+
+def test_a_heading_merged_before_a_garbled_label_keeps_its_figure_right() -> None:
+    expected = statement_of(
+        [
+            row("Provisions", "99"),
+            row("Bank overdraft", "80"),
+            row("Total current liabilities", "179"),
+        ]
+    )
+    extracted = extracted_of(
+        [
+            item(1, "Current liabilities rovisions", "99"),
+            item(2, "Bank overdraft", "80"),
+            item(3, "Total current liabilities", "179"),
+        ]
+    )
+    score = score_statement(expected, extracted)
+    assert (score.cells, score.right, score.mislabelled) == (3, 3, 0)
+
+
+def test_a_figure_under_a_section_heading_alone_is_wrong() -> None:
+    expected = statement_of([row("Borrowings", "2282"), row("Total liabilities", "9000")])
+    extracted = extracted_of(
+        [
+            item(1, "Liabilities Non-current liabilities", "2282"),
+            item(2, "Total liabilities", "9000"),
+        ]
+    )
+    score = score_statement(expected, extracted)
+    assert (score.right, score.mislabelled) == (1, 1)

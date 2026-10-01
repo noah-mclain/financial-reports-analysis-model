@@ -7,7 +7,7 @@ from fra_core.taxonomy.loader import load_taxonomy
 from fra_ingest.classify import Classification
 from fra_ingest.header import parse_header
 from fra_ingest.label_match import LabelIndex
-from fra_ingest.parts import PartialStatement, build_part, column_centre
+from fra_ingest.parts import PartialStatement, build_part, column_centre, is_per_share
 from fra_ingest.table_grid import Grid, GridCell
 
 
@@ -271,3 +271,54 @@ def test_a_moved_cell_keeps_its_docling_row_and_merged_labels_are_flagged() -> N
     moved = p.line_items[1].cells[0]
     assert moved.provenance.row == 9 and "row_realigned" in moved.flags
     assert all("label_merged" in c.flags for c in p.line_items[2].cells)
+
+
+def test_rows_under_a_per_share_heading_are_per_share() -> None:
+    rows = [
+        ["", "Notes", "31 December 2025 X '000", "31 December 2024 X '000"],
+        ["Profit for the year", "", "2,456,673", "2,313,667"],
+        ["Earnings per Share, based on Profit for the year", "", "", ""],
+        ["- Basic", "32", "2.48", "2.34"],
+        ["- Diluted", "32", "2.46", "2.31"],
+        ["Dividends", "", "", ""],
+        ["Declared", "", "1,000", "900"],
+    ]
+    g = grid(rows)
+    layout = parse_header(g, StatementType.INCOME, None)
+    classification = Classification(type=StatementType.INCOME, confidence=0.8)
+    p = build_part(g, layout, classification, source=TextSource.TEXT)
+    per_share = {
+        i.raw_label: all("per_share" in c.flags for c in i.cells) for i in p.line_items if i.cells
+    }
+    assert per_share == {
+        "Profit for the year": False,
+        "- Basic": True,
+        "- Diluted": True,
+        "Declared": False,
+    }
+
+
+def test_arabic_share_of_profit_per_share_rows_are_per_share() -> None:
+    rows = [
+        ["", "إيضاح", "31 ديسمبر 2025", "31 ديسمبر 2024"],
+        ["صافي ربح العام", "", "1,606", "1,613"],
+        ["نصيب السهم الأساسي و السهم المخفض في الأرباح", "30", "2,18", "2,25"],
+    ]
+    g = grid(rows)
+    layout = parse_header(g, StatementType.INCOME, None)
+    classification = Classification(type=StatementType.INCOME, confidence=0.8)
+    p = build_part(g, layout, classification, source=TextSource.TEXT)
+    assert all("per_share" in c.flags for c in p.line_items[-1].cells)
+    assert not any("per_share" in c.flags for c in p.line_items[0].cells)
+
+
+def test_per_share_labels_are_recognised_through_abbreviations_and_ocr_noise() -> None:
+    for label in (
+        "EPS - Basic",
+        "DPS",
+        "صيب السهم الاساسي و السهم المخفض",
+        "توزيعات الأرباح لكل سهم",
+    ):
+        assert is_per_share(label), label
+    for label in ("Share capital", "Deposits", "علاوة إصدار الأسهم", "Steps taken"):
+        assert not is_per_share(label), label

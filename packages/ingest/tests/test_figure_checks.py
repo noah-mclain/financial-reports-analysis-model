@@ -18,7 +18,9 @@ from fra_core.schemas import (
 from fra_core.taxonomy.loader import load_taxonomy
 from fra_ingest.figure_checks import (
     check_net_profit_tie,
+    flag_fractions,
     flag_period_outliers,
+    leading_digit_lost,
     one_digit_apart,
     single_digit_place,
 )
@@ -188,3 +190,53 @@ def test_a_cell_that_is_the_only_candidate_of_one_check_is_the_suspect_of_anothe
     assert identity.detail.endswith("single_digit:10^0; suspect:r7=6321")
     flagged = [i.id for i in checked.line_items for c in i.cells if "digit_suspect" in c.flags]
     assert flagged == ["r7"]
+
+
+def test_a_figure_that_lost_its_leading_digit_is_among_the_suspects() -> None:
+    rows = [
+        item(1, "Deferred tax", "2", "302"),
+        item(2, "Leases", "140", "140"),
+        item(3, "Borrowings", "228", "228"),
+        item(4, "Total non-current liabilities", "670", "670", total=True),
+    ]
+    checked, results = run_checks(statement(rows), INDEX)
+    failed = next(r for r in results if r.status == "fail")
+    assert failed.difference == Decimal("300") and "single_digit:10^2" in failed.detail
+    flagged = {i.id for i in checked.line_items for c in i.cells if "digit_suspect" in c.flags}
+    assert "r1" in flagged
+
+
+def test_a_leading_digit_is_lost_only_above_every_digit_read() -> None:
+    assert leading_digit_lost(Decimal("2414061"), Decimal("302414061"))
+    assert leading_digit_lost(Decimal("-2"), Decimal("-302"))
+    assert not leading_digit_lost(Decimal("140"), Decimal("440"))
+    assert not leading_digit_lost(Decimal("302"), Decimal("2"))
+    assert not leading_digit_lost(Decimal("2"), Decimal("-302"))
+
+
+def test_a_fraction_among_whole_amounts_is_flagged() -> None:
+    rows = [
+        item(1, "Borrowings", "2282057066", "1129283746"),
+        item(2, "Lease liabilities", "230717192", "1327.5608"),
+        item(3, "Deferred tax", "302414061", "240116669"),
+        item(4, "Earnings per share", "2.18", "2.25", flags=("per_share",)),
+        item(5, "Margin", "0.125", "0.130", flags=("percent",)),
+    ]
+    flagged = flag_fractions(statement(rows))
+    found = [
+        (i.id, c.period_key)
+        for i in flagged.line_items
+        for c in i.cells
+        if "fraction_among_whole" in c.flags
+    ]
+    assert found == [("r2", P2.key)]
+
+
+def test_a_statement_printed_with_decimals_throughout_is_not_flagged() -> None:
+    rows = [
+        item(1, "Revenue", "1234.5", "1100.2"),
+        item(2, "Cost of sales", "-800.1", "-700.9"),
+        item(3, "Gross profit", "434.4", "399.3"),
+    ]
+    flagged = flag_fractions(statement(rows))
+    assert not any("fraction_among_whole" in c.flags for i in flagged.line_items for c in i.cells)

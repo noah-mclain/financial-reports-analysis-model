@@ -192,3 +192,30 @@ def test_nothing_fits_so_the_run_is_judged_as_before() -> None:
     assert {o.detail for o in infer_sums(statement(cut))[0].outcomes.values()} == {
         "subtotal_scope_uncertain"
     }
+
+
+def test_a_period_of_zeros_confirms_no_scope() -> None:
+    rows = [
+        item(1, "Land", "100", "0"),
+        item(2, "Buildings", "150", "0"),
+        item(3, "Equipment", "200", "0"),
+        item(4, "Total property", "500", "0", total=True),
+    ]
+    group = infer_sums(statement(rows))[0]
+    assert group.addend_ids == ("r1", "r2", "r3")
+    assert group.outcomes[P1.key].status == "fail"
+    assert group.outcomes[P1.key].expected == Decimal("450")
+
+
+def test_a_total_over_a_single_row_is_checked_as_an_equality() -> None:
+    rows = [
+        item(1, "Non-current liabilities"),
+        item(2, "Borrowings", "70", "60"),
+        item(3, "Total non-current liabilities", "70", "65", total=True),
+    ]
+    group = infer_sums(statement(rows))[0]
+    assert group.addend_ids == ("r2",)
+    assert group.outcomes[P1.key].status == "pass"
+    assert group.outcomes[P1.key].detail == "single_addend"
+    assert group.outcomes[P2.key].status == "skipped"
+    assert group.outcomes[P2.key].detail == "subtotal_scope_unknown"

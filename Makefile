@@ -25,9 +25,10 @@ lint: ## Lint without fixing
 	$(UV) run ruff format --check .
 	$(UV) run ruff check .
 
-typecheck: ## Type check the packages
+typecheck: ## Type check the packages and the eval harness
 	@$(MAKE) --no-print-directory unhide-pth
 	$(UV) run mypy packages $(wildcard apps)
+	$(UV) run mypy eval/harness
 
 test: ## Fast tests (no models, no OCR)
 	@$(MAKE) --no-print-directory unhide-pth

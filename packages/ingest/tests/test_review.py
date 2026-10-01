@@ -165,3 +165,10 @@ def test_an_identity_that_passes_one_period_and_is_skipped_in_another_holds() ->
     assert review_statement(balance, checks, primary=True).reasons == [
         "identity_not_checked:missing_values"
     ]
+
+
+def test_a_fraction_among_whole_amounts_holds() -> None:
+    rows = [item(1, "10"), item(2, "5"), item(3, "15"), item(4, "7.5", "fraction_among_whole")]
+    assert review_statement(statement(rows), PASSING, primary=True).reasons == [
+        "fraction_among_whole:1"
+    ]

@@ -150,8 +150,8 @@ def main(argv: list[str] | None = None) -> int:
         checks = _load_checks(config.artifact_root / result.sha256 / "table_checks.json")
         reviews = {r.statement_id: r for r in result.reviews}
         found: dict[StatementType, Statement] = {}
-        for s in result.statements:
-            found.setdefault(s.type, s)
+        for extracted in result.statements:
+            found.setdefault(extracted.type, extracted)
         by_id[entry["id"]] = found
         row: dict[str, Any] = {"id": entry["id"], "flags": result.flags, "statements": {}}
         for statement_type in config.enabled_types:

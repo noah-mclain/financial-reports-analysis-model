@@ -15,6 +15,7 @@ from statistics import median
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from fra_core.labels import normalize_label
 from fra_core.numbers import parse_number
 from fra_core.schemas import BBox, Cell, LineItem, Period, Provenance, StatementType, TextSource
 from fra_ingest.classify import Classification
@@ -28,7 +29,9 @@ IMPLAUSIBLE = 10**15
 # many times the median of its own column, given enough values to have a median.
 IMPLAUSIBLE_RATIO = 10**4
 _MIN_COLUMN_VALUES = 5
-_PER_SHARE = tuple(squash(w) for w in ("per share", "للسهم", "ربحية السهم"))
+# "صيب السهم" is "نصيب السهم" with or without its first letter, which OCR drops.
+_PER_SHARE = tuple(squash(w) for w in ("per share", "للسهم", "ربحية السهم", "صيب السهم", "لكل سهم"))
+_PER_SHARE_WORDS = frozenset({"eps", "dps"})
 
 
 class PartialStatement(BaseModel):
@@ -46,6 +49,13 @@ class PartialStatement(BaseModel):
     header_text: str = ""
     table_refs: list[str] = Field(default_factory=list)
     flags: list[str] = Field(default_factory=list)
+
+
+def is_per_share(label: str) -> bool:
+    """A row that states an amount per share, not an amount of the statement's unit."""
+    return any(cue in squash(label) for cue in _PER_SHARE) or bool(
+        _PER_SHARE_WORDS & set(normalize_label(label).split())
+    )
 
 
 def column_centre(grid: Grid, col: int, rows: Sequence[int]) -> float | None:
@@ -140,6 +150,7 @@ def build_part(
         if centre is not None:
             part.column_centres[period.key] = centre
 
+    under_per_share = False  # the rows below a per-share heading, until the next heading
     for row in data_rows:
         label_cell = grid.cell(row, layout.label_col) if layout.label_col is not None else None
         label = label_cell.text if label_cell is not None else ""
@@ -157,10 +168,13 @@ def build_part(
         if not label and not any(texts.values()):
             continue
         item_id = f"p{grid.page_no}-{grid.table_index}-r{row}"
-        per_share = any(cue in squash(label) for cue in _PER_SHARE)
+        named_per_share = is_per_share(label)
         known = index.match(label, classification.type) if index is not None else None
         # A known total with every value lost keeps its cells, each flagged as missing.
         has_values = any(texts.values()) or (known is not None and has_subtotal_cue(label))
+        if not has_values:
+            under_per_share = named_per_share
+        per_share = named_per_share or under_per_share
         cells = []
         for col, period in layout.value_cols.items():
             if not has_values:

@@ -90,7 +90,8 @@ def _closing_suffix(
 ) -> tuple[int, dict[str, SumOutcome]] | None:
     """The length of the suffix of ``open_rows`` that ``item`` closes, with its outcomes.
 
-    Shortest first. Every candidate fits in at least one period with every value present. A
+    Shortest first. Every candidate fits in at least one period with every value present and
+    not all of them zero. A
     row with a total cue takes a suffix that clashes in no period, else the one that fits the
     most periods. A row without one must fit in every period."""
     best: tuple[int, int, dict[str, SumOutcome]] | None = None
@@ -100,7 +101,12 @@ def _closing_suffix(
             continue
         fits = {key: _fit(item, addends, key) for key in keys}
         kinds = [kind for kind, _ in fits.values()]
-        complete = kinds.count("fit")
+        # A period where every figure is zero fits any rows at all, so it confirms none.
+        complete = sum(
+            1
+            for kind, outcome in fits.values()
+            if kind == "fit" and (outcome.actual or outcome.expected)
+        )
         if not complete:
             continue
         outcomes = {key: outcome for key, (_, outcome) in fits.items()}
@@ -122,6 +128,18 @@ def _run_outcomes(
     before it."""
     outcomes: dict[str, SumOutcome] = {}
     for key in keys:
+        if len(run) == 1:
+            # One row above the total: the only check there is, that the two are equal.
+            actual, only = item.value_for(key), run[0].value_for(key)
+            if actual is not None and only is not None and abs(actual - only) <= HALF:
+                outcomes[key] = SumOutcome(
+                    status="pass",
+                    addend_ids=(run[0].id,),
+                    expected=only,
+                    actual=actual,
+                    detail="single_addend",
+                )
+                continue
         if len(run) < 2:
             outcomes[key] = SumOutcome(status="skipped", detail="subtotal_scope_unknown")
             continue

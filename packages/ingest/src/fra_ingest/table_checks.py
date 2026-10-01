@@ -15,7 +15,7 @@ from collections.abc import Sequence
 from decimal import Decimal
 
 from fra_core.schemas import CheckResult, LineItem, Statement, StatementType
-from fra_ingest.figure_checks import diagnose_digits, flag_period_outliers
+from fra_ingest.figure_checks import diagnose_digits, flag_fractions, flag_period_outliers
 from fra_ingest.label_match import LabelIndex
 from fra_ingest.sum_hierarchy import SumGroup, infer_sums
 
@@ -197,6 +197,7 @@ def run_checks(statement: Statement, index: LabelIndex) -> tuple[Statement, list
     results += check_identity(statement, index)
     statement, results = diagnose_digits(statement, results)
     statement = flag_period_outliers(statement)
+    statement = flag_fractions(statement)
     flags = list(statement.flags)
     if any(r.kind == "subtotal" and r.status == "fail" for r in results):
         flags.append("subtotal_failed")

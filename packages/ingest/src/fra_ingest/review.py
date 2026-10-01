@@ -21,6 +21,7 @@ CRITICAL_CELL_FLAGS = (
     "implausible_magnitude",
     "digit_suspect",
     "period_outlier",
+    "fraction_among_whole",
     "row_misaligned",
     "row_realigned",
     "ambiguous_separator",

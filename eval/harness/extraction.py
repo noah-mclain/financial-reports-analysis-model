@@ -41,6 +41,12 @@ SCANNED = 0.98
 PERIODS = 1.0
 SIGN = 0.999
 METADATA = 1.0
+# How alike an expected label and a stretch of the label read must be to count as found.
+LABEL_MATCH = 0.85
+# Below this, a label read is not this row's label even allowing for OCR noise.
+LABEL_READABLE = 0.6
+# Characters by which two stretches of a label may differ or overlap and still count as apart.
+_SLOP = 2
 
 
 @dataclass
@@ -67,31 +73,65 @@ class Score:
         )
 
 
-def _likeness(expected: str, read: str) -> tuple[float, float]:
-    """How much the label read looks like an expected label: first the share of the expected
-    label's characters found in order in it, which a heading merged in front does not lower,
-    then how alike the two are as wholes, which tells "current" from "non-current"."""
-    want, got = squash(expected), squash(read)
-    if not want or not got:
-        return (0.0, 0.0)
-    matcher = SequenceMatcher(None, want, got, autojunk=False)
-    return (sum(b.size for b in matcher.get_matching_blocks()) / len(want), matcher.ratio())
+def _place(label: str, read: str) -> tuple[float, int, int] | None:
+    """Where an expected label sits in the label read, both without spaces: how alike the label
+    and that stretch are, and the stretch's start and end. None when they share no two
+    characters in a row."""
+    blocks = [
+        b
+        for b in SequenceMatcher(None, label, read, autojunk=False).get_matching_blocks()
+        if b.size >= 2
+    ]
+    if not blocks:
+        return None
+    first, last = blocks[0], blocks[-1]
+    start = max(0, first.b - first.a)
+    end = min(len(read), last.b + last.size + len(label) - (last.a + last.size))
+    alike = SequenceMatcher(None, label, read[start:end], autojunk=False).ratio()
+    return alike, start, end
 
 
 def mislabelled(row: ExpectedRow, read: str, expected: Sequence[ExpectedRow]) -> bool:
-    """Whether a figure sits under another row's label. It does when the row read has no label
-    and the expected one has, or when the label read looks more like the label of a different
-    expected row than like its own. A label OCR garbled, or merged with a heading, still looks
-    most like its own, so label quality alone does not make a figure wrong."""
-    if not squash(row.label):
+    """Whether a figure sits under another row's label.
+
+    Every expected label is looked for inside the label read. Those found (``LABEL_MATCH``
+    alike or more) compete, and the one that accounts for the longest stretch of the label read
+    is the label it is: "Cash and cash equivalents" read with a typo is that label, not "Cash".
+    The figure is mislabelled when the row read has no label, when the label read is another
+    row's and the row's own label is not in it, or when its own label is only found inside the
+    stretch the other accounts for. A cell holding two rows' labels side by side serves both,
+    and so does one holding a heading before the row's label. A label garbled but still
+    readable as the row's own (``LABEL_READABLE``) does not make its figure wrong; one that
+    reads as nothing of the row's, such as a section heading alone, does.
+    """
+    own, got = squash(row.label), squash(read)
+    if not own:
         return False
-    if not squash(read):
+    if not got:
         return True
-    own = _likeness(row.label, read)
-    return any(
-        squash(other.label) != squash(row.label) and _likeness(other.label, read) > own
-        for other in expected
+    places = {}
+    for label in {squash(r.label) for r in expected} | {own}:
+        place = _place(label, got) if label else None
+        if place is not None and place[0] >= LABEL_MATCH:
+            places[label] = place
+    mine = places.get(own) or _place(own, got)
+    if mine is None or mine[0] < LABEL_READABLE:
+        # Not this row's label by any reading: another row's, or a heading, or nothing.
+        return True
+
+    def overlaps(other: tuple[float, int, int]) -> bool:
+        return min(mine[2], other[2]) - max(mine[1], other[1]) > _SLOP
+
+    if own not in places:
+        # Readable as this row's through noise, unless that stretch is really another's.
+        return any(overlaps(place) for place in places.values())
+    # The longest stretch wins; between stretches of about one length, the closer match.
+    longest = max(end - start for _, start, end in places.values())
+    winner = max(
+        (label for label, (_, start, end) in places.items() if longest - (end - start) <= _SLOP),
+        key=lambda label: (places[label][0], label == own),
     )
+    return winner != own and overlaps(places[winner])
 
 
 def _matches(row: ExpectedRow, item: LineItem) -> bool:

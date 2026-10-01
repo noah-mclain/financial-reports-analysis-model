@@ -11,6 +11,8 @@ from decimal import Decimal
 from fra_core.schemas import Cell, CheckResult, LineItem, Statement
 
 OUTLIER_RATIO = 1000
+# Above this share of fractional amounts, the statement is printed with decimals.
+FRACTION_SHARE = Decimal("0.2")
 _HALF = Decimal("0.5")
 _NOT_COMPARED = {"per_share", "percent", "implausible_magnitude"}
 
@@ -32,6 +34,17 @@ def one_digit_apart(a: Decimal, b: Decimal) -> bool:
         return False
     x, y = str(abs(int(a))), str(abs(int(b)))
     return len(x) == len(y) and sum(1 for p, q in zip(x, y, strict=True) if p != q) == 1
+
+
+def leading_digit_lost(read: Decimal, settled: Decimal) -> bool:
+    """Whether ``read`` is ``settled`` with its leading digit lost: 302,414,061 read as
+    2,414,061. The two differ by one digit that sits above every digit read."""
+    if (read < 0) != (settled < 0) or abs(settled) <= abs(read):
+        return False
+    if read != read.to_integral_value() or settled != settled.to_integral_value():
+        return False
+    place = single_digit_place(abs(settled) - abs(read))
+    return place is not None and place >= len(str(abs(int(read))))
 
 
 def _total_id(check: CheckResult) -> str:
@@ -80,7 +93,7 @@ def diagnose_digits(
             if value is None or (item_id, check.period_key) in vouched:
                 continue
             settled = value - check.difference if item_id == total else value + check.difference
-            if one_digit_apart(value, settled):
+            if one_digit_apart(value, settled) or leading_digit_lost(value, settled):
                 found[item_id] = settled
         candidates[check.id] = found
     period_of = {c.id: c.period_key for c in checks}
@@ -119,6 +132,26 @@ def flag_period_outliers(statement: Statement) -> Statement:
         if len(sizes) >= 2 and max(sizes) >= OUTLIER_RATIO * min(sizes):
             outliers.update((item.id, c.period_key) for c in cells)
     return _with_flag(statement, outliers, "period_outlier")
+
+
+def flag_fractions(statement: Statement) -> Statement:
+    """Flag a figure with a fractional part in a statement printed in whole amounts: a decimal
+    mark OCR put into a number (132,705,608 read as 1327.5608). Per-share and percentage cells
+    are not amounts. A statement printed with decimals throughout is left alone."""
+    amounts = [
+        (item.id, c)
+        for item in statement.line_items
+        for c in item.cells
+        if c.reported is not None and not {"per_share", "percent"} & set(c.flags)
+    ]
+    fractions = {
+        (item_id, c.period_key)
+        for item_id, c in amounts
+        if c.reported is not None and c.reported != c.reported.to_integral_value()
+    }
+    if len(fractions) > FRACTION_SHARE * len(amounts):
+        return statement
+    return _with_flag(statement, fractions, "fraction_among_whole")
 
 
 def _first_valued(statement: Statement) -> LineItem | None:
