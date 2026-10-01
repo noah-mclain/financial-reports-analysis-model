@@ -22,10 +22,9 @@ def corrupt(label: str, position: int) -> str | None:
     char = label[position]
     if char.isspace():
         return None
-    if "؀" <= char <= "ۿ":
-        swap = "ظ" if char != "ظ" else "ض"
-    else:
-        swap = "x" if char != "x" else "z"
+    arabic = "\u0600" <= char <= "\u06ff"
+    first, second = ("ظ", "ض") if arabic else ("x", "z")
+    swap = first if char != first else second
     return label[:position] + swap + label[position + 1 :]
 
 
