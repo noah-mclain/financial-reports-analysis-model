@@ -7,8 +7,9 @@ profit after gross profit). A heading row starts a new run but keeps the previou
 subtotal whose run began at a heading that cut rows off the run before it, and that misses both
 sums, is skipped as ``subtotal_scope_uncertain``, since those rows may belong to it. A plain row
 equal to the sum of the last two or more rows of the run in every period is an implicit
-subtotal: it passes and replaces those rows in the run as one addend. Other subtotals are
-skipped for Part 3b's sum-based hierarchy.
+subtotal: it passes and replaces those rows in the run as one addend. At least two of those
+rows must hold a value other than zero. Per-share rows are left out of every sum. Other
+subtotals are skipped for Part 3b's sum-based hierarchy.
 """
 
 from __future__ import annotations
@@ -76,10 +77,14 @@ def _suffix_sum(
 def _implicit_subtotal(
     statement: Statement, item: LineItem, run: list[LineItem]
 ) -> tuple[int, list[CheckResult]] | None:
-    """The length of the shortest suffix of two or more rows of ``run`` that ``item`` equals in
-    every period, with its pass results, else None."""
+    """The length of the shortest suffix of ``run`` that ``item`` equals in every period, with
+    its pass results, else None. The suffix needs two or more rows that are not zero
+    throughout: a row equal to one row plus dashes is not a sum."""
     for length in range(2, len(run) + 1):
-        results = _suffix_sum(statement, item, run[-length:])
+        addends = run[-length:]
+        if sum(1 for i in addends if any(_value(i, p.key) for p in statement.periods)) < 2:
+            continue
+        results = _suffix_sum(statement, item, addends)
         if results is not None:
             return length, results
     return None
@@ -91,6 +96,9 @@ def check_subtotals(statement: Statement) -> list[CheckResult]:
     previous: LineItem | None = None
     after_heading = False
     for item in statement.line_items:
+        if item.cells and all("per_share" in c.flags for c in item.cells):
+            # Earnings per share is not an amount of the statement's unit: it joins no sum.
+            continue
         if not item.cells:
             # A heading starts a new run; a running total carries across it. Only a heading
             # that cut rows off the run makes the next subtotal's scope uncertain.

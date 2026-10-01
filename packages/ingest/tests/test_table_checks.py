@@ -325,3 +325,59 @@ def test_each_period_under_a_heading_is_judged_on_its_own() -> None:
         )
     )
     assert [(c.period_key, c.status) for c in checks] == [(P.key, "pass"), (prior.key, "fail")]
+
+
+def test_a_zero_row_does_not_make_the_next_row_an_implicit_subtotal() -> None:
+    checks = check_subtotals(
+        statement(
+            [
+                item(1, "Current assets", None),
+                item(2, "Inventories", "500"),
+                item(3, "Derivatives", "0"),
+                item(4, "Trade receivables", "500"),
+                item(5, "Total current assets", "1000", subtotal=True),
+            ]
+        )
+    )
+    assert [(c.status, c.detail) for c in checks] == [("pass", "")]
+    assert checks[0].line_item_ids == ["r2", "r3", "r4", "r5"]
+
+
+def test_an_implicit_subtotal_may_include_a_zero_row_beside_two_others() -> None:
+    checks = check_subtotals(
+        statement(
+            [
+                item(1, "Share capital", "10"),
+                item(2, "Treasury shares", "0"),
+                item(3, "Retained earnings", "6"),
+                item(4, "Equity attributable to owners", "16"),
+                item(5, "Non-controlling interest", "2"),
+                item(6, "Total equity", "18", subtotal=True),
+            ]
+        )
+    )
+    assert [(c.status, c.detail) for c in checks] == [("pass", "implicit_subtotal"), ("pass", "")]
+
+
+def per_share(n: int, label: str, value: str) -> LineItem:
+    plain = item(n, label, value)
+    cells = [c.model_copy(update={"flags": ["per_share"]}) for c in plain.cells]
+    return plain.model_copy(update={"cells": cells})
+
+
+def test_per_share_rows_take_no_part_in_subtotal_checks() -> None:
+    checks = check_subtotals(
+        statement(
+            [
+                item(1, "Profit attributable to owners", "40"),
+                item(2, "Profit attributable to non-controlling interests", "2"),
+                per_share(3, "Basic earnings per share", "0.4"),
+                per_share(4, "Diluted earnings per share", "0.4"),
+                item(5, "Total profit for the year", "42", subtotal=True),
+            ],
+            StatementType.INCOME,
+        )
+    )
+    assert [(c.status, c.detail) for c in checks] == [("pass", "")]
+    assert checks[0].line_item_ids == ["r1", "r2", "r5"]
+    assert checks[0].tolerance == Decimal("1.0")
