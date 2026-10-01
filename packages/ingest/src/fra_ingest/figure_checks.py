@@ -11,6 +11,10 @@ from decimal import Decimal
 from fra_core.schemas import Cell, CheckResult, LineItem, Statement
 
 OUTLIER_RATIO = 1000
+# Zeros that may sit between a lost leading digit and the digits read.
+_ZEROS_LOST = 2
+# A fraction this large is no per-share figure or ratio the cues missed.
+_LARGE_FRACTION = 1000
 # Above this share of fractional amounts, the statement is printed with decimals.
 FRACTION_SHARE = Decimal("0.2")
 _HALF = Decimal("0.5")
@@ -38,13 +42,15 @@ def one_digit_apart(a: Decimal, b: Decimal) -> bool:
 
 def leading_digit_lost(read: Decimal, settled: Decimal) -> bool:
     """Whether ``read`` is ``settled`` with its leading digit lost: 302,414,061 read as
-    2,414,061. The two differ by one digit that sits above every digit read."""
-    if (read < 0) != (settled < 0) or abs(settled) <= abs(read):
+    2,414,061. The two differ by one digit that sits just above the digits read, with at most
+    two zeros between (3,014,061 read as 14,061). Nothing is "lost" from a zero."""
+    if read == 0 or (read < 0) != (settled < 0) or abs(settled) <= abs(read):
         return False
     if read != read.to_integral_value() or settled != settled.to_integral_value():
         return False
     place = single_digit_place(abs(settled) - abs(read))
-    return place is not None and place >= len(str(abs(int(read))))
+    digits = len(str(abs(int(read))))
+    return place is not None and digits <= place <= digits + _ZEROS_LOST
 
 
 def _total_id(check: CheckResult) -> str:
@@ -137,19 +143,24 @@ def flag_period_outliers(statement: Statement) -> Statement:
 def flag_fractions(statement: Statement) -> Statement:
     """Flag a figure with a fractional part in a statement printed in whole amounts: a decimal
     mark OCR put into a number (132,705,608 read as 1327.5608). Per-share and percentage cells
-    are not amounts. A statement printed with decimals throughout is left alone."""
-    amounts = [
-        (item.id, c)
-        for item in statement.line_items
-        for c in item.cells
-        if c.reported is not None and not {"per_share", "percent"} & set(c.flags)
-    ]
-    fractions = {
-        (item_id, c.period_key)
-        for item_id, c in amounts
-        if c.reported is not None and c.reported != c.reported.to_integral_value()
-    }
-    if len(fractions) > FRACTION_SHARE * len(amounts):
+    are not amounts, and a statement printed with decimals throughout is left alone. So is a
+    row of small fractions with no whole amount beside them: that is a per-share figure or a
+    ratio the label cues did not name, not a misread."""
+    fractions: set[tuple[str, str]] = set()
+    total = 0
+    for item in statement.line_items:
+        amounts = [
+            c
+            for c in item.cells
+            if c.reported is not None and not {"per_share", "percent"} & set(c.flags)
+        ]
+        total += len(amounts)
+        parts = [c for c in amounts if c.reported is not None and c.reported % 1 != 0]
+        beside_whole = len(parts) < len(amounts)
+        for c in parts:
+            if beside_whole or (c.reported is not None and abs(c.reported) >= _LARGE_FRACTION):
+                fractions.add((item.id, c.period_key))
+    if len(fractions) > FRACTION_SHARE * total:
         return statement
     return _with_flag(statement, fractions, "fraction_among_whole")
 

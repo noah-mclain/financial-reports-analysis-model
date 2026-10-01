@@ -48,7 +48,7 @@ from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
 from fra_ingest.visual_order import repair_grid, repair_text
 
-STRUCTURE_VERSION = "7"  # bump whenever structure's output can change, reviews included
+STRUCTURE_VERSION = "8"  # bump whenever structure's output can change, reviews included
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 

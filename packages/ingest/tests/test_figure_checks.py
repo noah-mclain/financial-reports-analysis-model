@@ -212,6 +212,9 @@ def test_a_leading_digit_is_lost_only_above_every_digit_read() -> None:
     assert not leading_digit_lost(Decimal("140"), Decimal("440"))
     assert not leading_digit_lost(Decimal("302"), Decimal("2"))
     assert not leading_digit_lost(Decimal("2"), Decimal("-302"))
+    assert not leading_digit_lost(Decimal("0"), Decimal("20000"))
+    assert not leading_digit_lost(Decimal("75"), Decimal("800075"))
+    assert leading_digit_lost(Decimal("14061"), Decimal("3014061"))
 
 
 def test_a_fraction_among_whole_amounts_is_flagged() -> None:
@@ -240,3 +243,34 @@ def test_a_statement_printed_with_decimals_throughout_is_not_flagged() -> None:
     ]
     flagged = flag_fractions(statement(rows))
     assert not any("fraction_among_whole" in c.flags for i in flagged.line_items for c in i.cells)
+
+
+WHOLE = [
+    item(1, "Revenue", "22064876", "20979512"),
+    item(2, "Cost of sales", "-15177063", "-14315460"),
+    item(3, "Gross profit", "6887813", "6664052"),
+    item(4, "Selling expenses", "-3231061", "-2993918"),
+    item(5, "Operating profit", "3656752", "3670134"),
+]
+
+
+def test_a_small_fractional_row_no_cue_names_is_not_an_ocr_fraction() -> None:
+    rows = [*WHOLE, item(6, "Return per unit held", "2.48", "2.34")]
+    flagged = flag_fractions(statement(rows))
+    assert not any("fraction_among_whole" in c.flags for i in flagged.line_items for c in i.cells)
+
+
+def test_a_large_fraction_or_one_beside_a_whole_amount_is_flagged() -> None:
+    rows = [
+        *WHOLE,
+        item(6, "Lease liabilities", "1327.5608"),
+        item(7, "Provisions", "99601868", "10.5"),
+    ]
+    flagged = flag_fractions(statement(rows))
+    found = [
+        (i.id, c.period_key)
+        for i in flagged.line_items
+        for c in i.cells
+        if "fraction_among_whole" in c.flags
+    ]
+    assert found == [("r6", P1.key), ("r7", P2.key)]

@@ -129,15 +129,32 @@ def _run_outcomes(
     outcomes: dict[str, SumOutcome] = {}
     for key in keys:
         if len(run) == 1:
-            # One row above the total: the only check there is, that the two are equal.
+            # One row above the total. The only checks there are: that the two are equal, or
+            # that the total is that row plus the total before it. One addend rounds nothing,
+            # so the equality is exact.
             actual, only = item.value_for(key), run[0].value_for(key)
-            if actual is not None and only is not None and abs(actual - only) <= HALF:
+            prior = previous.value_for(key) if previous is not None else None
+            if actual is not None and only is not None and actual == only:
                 outcomes[key] = SumOutcome(
                     status="pass",
                     addend_ids=(run[0].id,),
                     expected=only,
                     actual=actual,
                     detail="single_addend",
+                )
+                continue
+            if (
+                actual is not None
+                and only is not None
+                and previous is not None
+                and prior is not None
+                and abs(actual - prior - only) <= HALF * 2
+            ):
+                outcomes[key] = SumOutcome(
+                    status="pass",
+                    addend_ids=(previous.id, run[0].id),
+                    expected=prior + only,
+                    actual=actual,
                 )
                 continue
         if len(run) < 2:

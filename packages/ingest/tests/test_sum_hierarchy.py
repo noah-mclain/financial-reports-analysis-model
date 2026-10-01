@@ -219,3 +219,28 @@ def test_a_total_over_a_single_row_is_checked_as_an_equality() -> None:
     assert group.outcomes[P1.key].detail == "single_addend"
     assert group.outcomes[P2.key].status == "skipped"
     assert group.outcomes[P2.key].detail == "subtotal_scope_unknown"
+
+
+def test_a_single_row_equality_is_exact() -> None:
+    rows = [
+        item(1, "Liabilities"),
+        item(2, "Borrowings", "12.2", "70"),
+        item(3, "Total liabilities", "12.6", "70", total=True),
+    ]
+    group = infer_sums(statement(rows))[0]
+    assert group.outcomes[P1.key].status == "skipped"
+    assert group.outcomes[P2.key].status == "pass"
+
+
+def test_a_running_total_whose_one_new_row_is_zero_passes() -> None:
+    rows = [
+        item(1, "Revenue", "100", "90"),
+        item(2, "Cost of sales", "-60", "-50"),
+        item(3, "Total gross profit", "40", "40", total=True),
+        item(4, "Other income", "0", "0"),
+        item(5, "Total operating profit", "40", "40", total=True),
+    ]
+    group = infer_sums(statement(rows))[-1]
+    assert group.total_id == "r5"
+    assert [o.status for o in group.outcomes.values()] == ["pass", "pass"]
+    assert group.outcomes[P1.key].addend_ids == ("r3", "r4")

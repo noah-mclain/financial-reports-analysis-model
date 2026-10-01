@@ -186,11 +186,12 @@ Steps 1 to 6 of spec 11 are unchanged. Step numbers below continue spec 11's.
         against its run replaces the run.
       - A period in which the total and every addend are zero fits any rows at all, so it
         confirms no suffix.
-      - A total with exactly one row above it in its run is checked as an equality with that
-        row: pass with `single_addend` when they are equal, otherwise skipped as before.
-      - Per-share rows are those whose label says so (`per share`, `EPS`, `DPS`, `للسهم`,
-        `ربحية السهم`, `نصيب السهم`, `لكل سهم`) and those under a heading that says so, until
-        the next heading.
+      - A total with exactly one row above it in its run passes with `single_addend` when the
+        two are exactly equal (one addend rounds nothing), and passes as a running total when
+        it is that row plus the total before it. Otherwise it is skipped as before.
+      - Per-share rows are those whose label says so (`per ... share`, `EPS`, `DPS`, `السهم`,
+        `لكل سهم`), and the basic and diluted rows under a heading that says so. The heading
+        reaches no other row.
     - **Identity**, as in spec 11.
     - **Net profit tie.** When a document has an income statement and a comprehensive income
       statement, the first valued row of comprehensive income must equal one row of the income
@@ -200,7 +201,8 @@ Steps 1 to 6 of spec 11 are unchanged. Step numbers below continue spec 11's.
     - **Single digit.** A failed sum or identity whose difference is one digit times a power
       of ten gets `single_digit:10^k`. A cell is a candidate when changing that one digit of
       it settles the difference, or when the figure read is the settling figure with its leading
-      digit lost (302,414,061 read as 2,414,061). A candidate is cleared when it sits in another check that
+      digit lost (302,414,061 read as 2,414,061; at most two zeros between, and never from a
+      zero). A candidate is cleared when it sits in another check that
       passes in that period. The candidates left carry `digit_suspect`; with one left, the
       check's detail names it and the figure that would settle it. `reported` is never
       changed.
@@ -209,8 +211,10 @@ Steps 1 to 6 of spec 11 are unchanged. Step numbers below continue spec 11's.
       percentage and `implausible_magnitude` cells are left out.
     - **Fraction among whole amounts.** A figure with a fractional part, in a statement where
       at most a fifth of the amounts have one, carries `fraction_among_whole`: a decimal mark
-      OCR put into a number. Per-share and percentage cells are not amounts; a statement
-      printed with decimals throughout is left alone.
+      OCR put into a number. It must stand beside a whole amount in its row or be 1,000 or
+      more: a row of small fractions alone is a per-share figure or a ratio the label cues
+      missed. Per-share and percentage cells are not amounts; a statement printed with
+      decimals throughout is left alone.
 10a. **Review.** A statement is `passed` when all of these hold, else `needs_review` with one
    reason per rule broken:
    - no check on it failed (`subtotal_failed`, `identity_failed`, `tie_failed`);
@@ -218,7 +222,8 @@ Steps 1 to 6 of spec 11 are unchanged. Step numbers below continue spec 11's.
      count): a total nothing could be checked against vouches for nothing;
    - a balance sheet's identity passed in every period (`identity_not_checked` with the
      skipped check's detail otherwise);
-   - at least one check passed (`unchecked`);
+   - at least one check passed, not counting a total equal to the single row above it, which
+     shows only that a figure was printed twice (`unchecked`);
    - no cell carries `numbers_missing` without `blank_confirmed`, `unparsed`,
      `implausible_magnitude`, `digit_suspect`, `period_outlier`, `fraction_among_whole`,
      `row_misaligned`, `row_realigned` or `ambiguous_separator`; the reason is the flag with
@@ -359,8 +364,8 @@ block headed provisional. Unconfirmed cells are counted and left out of both blo
 Measured 2026-10-01 on the `ingest-structure` branch, structure version 4, with
 `make eval-structure` and `make eval-extraction` on the stored conversions of the golden set.
 Structure version 5 adds unit caveats ([13-unit-caveats.md](13-unit-caveats.md)), and versions
-6 and 7 the fixes from the review of this branch. The review table and the extraction figures
-below are from version 7; no value, check or review status differs from version 4.
+6 to 8 the fixes from the review of this branch. The review table and the extraction figures
+below are from version 8; no value, check or review status differs from version 4.
 
 ### Against Done when
 
@@ -520,9 +525,13 @@ Fixed, each with a test:
 - A figure that lost its leading digit (302,414,061 read as 2,414,061) is among the suspects of
   a single-digit failure.
 - Per-share rows named only by their heading ("- Basic" under an earnings-per-share heading),
-  by `EPS` or `DPS`, or by an Arabic label OCR clipped, are recognised.
-- A fraction among whole amounts (132,705,608 read as 1327.5608) is flagged and holds.
-- A total over a single row is checked as an equality instead of holding its statement.
+  by `EPS` or `DPS`, or by an Arabic label OCR clipped, are recognised. The heading reaches
+  only basic and diluted rows, so an amount printed after them is not taken for per-share.
+- A fraction among whole amounts (132,705,608 read as 1327.5608) is flagged and holds. A row
+  of small fractions alone is not, so a per-share row the cues miss does not hold a statement.
+- A total over a single row is checked as an exact equality, or as that row plus the total
+  before it, instead of holding its statement. An equality alone does not make a statement
+  count as checked.
 - `eval/harness` is under `make typecheck`.
 - The eval's label rule no longer confuses a short label with a longer one that contains it.
   Stress on the three expected files (`eval/harness/label_stress.py`): a correct figure whose own label has one character

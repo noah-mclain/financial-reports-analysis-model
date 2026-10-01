@@ -172,3 +172,9 @@ def test_a_fraction_among_whole_amounts_holds() -> None:
     assert review_statement(statement(rows), PASSING, primary=True).reasons == [
         "fraction_among_whole:1"
     ]
+
+
+def test_a_one_row_equality_alone_vouches_for_nothing() -> None:
+    only = [check("subtotal", "pass", ["r1", "r3"], "single_addend")]
+    assert review_statement(statement(ROWS), only, primary=True).reasons == ["unchecked"]
+    assert review_statement(statement(ROWS), [*PASSING, *only], primary=True).status == "passed"

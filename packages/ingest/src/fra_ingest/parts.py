@@ -32,6 +32,9 @@ _MIN_COLUMN_VALUES = 5
 # "صيب السهم" is "نصيب السهم" with or without its first letter, which OCR drops.
 _PER_SHARE = tuple(squash(w) for w in ("per share", "للسهم", "ربحية السهم", "صيب السهم", "لكل سهم"))
 _PER_SHARE_WORDS = frozenset({"eps", "dps"})
+_THE_SHARE = normalize_label("السهم")
+# The rows a per-share heading reaches: "- Basic", "- Diluted", "الأساسية", "المخفضة".
+_BASIC_DILUTED = tuple(squash(w) for w in ("basic", "diluted", "أساسي", "مخفض"))
 
 
 class PartialStatement(BaseModel):
@@ -53,9 +56,15 @@ class PartialStatement(BaseModel):
 
 def is_per_share(label: str) -> bool:
     """A row that states an amount per share, not an amount of the statement's unit."""
-    return any(cue in squash(label) for cue in _PER_SHARE) or bool(
-        _PER_SHARE_WORDS & set(normalize_label(label).split())
-    )
+    words = normalize_label(label).split()
+    if _PER_SHARE_WORDS & set(words) or any(cue in squash(label) for cue in _PER_SHARE):
+        return True
+    # "per ordinary share"; and "السهم", the share, which no line of amounts is named by.
+    return ("per" in words and "share" in words[words.index("per") :]) or _THE_SHARE in words
+
+
+def _basic_or_diluted(label: str) -> bool:
+    return any(cue in squash(label) for cue in _BASIC_DILUTED)
 
 
 def column_centre(grid: Grid, col: int, rows: Sequence[int]) -> float | None:
@@ -150,7 +159,7 @@ def build_part(
         if centre is not None:
             part.column_centres[period.key] = centre
 
-    under_per_share = False  # the rows below a per-share heading, until the next heading
+    under_per_share = False  # below a per-share heading, until the next heading
     for row in data_rows:
         label_cell = grid.cell(row, layout.label_col) if layout.label_col is not None else None
         label = label_cell.text if label_cell is not None else ""
@@ -174,7 +183,7 @@ def build_part(
         has_values = any(texts.values()) or (known is not None and has_subtotal_cue(label))
         if not has_values:
             under_per_share = named_per_share
-        per_share = named_per_share or under_per_share
+        per_share = named_per_share or (under_per_share and _basic_or_diluted(label))
         cells = []
         for col, period in layout.value_cols.items():
             if not has_values:

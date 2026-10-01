@@ -322,3 +322,34 @@ def test_per_share_labels_are_recognised_through_abbreviations_and_ocr_noise() -
         assert is_per_share(label), label
     for label in ("Share capital", "Deposits", "علاوة إصدار الأسهم", "Steps taken"):
         assert not is_per_share(label), label
+
+
+def test_a_per_share_heading_reaches_only_the_basic_and_diluted_rows_under_it() -> None:
+    rows = [
+        ["", "Notes", "31 December 2025 X '000", "31 December 2024 X '000"],
+        ["Earnings per share", "", "", ""],
+        ["- Basic", "32", "2.48", "2.34"],
+        ["- Diluted", "32", "2.46", "2.31"],
+        ["Profit for the year", "", "2,456,673", "2,313,667"],
+        ["Other comprehensive income", "", "212,833", "(443,574)"],
+    ]
+    g = grid(rows)
+    layout = parse_header(g, StatementType.INCOME, None)
+    classification = Classification(type=StatementType.INCOME, confidence=0.8)
+    p = build_part(g, layout, classification, source=TextSource.TEXT)
+    per_share = {
+        i.raw_label: all("per_share" in c.flags for c in i.cells) for i in p.line_items if i.cells
+    }
+    assert per_share == {
+        "- Basic": True,
+        "- Diluted": True,
+        "Profit for the year": False,
+        "Other comprehensive income": False,
+    }
+
+
+def test_per_share_wording_with_words_between_and_the_arabic_singular() -> None:
+    for label in ("Earnings per ordinary share", "العائد على السهم", "حصة السهم من الأرباح"):
+        assert is_per_share(label), label
+    for label in ("Share of profit of associates", "رأس المال السهمي", "أسهم خزينة"):
+        assert not is_per_share(label), label

@@ -86,7 +86,8 @@ def review_statement(
     unchecked_totals = sum(1 for c in checks if c.kind == "subtotal" and c.status == "skipped")
     if unchecked_totals:
         reasons.append(f"subtotal_not_checked:{unchecked_totals}")
-    if not any(c.status == "pass" for c in checks):
+    # A total equal to the one row above it shows only that a figure was printed twice.
+    if not any(c.status == "pass" and "single_addend" not in c.detail for c in checks):
         reasons.append("unchecked")
     lost = sum(1 for _, c in cells if _lost(c))
     if lost:
