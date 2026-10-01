@@ -1,23 +1,22 @@
-"""Subtotal checks and the balance sheet identity (spec 11, Data flow step 10).
+"""Subtotal checks and the balance sheet identity (spec 11, step 10; spec 12, step 10).
 
-Tolerance is rounding-aware (D6): n x 0.5 reported units, n the number of addends. A subtotal
-is checked only when it directly closes a run of two or more plain rows; it passes against
-their sum, or against their sum plus the previous subtotal (a running total such as operating
-profit after gross profit). A heading row starts a new run but keeps the previous subtotal; a
-subtotal whose run began at a heading that cut rows off the run before it, and that misses both
-sums, is skipped as ``subtotal_scope_uncertain``, since those rows may belong to it. A plain row
-equal to the sum of the last two or more rows of the run in every period is an implicit
-subtotal: it passes and replaces those rows in the run as one addend. At least two of those
-rows must hold a value other than zero. Per-share rows are left out of every sum. Other
-subtotals are skipped for Part 3b's sum-based hierarchy.
+Tolerance is rounding-aware (D6): n x 0.5 reported units, n the number of addends. Which rows
+a subtotal covers is settled by ``sum_hierarchy.infer_sums``: the shortest run of open rows
+above it that sums to it, across headings, with a blank the sum confirms counted as zero. A
+total no sum explains is judged against the run since the last heading or total, alone or with
+the total before it, and is skipped as ``subtotal_scope_uncertain`` when a heading cut rows off
+that run, or as ``subtotal_scope_unknown`` when the run is shorter than two rows. Per-share
+rows are left out of every sum.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from decimal import Decimal
 
 from fra_core.schemas import CheckResult, LineItem, Statement, StatementType
 from fra_ingest.label_match import LabelIndex
+from fra_ingest.sum_hierarchy import SumGroup, infer_sums
 
 _HALF = Decimal("0.5")
 
@@ -41,140 +40,76 @@ def _result(
     )
 
 
-def _suffix_sum(
-    statement: Statement, item: LineItem, addends: list[LineItem]
-) -> list[CheckResult] | None:
-    """Pass results when ``item`` equals the sum of ``addends`` in every period, else None."""
-    tolerance = _HALF * len(addends)
+def _sum_results(statement: Statement, group: SumGroup) -> list[CheckResult]:
     results = []
-    for period in statement.periods:
-        key = period.key
-        actual = _value(item, key)
-        values = [_value(i, key) for i in addends]
-        if actual is None or any(v is None for v in values):
-            return None
-        expected = sum((v for v in values if v is not None), Decimal(0))
-        if abs(actual - expected) > tolerance:
-            return None
+    for key, outcome in group.outcomes.items():
+        expected, actual = outcome.expected, outcome.actual
+        judged = expected is not None and actual is not None
+        details = [
+            outcome.detail,
+            "implicit_subtotal" if group.implicit else "",
+            "sum_based" if group.basis == "sums" and not group.implicit and judged else "",
+            "blank_as_zero" if outcome.blank_ids else "",
+        ]
+        addends = len(outcome.addend_ids) - len(outcome.blank_ids)
         results.append(
             _result(
                 statement,
                 "subtotal",
                 key,
-                item.id,
-                "pass",
+                group.total_id,
+                outcome.status,
                 expected=expected,
                 actual=actual,
-                difference=actual - expected,
-                tolerance=tolerance,
-                line_item_ids=[*(i.id for i in addends), item.id],
-                detail="implicit_subtotal",
+                difference=actual - expected
+                if actual is not None and expected is not None
+                else None,
+                tolerance=_HALF * addends if judged else None,
+                line_item_ids=[*outcome.addend_ids, group.total_id],
+                detail="; ".join(d for d in details if d),
             )
         )
     return results
 
 
-def _implicit_subtotal(
-    statement: Statement, item: LineItem, run: list[LineItem]
-) -> tuple[int, list[CheckResult]] | None:
-    """The length of the shortest suffix of ``run`` that ``item`` equals in every period, with
-    its pass results, else None. The suffix needs two or more rows that are not zero
-    throughout: a row equal to one row plus dashes is not a sum."""
-    for length in range(2, len(run) + 1):
-        addends = run[-length:]
-        if sum(1 for i in addends if any(_value(i, p.key) for p in statement.periods)) < 2:
-            continue
-        results = _suffix_sum(statement, item, addends)
-        if results is not None:
-            return length, results
-    return None
-
-
 def check_subtotals(statement: Statement) -> list[CheckResult]:
-    results: list[CheckResult] = []
-    run: list[LineItem] = []
-    previous: LineItem | None = None
-    after_heading = False
+    return [r for group in infer_sums(statement) for r in _sum_results(statement, group)]
+
+
+def _apply_sums(statement: Statement, groups: Sequence[SumGroup]) -> Statement:
+    """Parents from the sums, implicit totals marked, blanks the sums confirmed flagged."""
+    parents: dict[str, str] = {}
+    implicit: set[str] = set()
+    blanks: set[tuple[str, str]] = set()
+    for group in groups:
+        if not group.confirmed:
+            continue
+        if group.implicit:
+            implicit.add(group.total_id)
+        for key, outcome in group.outcomes.items():
+            if outcome.status != "pass":
+                continue
+            for addend in outcome.addend_ids:
+                parents.setdefault(addend, group.total_id)
+            blanks.update((addend, key) for addend in outcome.blank_ids)
+    items = []
     for item in statement.line_items:
-        if item.cells and all("per_share" in c.flags for c in item.cells):
-            # Earnings per share is not an amount of the statement's unit: it joins no sum.
-            continue
-        if not item.cells:
-            # A heading starts a new run; a running total carries across it. Only a heading
-            # that cut rows off the run makes the next subtotal's scope uncertain.
-            after_heading = after_heading or bool(run)
-            run = []
-            continue
-        if not item.is_subtotal:
-            implicit = _implicit_subtotal(statement, item, run)
-            if implicit is not None:
-                # The implicit subtotal stands in for the rows it sums.
-                length, found = implicit
-                results.extend(found)
-                del run[-length:]
-            run.append(item)
-            continue
-        for period in statement.periods:
-            key = period.key
-            if len(run) < 2:
-                results.append(
-                    _result(
-                        statement,
-                        "subtotal",
-                        key,
-                        item.id,
-                        "skipped",
-                        line_item_ids=[item.id],
-                        detail="subtotal_scope_unknown",
-                    )
-                )
-                continue
-            values = [_value(i, key) for i in run]
-            actual = _value(item, key)
-            if actual is None or any(v is None for v in values):
-                results.append(
-                    _result(
-                        statement,
-                        "subtotal",
-                        key,
-                        item.id,
-                        "skipped",
-                        line_item_ids=[item.id],
-                        detail="missing_values",
-                    )
-                )
-                continue
-            plain = sum((v for v in values if v is not None), Decimal(0))
-            candidates = [(plain, len(run), [i.id for i in run])]
-            prior = _value(previous, key) if previous is not None else None
-            if previous is not None and prior is not None:
-                candidates.append(
-                    (plain + prior, len(run) + 1, [previous.id, *(i.id for i in run)])
-                )
-            expected, addends, ids = min(candidates, key=lambda c: abs(actual - c[0]))
-            tolerance = _HALF * addends
-            difference = actual - expected
-            status, detail = ("pass", "") if abs(difference) <= tolerance else ("fail", "")
-            if status == "fail" and after_heading:
-                # The heading may have cut rows the subtotal covers (items above it).
-                status, detail = "skipped", "subtotal_scope_uncertain"
-            results.append(
-                _result(
-                    statement,
-                    "subtotal",
-                    key,
-                    item.id,
-                    status,
-                    expected=expected,
-                    actual=actual,
-                    difference=difference,
-                    tolerance=tolerance,
-                    line_item_ids=[*ids, item.id],
-                    detail=detail,
-                )
+        cells = [
+            c.model_copy(update={"flags": [*c.flags, "blank_confirmed"]})
+            if (item.id, c.period_key) in blanks
+            else c
+            for c in item.cells
+        ]
+        items.append(
+            item.model_copy(
+                update={
+                    "cells": cells,
+                    "parent_id": parents.get(item.id, item.parent_id),
+                    "is_subtotal": item.is_subtotal or item.id in implicit,
+                }
             )
-        run, previous, after_heading = [], item, False
-    return results
+        )
+    return statement.model_copy(update={"line_items": items})
 
 
 def _find(statement: Statement, index: LabelIndex, canonical_id: str) -> LineItem | None:
@@ -255,7 +190,10 @@ def check_identity(statement: Statement, index: LabelIndex) -> list[CheckResult]
 
 
 def run_checks(statement: Statement, index: LabelIndex) -> tuple[Statement, list[CheckResult]]:
-    results = check_subtotals(statement) + check_identity(statement, index)
+    groups = infer_sums(statement)
+    results = [r for group in groups for r in _sum_results(statement, group)]
+    statement = _apply_sums(statement, groups)
+    results += check_identity(statement, index)
     flags = list(statement.flags)
     if any(r.kind == "subtotal" and r.status == "fail" for r in results):
         flags.append("subtotal_failed")

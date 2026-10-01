@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections import Counter
 from collections.abc import Callable
 from decimal import Decimal
@@ -71,3 +72,21 @@ def test_almarai_english_and_arabic_figures_match(
     assert ar_rows - en_rows == Counter(), (
         f"Arabic rows without an English counterpart: {ar_rows - en_rows}"
     )
+
+
+def test_almarai_balance_sheet_totals_are_all_checked(golden: Callable[[str], Path]) -> None:
+    for name in ("almarai-2025-en-annualreport.pdf", "almarai-2025-ar-annualreport.pdf"):
+        pdf = golden(name)
+        statements(golden, name)
+        checks = json.loads((artifact_dir(pdf) / "table_checks.json").read_text(encoding="utf-8"))
+        balance = [c for c in checks if "-balance-1:" in c["id"] and c["kind"] == "subtotal"]
+        assert balance and {c["status"] for c in balance} == {"pass"}
+
+
+def test_edita_ifrs_total_equity_passes(golden: Callable[[str], Path]) -> None:
+    pdf = golden("edita-2025-en-consolidated-ifrs.pdf")
+    balance = statements(golden, "edita-2025-en-consolidated-ifrs.pdf")[StatementType.BALANCE]
+    assert "subtotal_failed" not in balance.flags
+    checks = json.loads((artifact_dir(pdf) / "table_checks.json").read_text(encoding="utf-8"))
+    equity = [c for c in checks if c["id"].startswith(f"{balance.id}:subtotal:p8-t0-r26:")]
+    assert [c["status"] for c in equity] == ["pass", "pass"]

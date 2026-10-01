@@ -223,7 +223,7 @@ def test_a_total_over_one_row_and_dashes_is_checked_against_its_run() -> None:
         item(1, "Assets"),
         item(2, "Investments", "0", "0"),
         item(3, "Cash", "70", "60"),
-        item(4, "Total assets", "70", "61", total=True),
+        item(4, "Total assets", "70", "65", total=True),
     ]
     group = infer_sums(statement(rows))[0]
     assert group.basis == "run"
@@ -546,7 +546,8 @@ In `table_checks.py`, replace `_suffix_sum`, `_implicit_subtotal` and the body o
 def _sum_results(statement: Statement, group: SumGroup) -> list[CheckResult]:
     results = []
     for key, outcome in group.outcomes.items():
-        judged = outcome.expected is not None and outcome.actual is not None
+        expected, actual = outcome.expected, outcome.actual
+        judged = expected is not None and actual is not None
         details = [
             outcome.detail,
             "implicit_subtotal" if group.implicit else "",
@@ -561,9 +562,9 @@ def _sum_results(statement: Statement, group: SumGroup) -> list[CheckResult]:
                 key,
                 group.total_id,
                 outcome.status,
-                expected=outcome.expected,
-                actual=outcome.actual,
-                difference=outcome.actual - outcome.expected if judged else None,
+                expected=expected,
+                actual=actual,
+                difference=actual - expected if actual is not None and expected is not None else None,
                 tolerance=_HALF * addends if judged else None,
                 line_item_ids=[*outcome.addend_ids, group.total_id],
                 detail="; ".join(d for d in details if d),

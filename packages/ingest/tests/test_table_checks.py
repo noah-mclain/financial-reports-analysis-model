@@ -97,7 +97,7 @@ def test_a_running_total_counts_the_previous_subtotal() -> None:
     assert [c.status for c in check_subtotals(income)] == ["pass", "pass"]
 
 
-def test_a_subtotal_over_subtotals_is_skipped() -> None:
+def test_a_total_over_one_total_alone_is_skipped() -> None:
     checks = check_subtotals(
         statement(
             [
@@ -208,21 +208,29 @@ def test_a_heading_keeps_the_running_total() -> None:
     assert checks[1].line_item_ids == ["r3", "r5", "r6", "r7"]
 
 
-def test_a_subtotal_after_a_heading_that_misses_both_candidates_is_uncertain() -> None:
-    checks = check_subtotals(
-        statement(
-            [
-                item(1, "Profit", "100"),
-                item(2, "Items that may be reclassified", None),
-                item(3, "Translation", "5"),
-                item(4, "Hedges", "7"),
-                item(5, "Total comprehensive income", "112", subtotal=True),
-            ],
-            StatementType.COMPREHENSIVE_INCOME,
-        )
+def comprehensive(total: str) -> Statement:
+    return statement(
+        [
+            item(1, "Profit", "100"),
+            item(2, "Items that may be reclassified", None),
+            item(3, "Translation", "5"),
+            item(4, "Hedges", "7"),
+            item(5, "Total comprehensive income", total, subtotal=True),
+        ],
+        StatementType.COMPREHENSIVE_INCOME,
     )
+
+
+def test_a_subtotal_that_covers_a_row_above_its_heading_is_found_by_the_sums() -> None:
+    checks = check_subtotals(comprehensive("112"))
+    assert [(c.status, c.detail) for c in checks] == [("pass", "sum_based")]
+    assert checks[0].line_item_ids == ["r1", "r3", "r4", "r5"]
+
+
+def test_a_subtotal_after_a_heading_that_no_sum_explains_is_uncertain() -> None:
+    checks = check_subtotals(comprehensive("150"))
     assert [(c.status, c.detail) for c in checks] == [("skipped", "subtotal_scope_uncertain")]
-    assert checks[0].expected == Decimal("12") and checks[0].actual == Decimal("112")
+    assert checks[0].expected == Decimal("12") and checks[0].actual == Decimal("150")
 
 
 def test_a_clearly_wrong_subtotal_at_the_start_still_fails() -> None:
@@ -381,3 +389,39 @@ def test_per_share_rows_take_no_part_in_subtotal_checks() -> None:
     assert [(c.status, c.detail) for c in checks] == [("pass", "")]
     assert checks[0].line_item_ids == ["r1", "r2", "r5"]
     assert checks[0].tolerance == Decimal("1.0")
+
+
+def test_sum_groups_set_parents_implicit_totals_and_confirmed_blanks() -> None:
+    rows = [
+        item(1, "Share capital", "100"),
+        item(2, "Retained earnings", "50"),
+        item(3, "Equity attributable to owners", "150"),
+        item(4, "Non-controlling interests", "10"),
+        item(5, "Total equity", "160", subtotal=True),
+    ]
+    checked, results = run_checks(statement(rows), INDEX)
+    by_id = {i.id: i for i in checked.line_items}
+    assert by_id["r1"].parent_id == "r3" and by_id["r3"].parent_id == "r5"
+    assert by_id["r3"].is_subtotal
+    assert [r.detail for r in results if r.kind == "subtotal"] == ["implicit_subtotal", ""]
+
+
+def test_a_total_found_by_sums_says_so() -> None:
+    rows = [
+        item(1, "Non-current assets", None),
+        item(2, "Property", "100"),
+        item(3, "Goodwill", "20"),
+        item(4, "Total non-current assets", "120", subtotal=True),
+        item(5, "Current assets", None),
+        item(6, "Inventories", "30"),
+        item(7, "Cash", "10"),
+        item(8, "Total current assets", "40", subtotal=True),
+        item(9, "Total assets", "160", subtotal=True),
+    ]
+    results = check_subtotals(statement(rows))
+    assert [(r.status, r.detail) for r in results] == [
+        ("pass", ""),
+        ("pass", ""),
+        ("pass", "sum_based"),
+    ]
+    assert results[-1].line_item_ids == ["r4", "r8", "r9"]

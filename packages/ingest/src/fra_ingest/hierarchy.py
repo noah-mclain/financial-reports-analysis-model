@@ -1,6 +1,7 @@
 """A light hierarchy: depth from indentation, sections, subtotal cues and parents (spec 11).
 
-Sum-based inference, which settles subtotals the cues miss, is Part 3b.
+Parents from sums, which settle the subtotals the cues miss, are set by
+``table_checks.run_checks`` (spec 12).
 """
 
 from __future__ import annotations
