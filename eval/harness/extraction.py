@@ -4,7 +4,7 @@
 
 For each expected statement, its rows are aligned in order with the extracted rows, and every
 confirmed expected figure is scored: right when the aligned row holds the same value in that
-period and its label agrees with the expected one. Where nothing is printed, nothing must be
+period and does not sit under another row's label. Where nothing is printed, nothing must be
 read. Only files with status ``checked`` count towards G1. A draft starts as a copy of the
 extraction, so only the figures confirmed against the page are scored, in a block headed
 provisional. Writes var/eval/extraction-golden.json.
@@ -41,8 +41,6 @@ SCANNED = 0.98
 PERIODS = 1.0
 SIGN = 0.999
 METADATA = 1.0
-# Share of an expected label's characters that must be found in the label read.
-LABEL_AGREEMENT = 0.6
 
 
 @dataclass
@@ -69,15 +67,31 @@ class Score:
         )
 
 
-def label_agrees(expected: str, read: str) -> bool:
-    """Whether the label read is the expected one, allowing for OCR noise and for a heading
-    merged in front of it: most of the expected label's characters appear, in order, in the
-    label read. An expected row without a label agrees with anything."""
+def _likeness(expected: str, read: str) -> tuple[float, float]:
+    """How much the label read looks like an expected label: first the share of the expected
+    label's characters found in order in it, which a heading merged in front does not lower,
+    then how alike the two are as wholes, which tells "current" from "non-current"."""
     want, got = squash(expected), squash(read)
-    if not want:
+    if not want or not got:
+        return (0.0, 0.0)
+    matcher = SequenceMatcher(None, want, got, autojunk=False)
+    return (sum(b.size for b in matcher.get_matching_blocks()) / len(want), matcher.ratio())
+
+
+def mislabelled(row: ExpectedRow, read: str, expected: Sequence[ExpectedRow]) -> bool:
+    """Whether a figure sits under another row's label. It does when the row read has no label
+    and the expected one has, or when the label read looks more like the label of a different
+    expected row than like its own. A label OCR garbled, or merged with a heading, still looks
+    most like its own, so label quality alone does not make a figure wrong."""
+    if not squash(row.label):
+        return False
+    if not squash(read):
         return True
-    blocks = SequenceMatcher(None, want, got, autojunk=False).get_matching_blocks()
-    return sum(b.size for b in blocks) / len(want) >= LABEL_AGREEMENT
+    own = _likeness(row.label, read)
+    return any(
+        squash(other.label) != squash(row.label) and _likeness(other.label, read) > own
+        for other in expected
+    )
 
 
 def _matches(row: ExpectedRow, item: LineItem) -> bool:
@@ -127,7 +141,7 @@ def score_statement(expected: ExpectedStatement, statement: Statement | None) ->
     aligned = align_rows(expected.rows, items)
     for row, position in zip(expected.rows, aligned, strict=True):
         item = items[position] if position is not None else None
-        labelled = item is not None and label_agrees(row.label, item.raw_label)
+        labelled = item is not None and not mislabelled(row, item.raw_label, expected.rows)
         for key, value in row.values.items():
             if key in row.unconfirmed:
                 score.unconfirmed += 1
@@ -135,7 +149,7 @@ def score_statement(expected: ExpectedStatement, statement: Statement | None) ->
             read = item.value_for(key) if item is not None else None
             score.cells += 1
             # Nothing printed must read as nothing; a figure must be read, on its own label.
-            same = read == value
+            same = statement is not None and read == value
             if same and (value is None or labelled):
                 score.right += 1
             else:

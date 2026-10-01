@@ -41,12 +41,7 @@ def realign_rows(grid: Grid, layout: HeaderLayout) -> Realignment:
     for cell in grid.cells:
         if cell.row in rows and cell.col in layout.value_cols and cell.text and cell.bbox:
             groups.setdefault(cell.row, []).append(cell)
-    unboxed = any(
-        c.row in rows and c.col in layout.value_cols and c.text and c.bbox is None
-        for c in grid.cells
-    )
-    if not groups or layout.label_col is None or unboxed:
-        # A value without a box cannot be placed, and a moved cell could land on top of it.
+    if not groups or layout.label_col is None:
         return Realignment(grid=grid)
     height = median(c.bbox.height for cells in groups.values() for c in cells if c.bbox)
     slack = _SLACK * height
@@ -64,6 +59,22 @@ def realign_rows(grid: Grid, layout: HeaderLayout) -> Realignment:
     off = sorted(r for r in groups if r in bands and not inside(at[r], r))
     if not off:
         return Realignment(grid=grid, merged_labels=merged)
+    unboxed = any(
+        c.row in rows and c.col in layout.value_cols and c.text and c.bbox is None
+        for c in grid.cells
+    )
+    if unboxed:
+        # A value without a box cannot be placed, and a moved cell could land on top of it:
+        # nothing moves, and the rows that are off say so.
+        flagged = tuple(
+            c.model_copy(update={"flags": (*c.flags, "row_misaligned")})
+            if c.row in off and c in groups[c.row]
+            else c
+            for c in grid.cells
+        )
+        return Realignment(
+            grid=grid.model_copy(update={"cells": flagged}), unresolved=off, merged_labels=merged
+        )
 
     # Where each row's group ends up: start from the grid, then vacate the rows that are off.
     holds: dict[int, int | None] = {r: (r if r in groups else None) for r in rows}

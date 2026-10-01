@@ -158,8 +158,8 @@ Steps 1 to 6 of spec 11 are unchanged. Step numbers below continue spec 11's.
      keep their docling row in `source_row`; the statement carries `rows_realigned`.
    - A label cell taller than 1.7 value heights gives its row's cells `label_merged`. The text
      is not split: nothing on the page says where one label ends.
-   - A table with a value that has text and no box is left as it came: such a value cannot be
-     placed, and a moved cell could land on top of it.
+   - A shifted table with a value that has text and no box is not repaired: such a value cannot
+     be placed, and a moved cell could land on top of it. The rows that are off are flagged.
    - A repair that would leave the rows out of page order, or lose a group, is not made: every
      row that was off stays and is flagged.
 7. **Line items**, as in spec 11, from the realigned grid.
@@ -251,7 +251,7 @@ V3 (totals with their addends and outcome), V4 (scale and currency in the statem
 
 | Situation | Behaviour |
 |-----------|-----------|
-| A value group lies on no label line | Left in place, `row_misaligned`, statement `row_alignment_unresolved`, held |
+| A value group lies on no label line, or the table is shifted and holds a value with no box | Left in place, `row_misaligned`, statement `row_alignment_unresolved`, held |
 | Rows were realigned | Cells `row_realigned`, statement `rows_realigned`, held: a repair is shown to a person before it is trusted |
 | A label cell holds several lines | `label_merged` on the row's cells; a warning in the review |
 | A total fits no suffix in any period | 3a's result against its run: fail, `subtotal_scope_uncertain` or `subtotal_scope_unknown` |
@@ -261,7 +261,7 @@ V3 (totals with their addends and outcome), V4 (scale and currency in the statem
 | One income statement, no comprehensive income statement, or the reverse | No tie check |
 | A statement with no passing check | Held, `unchecked` |
 | An expected file is a draft | Its confirmed cells are scored and printed as provisional; it does not count towards G1 |
-| An expected statement was not extracted | Every cell of it is a miss |
+| An expected statement was not extracted | Every cell of it is a miss, blank cells included |
 | `review-report` on an unknown or ambiguous hash, or a missing artifact | Exit 2 with the reason |
 
 ## Testing
@@ -293,9 +293,11 @@ its statement is `needs_review` and a row of the check carries `numbers_missing`
 are aligned in order with the extracted rows (two rows match when their labels are equal with
 spaces ignored, or they share an equal non-zero value in one period), and every expected
 confirmed cell is scored: right when the aligned row holds the same value in that period and
-its label agrees with the expected one (60% of the expected label's characters found in order
-in the label read, which allows OCR noise and a heading merged in front). A figure under the
-wrong label, or on a row with no label, is wrong and counted as mislabelled. Where the expected
+does not sit under another row's label. It does when the row read has no label and the expected
+row has one, or when the label read looks more like a different expected row's label than like
+its own. A label OCR garbled or merged with a heading still looks most like its own, so label
+quality alone does not make a figure wrong; a shifted or swapped row does. Such a figure is
+wrong and counted as mislabelled. Where the expected
 file says nothing is printed, nothing must be read. Extracted rows with values that no expected
 row aligns to are counted as extra rows and printed.
 
@@ -339,8 +341,9 @@ block headed provisional. Unconfirmed cells are counted and left out of both blo
 
 Measured 2026-10-01 on the `ingest-structure` branch, structure version 4, with
 `make eval-structure` and `make eval-extraction` on the stored conversions of the golden set.
-Structure version 5, which adds unit caveats ([13-unit-caveats.md](13-unit-caveats.md)), changes
-none of these figures.
+Structure version 5 adds unit caveats ([13-unit-caveats.md](13-unit-caveats.md)) and version 6
+the fixes from the review of this branch. The review table and the extraction figures below are
+from version 6; no value, check or review status differs from version 4.
 
 ### Against Done when
 
@@ -486,7 +489,8 @@ passed with two unread dashes, which its sums confirmed as blanks.
   them. That is the week 2 bake-off's job, and this eval is now there to score it.
 - The checks caught or held 33 of the 36 wrong figures by themselves. The three they missed
   are the case R39 names. A statement with any subtotal that could not be checked is now held
-  (`subtotal_not_checked`), which covers the blocks those three sit in.
+  (`subtotal_not_checked`), which covers the blocks two of the three sit in. The third, profit
+  before tax, is on an income statement held only for its unparsed cells.
 
 ### Known limits
 
@@ -508,6 +512,12 @@ Found by the review of this branch and left as they are, each with the case that
   work.
 - **A fractional amount is not a reason to hold.** 132,705,608 read as 1327.5608 was caught
   only because its other period made it a `period_outlier`.
+- **A total over a single row holds its statement.** Such a total cannot be checked against a
+  sum, so it is `subtotal_not_checked`, though it may be right. No golden status changed;
+  expect more holds on the corpus.
+- **Extra rows gate nothing.** An extracted row with values that no expected row aligns to is
+  counted and printed, but G1 has no threshold for it.
+- **`period_unbound:0` reads like a count** in the review reasons; the number is a column.
 - **`eval/harness` is outside `make typecheck`.** The two new harness files pass mypy when run
   on them directly.
 

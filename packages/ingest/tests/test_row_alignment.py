@@ -205,14 +205,15 @@ def test_a_group_whose_label_line_is_taken_is_left_and_flagged() -> None:
     assert result.grid.text(2, 1) == "72" and result.grid.text(3, 1) == "4,085"
 
 
-def test_a_table_with_a_value_that_has_no_box_is_left_alone() -> None:
-    cells = list(shifted().cells)
+def test_a_shifted_table_with_a_value_that_has_no_box_is_flagged_not_repaired() -> None:
+    cells = [c for c in shifted().cells if (c.row, c.col, c.text) != (2, 1, "4,157")]
     cells.append(GridCell(text="999", row=2, col=1, bbox=None, page_no=5))
-    g = shifted().model_copy(
-        update={"cells": tuple(c for c in cells if (c.row, c.col, c.text) != (2, 1, "4,157"))}
-    )
+    g = shifted().model_copy(update={"cells": tuple(cells)})
     result = realign_rows(g, layout(g))
-    assert result.grid == g and not result.moved and result.unresolved == []
+    assert not result.moved and result.unresolved == [3]
+    assert result.grid.text(3, 1) == "102" and result.grid.text(2, 1) == "999"
+    off = result.grid.cell(3, 1)
+    assert off is not None and "row_misaligned" in off.flags
 
 
 def test_a_repair_that_would_put_figures_out_of_order_is_refused() -> None:

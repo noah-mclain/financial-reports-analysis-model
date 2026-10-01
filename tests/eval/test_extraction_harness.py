@@ -3,6 +3,7 @@
 from datetime import date
 from decimal import Decimal
 
+import pytest
 from harness.expected import ExpectedFile, ExpectedRow, ExpectedStatement
 from harness.extraction import align_rows, report, score_statement
 
@@ -208,3 +209,59 @@ def test_extra_rows_are_printed_for_drafts_too() -> None:
         [(file_of(statement_of([row("Cash", "5")]), "draft"), {StatementType.BALANCE: extra})]
     )
     assert "extra rows 1" in "\n".join(lines)
+
+
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [
+        ("Total equity", "Total liabilities"),
+        ("Total current liabilities", "Total non-current liabilities"),
+        ("Trade receivables", "Trade payables"),
+        ("Finance income", "Finance costs"),
+        ("Revenue", "Selling and Distribution Expenses"),
+    ],
+)
+def test_two_rows_with_swapped_values_are_both_wrong(first: str, second: str) -> None:
+    expected = statement_of([row(first, "40"), row(second, "60")])
+    swapped = extracted_of([item(1, second, "40"), item(2, first, "60")])
+    score = score_statement(expected, swapped)
+    assert (score.cells, score.right, score.mislabelled) == (2, 0, 2)
+
+
+@pytest.mark.parametrize(
+    ("expected", "read"),
+    [
+        ("Inventories", "lnventorles"),
+        ("Paid-up share capital", "Equity and liabilities Equity Paid-up share capltal"),
+        ("رأس المال المدفوع", "حقوق الملكية والإلتزامات دقوق الملكية رأس العال المدفوع"),
+        ("احتياطي قانوني", "احتيالي فاتوني"),
+        ("نقدية وأرصدة لدى البنوك", "نقدية و أرصدة لدى الينوك"),
+        ("ربح السنة", "ربحالسنة"),
+        ("", "anything"),
+    ],
+)
+def test_a_noisy_or_merged_label_keeps_its_figure_right(expected: str, read: str) -> None:
+    others = [row("Total equity and liabilities", "900"), row("Statutory reserve", "70")]
+    statement = statement_of([row(expected, "140"), *others])
+    extracted = extracted_of(
+        [
+            item(1, read, "140"),
+            item(2, "Total equity and liabilities", "900"),
+            item(3, "Statutory reserve", "70"),
+        ]
+    )
+    score = score_statement(statement, extracted)
+    assert (score.cells, score.right, score.mislabelled) == (3, 3, 0)
+
+
+def test_a_figure_on_a_row_with_no_label_is_wrong() -> None:
+    score = score_statement(
+        statement_of([row("Total equity", "40")]), extracted_of([item(1, "", "40")])
+    )
+    assert (score.cells, score.right, score.mislabelled) == (1, 0, 1)
+
+
+def test_blank_cells_of_a_statement_that_was_not_extracted_are_misses() -> None:
+    blank = ExpectedRow(label="Treasury shares", values={P.key: None})
+    score = score_statement(statement_of([blank, row("Total", "5")]), None)
+    assert (score.cells, score.right) == (2, 0)
