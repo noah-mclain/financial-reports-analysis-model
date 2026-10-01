@@ -140,3 +140,28 @@ def test_an_implausible_assumed_scale_holds() -> None:
     flags = ("scale_missing", "scale_implausible")
     held = review_statement(statement(ROWS, flags=flags), PASSING, primary=True)
     assert held.reasons == ["scale_implausible"] and held.warnings == ["scale_missing"]
+
+
+def test_a_subtotal_that_could_not_be_checked_holds_the_statement() -> None:
+    for detail in ("subtotal_scope_uncertain", "subtotal_scope_unknown", "missing_values"):
+        checks = [*PASSING, check("subtotal", "skipped", ["r4"], detail)]
+        review = review_statement(statement(ROWS), checks, primary=True)
+        assert review.status == "needs_review" and review.reasons == ["subtotal_not_checked:1"]
+
+
+def test_a_figure_dropped_for_want_of_a_box_holds_the_statement() -> None:
+    review = review_statement(
+        statement(ROWS, flags=("value_without_box:r3c2",)), PASSING, primary=True
+    )
+    assert review.reasons == ["value_without_box:r3c2"]
+
+
+def test_an_identity_that_passes_one_period_and_is_skipped_in_another_holds() -> None:
+    balance = statement(ROWS, StatementType.BALANCE)
+    other = check("balance_identity", "skipped", ["r3", "r4"], "missing_values").model_copy(
+        update={"id": "s:balance_identity:other", "period_key": "2024-12-31"}
+    )
+    checks = [*PASSING, check("balance_identity", "pass", ["r3", "r4"]), other]
+    assert review_statement(balance, checks, primary=True).reasons == [
+        "identity_not_checked:missing_values"
+    ]

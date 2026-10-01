@@ -158,6 +158,10 @@ Steps 1 to 6 of spec 11 are unchanged. Step numbers below continue spec 11's.
      keep their docling row in `source_row`; the statement carries `rows_realigned`.
    - A label cell taller than 1.7 value heights gives its row's cells `label_merged`. The text
      is not split: nothing on the page says where one label ends.
+   - A table with a value that has text and no box is left as it came: such a value cannot be
+     placed, and a moved cell could land on top of it.
+   - A repair that would leave the rows out of page order, or lose a group, is not made: every
+     row that was off stays and is flagged.
 7. **Line items**, as in spec 11, from the realigned grid.
 9. **Hierarchy.** Depth and section parents as in spec 11. After the sums are inferred, each
    addend's `parent_id` is the total that covers it, and an implicit total is `is_subtotal`.
@@ -198,6 +202,8 @@ Steps 1 to 6 of spec 11 are unchanged. Step numbers below continue spec 11's.
 10a. **Review.** A statement is `passed` when all of these hold, else `needs_review` with one
    reason per rule broken:
    - no check on it failed (`subtotal_failed`, `identity_failed`, `tie_failed`);
+   - no subtotal check on it was skipped, for whatever cause (`subtotal_not_checked` with the
+     count): a total nothing could be checked against vouches for nothing;
    - a balance sheet's identity passed in every period (`identity_not_checked` with the
      skipped check's detail otherwise);
    - at least one check passed (`unchecked`);
@@ -205,7 +211,8 @@ Steps 1 to 6 of spec 11 are unchanged. Step numbers below continue spec 11's.
      `implausible_magnitude`, `digit_suspect`, `period_outlier`, `row_misaligned`,
      `row_realigned` or `ambiguous_separator`; the reason is the flag with its count;
    - no statement flag among `period_unbound`, `scale_conflict`, `currency_conflict`,
-     `currency_missing`, `row_alignment_unresolved`;
+     `currency_missing`, `row_alignment_unresolved`, `scale_implausible` (spec 13),
+     `value_without_box`;
    - it is the first statement of its type in the document (`duplicate_statement` on the
      others, which `ambiguous_statement` already marks).
 
@@ -285,7 +292,12 @@ its statement is `needs_review` and a row of the check carries `numbers_missing`
 `make eval-extraction` runs `eval/harness/extraction.py`. For each expected statement, its rows
 are aligned in order with the extracted rows (two rows match when their labels are equal with
 spaces ignored, or they share an equal non-zero value in one period), and every expected
-numeric cell is scored: right when the aligned row holds the same value in that period.
+confirmed cell is scored: right when the aligned row holds the same value in that period and
+its label agrees with the expected one (60% of the expected label's characters found in order
+in the label read, which allows OCR noise and a heading merged in front). A figure under the
+wrong label, or on a row with no label, is wrong and counted as mislabelled. Where the expected
+file says nothing is printed, nothing must be read. Extracted rows with values that no expected
+row aligns to are counted as extra rows and printed.
 
 | Measure | Definition | G1 |
 |---------|------------|----|
@@ -294,7 +306,8 @@ numeric cell is scored: right when the aligned row holds the same value in that 
 | Period mapping | expected periods found with the same key, end date, kind and length | 100% |
 | Sign accuracy | among cells equal in absolute value, those equal in sign | 99.9% |
 
-Only files with `status: checked` count. A draft starts as a copy of the extraction, so scoring
+Only files with `status: checked` count, and a file cannot be `checked` without two different
+readers in `checked_by` and an empty `unconfirmed` on every row. A draft starts as a copy of the extraction, so scoring
 all of it would measure nothing: drafts are scored on their confirmed cells only, in a separate
 block headed provisional. Unconfirmed cells are counted and left out of both blocks.
 
@@ -338,7 +351,7 @@ none of these figures.
 | Edita IFRS balance sheet | Total equity passes; no `subtotal_failed` | met. All totals pass, 68 of 68 numeric cells sit in a passing check, and the statement passes review |
 | Every other golden statement | Values unchanged from version 3 | met. Against the version 3 output, 10 cells differ, all on Edita 2024 AR p5 and all moved by row alignment. No value, label, period, scale or currency changed on the other eleven documents |
 | `make eval-structure` | PASS | met |
-| Review report | Written for all 12 documents, every box inside its page | met. 12 reports, 1,302 boxes, none outside its page. On Edita 2024 AR p5 the boxes were drawn over the page image and sit on the printed figures |
+| Review report | Written for all 12 documents, every box inside its page | met in part. 12 reports, 1,302 boxes. Boxes are clamped to the page when drawn, so "inside its page" holds by construction and says nothing about whether a box is right. On Edita 2024 AR p5 the boxes were drawn over the page image and sit on the printed figures; the other pages were not looked at this way, and the report was not opened in a browser |
 | Extraction eval | Runs on the golden set; G1 stated for checked files, drafts as provisional | runs. No expected file is checked, so **G1 is not measured**. Provisional figures are below |
 
 ### Checks, version 3 against version 4
@@ -386,27 +399,27 @@ of 980 numeric cells sit in a passing check.
 | juhayna-2025-ar-standalone | balance, comprehensive income | not extracted | | |
 | juhayna-2025-ar-consolidated | income | held | 6 of 30 | `numbers_missing:2`, `unparsed:8` |
 | juhayna-2025-ar-consolidated | balance, comprehensive income | not extracted | | |
-| juhayna-2025-en-consolidated | balance | held | 0 of 7 | `identity_not_checked:identity_totals_not_found`, `unchecked`, `numbers_missing:5`, `period_unbound:1` |
-| juhayna-2025-en-consolidated | comprehensive income | held | 0 of 5 | `subtotal_failed`, `tie_failed`, `unchecked`, `unparsed:2`, `implausible_magnitude:4` |
+| juhayna-2025-en-consolidated | balance | held | 0 of 7 | `identity_not_checked:identity_totals_not_found`, `subtotal_not_checked:8`, `unchecked`, `numbers_missing:5`, `period_unbound:1` |
+| juhayna-2025-en-consolidated | comprehensive income | held | 0 of 5 | `subtotal_failed`, `tie_failed`, `subtotal_not_checked:1`, `unchecked`, `unparsed:2`, `implausible_magnitude:4` |
 | juhayna-2025-en-consolidated | income | held | 38 of 40 | `tie_failed` |
-| juhayna-2024-ar-consolidated | comprehensive income | held | 6 of 11 | `numbers_missing:2`, `unparsed:1` |
+| juhayna-2024-ar-consolidated | comprehensive income | held | 6 of 11 | `subtotal_not_checked:2`, `numbers_missing:2`, `unparsed:1` |
 | juhayna-2024-ar-consolidated | balance, income | not extracted | | |
-| juhayna-2024-en-consolidated | balance | held | 12 of 73 | `subtotal_failed`, `identity_not_checked:identity_totals_not_found`, `numbers_missing:2`, `unparsed:1`, `implausible_magnitude:2`, `digit_suspect:3` |
+| juhayna-2024-en-consolidated | balance | held | 12 of 73 | `subtotal_failed`, `identity_not_checked:identity_totals_not_found`, `subtotal_not_checked:10`, `numbers_missing:2`, `unparsed:1`, `implausible_magnitude:2`, `digit_suspect:3` |
 | juhayna-2024-en-consolidated | comprehensive income | passed | 12 of 12 |  |
 | juhayna-2024-en-consolidated | income | passed | 36 of 38 |  |
-| edita-2025-ar-consolidated | balance | held | 14 of 37 | `subtotal_failed`, `identity_not_checked:identity_totals_not_found`, `unparsed:2`, `period_unbound:0` |
-| edita-2025-ar-consolidated | comprehensive income | held | 5 of 12 | `subtotal_failed`, `unparsed:2` |
-| edita-2025-ar-consolidated | income | held | 12 of 34 | `numbers_missing:1`, `unparsed:7` |
-| edita-2025-en-consolidated-eas | balance | held | 17 of 72 | `subtotal_failed`, `numbers_missing:3`, `unparsed:1`, `implausible_magnitude:3`, `digit_suspect:3` |
+| edita-2025-ar-consolidated | balance | held | 14 of 37 | `subtotal_failed`, `identity_not_checked:identity_totals_not_found`, `subtotal_not_checked:3`, `unparsed:2`, `period_unbound:0` |
+| edita-2025-ar-consolidated | comprehensive income | held | 5 of 12 | `subtotal_failed`, `subtotal_not_checked:2`, `unparsed:2` |
+| edita-2025-ar-consolidated | income | held | 12 of 34 | `subtotal_not_checked:2`, `numbers_missing:1`, `unparsed:7` |
+| edita-2025-en-consolidated-eas | balance | held | 17 of 72 | `subtotal_failed`, `subtotal_not_checked:7`, `numbers_missing:3`, `unparsed:1`, `implausible_magnitude:3`, `digit_suspect:3` |
 | edita-2025-en-consolidated-eas | comprehensive income | passed | 14 of 14 |  |
 | edita-2025-en-consolidated-eas | income | passed | 37 of 39 |  |
 | edita-2025-en-consolidated-ifrs | balance | passed | 68 of 68 |  |
-| edita-2025-en-consolidated-ifrs | comprehensive income | held | 14 of 14 | `numbers_missing:1`, `unparsed:1` |
+| edita-2025-en-consolidated-ifrs | comprehensive income | held | 14 of 14 | `subtotal_not_checked:2`, `numbers_missing:1`, `unparsed:1` |
 | edita-2025-en-consolidated-ifrs | income | held | 37 of 38 | `unparsed:1` |
-| edita-2024-ar-consolidated | balance | held | 28 of 67 | `subtotal_failed`, `identity_failed`, `numbers_missing:5`, `unparsed:2`, `implausible_magnitude:3`, `digit_suspect:6`, `period_outlier:4`, `row_realigned:7` |
+| edita-2024-ar-consolidated | balance | held | 28 of 67 | `subtotal_failed`, `identity_failed`, `subtotal_not_checked:5`, `numbers_missing:5`, `unparsed:2`, `implausible_magnitude:3`, `digit_suspect:6`, `period_outlier:4`, `row_realigned:7` |
 | edita-2024-ar-consolidated | comprehensive income | passed | 14 of 14 |  |
 | edita-2024-ar-consolidated | income | held | 8 of 31 | `unparsed:7` |
-| juhayna-2025-en-standalone | comprehensive income | held | 0 of 5 | `subtotal_failed`, `tie_failed`, `unchecked`, `unparsed:1`, `implausible_magnitude:2` |
+| juhayna-2025-en-standalone | comprehensive income | held | 0 of 5 | `subtotal_failed`, `tie_failed`, `subtotal_not_checked:1`, `unchecked`, `unparsed:1`, `implausible_magnitude:2` |
 | juhayna-2025-en-standalone | income | held | 26 of 28 | `tie_failed`, `ambiguous_separator:1` |
 | juhayna-2025-en-standalone | balance | not extracted | | |
 
@@ -424,9 +437,13 @@ unconfirmed in the three files.
 |----------|-------|---------|-------|-------|---------|----------|
 | almarai-2025-en | digital | 138 | 138 | 100.00% | 0 | 0 |
 | edita-2025-en-consolidated-ifrs | scanned, English | 126 | 120 | 95.24% | 0 | 6 |
-| edita-2024-ar-consolidated | scanned, Arabic | 128 | 99 | 77.34% | 11 | 18 |
+| edita-2024-ar-consolidated | scanned, Arabic | 128 | 98 | 76.56% | 11 | 18 |
 | Digital | | 138 | 138 | 100.00% | | |
-| Scanned | | 254 | 219 | 86.22% | | |
+| Scanned | | 254 | 218 | 85.83% | | |
+
+One more figure on Edita 2024 AR is read correctly and counted wrong: non-controlling interests
+for 2024 (102,084,427) sits on a row with no label, because its label is merged into the cell
+above. One extracted row aligns to no expected row.
 
 Period mapping is 18 of 18, sign 357 of 357 on the figures equal in size, and scale and
 currency 18 of 18 against the files (the Edita scales are still `unconfirmed` in the manifest).
@@ -443,7 +460,7 @@ How each file was compared:
   from one reading. The row for total current liabilities, which the extraction merged into the
   row above it, was added by hand.
 
-What the checks did with the 35 wrong figures on the two scanned documents:
+What the checks did with the 36 wrong figures on the two scanned documents:
 
 | | Figures |
 |---|---|
@@ -451,6 +468,7 @@ What the checks did with the 35 wrong figures on the two scanned documents:
 | Misread, and the cell flagged | 6 |
 | Misread, not flagged, inside a failed check | 2 |
 | Misread with no flag and no failed check on it | 3 |
+| Read correctly, on a row with no label; the cell flagged `row_realigned` | 1 |
 
 The three silent ones are on Edita 2024 AR, on statements held for other reasons: deferred tax
 liabilities 2024 (302,414,061 read as 2,414,061), other credit balances 2024 (643,699,632 read
@@ -463,12 +481,35 @@ passed with two unread dashes, which its sums confirmed as blanks.
 
 - Almarai, the digital document, is right on every figure compared, and both editions pass.
 - The scanned English sheet is close: 95.24%, every miss a figure not read, none misread.
-- The scanned Arabic sheet is at 77.34%, against a G1 threshold of 98.0% for scanned pages.
+- The scanned Arabic sheet is at 76.56%, against a G1 threshold of 98.0% for scanned pages.
   Part 3b makes its faults visible and holds the statements; it does not make the OCR read
   them. That is the week 2 bake-off's job, and this eval is now there to score it.
-- The checks caught or held 32 of the 35 wrong figures by themselves. The three they missed
-  are the case R39 names, and they argue for holding a statement whenever a section of it has
-  no passing total, which today is true only through the other reasons.
+- The checks caught or held 33 of the 36 wrong figures by themselves. The three they missed
+  are the case R39 names. A statement with any subtotal that could not be checked is now held
+  (`subtotal_not_checked`), which covers the blocks those three sit in.
+
+### Known limits
+
+Found by the review of this branch and left as they are, each with the case that shows it:
+
+- **An implicit total by rounding.** Two addends allow a difference of 1. With small printed
+  figures (3, 4, then 8) a plain row can be taken for the sum of the two above it. The real
+  total is then unexplained, and the statement is held as `subtotal_not_checked`. Needs figures
+  printed in millions; none in the golden set.
+- **A period of zeros confirms a scope.** A suffix whose rows are all zero in one period "fits"
+  there, so a failed total can be reported against too short a run of rows. The statement is
+  still held; the difference shown is against the wrong rows.
+- **A dropped leading digit.** 302,414,061 read as 2,414,061 changes the figure's length, so
+  the single-digit rule does not name that cell and can flag its neighbours. One of the three
+  silent misreads above is this shape.
+- **Per-share rows named only by their heading.** Almarai prints "- Basic" and "- Diluted"
+  under an earnings-per-share heading, so those rows carry no `per_share` flag and stay in the
+  open rows and in the caveat's median. A limit of Part 3a's label rule, for the week 2 label
+  work.
+- **A fractional amount is not a reason to hold.** 132,705,608 read as 1327.5608 was caught
+  only because its other period made it a `period_outlier`.
+- **`eval/harness` is outside `make typecheck`.** The two new harness files pass mypy when run
+  on them directly.
 
 ## Decisions
 

@@ -4,7 +4,8 @@
 
 For each expected statement, its rows are aligned in order with the extracted rows, and every
 confirmed expected figure is scored: right when the aligned row holds the same value in that
-period. Only files with status ``checked`` count towards G1. A draft starts as a copy of the
+period and its label agrees with the expected one. Where nothing is printed, nothing must be
+read. Only files with status ``checked`` count towards G1. A draft starts as a copy of the
 extraction, so only the figures confirmed against the page are scored, in a block headed
 provisional. Writes var/eval/extraction-golden.json.
 """
@@ -16,6 +17,7 @@ import json
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
+from difflib import SequenceMatcher
 
 import yaml
 
@@ -39,6 +41,8 @@ SCANNED = 0.98
 PERIODS = 1.0
 SIGN = 0.999
 METADATA = 1.0
+# Share of an expected label's characters that must be found in the label read.
+LABEL_AGREEMENT = 0.6
 
 
 @dataclass
@@ -53,6 +57,7 @@ class Score:
     metadata_right: int = 0
     unconfirmed: int = 0
     extra_rows: int = 0
+    mislabelled: int = 0
     wrong: list[dict[str, str]] = field(default_factory=list)
 
     def __add__(self, other: Score) -> Score:
@@ -62,6 +67,17 @@ class Score:
                 for name in self.__dataclass_fields__
             }
         )
+
+
+def label_agrees(expected: str, read: str) -> bool:
+    """Whether the label read is the expected one, allowing for OCR noise and for a heading
+    merged in front of it: most of the expected label's characters appear, in order, in the
+    label read. An expected row without a label agrees with anything."""
+    want, got = squash(expected), squash(read)
+    if not want:
+        return True
+    blocks = SequenceMatcher(None, want, got, autojunk=False).get_matching_blocks()
+    return sum(b.size for b in blocks) / len(want) >= LABEL_AGREEMENT
 
 
 def _matches(row: ExpectedRow, item: LineItem) -> bool:
@@ -111,27 +127,30 @@ def score_statement(expected: ExpectedStatement, statement: Statement | None) ->
     aligned = align_rows(expected.rows, items)
     for row, position in zip(expected.rows, aligned, strict=True):
         item = items[position] if position is not None else None
+        labelled = item is not None and label_agrees(row.label, item.raw_label)
         for key, value in row.values.items():
             if key in row.unconfirmed:
                 score.unconfirmed += 1
                 continue
-            if value is None:
-                continue
             read = item.value_for(key) if item is not None else None
             score.cells += 1
-            if read == value:
+            # Nothing printed must read as nothing; a figure must be read, on its own label.
+            same = read == value
+            if same and (value is None or labelled):
                 score.right += 1
             else:
+                score.mislabelled += same
                 score.wrong.append(
                     {
                         "statement": expected.type.value,
                         "label": row.label,
                         "period": key,
-                        "expected": str(value),
+                        "expected": "" if value is None else str(value),
                         "read": "" if read is None else str(read),
+                        "label_read": item.raw_label if item is not None else "",
                     }
                 )
-            if read is not None and abs(read) == abs(value):
+            if value is not None and read is not None and abs(read) == abs(value):
                 score.sign_cells += 1
                 score.sign_right += read == value
     used = {p for p in aligned if p is not None}
@@ -205,7 +224,10 @@ def report(
         for mode in ("digital", "scanned"):
             score = by_status["draft"].get(mode)
             if score is not None:
-                lines.append(_mode_line(mode, score) + f"  unconfirmed {score.unconfirmed}")
+                lines.append(
+                    _mode_line(mode, score)
+                    + f"  unconfirmed {score.unconfirmed}  extra rows {score.extra_rows}"
+                )
     return lines, 1 if failed else 0
 
 
@@ -221,8 +243,8 @@ def main(argv: list[str] | None = None) -> int:
         expected = load_expected(path)
         result = structure_pdf(MANIFEST.parent / entries[expected.id]["file"], config, None)
         found: dict[StatementType, Statement] = {}
-        for s in result.statements:
-            found.setdefault(s.type, s)
+        for extracted in result.statements:
+            found.setdefault(extracted.type, extracted)
         files.append((expected, found))
         for s in expected.statements:
             score = score_statement(s, found.get(s.type))

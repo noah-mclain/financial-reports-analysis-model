@@ -173,3 +173,18 @@ def test_no_shared_period_means_no_tie_check() -> None:
         [item(1, "Net profit", "160", "140")], StatementType.COMPREHENSIVE_INCOME, "ci"
     ).model_copy(update={"periods": [other], "line_items": []})
     assert check_net_profit_tie(INCOME, comprehensive) == []
+
+
+def test_a_cell_that_is_the_only_candidate_of_one_check_is_the_suspect_of_another() -> None:
+    # Total assets misses its sum by 5 and is that check's only candidate. The identity misses
+    # by the same 5 and could blame either side; the first check settles which.
+    rows = [
+        *ASSETS,
+        item(7, "Total assets", "8169", "6326", total=True),
+        item(8, "Total liabilities and equity", "8169", "6321", total=True),
+    ]
+    checked, results = run_checks(statement(rows), INDEX)
+    identity = next(r for r in results if r.kind == "balance_identity" and r.status == "fail")
+    assert identity.detail.endswith("single_digit:10^0; suspect:r7=6321")
+    flagged = [i.id for i in checked.line_items for c in i.cells if "digit_suspect" in c.flags]
+    assert flagged == ["r7"]

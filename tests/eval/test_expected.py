@@ -4,7 +4,9 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
-from harness.expected import draft_expected, load_expected, write_draft
+import pytest
+from harness.expected import ExpectedFile, draft_expected, load_expected, write_draft
+from pydantic import ValidationError
 
 from fra_core.schemas import (
     BBox,
@@ -112,6 +114,21 @@ def test_a_checked_file_or_a_draft_with_a_confirmed_figure_is_never_replaced(
     assert not write_draft(path, draft)
     assert load_expected(path) == read
     assert write_draft(path, draft, force=True)
-    checked = draft.model_copy(update={"status": "checked", "checked_by": ["n", "m"]})
+    checked = read.model_copy(deep=True)
+    for row in checked.statements[0].rows:
+        row.unconfirmed = []
+    checked = checked.model_copy(update={"status": "checked", "checked_by": ["n", "m"]})
     path.write_text(checked.model_dump_json(), encoding="utf-8")
     assert not write_draft(path, draft)
+
+
+def test_a_checked_file_needs_two_readers_and_no_unconfirmed_figure() -> None:
+    draft = draft_expected("doc", result([statement(1, ROWS)]))
+    with pytest.raises(ValidationError, match="two readers"):
+        ExpectedFile.model_validate({**draft.model_dump(mode="json"), "status": "checked"})
+    one = {**draft.model_dump(mode="json"), "status": "checked", "checked_by": ["n", "n"]}
+    with pytest.raises(ValidationError, match="two readers"):
+        ExpectedFile.model_validate(one)
+    two = {**draft.model_dump(mode="json"), "status": "checked", "checked_by": ["n", "m"]}
+    with pytest.raises(ValidationError, match="unconfirmed"):
+        ExpectedFile.model_validate(two)

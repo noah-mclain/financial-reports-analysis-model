@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from fra_core.schemas import Period, StatementType, TextSource
 from fra_ingest.config import REPO_ROOT, load_config
@@ -63,6 +63,18 @@ class ExpectedFile(BaseModel):
     checked_by: list[str] = Field(default_factory=list)
     note: str = ""
     statements: list[ExpectedStatement]
+
+    @model_validator(mode="after")
+    def _checked_means_read_twice(self) -> ExpectedFile:
+        if self.status != "checked":
+            return self
+        if len(set(self.checked_by)) < 2:
+            msg = "a checked file names its two readers in checked_by"
+            raise ValueError(msg)
+        if any(row.unconfirmed for s in self.statements for row in s.rows):
+            msg = "a checked file has no unconfirmed figure"
+            raise ValueError(msg)
+        return self
 
     @property
     def confirmed_cells(self) -> int:

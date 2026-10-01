@@ -68,7 +68,7 @@ Part 3b was built on `ingest-structure` the same day, so pull request #4 now cov
 - The Edita 2024 AR row shift is repaired from the cell boxes. Total equity now reads 4,157,569,146 on its own label.
 - A failed sum that is one digit off names its suspect. Edita's 2023 total assets is named at 7,743,342,651, which is what the page prints.
 - Every statement is passed or held for review with reasons: 12 of 29 pass. `fra-ingest review-report <sha256>` draws every cell on its page image.
-- A first comparison against the page, on three documents, gives 100% of 138 figures on Almarai EN, 95.24% of 126 on Edita IFRS and 77.34% of 128 on Edita 2024 AR. These are provisional: the expected files are drafts compared once, so Gate G1 is not measured.
+- A first comparison against the page, on three documents, gives 100% of 138 figures on Almarai EN, 95.24% of 126 on Edita IFRS and 76.56% of 128 on Edita 2024 AR. These are provisional: the expected files are drafts compared once, so Gate G1 is not measured.
 - The scanned Arabic sheet is far below G1's 98%. Part 3b shows and holds its faults; reading it is the week 2 OCR work.
 
 ## Open decisions

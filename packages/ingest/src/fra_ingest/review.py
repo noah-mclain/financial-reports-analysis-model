@@ -32,6 +32,7 @@ _HOLD_FLAGS = (
     "currency_missing",
     "row_alignment_unresolved",
     "scale_implausible",
+    "value_without_box",
 )
 _WARNING_FLAGS = (
     "scale_missing",
@@ -80,6 +81,10 @@ def review_statement(
         skipped = sorted({c.detail for c in identity if c.status == "skipped" and c.detail})
         if not identity or skipped or any(c.status != "pass" for c in identity):
             reasons.append(":".join(["identity_not_checked", *skipped[:1]]))
+    # A total nothing could be checked against vouches for nothing, whatever the cause.
+    unchecked_totals = sum(1 for c in checks if c.kind == "subtotal" and c.status == "skipped")
+    if unchecked_totals:
+        reasons.append(f"subtotal_not_checked:{unchecked_totals}")
     if not any(c.status == "pass" for c in checks):
         reasons.append("unchecked")
     lost = sum(1 for _, c in cells if _lost(c))

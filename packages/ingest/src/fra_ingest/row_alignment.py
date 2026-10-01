@@ -41,7 +41,12 @@ def realign_rows(grid: Grid, layout: HeaderLayout) -> Realignment:
     for cell in grid.cells:
         if cell.row in rows and cell.col in layout.value_cols and cell.text and cell.bbox:
             groups.setdefault(cell.row, []).append(cell)
-    if not groups or layout.label_col is None:
+    unboxed = any(
+        c.row in rows and c.col in layout.value_cols and c.text and c.bbox is None
+        for c in grid.cells
+    )
+    if not groups or layout.label_col is None or unboxed:
+        # A value without a box cannot be placed, and a moved cell could land on top of it.
         return Realignment(grid=grid)
     height = median(c.bbox.height for cells in groups.values() for c in cells if c.bbox)
     slack = _SLACK * height

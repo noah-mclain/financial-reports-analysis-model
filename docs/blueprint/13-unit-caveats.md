@@ -136,8 +136,9 @@ Footnote text, fixed, one per caveat and language:
 
 Measured 2026-10-01, structure version 5, golden set.
 
-- Of 33 statements, 21 carry `scale_assumed_units` (every Juhayna and Edita statement that
-  states no multiplier), 8 carry `currency_from_domicile` (Almarai), and 4 carry none.
+- Of 33 statements, 24 carry `scale_assumed_units` (every Juhayna and Edita statement that
+  states no multiplier), 8 carry `currency_from_domicile` (Almarai), and 1 carries none: the
+  Edita EAS notes table, which states thousands.
 - No statement is `scale_implausible`.
 - Against version 4, no value, flag, check or review status changed: 12 statements pass and 21
   are held, as before. `make eval-structure` prints PASS and the provisional extraction figures

@@ -70,8 +70,15 @@ def extracted_of(items: list[LineItem], period: Period = P) -> Statement:
 
 
 def file_of(statement: ExpectedStatement, status: str) -> ExpectedFile:
+    readers = ["first reader", "second reader"] if status == "checked" else []
     return ExpectedFile.model_validate(
-        {"id": "doc", "sha256": SHA, "status": status, "statements": [statement]}
+        {
+            "id": "doc",
+            "sha256": SHA,
+            "status": status,
+            "checked_by": readers,
+            "statements": [statement],
+        }
     )
 
 
@@ -154,3 +161,50 @@ def test_a_checked_file_that_meets_every_threshold_passes() -> None:
     expected = statement_of([row("Cash", "5"), row("Total", "5")])
     lines, code = report([(file_of(expected, "checked"), {StatementType.BALANCE: right})])
     assert code == 0 and "digital  cells 2  right 2  100.00%  meets 99.50%" in "\n".join(lines)
+
+
+def test_a_right_figure_on_the_wrong_label_is_not_right() -> None:
+    expected = statement_of(
+        [
+            row("Non-controlling interests", "102"),
+            row("Total equity", "4157"),
+            row("Borrowings", "2282"),
+        ]
+    )
+    shifted = extracted_of(
+        [item(1, "Total equity", "102"), item(2, "", "4157"), item(3, "Liabilities", "2282")]
+    )
+    score = score_statement(expected, shifted)
+    assert (score.cells, score.right, score.mislabelled) == (3, 0, 3)
+    assert {w["read"] for w in score.wrong} == {"102", "4157", "2282"}
+
+
+def test_a_label_ocr_garbled_or_merged_with_a_heading_still_agrees() -> None:
+    expected = statement_of([row("Inventories", "10"), row("Paid-up share capital", "140")])
+    noisy = extracted_of(
+        [
+            item(1, "lnventorles", "10"),
+            item(2, "Equity and liabilities Equity Paid-up share capltal", "140"),
+        ]
+    )
+    score = score_statement(expected, noisy)
+    assert (score.cells, score.right, score.mislabelled) == (2, 2, 0)
+
+
+def test_a_figure_read_where_nothing_is_printed_is_wrong() -> None:
+    blank = ExpectedRow(label="Treasury shares", values={P.key: None})
+    invented = score_statement(
+        statement_of([blank]), extracted_of([item(1, "Treasury shares", "7")])
+    )
+    assert (invented.cells, invented.right) == (1, 0)
+    empty = extracted_of([item(1, "Treasury shares", None)])
+    assert score_statement(statement_of([blank]), empty).cells == 1
+    assert score_statement(statement_of([blank]), empty).right == 1
+
+
+def test_extra_rows_are_printed_for_drafts_too() -> None:
+    extra = extracted_of([item(1, "Cash", "5"), item(2, "Invented", "99")])
+    lines, _ = report(
+        [(file_of(statement_of([row("Cash", "5")]), "draft"), {StatementType.BALANCE: extra})]
+    )
+    assert "extra rows 1" in "\n".join(lines)

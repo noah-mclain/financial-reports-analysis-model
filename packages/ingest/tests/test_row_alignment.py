@@ -181,3 +181,56 @@ def test_a_mirrored_table_is_repaired_the_same_way() -> None:
     )
     fixed = realign_rows(mirrored, layout(mirrored)).grid
     assert [fixed.text(3, 0), fixed.text(3, 1)] == ["3,447", "4,157"]
+
+
+def test_a_group_whose_label_line_is_taken_is_left_and_flagged() -> None:
+    # Row 2's values sit on row 3's line, and row 3's own values sit above them: moving row 2
+    # down would leave row 3 holding two groups, and nothing below is free.
+    g = grid(
+        [
+            cell("Share capital", 1, 0, 0),
+            cell("140", 1, 1, 0),
+            cell("140", 1, 2, 0),
+            cell("Reserves", 2, 0, 1),
+            cell("72", 2, 1, 2),
+            cell("70", 2, 2, 2),
+            cell("Retained earnings", 3, 0, 2),
+            cell("4,085", 3, 1, 2),
+            cell("3,244", 3, 2, 2),
+        ],
+        rows=4,
+    )
+    result = realign_rows(g, layout(g))
+    assert not result.moved and result.unresolved == [2]
+    assert result.grid.text(2, 1) == "72" and result.grid.text(3, 1) == "4,085"
+
+
+def test_a_table_with_a_value_that_has_no_box_is_left_alone() -> None:
+    cells = list(shifted().cells)
+    cells.append(GridCell(text="999", row=2, col=1, bbox=None, page_no=5))
+    g = shifted().model_copy(
+        update={"cells": tuple(c for c in cells if (c.row, c.col, c.text) != (2, 1, "4,157"))}
+    )
+    result = realign_rows(g, layout(g))
+    assert result.grid == g and not result.moved and result.unresolved == []
+
+
+def test_a_repair_that_would_put_figures_out_of_order_is_refused() -> None:
+    # The grid lists the two labels in the reverse of their order on the page, each with the
+    # other's values. Swapping them would leave the rows out of page order, so nothing moves.
+    g = grid(
+        [
+            cell("Retained earnings", 1, 0, 2),
+            cell("140", 1, 1, 0),
+            cell("140", 1, 2, 0),
+            cell("Share capital", 2, 0, 0),
+            cell("4,085", 2, 1, 2),
+            cell("3,244", 2, 2, 2),
+        ],
+        rows=3,
+    )
+    result = realign_rows(g, layout(g))
+    assert not result.moved and result.unresolved == [1, 2]
+    assert result.grid.text(1, 1) == "140" and result.grid.text(2, 1) == "4,085"
+    flagged = [c for c in result.grid.cells if "row_misaligned" in c.flags]
+    assert len(flagged) == 4
