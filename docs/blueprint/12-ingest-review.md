@@ -295,8 +295,9 @@ spaces ignored, or they share an equal non-zero value in one period), and every 
 confirmed cell is scored: right when the aligned row holds the same value in that period and
 does not sit under another row's label. It does when the row read has no label and the expected
 row has one, or when the label read looks more like a different expected row's label than like
-its own. A label OCR garbled or merged with a heading still looks most like its own, so label
-quality alone does not make a figure wrong; a shifted or swapped row does. Such a figure is
+its own. A label OCR garbled or merged with a heading usually still looks most like its own, so
+label quality alone seldom makes a figure wrong, while a shifted or swapped row does. The rule
+is not exact in either direction (Known limits). Such a figure is
 wrong and counted as mislabelled. Where the expected
 file says nothing is printed, nothing must be read. Extracted rows with values that no expected
 row aligns to are counted as extra rows and printed.
@@ -515,6 +516,14 @@ Found by the review of this branch and left as they are, each with the case that
 - **A total over a single row holds its statement.** Such a total cannot be checked against a
   sum, so it is `subtotal_not_checked`, though it may be right. No golden status changed;
   expect more holds on the corpus.
+- **The eval's label rule misjudges a short label inside a longer one.** Where one expected
+  label is contained in another ("Cash" and "Cash and cash equivalents"), a figure under the
+  longer label read with OCR noise can pass on the shorter row, and a correctly placed figure
+  under the noisy longer label can be counted mislabelled. Corrupting one character of each
+  expected label in turn makes a correct figure wrong in 6.1% of cases, on 18 of 188 rows; a
+  label cell holding two rows' labels counts both figures wrong. On the golden output it
+  misjudges nothing: the one mislabelled figure is the row with no label. To be made robust
+  before any expected file is marked `checked`.
 - **Extra rows gate nothing.** An extracted row with values that no expected row aligns to is
   counted and printed, but G1 has no threshold for it.
 - **`period_unbound:0` reads like a count** in the review reasons; the number is a column.
