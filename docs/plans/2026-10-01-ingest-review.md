@@ -2037,7 +2037,7 @@ In `tests/eval/test_structure_harness.py`, beside the existing `identity_excuses
 
 - [ ] **Step 2: Run to see them fail, implement, run again**
 
-`identity_excuses` collects `{"item", "period", "flag"}` for each cell on the check's rows, in the check's period, with either flag. In `main`, load the reviews by statement id from the result, add them to the row, print `passed` or `held` after each statement's identity, and change the failure rule to: `excuses is None or review.status != "needs_review"`, with the reason text `identity failed and nothing on its rows explains it`.
+`identity_excuses` collects `{"item", "period", "flag"}` for each cell on the check's rows, in the check's period, with either flag. `identity_accepted(excuses, review) -> bool` is true when the excuses exist and the review is `needs_review`. In `main`, load the reviews by statement id from the result, add them to the row, print `passed` or `held` after each statement's identity, and fail a document whose failed identity is not accepted, with the reason text `identity failed and nothing on its rows explains it`.
 
 Run: `uv run pytest tests/eval/test_structure_harness.py -q`
 Expected: PASS.

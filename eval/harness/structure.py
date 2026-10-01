@@ -3,8 +3,10 @@
     uv run python eval/harness/structure.py
 
 Per document: statements per enabled type, scale and currency against the manifest, identity
-status (from the balance identity checks in table_checks.json) and flags. Per language pair:
-numeric rows without a counterpart. Only the Almarai pair is gated. Writes
+status (from the balance identity checks in table_checks.json), review status and flags. A
+failed identity is accepted only on a statement held for review, with a cell on the check's
+rows that explains it (spec 12, Scoring). Per language pair: numeric rows without a
+counterpart. Only the Almarai pair is gated. Writes
 var/eval/structure-golden.json.
 """
 
@@ -23,6 +25,7 @@ import yaml
 from fra_core.schemas import CheckResult, Statement, StatementType
 from fra_ingest.config import REPO_ROOT, load_config
 from fra_ingest.errors import IngestError
+from fra_ingest.review import StatementReview
 from fra_ingest.structure import structure_pdf
 
 MANIFEST = REPO_ROOT / "eval" / "golden" / "manifest.yaml"
@@ -35,6 +38,7 @@ PAIRS = (
 )
 _SCALE_FLAGS = {"scale_missing", "scale_conflict"}
 _CURRENCY_FLAGS = {"currency_missing", "currency_conflict"}
+_EXCUSE_FLAGS = ("numbers_missing", "digit_suspect")
 
 
 def value_rows(statement: Statement) -> Counter[tuple[tuple[str, Decimal], ...]]:
@@ -85,24 +89,38 @@ def identity_status(checks: list[CheckResult]) -> tuple[str, str]:
 def identity_excuses(
     statement: Statement, checks: list[CheckResult]
 ) -> list[dict[str, str]] | None:
-    """The cells with ``numbers_missing`` on rows of each failed identity check; None when a
-    failed check has no such cell, so its failure is not excused."""
+    """The cells that explain each failed identity check: those on its rows, in its period, that
+    carry ``numbers_missing`` or ``digit_suspect``. None when a failed check has no such cell, so
+    nothing on its rows explains it."""
     excuses: list[dict[str, str]] = []
     for check in checks:
         if check.kind != "balance_identity" or check.status != "fail":
             continue
         rows = set(check.line_item_ids)
         found = [
-            {"item": item.id, "period": cell.period_key}
+            {"item": item.id, "period": cell.period_key, "flag": flag}
             for item in statement.line_items
             if item.id in rows
             for cell in item.cells
-            if "numbers_missing" in cell.flags
+            if cell.period_key == check.period_key
+            for flag in _EXCUSE_FLAGS
+            if flag in cell.flags
         ]
         if not found:
             return None
         excuses.extend(found)
     return excuses
+
+
+def identity_accepted(excuses: list[dict[str, str]] | None, review: StatementReview | None) -> bool:
+    """A failed identity is accepted only when a cell on its rows explains it and the
+    statement is held for review."""
+    return excuses is not None and review is not None and review.status == "needs_review"
+
+
+def _statement_summary(row: dict[str, Any]) -> str:
+    held = "passed" if row["review"] == "passed" else "held"
+    return f"{row['lines']} lines {row['identity']} {held}"
 
 
 def _load_checks(path: Path) -> dict[str, list[CheckResult]]:
@@ -130,6 +148,7 @@ def main(argv: list[str] | None = None) -> int:
             reasons.append(f"{entry['id']}: {exc.reason}")
             continue
         checks = _load_checks(config.artifact_root / result.sha256 / "table_checks.json")
+        reviews = {r.statement_id: r for r in result.reviews}
         found: dict[StatementType, Statement] = {}
         for s in result.statements:
             found.setdefault(s.type, s)
@@ -141,6 +160,7 @@ def main(argv: list[str] | None = None) -> int:
                 row["statements"][statement_type.value] = None
                 continue
             ok = metadata_ok(s, entry["scale"], str(entry["currency"]))
+            review = reviews.get(s.id)
             identity, identity_detail = (
                 identity_status(checks.get(s.id, []))
                 if s.type is StatementType.BALANCE
@@ -155,6 +175,10 @@ def main(argv: list[str] | None = None) -> int:
                 "identity": identity,
                 "identity_detail": identity_detail,
                 "flags": s.flags,
+                "review": review.status if review else None,
+                "review_reasons": review.reasons if review else [],
+                "checked_cells": review.checked_cells if review else 0,
+                "numeric_cells": review.numeric_cells if review else 0,
             }
             if not ok:
                 reasons.append(
@@ -164,13 +188,15 @@ def main(argv: list[str] | None = None) -> int:
             if identity == "failed":
                 excuses = identity_excuses(s, checks.get(s.id, []))
                 row["statements"][statement_type.value]["identity_excused_by"] = excuses
-                if excuses is None:
-                    reasons.append(f"{entry['id']}: identity failed with every value present")
+                if not identity_accepted(excuses, review):
+                    reasons.append(
+                        f"{entry['id']}: identity failed and nothing on its rows explains it"
+                    )
         rows.append(row)
         print(
             f"{entry['id']:34} "
             + "  ".join(
-                f"{k} {'-' if v is None else str(v['lines']) + ' lines ' + v['identity']}"
+                f"{k} {'-' if v is None else _statement_summary(v)}"
                 for k, v in row["statements"].items()
             )
         )

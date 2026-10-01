@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from harness import structure as harness
 from harness.structure import (
+    identity_accepted,
     identity_excuses,
     identity_status,
     metadata_ok,
@@ -28,6 +29,7 @@ from fra_core.schemas import (
 )
 from fra_ingest.config import IngestConfig
 from fra_ingest.results import StructureResult
+from fra_ingest.review import StatementReview
 
 P = Period(key="2025-12-31", end_date=date(2025, 12, 31), kind=PeriodKind.INSTANT)
 BOX = BBox(left=1, top=1, right=2, bottom=2)
@@ -117,7 +119,36 @@ def _with_missing_cell(row: int, total: int = 3) -> Statement:
 
 def test_identity_failure_is_excused_by_a_missing_cell_on_its_own_rows() -> None:
     check = _identity_check(["r0", "r1"])
-    assert identity_excuses(_with_missing_cell(1), [check]) == [{"item": "r1", "period": P.key}]
+    assert identity_excuses(_with_missing_cell(1), [check]) == [
+        {"item": "r1", "period": P.key, "flag": "numbers_missing"}
+    ]
+
+
+def test_identity_failure_is_excused_by_a_digit_suspect_on_its_own_rows() -> None:
+    suspect = statement(["10", "15"])
+    cell = suspect.line_items[0].cells[0]
+    suspect.line_items[0].cells[0] = cell.model_copy(update={"flags": ["digit_suspect"]})
+    check = _identity_check(["r0", "r1"])
+    assert identity_excuses(suspect, [check]) == [
+        {"item": "r0", "period": P.key, "flag": "digit_suspect"}
+    ]
+
+
+def test_a_failed_identity_is_accepted_only_on_a_held_statement_with_an_excuse() -> None:
+    excuse = [{"item": "r0", "period": P.key, "flag": "digit_suspect"}]
+    held = StatementReview(
+        statement_id="s",
+        status="needs_review",
+        reasons=["identity_failed"],
+        numeric_cells=2,
+        checked_cells=0,
+        flagged_cells=1,
+    )
+    passed = held.model_copy(update={"status": "passed", "reasons": []})
+    assert identity_accepted(excuse, held)
+    assert not identity_accepted(None, held)
+    assert not identity_accepted(excuse, passed)
+    assert not identity_accepted(excuse, None)
 
 
 def test_identity_failure_is_not_excused_by_an_unrelated_row() -> None:
@@ -200,7 +231,7 @@ def _run_main(
 P_TYPE = StatementType.BALANCE
 
 
-def test_an_identity_failure_with_every_value_present_fails_the_run(
+def test_an_identity_failure_nothing_explains_fails_the_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     good = statement(["10", "10"])
@@ -210,7 +241,7 @@ def test_an_identity_failure_with_every_value_present_fails_the_run(
         tmp_path, monkeypatch, {"en": ([good], []), "ar": ([failed], [check])}
     )
     assert code == 1
-    assert "ar: identity failed with every value present" in written["reasons"]
+    assert "ar: identity failed and nothing on its rows explains it" in written["reasons"]
     documents = {d["id"]: d for d in written["documents"]}
     assert documents["ar"]["statements"]["balance"]["identity"] == "failed"
     assert documents["en"]["statements"]["balance"]["identity"] == "skipped"
