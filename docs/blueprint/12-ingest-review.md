@@ -1,6 +1,6 @@
 # 12. Ingest, Part 3b: Review
 
-Status: v1, 2026-10-01. Completes the structure stage of
+Status: v1, 2026-10-01, with results of the same day. Completes the structure stage of
 [11-ingest-structure.md](11-ingest-structure.md): tasks 1.6, 1.8 and the first line of 1.9 in
 [04-execution-phases.md](04-execution-phases.md), towards Gate G1 and Gate A of
 [08-revised-plan.md](08-revised-plan.md). The table-model comparison of 1.9 and the OCR engine
@@ -321,6 +321,152 @@ block headed provisional. Unconfirmed cells are counted and left out of both blo
 | R40 | A draft expected file is taken for a hand-checked one | `status` in the file; the harness keeps drafts out of the gate and prints them as provisional; unconfirmed cells listed per row |
 | R41 | Counting a blank as zero hides a lost figure | Only when the total holds without it at the D6 tolerance, so the lost figure would have to be zero within rounding, and only with another period complete |
 | R42 | The 1,000 times outlier rule flags a real swing | It holds the statement for a look; it changes nothing. Almarai's largest real ratio is 326 |
+
+## Results
+
+Measured 2026-10-01 on the `ingest-structure` branch, structure version 4, with
+`make eval-structure` and `make eval-extraction` on the stored conversions of the golden set.
+
+### Against Done when
+
+| Measure | Target | Result |
+|---------|--------|--------|
+| Edita 2024 AR balance sheet | `needs_review`, with `identity_failed` and the suspect cell named; the equity and non-current liability rows on their own labels | met. Held with `subtotal_failed`, `identity_failed`, 6 `digit_suspect` cells, 7 `row_realigned` cells and the figures OCR lost. The 2023 identity fails by 5 and names `p5-t0-r14` at 7,743,342,651, which is what the page prints. Total equity (4,157,569,146) is on `r22`, non-controlling interests on `r21`, borrowings on `r24`, government grants on `r25`, and `r23` is the heading it prints as |
+| Almarai EN and AR | Every statement `passed`; the pair check still 0 unmatched rows; no `subtotal_scope_unknown` on the three primary statements | met. The six primary statements pass, the pair is (0, 0) on all three, and no subtotal on them is skipped |
+| Edita IFRS balance sheet | Total equity passes; no `subtotal_failed` | met. All totals pass, 68 of 68 numeric cells sit in a passing check, and the statement passes review |
+| Every other golden statement | Values unchanged from version 3 | met. Against the version 3 output, 10 cells differ, all on Edita 2024 AR p5 and all moved by row alignment. No value, label, period, scale or currency changed on the other eleven documents |
+| `make eval-structure` | PASS | met |
+| Review report | Written for all 12 documents, every box inside its page | met. 12 reports, 1,302 boxes, none outside its page. On Edita 2024 AR p5 the boxes were drawn over the page image and sit on the printed figures |
+| Extraction eval | Runs on the golden set; G1 stated for checked files, drafts as provisional | runs. No expected file is checked, so **G1 is not measured**. Provisional figures are below |
+
+### Checks, version 3 against version 4
+
+Counted per check and period over the twelve documents.
+
+| Check | Outcome | Version 3 | Version 4 |
+|-------|---------|-----------|-----------|
+| Subtotal | pass | 139 | 184 |
+| Subtotal | fail | 19 | 18 |
+| Subtotal | skipped, `subtotal_scope_unknown` | 79 | 51 |
+| Subtotal | skipped, `subtotal_scope_uncertain` | 8 | 6 |
+| Subtotal | skipped, `missing_values` | 23 | 19 |
+| Balance identity | pass / fail / skipped | 14 / 1 / 12 | 14 / 1 / 12 |
+| Net profit tie | pass / fail | none | 14 / 3 |
+
+The 51 that remain `subtotal_scope_unknown` are totals with fewer than two open rows above them
+that no sum explains: 28 on second tables of a type (Almarai's five-year highlights table in both
+editions, and a table on page 28 of Juhayna 2024 EN), 16 on unlabelled rows of the scanned
+Juhayna and Edita sheets, and 7 on labelled totals of scanned statements. The tie passes on seven documents and fails on Juhayna 2025 EN
+consolidated and standalone, whose comprehensive income cells hold two merged figures.
+
+Single-digit failures found: Edita 2024 AR non-current assets (800,000) and current assets
+(5,000,000) for 2024 and total assets (5) for 2023; Edita EAS non-current liabilities (20,000)
+for 2024; Juhayna 2024 EN total equity (10) for 2024. On Edita 2024 AR the page confirms all
+three: the misread cells (202,114,513 read as 202,914,513; 136,103,684 read as 131,103,684;
+7,743,342,651 read as 7,743,342,656) are among the suspects each time, and total assets is the
+only suspect of its check.
+
+### Review status
+
+The first statement of each type per document, 29 in all: 12 pass and 17 are held. Four more
+statements are second tables of a type and are held as `duplicate_statement`. Across the 29, 672
+of 980 numeric cells sit in a passing check.
+
+| Document | Statement | Review | Cells in a passing check | Reasons |
+|----------|-----------|--------|--------------------------|---------|
+| almarai-2025-en | balance | passed | 80 of 80 |  |
+| almarai-2025-en | comprehensive income | passed | 20 of 20 |  |
+| almarai-2025-en | income | passed | 34 of 38 |  |
+| almarai-2025-ar | balance | passed | 80 of 80 |  |
+| almarai-2025-ar | comprehensive income | passed | 20 of 20 |  |
+| almarai-2025-ar | income | passed | 34 of 38 |  |
+| juhayna-2025-ar-standalone | income | held | 0 of 15 | `unchecked`, `numbers_missing:4`, `unparsed:9` |
+| juhayna-2025-ar-standalone | balance, comprehensive income | not extracted | | |
+| juhayna-2025-ar-consolidated | income | held | 6 of 30 | `numbers_missing:2`, `unparsed:8` |
+| juhayna-2025-ar-consolidated | balance, comprehensive income | not extracted | | |
+| juhayna-2025-en-consolidated | balance | held | 0 of 7 | `identity_not_checked:identity_totals_not_found`, `unchecked`, `numbers_missing:5`, `period_unbound:1` |
+| juhayna-2025-en-consolidated | comprehensive income | held | 0 of 5 | `subtotal_failed`, `tie_failed`, `unchecked`, `unparsed:2`, `implausible_magnitude:4` |
+| juhayna-2025-en-consolidated | income | held | 38 of 40 | `tie_failed` |
+| juhayna-2024-ar-consolidated | comprehensive income | held | 6 of 11 | `numbers_missing:2`, `unparsed:1` |
+| juhayna-2024-ar-consolidated | balance, income | not extracted | | |
+| juhayna-2024-en-consolidated | balance | held | 12 of 73 | `subtotal_failed`, `identity_not_checked:identity_totals_not_found`, `numbers_missing:2`, `unparsed:1`, `implausible_magnitude:2`, `digit_suspect:3` |
+| juhayna-2024-en-consolidated | comprehensive income | passed | 12 of 12 |  |
+| juhayna-2024-en-consolidated | income | passed | 36 of 38 |  |
+| edita-2025-ar-consolidated | balance | held | 14 of 37 | `subtotal_failed`, `identity_not_checked:identity_totals_not_found`, `unparsed:2`, `period_unbound:0` |
+| edita-2025-ar-consolidated | comprehensive income | held | 5 of 12 | `subtotal_failed`, `unparsed:2` |
+| edita-2025-ar-consolidated | income | held | 12 of 34 | `numbers_missing:1`, `unparsed:7` |
+| edita-2025-en-consolidated-eas | balance | held | 17 of 72 | `subtotal_failed`, `numbers_missing:3`, `unparsed:1`, `implausible_magnitude:3`, `digit_suspect:3` |
+| edita-2025-en-consolidated-eas | comprehensive income | passed | 14 of 14 |  |
+| edita-2025-en-consolidated-eas | income | passed | 37 of 39 |  |
+| edita-2025-en-consolidated-ifrs | balance | passed | 68 of 68 |  |
+| edita-2025-en-consolidated-ifrs | comprehensive income | held | 14 of 14 | `numbers_missing:1`, `unparsed:1` |
+| edita-2025-en-consolidated-ifrs | income | held | 37 of 38 | `unparsed:1` |
+| edita-2024-ar-consolidated | balance | held | 28 of 67 | `subtotal_failed`, `identity_failed`, `numbers_missing:5`, `unparsed:2`, `implausible_magnitude:3`, `digit_suspect:6`, `period_outlier:4`, `row_realigned:7` |
+| edita-2024-ar-consolidated | comprehensive income | passed | 14 of 14 |  |
+| edita-2024-ar-consolidated | income | held | 8 of 31 | `unparsed:7` |
+| juhayna-2025-en-standalone | comprehensive income | held | 0 of 5 | `subtotal_failed`, `tie_failed`, `unchecked`, `unparsed:1`, `implausible_magnitude:2` |
+| juhayna-2025-en-standalone | income | held | 26 of 28 | `tie_failed`, `ambiguous_separator:1` |
+| juhayna-2025-en-standalone | balance | not extracted | | |
+
+Seven of the twelve passes are on statements nobody has compared with the page: Almarai AR's
+three, Edita EAS's two and Juhayna 2024 EN's two. Their checks hold; that is all a pass says.
+
+### Extraction eval, provisional
+
+Three expected files exist, all with `status: draft`. Each was prepared from the extraction and
+compared with its page images once, figure by figure; none has had the two readings V1 asks for,
+so none counts towards G1 and the figures below are not gate results. No figure is left
+unconfirmed in the three files.
+
+| Document | Pages | Figures | Right | Share | Misread | Not read |
+|----------|-------|---------|-------|-------|---------|----------|
+| almarai-2025-en | digital | 138 | 138 | 100.00% | 0 | 0 |
+| edita-2025-en-consolidated-ifrs | scanned, English | 126 | 120 | 95.24% | 0 | 6 |
+| edita-2024-ar-consolidated | scanned, Arabic | 128 | 99 | 77.34% | 11 | 18 |
+| Digital | | 138 | 138 | 100.00% | | |
+| Scanned | | 254 | 219 | 86.22% | | |
+
+Period mapping is 18 of 18, sign 357 of 357 on the figures equal in size, and scale and
+currency 18 of 18 against the files (the Edita scales are still `unconfirmed` in the manifest).
+
+How each file was compared:
+
+- Almarai EN: every row and figure on pages 156 to 161 against the image. Each figure was also
+  re-read from the PDF text layer inside its box, 138 of 138 equal.
+- Edita IFRS: pages 8 to 10 print English digits legibly. The six misses are figures the
+  extraction did not read: three printed dashes, the 2024 earnings per share, and both figures
+  of total comprehensive income.
+- Edita 2024 AR: pages 5 to 7 print Arabic-Indic digits, read at three times zoom. Every sum
+  the pages print holds on the figures as read, which is what makes the corrections credible
+  from one reading. The row for total current liabilities, which the extraction merged into the
+  row above it, was added by hand.
+
+What the checks did with the 35 wrong figures on the two scanned documents:
+
+| | Figures |
+|---|---|
+| Not read at all, so missing or flagged | 24 |
+| Misread, and the cell flagged | 6 |
+| Misread, not flagged, inside a failed check | 2 |
+| Misread with no flag and no failed check on it | 3 |
+
+The three silent ones are on Edita 2024 AR, on statements held for other reasons: deferred tax
+liabilities 2024 (302,414,061 read as 2,414,061), other credit balances 2024 (643,699,632 read
+as 143,699,632) and profit before tax 2024 (2,163,025,380 read as 21,302,538). Each sits in a
+block whose total could not be checked because other figures in it were lost. No statement that
+passed review holds a misread figure in these three documents; the Edita IFRS balance sheet
+passed with two unread dashes, which its sums confirmed as blanks.
+
+### What this says
+
+- Almarai, the digital document, is right on every figure compared, and both editions pass.
+- The scanned English sheet is close: 95.24%, every miss a figure not read, none misread.
+- The scanned Arabic sheet is at 77.34%, against a G1 threshold of 98.0% for scanned pages.
+  Part 3b makes its faults visible and holds the statements; it does not make the OCR read
+  them. That is the week 2 bake-off's job, and this eval is now there to score it.
+- The checks caught or held 32 of the 35 wrong figures by themselves. The three they missed
+  are the case R39 names, and they argue for holding a statement whenever a section of it has
+  no passing total, which today is true only through the other reasons.
 
 ## Open decisions
 

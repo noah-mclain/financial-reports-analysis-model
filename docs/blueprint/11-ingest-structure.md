@@ -3,8 +3,8 @@
 Status: v1, 2026-09-29. Implements the first half of the structure stage for week 1 of
 [08-revised-plan.md](08-revised-plan.md), following tasks 1.3 to 1.8 of
 [04-execution-phases.md](04-execution-phases.md). Part 2 is [10-ingest-convert.md](10-ingest-convert.md).
-Part 3b (review report, sum-based hierarchy, extraction eval against expected files) gets its
-own document.
+Part 3b (review report, sum-based hierarchy, extraction eval against expected files) is
+[12-ingest-review.md](12-ingest-review.md).
 
 ## What structure does
 
@@ -387,3 +387,7 @@ Logic fixes after the results above, each with its test, and what they changed o
 - A cached `statements.raw.json` is used only when `table_checks.json` is beside it. `STRUCTURE_VERSION` is 3.
 
 Every other statement, check and flag on the twelve documents is identical before and after.
+
+Part 3b changes these results: structure version 4 settles subtotal scope by sums, repairs the
+Edita 2024 AR row shift, and holds statements for review. Its measurements are in
+[12-ingest-review.md](12-ingest-review.md), Results.
