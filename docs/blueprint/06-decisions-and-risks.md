@@ -17,6 +17,8 @@ an owner sign-off before the Phase 1 exit gate.
 | D7 | Industry scope for v1 | All issuers, or non-financial corporates | Non-financial corporates. Banks, insurers and Islamic financial institutions route to `needs_review` with flag `unsupported_industry_template` |
 | D8 | Narrative audience | Credit analyst, equity analyst, business owner | Credit analyst: liquidity and leverage first, neutral tone |
 | D9 | Base model after the bake-off | Section 01, 1.6 | Decided by the rule in 1.6 |
+| D10 | A figure the checks can name as misread (a failed sum one digit off, with one cell left as the suspect) | Replace the read figure with the one the checks give, or flag the cell and leave it as read | Decided 2026-10-01: flag only. The cell carries `digit_suspect`, the check names the figure that would settle it, and the statement is held for review ([12](12-ingest-review.md)) |
+| D11 | A statement that prints no unit multiplier (`scale_missing`) | Hold it for review, or use it at scale 1 | Decided 2026-10-01: use it, as a warning and not a reason to hold, with a footnote wherever an amount depends on the assumption, carried through to the written summary ([13](13-unit-caveats.md)) |
 
 ## 6.2 Risk register
 

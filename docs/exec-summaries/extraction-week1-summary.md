@@ -73,9 +73,10 @@ Part 3b was built on `ingest-structure` the same day, so pull request #4 now cov
 
 ## Open decisions
 
-- [x] Merge `ingest-structure` with the honest Edita failure recorded, or hold the merge for part 3b's row-alignment fix. Decided 2026-10-01: hold. Pull request #4 stays a draft until part 3b is done on the same branch, so it covers 3a and 3b. Design: `docs/blueprint/12-ingest-review.md`.
+- [x] Merge `ingest-structure` with the honest Edita failure recorded, or hold the merge for part 3b's row-alignment fix. Decided 2026-10-01: hold. Pull request #4 stays a draft until part 3b is done on the same branch, so it covers 3a and 3b. Design: `docs/blueprint/12-ingest-review.md`. Part 3b is done; the pull request stays a draft until the last changes on the branch are in.
 - [ ] Give the three expected files in `eval/golden/expected/` their two readings against the page, or name who does, so Gate G1 can be measured.
-- [ ] Decide whether a figure the checks can name (Edita 2024 AR's 2023 total assets) stays flagged as read, or is replaced when two printed witnesses agree. Recommended: flag only, for now.
+- [x] Decide whether a figure the checks can name (Edita 2024 AR's 2023 total assets) stays flagged as read, or is replaced when two printed witnesses agree. Decided 2026-10-01: flag only (D10).
+- [x] A statement with no printed scale: hold it, or use it. Decided 2026-10-01: use it as a warning, with a footnote on every amount that depends on it, through to the summary (D11). Plan: `docs/blueprint/13-unit-caveats.md`.
 - [ ] Confirm the scale (units, thousands or millions) of the 10 Juhayna and Edita golden documents in `eval/golden/manifest.yaml`. Today scale is checked only on Almarai.
 - [ ] Accept the recorded risk that two statements of the same type, printed on one page with the same layout, would be merged into one. There is no such case in the golden set.
 - [ ] When to run the `model_test` checkpoint. Running it freezes the `model_test` and `blind` pools.

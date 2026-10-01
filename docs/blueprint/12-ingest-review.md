@@ -468,16 +468,20 @@ passed with two unread dashes, which its sums confirmed as blanks.
   are the case R39 names, and they argue for holding a statement whenever a section of it has
   no passing total, which today is true only through the other reasons.
 
-## Open decisions
+## Decisions
 
 1. **A figure the checks can name.** For Edita 2024 AR's 2023 total assets, the sum of its
    parts and the printed closing total both give 7,743,342,651 against a read of
-   7,743,342,656. This design flags the cell and reports the figure that would settle it, and
-   leaves `reported` as read. The alternative is to replace the read when two independent
-   printed witnesses agree. Recommended: flag only, until the extraction eval shows how often
-   the suggestion is right.
-2. **Scale.** `scale_missing` is a warning, not a reason to hold, because the ten Juhayna and
-   Edita documents print no scale and are in units. This rests on the scales still marked
-   `unconfirmed` in the manifest; confirming them there closes it.
-3. **Expected files.** Two readings per file are the owner's (V1). Suggested order: Almarai EN
-   (digital), Edita 2025 EN IFRS (scanned, English), Edita 2024 AR (scanned, Arabic).
+   7,743,342,656. Decided by the owner, 2026-10-01 (D10): the cell is flagged and the figure
+   that would settle it is reported; `reported` stays as read. To revisit once the extraction
+   eval shows how often the suggestion is right.
+2. **Scale.** Decided by the owner, 2026-10-01 (D11): `scale_missing` is a warning, not a reason
+   to hold, and every amount that depends on the assumed scale carries a footnote, through to
+   the written summary. The plan is [13-unit-caveats.md](13-unit-caveats.md). The scales marked
+   `unconfirmed` in the manifest still need confirming per document before they are scored.
+3. **Expected files.** Open. The three drafts in `eval/golden/expected/` have been compared
+   with their pages once. V1 asks for two independent readings per file before it is `checked`;
+   until a second reading is done, Gate G1 is not measured. Order when more are added: digital
+   first, then scanned English, then scanned Arabic.
+4. **Pull request #4** stays a draft until the last changes on this branch are in, by the
+   owner's decision of 2026-10-01.
