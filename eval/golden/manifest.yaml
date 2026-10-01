@@ -78,7 +78,7 @@ documents:
     document_type: financial statements
     framework: EAS
     currency: EGP
-    scale: unconfirmed
+    scale: 1               # header reads "جنيه مصري" with no multiplier; figures run to nine or ten digits
     pages: 62
     text_layer: scanned
     statement_pages:  # labelled blind from the OCR sheet, then reconciled
@@ -104,7 +104,7 @@ documents:
     document_type: financial statements
     framework: EAS
     currency: EGP
-    scale: unconfirmed
+    scale: 1               # header reads "جنيه مصري" with no multiplier; figures run to nine or ten digits
     pages: 64
     text_layer: scanned
     statement_pages:  # labelled blind from the OCR sheet, then reconciled
@@ -129,7 +129,7 @@ documents:
     document_type: financial statements
     framework: EAS
     currency: EGP
-    scale: unconfirmed
+    scale: 1               # header reads "L.E" with no multiplier; figures run to nine or ten digits
     pages: 59
     text_layer: mixed      # front matter and auditor pages scanned, later pages carry text
     statement_pages:  # labelled blind from the OCR sheet, then reconciled
@@ -154,7 +154,7 @@ documents:
     document_type: financial statements
     framework: EAS
     currency: EGP
-    scale: unconfirmed
+    scale: 1               # header reads "جنيه مصري" with no multiplier; figures run to nine or ten digits
     pages: 59
     text_layer: scanned
     statement_pages:  # labelled blind from the OCR sheet, then reconciled
@@ -179,7 +179,7 @@ documents:
     document_type: financial statements
     framework: EAS
     currency: EGP
-    scale: unconfirmed
+    scale: 1               # header reads "L.E" with no multiplier; figures run to nine or ten digits
     pages: 57
     text_layer: scanned
     statement_pages:  # labelled blind from the OCR sheet, then reconciled
@@ -204,7 +204,7 @@ documents:
     document_type: financial statements
     framework: EAS
     currency: EGP
-    scale: unconfirmed
+    scale: 1               # header reads "جنيه مصري" with no multiplier; figures run to nine or ten digits
     pages: 63
     text_layer: scanned
     statement_pages:  # labelled blind from the OCR sheet, then reconciled
@@ -229,7 +229,7 @@ documents:
     document_type: financial statements
     framework: EAS
     currency: EGP
-    scale: unconfirmed
+    scale: 1               # header reads "EGP" with no multiplier; figures run to nine or ten digits
     pages: 66
     text_layer: scanned
     statement_pages:  # labelled blind from the OCR sheet, then reconciled
@@ -254,7 +254,7 @@ documents:
     document_type: financial statements
     framework: IFRS
     currency: EGP
-    scale: unconfirmed
+    scale: 1               # header reads "EGP" with no multiplier; figures run to nine or ten digits
     pages: 85
     text_layer: scanned
     statement_pages:  # labelled blind from the OCR sheet, then reconciled
@@ -280,7 +280,7 @@ documents:
     document_type: financial statements
     framework: EAS
     currency: EGP
-    scale: unconfirmed
+    scale: 1               # header reads "جنيه مصري" with no multiplier; figures run to nine or ten digits
     pages: 61
     text_layer: scanned
     statement_pages:  # labelled blind from the OCR sheet, then reconciled
@@ -306,7 +306,7 @@ documents:
     document_type: financial statements
     framework: EAS
     currency: EGP
-    scale: unconfirmed      # statement header reads "LE"; figures appear to be in units
+    scale: 1               # header reads "L.E" with no multiplier; figures run to nine or ten digits
     pages: 61
     text_layer: mixed
     statement_pages:

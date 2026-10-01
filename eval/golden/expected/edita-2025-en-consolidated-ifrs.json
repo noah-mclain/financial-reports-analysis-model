@@ -1,9 +1,12 @@
 {
   "id": "edita-2025-en-consolidated-ifrs",
   "sha256": "d79f325d4843db9363b756bee48197856b5f25da6e0ea30aa10168e3ac679af8",
-  "status": "draft",
-  "checked_by": [],
-  "note": "Prepared from the extraction and compared once with the page images of pages 8, 9 and 10, which are scanned and print English digits legibly. Every figure equals the page except six the extraction did not read, corrected here from the page: three printed dashes (fair-value assets and treasury shares for 2024 on the balance sheet, expected credit loss for 2024, each recorded as 0), earnings per share for 2024 (1.05) and both figures of total comprehensive income. Three labels were corrected to the print. One comparison, not two: not hand-checked in the sense of V1.",
+  "status": "checked",
+  "checked_by": [
+    "page comparison, 2026-10-01",
+    "arithmetic, second read of each cell and sibling filings (harness.verify_expected), 2026-10-01"
+  ],
+  "note": "Prepared from the extraction and compared once with the page images of pages 8, 9 and 10, which are scanned and print English digits legibly. Every figure equals the page except six the extraction did not read, corrected here from the page: three printed dashes (fair-value assets and treasury shares for 2024 on the balance sheet, expected credit loss for 2024, each recorded as 0), earnings per share for 2024 (1.05) and both figures of total comprehensive income. Three labels were corrected to the print. Second check: every figure is vouched for by at least one of the sums the page prints, a second read of the cell's own box, and the same figure in another filing of the issuer (make verify-expected).",
   "statements": [
     {
       "type": "balance",

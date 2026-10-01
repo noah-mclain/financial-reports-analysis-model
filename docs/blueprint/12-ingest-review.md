@@ -454,9 +454,32 @@ of 980 numeric cells sit in a passing check.
 Seven of the twelve passes are on statements nobody has compared with the page: Almarai AR's
 three, Edita EAS's two and Juhayna 2024 EN's two. Their checks hold; that is all a pass says.
 
-### Extraction eval, provisional
+### Gate G1, measured
 
-Three expected files exist, all with `status: draft`. Each was prepared from the extraction and
+Added 2026-10-01 after the merge, structure version 9. The three expected files are `checked`
+(Decisions, 3), so `make eval-extraction` now measures the gate, and exits 1 because one
+threshold is missed.
+
+| Measure | Result | G1 | |
+|---------|--------|----|---|
+| Numeric cell accuracy, digital pages | 138 of 138, 100.00% | 99.5% | met |
+| Numeric cell accuracy, scanned pages | 218 of 254, 85.83% | 98.0% | **not met** |
+| Period mapping | 18 of 18 | 100% | met |
+| Sign accuracy | 357 of 357 | 99.9% | met |
+| Scale and currency | 18 of 18 | 100% | met |
+
+The scanned figure is Edita IFRS at 120 of 126 and Edita 2024 AR at 98 of 128. It is measured on
+two scanned documents of one issuer; the Juhayna scans, which read worse, have no expected file
+yet. With the scales confirmed, `make eval-structure` also scores scale on all twelve documents
+and still prints PASS.
+
+What stands behind `checked`: one comparison of every figure with the page image, and the
+automated second check. Nobody has read the files a second time by eye. The second check cannot
+catch a misprint in the filing itself, or two errors in one sum that cancel exactly.
+
+### Extraction eval, as first measured
+
+Written before the files were checked; the figures are the same. Three expected files existed, all with `status: draft`. Each was prepared from the extraction and
 compared with its page images once, figure by figure; none has had the two readings V1 asks for,
 so none counts towards G1 and the figures below are not gate results. No figure is left
 unconfirmed in the three files.
@@ -576,9 +599,16 @@ Left:
    to hold, and every amount that depends on the assumed scale carries a footnote, through to
    the written summary. The plan is [13-unit-caveats.md](13-unit-caveats.md). The scales marked
    `unconfirmed` in the manifest still need confirming per document before they are scored.
-3. **Expected files.** Open. The three drafts in `eval/golden/expected/` have been compared
-   with their pages once. V1 asks for two independent readings per file before it is `checked`;
-   until a second reading is done, Gate G1 is not measured. Order when more are added: digital
-   first, then scanned English, then scanned Arabic.
-4. **Pull request #4** stays a draft until the last changes on this branch are in, by the
-   owner's decision of 2026-10-01.
+3. **Expected files.** Decided by the owner, 2026-10-01: the second check is automated, and a
+   person reads only what it cannot vouch for. `make verify-expected` gives every figure
+   independent evidence of three kinds: it sits in a sum, identity or tie that holds on the
+   expected figures; a second read of the cell's own box (the PDF text layer on a digital page,
+   OCR of the enlarged crop on a scanned one) gives the same figure; or the same figure stands
+   under the same period in another filing of the issuer. On the three files all 392 figures
+   are vouched for, 369 of them by two kinds or more, so none was left for a person and the
+   files are `checked`, with the page comparison and this check named in `checked_by`.
+   The ten Juhayna and Edita scales are confirmed as 1 in the manifest: each statement header
+   names the currency ("جنيه مصري", "L.E", "EGP") and no multiplier, and the figures run to
+   nine or ten digits.
+4. **Pull request #4** was merged on 2026-10-01 by the owner's instruction, after six review
+   passes.

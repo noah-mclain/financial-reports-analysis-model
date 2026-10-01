@@ -1,9 +1,12 @@
 {
   "id": "almarai-2025-en",
   "sha256": "08ec6e6c6182287604d0b8ead05fd557717c9a3adc38a07484c76db87442e297",
-  "status": "draft",
-  "checked_by": [],
-  "note": "Prepared from the extraction and compared once with the page images of pages 156 to 161: every row is present and every figure equals the page. Each figure was also re-read from the PDF text layer inside its box, 138 of 138 equal, and the Arabic edition gives the same figures row for row. One comparison, not two: not hand-checked in the sense of V1.",
+  "status": "checked",
+  "checked_by": [
+    "page comparison, 2026-10-01",
+    "arithmetic, second read of each cell and sibling filings (harness.verify_expected), 2026-10-01"
+  ],
+  "note": "Prepared from the extraction and compared once with the page images of pages 156 to 161: every row is present and every figure equals the page. Each figure was also re-read from the PDF text layer inside its box, 138 of 138 equal, and the Arabic edition gives the same figures row for row. Second check: every figure is vouched for by at least one of the sums the page prints, a second read of the cell's own box, and the same figure in another filing of the issuer (make verify-expected).",
   "statements": [
     {
       "type": "balance",
