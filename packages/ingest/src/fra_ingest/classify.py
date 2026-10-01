@@ -12,6 +12,7 @@ import re
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from fra_core.periods import parse_period
 from fra_core.schemas import StatementType
 from fra_ingest.header import HeaderLayout
 from fra_ingest.label_match import LabelIndex, squash
@@ -56,6 +57,12 @@ class Classification(BaseModel):
     industry_flags: list[str] = Field(default_factory=list)
 
 
+def _is_note_heading(text: str) -> bool:
+    """ "Note 12 Property, plant and equipment", but not a column header line that docling
+    left above the table, such as "Notes 31 December 2025" or "Note 2025 2024"."""
+    return _NOTE_HEADING.match(text) is not None and parse_period(text) is None
+
+
 def _cue_hits(labels: list[str]) -> int:
     squashed = [squash(label) for label in labels]
     return sum(any(cue in label for cue in _COMPREHENSIVE_CUES) for label in squashed)
@@ -82,7 +89,7 @@ def classify(
     flags = list(context.industry_flags)
     if not layout.value_cols:
         return Classification(type=None, evidence=["no_period_header"], industry_flags=flags)
-    if any(_NOTE_HEADING.match(text) for text in context.heading_texts):
+    if any(_is_note_heading(text) for text in context.heading_texts):
         return Classification(type=None, evidence=["note_heading"], industry_flags=flags)
 
     labels = (

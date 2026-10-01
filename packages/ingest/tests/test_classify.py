@@ -158,3 +158,14 @@ def test_a_tie_goes_to_the_first_title_type() -> None:
     layout = parse_header(g, BALANCE, None)
     assert classify(g, layout, first_comprehensive, INDEX, low).type is COMPREHENSIVE
     assert classify(g, layout, first_income, INDEX, low).type is INCOME
+
+
+def test_a_column_header_line_above_the_table_is_not_a_note_heading() -> None:
+    rows = [HEADER, ["Inventories", "", "5", "4"], ["Total assets", "", "50", "40"]]
+    g = grid(rows)
+    for heading in ("Note 2025 2024", "Notes 31 December 2025 31 December 2024", "إيضاح ٢٠٢٥ ٢٠٢٤"):
+        context = TableContext(
+            title_types=(BALANCE,), cue_types=(), heading_texts=(heading,), industry_flags=()
+        )
+        result = classify(g, parse_header(g, BALANCE, None), context, INDEX, 0.5)
+        assert result.type is BALANCE, heading
