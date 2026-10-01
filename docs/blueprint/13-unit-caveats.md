@@ -1,6 +1,7 @@
 # 13. Unit caveats: from extraction to the written summary
 
-Status: v1, 2026-10-01. A plan, not yet built. It follows the owner's decision D11
+Status: v1, 2026-10-01. The structure stage is built; analytics, narration and display are
+planned. It follows the owner's decision D11
 ([06-decisions-and-risks.md](06-decisions-and-risks.md)): a statement that prints no unit
 multiplier is not held for review; its figures are used, and every use that depends on the
 multiplier carries a footnote. This document says how that footnote travels from the structure
@@ -47,20 +48,26 @@ class Caveat(BaseModel):            # fra_core.schemas.caveat, frozen
     evidence: dict[str, str]        # what the assumption rests on, for the review report
 ```
 
+Evidence for `scale_assumed_units` is `currency_source` (header, context, domicile, document or
+none) and `median_figure`; for the two currency caveats it is the `currency` taken.
+
 ### 1. Structure (ingest)
 
-- `detect_metadata` keeps `scale_missing` as the flag and also returns the caveat. Evidence for
-  `scale_assumed_units`: whether a currency was named in the header (`currency_in_header`), and
-  the median printed figure of the statement (`median_figure`).
+- `scale_missing` stays as the flag, and `fra_ingest.caveats.unit_caveats` builds the caveat
+  from the statement's metadata and rows.
 - `Statement` gains `caveats: list[Caveat]`. A statement whose scale was read has none for scale.
-- Two rules beside it:
-  - A document's statements must agree. When one statement states a multiplier and another of
-    the same document states none, the stated one is used for both and the second carries
-    `scale_from_sibling`, not the caveat. When two state different multipliers, that is
-    `scale_conflict`, which already holds.
-  - A statement with the caveat whose median printed figure is under 10^4 carries
-    `scale_implausible` and is held: figures that small in single units mean a lost multiplier
-    or a broken read. (The threshold is checked against the corpus `dev` pool before it is fixed.)
+- One rule beside it: a statement with the caveat and five figures or more, whose median
+  printed figure is under 10^4, carries `scale_implausible` and is held. Figures that small in
+  single units mean a lost multiplier or a broken read. The threshold is set from the golden
+  set, where the smallest such median on a readable statement is 3.4 x 10^7, and is to be
+  checked again when structure runs on the corpus `dev` pool.
+- A statement does not take a multiplier from another table of its document. This was built
+  and removed the same day: in Edita 2025 EAS a notes table printed in thousands is classified
+  as a second income statement, and the rule applied its multiplier to three statements printed
+  in single pounds. The comparison of golden output before and after caught it. That table does
+  carry evidence, though: its net profit of 2,695,302 thousand is the income statement's
+  2,695,301,670 in units, which supports the assumption. Using such agreement as evidence is
+  left for later; it must never change a scale.
 - The review report prints the caveat and its evidence in the statement's line, and
   `StatementReview.warnings` keeps listing it.
 - The manifest's `scale: unconfirmed` stays until the owner confirms each document; the eval
@@ -120,16 +127,28 @@ Footnote text, fixed, one per caveat and language:
 
 | Stage | Work | When |
 |-------|------|------|
-| Structure | `Caveat`, `Statement.caveats`, sibling rule, `scale_implausible`, review report line, tests | With part 3b, on `ingest-structure`, once this plan is agreed |
+| Structure | `Caveat`, `Statement.caveats`, `scale_implausible`, review report line, tests | Built 2026-10-01 on `ingest-structure`, structure version 5 |
 | Analytics | Caveats on frame rows and `MetricValue`, chart labels | Week 2, with the metric registry |
 | Narration | Payload, prompt rule, `Sentence.footnotes`, `Narrative.footnotes`, attach step, two grounding rules, templates in both languages | Week 3, with the grounding checker |
 | Display | Header, footnote marks, summary footnotes | Week 4, with the results page |
+
+## Results, structure stage
+
+Measured 2026-10-01, structure version 5, golden set.
+
+- Of 33 statements, 21 carry `scale_assumed_units` (every Juhayna and Edita statement that
+  states no multiplier), 8 carry `currency_from_domicile` (Almarai), and 4 carry none.
+- No statement is `scale_implausible`.
+- Against version 4, no value, flag, check or review status changed: 12 statements pass and 21
+  are held, as before. `make eval-structure` prints PASS and the provisional extraction figures
+  are unchanged.
+- The review report prints each statement's caveats with their evidence.
 
 ## Testing
 
 | Area | Cases |
 |------|-------|
-| Structure | No multiplier and a currency in the header gives scale 1, `scale_missing` and the caveat with its evidence; a stated multiplier gives no caveat; a sibling's stated multiplier is taken with `scale_from_sibling`; median under the threshold gives `scale_implausible` and a hold; the caveat alone does not hold |
+| Structure | No multiplier and a currency in the header gives scale 1, `scale_missing` and the caveat with its evidence; a stated multiplier gives no caveat; a notes table in thousands does not rescale the statements beside it; median under the threshold gives `scale_implausible` and a hold; the caveat alone does not hold |
 | Analytics | A currency metric from a caveated statement carries the caveat; a ratio from the same rows does not; growth within one statement does not; scaling every input by 1,000 changes caveated amounts and no ratio (extends T2) |
 | Narration | A sentence with a claim on a caveated amount gets the footnote; a sentence with only ratio claims gets none; the template fallback attaches it; a sentence that restates a caveated amount with an unformatted "million" fails; footnote text comes from the template in the narrative's language (extends T8) |
 | End to end | Edita IFRS: the summary's amounts carry one footnote, its margins none. Almarai: no scale footnote, one currency footnote (`currency_from_domicile`) |

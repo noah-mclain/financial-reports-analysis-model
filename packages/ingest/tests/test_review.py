@@ -134,3 +134,9 @@ def test_a_second_statement_of_a_type_is_held_as_a_duplicate() -> None:
     assert review_statement(statement(ROWS), PASSING, primary=False).reasons == [
         "duplicate_statement"
     ]
+
+
+def test_an_implausible_assumed_scale_holds() -> None:
+    flags = ("scale_missing", "scale_implausible")
+    held = review_statement(statement(ROWS, flags=flags), PASSING, primary=True)
+    assert held.reasons == ["scale_implausible"] and held.warnings == ["scale_missing"]

@@ -31,8 +31,13 @@ _HOLD_FLAGS = (
     "currency_conflict",
     "currency_missing",
     "row_alignment_unresolved",
+    "scale_implausible",
 )
-_WARNING_FLAGS = ("scale_missing", "currency_from_domicile", "currency_inferred")
+_WARNING_FLAGS = (
+    "scale_missing",
+    "currency_from_domicile",
+    "currency_inferred",
+)
 _WARNING_CELL_FLAGS = ("label_merged", "blank_confirmed")
 _FAILED = (
     ("subtotal", "subtotal_failed"),

@@ -326,6 +326,8 @@ block headed provisional. Unconfirmed cells are counted and left out of both blo
 
 Measured 2026-10-01 on the `ingest-structure` branch, structure version 4, with
 `make eval-structure` and `make eval-extraction` on the stored conversions of the golden set.
+Structure version 5, which adds unit caveats ([13-unit-caveats.md](13-unit-caveats.md)), changes
+none of these figures.
 
 ### Against Done when
 

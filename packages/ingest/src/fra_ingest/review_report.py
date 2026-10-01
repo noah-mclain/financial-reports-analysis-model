@@ -194,6 +194,15 @@ def _review_line(review: StatementReview | None) -> str:
     )
 
 
+def _caveats(statement: Statement) -> str:
+    """The assumptions the statement's amounts rest on, with their evidence."""
+    lines = [
+        f"{c.id} ({', '.join(f'{k} {v}' for k, v in sorted(c.evidence.items()))})"
+        for c in statement.caveats
+    ]
+    return f'<p class="caveats">caveats: {escape("; ".join(lines))}</p>' if lines else ""
+
+
 def _summary(result: StructureResult, reviews: Mapping[str, StatementReview]) -> str:
     rows = []
     for s in result.statements:
@@ -241,7 +250,7 @@ def render_report(
         own += [c for c in checks if c.statement_id != s.id and ids & set(c.line_item_ids)]
         sections.append(
             f'<h2 id="{escape(s.id)}">{escape(s.type.value)} &middot; {escape(s.id)}</h2>'
-            f"<p>{_review_line(reviews.get(s.id))}</p>"
+            f"<p>{_review_line(reviews.get(s.id))}</p>{_caveats(s)}"
             f'<div class="statement"><div>{_pages(s, own, page_sizes, page_images)}</div>'
             f"<div>{_rows_table(s, own)}</div></div>"
         )

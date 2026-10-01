@@ -159,3 +159,28 @@ def test_edita_2024_ar_balance_sheet_is_held_with_its_reasons(
     assert "identity_failed" in review.reasons
     assert any(r.startswith("digit_suspect:") for r in review.reasons)
     assert any(r.startswith("row_realigned:") for r in review.reasons)
+
+
+def test_an_unstated_scale_carries_its_caveat_and_a_stated_one_does_not(
+    golden: Callable[[str], Path],
+) -> None:
+    edita = statements(golden, "edita-2025-en-consolidated-ifrs.pdf")[StatementType.BALANCE]
+    assert [c.id for c in edita.caveats] == ["scale_assumed_units"]
+    assert edita.caveats[0].evidence["currency_source"] == "header"
+    assert Decimal(edita.caveats[0].evidence["median_figure"]) > 10**8
+    assert "scale_missing" in edita.flags and "scale_implausible" not in edita.flags
+    almarai = statements(golden, "almarai-2025-en-annualreport.pdf")[StatementType.BALANCE]
+    assert [c.id for c in almarai.caveats] == ["currency_from_domicile"]
+    assert almarai.scale == 1000
+
+
+def test_a_notes_table_in_thousands_does_not_rescale_the_statements(
+    golden: Callable[[str], Path],
+) -> None:
+    pdf = golden("edita-2025-en-consolidated-eas.pdf")
+    statements(golden, "edita-2025-en-consolidated-eas.pdf")
+    stored = StructureResult.model_validate_json(
+        (artifact_dir(pdf) / "statements.raw.json").read_text(encoding="utf-8")
+    )
+    scales = {s.id.split("-", 1)[1]: s.scale for s in stored.statements}
+    assert scales == {"balance-1": 1, "comprehensive_income-2": 1, "income-3": 1, "income-4": 1000}

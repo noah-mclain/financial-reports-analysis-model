@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from fra_core.periods import parse_period
 from fra_core.schemas import CheckResult, LineItem, PageMode, Statement, StatementType, TextSource
 from fra_core.taxonomy.loader import load_taxonomy
+from fra_ingest.caveats import unit_caveats
 from fra_ingest.child import convert_in_child
 from fra_ingest.classify import Classification, TableContext, classify
 from fra_ingest.config import IngestConfig
@@ -47,7 +48,7 @@ from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
 from fra_ingest.visual_order import repair_grid, repair_text
 
-STRUCTURE_VERSION = "4"  # bump whenever structure's output can change
+STRUCTURE_VERSION = "5"  # bump whenever structure's output can change
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -112,6 +113,7 @@ def _statement(
                 update={"depth": node.depth, "is_subtotal": node.is_subtotal, "parent_id": parent}
             )
         )
+    caveats, caveat_flags = unit_caveats(meta, items)
     return Statement(
         id=f"{inputs.sha256[:12]}-{part.type.value}-{number}",
         document_sha256=inputs.sha256,
@@ -124,7 +126,8 @@ def _statement(
         periods=part.periods,
         line_items=items,
         source_pages=list(range(part.first_page, part.last_page + 1)),
-        flags=[*part.flags, *meta.flags],
+        flags=[*part.flags, *meta.flags, *caveat_flags],
+        caveats=caveats,
     )
 
 

@@ -10,6 +10,7 @@ import pytest
 
 from fra_core.schemas import (
     BBox,
+    Caveat,
     Cell,
     CheckResult,
     LineItem,
@@ -210,3 +211,15 @@ def test_the_report_is_written_beside_the_artifacts(tmp_path: Path) -> None:
     assert path == out / "review.html" and "Total current assets" in path.read_text(
         encoding="utf-8"
     )
+
+
+def test_a_caveat_is_shown_with_its_evidence() -> None:
+    caveat = Caveat(
+        id="scale_assumed_units", evidence={"currency_source": "header", "median_figure": "10"}
+    )
+    with_caveat = RESULT.model_copy(
+        update={"statements": [STATEMENT.model_copy(update={"caveats": [caveat]})]}
+    )
+    page = render_report(with_caveat, CHECKS, {5: (600.0, 800.0)}, {5: "pages/5.png"}, "edita")
+    assert "caveats: scale_assumed_units (currency_source header, median_figure 10)" in page
+    assert "caveats:" not in html()
