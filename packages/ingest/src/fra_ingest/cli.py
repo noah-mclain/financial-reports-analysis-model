@@ -3,10 +3,13 @@
 fra-ingest locate <pdf> [--json] [--no-ocr] [--no-cache] [--config PATH] [--artifacts DIR]
 fra-ingest convert <pdf> [--json] [--no-ocr] [--no-cache] [--config PATH] [--artifacts DIR]
 fra-ingest structure <pdf> [--json] [--no-ocr] [--no-cache] [--config PATH] [--artifacts DIR]
+fra-ingest review-report <sha256> [--config PATH] [--artifacts DIR]
 
 convert exits 0 when it wrote a result, 2 on an ingest error and 3 when every range it
 attempted failed. It is the child process of convert_in_child (spec 10). structure exits 0
-when it wrote a result and 2 on an ingest error.
+when it wrote a result and 2 on an ingest error. review-report takes a document's sha256 under
+the artifact root, or a unique prefix of it, writes review.html beside the stored results and
+prints its path; it runs no stage and exits 2 when the document or an artifact is missing.
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ from fra_ingest.convert import convert_pdf
 from fra_ingest.errors import IngestError
 from fra_ingest.ocr import OcrEngine, default_engine
 from fra_ingest.results import ConvertResult, LocateResult, StructureResult
+from fra_ingest.review_report import write_review_report
 from fra_ingest.stage import load_or_locate, locate_pdf, page_ocr_languages
 from fra_ingest.structure import structure_pdf
 
@@ -48,11 +52,24 @@ def main(argv: list[str] | None = None) -> int:
         )
         command.add_argument("--config", type=Path, default=None)
         command.add_argument("--artifacts", type=Path, default=None, help="artifact root override")
+    report = commands.add_parser(
+        "review-report", help="draw the extracted cells on their page images"
+    )
+    report.add_argument("sha256", help="a document's sha256, or a unique prefix of it")
+    report.add_argument("--config", type=Path, default=None)
+    report.add_argument("--artifacts", type=Path, default=None, help="artifact root override")
     args = parser.parse_args(argv)
 
     config = load_config(args.config)
     if args.artifacts is not None:
         config = config.model_copy(update={"artifact_root": args.artifacts})
+    if args.command == "review-report":
+        try:
+            print(write_review_report(args.sha256, config))
+        except IngestError as exc:
+            print(f"{args.sha256}: {exc.reason} {exc.detail}".rstrip(), file=sys.stderr)
+            return EXIT_ERROR
+        return 0
     engine = None if args.no_ocr else default_engine()
 
     try:

@@ -149,3 +149,24 @@ def test_structure_writes_a_result(
     assert StructureResult.model_validate_json(capsys.readouterr().out).flags == [
         "statement_not_extracted:balance"
     ]
+
+
+def test_review_report_of_an_unknown_document_exits_with_its_reason(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["review-report", "ee", "--artifacts", str(tmp_path)]) == 2
+    assert capsys.readouterr().err.strip().splitlines()[-1].startswith("ee: unknown_document")
+
+
+def test_review_report_prints_where_it_wrote(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    written = tmp_path / "ab" / "review.html"
+
+    def fake_report(sha256: str, config: object) -> Path:
+        assert sha256 == "ab"
+        return written
+
+    monkeypatch.setattr(cli, "write_review_report", fake_report)
+    assert main(["review-report", "ab", "--artifacts", str(tmp_path)]) == 0
+    assert capsys.readouterr().out.strip() == str(written)
