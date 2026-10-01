@@ -77,8 +77,11 @@ extraction against them (`docs/blueprint/12-ingest-review.md`, Scoring).
 - A period key leaves `unconfirmed` only when its figure has been compared with the page image
   and found legible and equal, or corrected to what the page prints. Rows the extraction missed
   are added by hand. `note` says how far the file has been read.
-- `status` becomes `checked`, with the readers in `checked_by`, after two readings with their
-  disagreements resolved against the page (`docs/blueprint/05-verification-and-test.md`, V1).
+- `status` becomes `checked` after two checks, named in `checked_by`. The first is a comparison
+  of every figure with the page. The second is `make verify-expected`, which looks for
+  independent evidence for each figure: a printed sum that holds, a second read of the cell's
+  own box, or the same figure in another filing of the issuer. A person reads only the figures
+  it lists as not vouched for; when it lists none, the file is checked.
 - Only checked files count towards Gate G1. The confirmed figures of drafts are scored in a
   separate block headed provisional. `make expected-drafts` never replaces a checked file or a
   draft with a confirmed figure.

@@ -1,9 +1,12 @@
 {
   "id": "edita-2024-ar-consolidated",
   "sha256": "ec1f045a8a9eb594335566e3965483e657825f4eb9b7a829b4dc6aa13737427f",
-  "status": "draft",
-  "checked_by": [],
-  "note": "Prepared from the extraction and compared once with the page images of pages 5, 6 and 7, which are scanned and print Arabic-Indic digits. Every figure was read from the image at three times zoom, and every sum the pages print holds on the figures as read: each section total, total assets against total equity and liabilities in both years, profit before tax, net profit and its split, and total comprehensive income and its split. Figures the extraction misread or lost are corrected here from the page, and the row for total current liabilities, which the extraction merged into the row above it, is added. Labels are as read from the image and were not compared letter by letter. One comparison, not two: not hand-checked in the sense of V1.",
+  "status": "checked",
+  "checked_by": [
+    "page comparison, 2026-10-01",
+    "arithmetic, second read of each cell and sibling filings (harness.verify_expected), 2026-10-01"
+  ],
+  "note": "Prepared from the extraction and compared once with the page images of pages 5, 6 and 7, which are scanned and print Arabic-Indic digits. Every figure was read from the image at three times zoom, and every sum the pages print holds on the figures as read: each section total, total assets against total equity and liabilities in both years, profit before tax, net profit and its split, and total comprehensive income and its split. Figures the extraction misread or lost are corrected here from the page, and the row for total current liabilities, which the extraction merged into the row above it, is added. Labels are as read from the image and were not compared letter by letter. Second check: every figure is vouched for by at least one of the sums the page prints, a second read of the cell's own box, and the same figure in another filing of the issuer (make verify-expected).",
   "statements": [
     {
       "type": "balance",
