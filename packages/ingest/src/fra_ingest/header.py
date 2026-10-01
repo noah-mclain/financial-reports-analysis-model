@@ -27,6 +27,11 @@ _NOTE_HEADERS = frozenset(
 )
 # Digit groups after the first are thousands groups: "2 077 685 182", "٢٠٧٧ ٦٨٥ ١٨٢".
 _GROUPED = re.compile(r"[(\-]?\d+(?:[\s,\u066c\u060c]\d{3})+(?:\.\d+)?\)?")
+# A number after one of these names a standard, a level or a stage, not a note.
+_NUMBERED_TERMS = frozenset(
+    {"ifrs", "ias", "ifric", "sic", "eas", "level", "tier", "stage", "phase"}
+    | {"المعيار", "المستوى", "المرحلة"}
+)
 _LETTER = re.compile(r"[^\W\d_]", re.UNICODE)
 _MARKERS = frozenset({"restated", "audited", "unaudited", "معدلة", "مدققة", "غير", "'000"})
 _DURATION_TYPES = frozenset(
@@ -64,11 +69,17 @@ def is_amount(text: str) -> bool:
 
 
 def split_note(label: str) -> tuple[str, str | None]:
-    """A label ending in a note reference, as Almarai AR prints them: (label, note)."""
+    """A label ending in a note reference, as Almarai AR prints them: (label, note). A number
+    that closes a bracket opened earlier, or follows a word such as IFRS or Level, belongs to
+    the label."""
     head, _, tail = label.rpartition(" ")
-    if head and is_note_ref(tail) and not _YEAR.fullmatch(_plain(tail)):
-        return head, tail
-    return label, None
+    if not head or not is_note_ref(tail) or _YEAR.fullmatch(_plain(tail)):
+        return label, None
+    if tail.count("(") != tail.count(")"):
+        return label, None
+    if head.split()[-1].strip("()[],.:-").casefold() in _NUMBERED_TERMS:
+        return label, None
+    return head, tail
 
 
 class HeaderLayout(BaseModel):
@@ -154,14 +165,19 @@ def _year_only(header: str) -> bool:
     )
 
 
+_INTERIM_LENGTHS = {3: "three", 6: "six", 9: "nine"}
+
+
 def _with_date_hint(period: Period, header: str, hint: Period | None) -> Period:
-    """A header naming only a year takes the day and month of the statement's date line."""
+    """A header naming only a year takes the day and month of the statement's date line, and
+    for a duration its length: a year, or the three, six or nine months the line names."""
     if hint is None or not _year_only(header):
         return period
     month = calendar.month_name[hint.end_date.month]
     text = f"{hint.end_date.day} {month} {period.end_date.year}"
     if period.kind is PeriodKind.DURATION:
-        text = f"For the year ended {text}"
+        length = _INTERIM_LENGTHS.get(hint.months or 12)
+        text = f"For the {length} months ended {text}" if length else f"For the year ended {text}"
     moved = parse_period(text, default_kind=period.kind)
     return moved.model_copy(update={"restated": period.restated}) if moved else period
 

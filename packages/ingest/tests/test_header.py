@@ -318,3 +318,26 @@ def test_numbered_note_headers_name_the_note_column() -> None:
         )
         assert layout.note_col == 3, header
         assert sorted(layout.value_cols) == [1, 2] and layout.unbound_cols == []
+
+
+def test_a_standard_or_level_number_is_not_a_note_reference() -> None:
+    assert split_note("Right-of-use assets (IFRS 16)") == ("Right-of-use assets (IFRS 16)", None)
+    assert split_note("Lease liabilities IFRS 16") == ("Lease liabilities IFRS 16", None)
+    assert split_note("Financial instruments IAS 39") == ("Financial instruments IAS 39", None)
+    assert split_note("Fair value - Level 3") == ("Fair value - Level 3", None)
+    assert split_note("Expected credit losses - Stage 2") == (
+        "Expected credit losses - Stage 2",
+        None,
+    )
+    assert split_note("Trade receivables (12)") == ("Trade receivables", "(12)")
+    assert split_note("Profit for the year 5") == ("Profit for the year", "5")
+
+
+def test_a_year_only_header_under_an_interim_date_line_keeps_the_interim_length() -> None:
+    layout = parse_header(
+        grid([["", "2025", "2024"], ["Revenue", "100", "90"], ["Cost of sales", "(60)", "(50)"]]),
+        INCOME,
+        "For the six months ended 30 June 2025",
+    )
+    assert [p.key for p in layout.value_cols.values()] == ["6M-2025-06-30", "6M-2024-06-30"]
+    assert [p.months for p in layout.value_cols.values()] == [6, 6]
