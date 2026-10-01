@@ -271,3 +271,45 @@ def test_a_tail_page_two_pages_after_the_part_stays_unattached() -> None:
     pages, evidence, kind = _tail_decision(_income_pages(INCOME_2, second_page=3), {3: ()})
     assert pages == [1]
     assert kind is None and "continuation_of:income" not in evidence
+
+
+def test_a_tail_page_below_confidence_takes_an_undated_column_from_the_page_before() -> None:
+    undated = [["", "Notes", "2025 SAR '000", ""], *INCOME_2[1:]]
+    pages, evidence, kind = _tail_decision(_income_pages(undated), {2: ()})
+    assert pages == [1, 2]
+    assert kind is StatementType.INCOME and "continuation_of:income" in evidence
+    result, _ = structure_document(_income_inputs(_income_pages(undated), {2: ()}), IngestConfig())
+    profit = next(i for i in result.statements[0].line_items if i.raw_label.startswith("Profit"))
+    assert [(c.period_key, c.reported) for c in profit.cells] == [
+        ("FY2025", Decimal("40")),
+        ("FY2024", Decimal("35")),
+    ]
+    assert "inherited:3:FY2024" in result.statements[0].flags
+
+
+def test_a_total_whose_values_were_all_lost_is_missing_values_not_a_heading() -> None:
+    lost = [
+        HEADER,
+        ["Inventories", "19", "10", "8"],
+        ["Cash", "21", "5", "4"],
+        ["Total assets", "", "", ""],
+    ]
+    doc = DlDocument.model_validate(
+        {
+            "tables": [table(0, 1, lost), table(1, 2, PAGE_2)],
+            "texts": [],
+            "pages": {
+                "1": {"page_no": 1, "size": {"width": 800, "height": 1000}},
+                "2": {"page_no": 2, "size": {"width": 800, "height": 1000}},
+            },
+        }
+    )
+    result, checks = structure_document(inputs([("docling/p1-2.json", doc)]), IngestConfig())
+    balance = next(s for s in result.statements if s.type is StatementType.BALANCE)
+    total = next(i for i in balance.line_items if i.raw_label == "Total assets")
+    assert [c.reported for c in total.cells] == [None, None]
+    assert all("numbers_missing" in c.flags for c in total.cells)
+    assert total.is_subtotal
+    identity = [c for c in checks if c.kind == "balance_identity"]
+    assert identity and all((c.status, c.detail) == ("skipped", "missing_values") for c in identity)
+    assert "identity_totals_not_found" not in balance.flags

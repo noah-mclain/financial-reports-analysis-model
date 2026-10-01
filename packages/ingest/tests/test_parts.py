@@ -3,8 +3,10 @@
 from decimal import Decimal
 
 from fra_core.schemas import BBox, StatementType, TextSource
+from fra_core.taxonomy.loader import load_taxonomy
 from fra_ingest.classify import Classification
 from fra_ingest.header import parse_header
+from fra_ingest.label_match import LabelIndex
 from fra_ingest.parts import PartialStatement, build_part, column_centre
 from fra_ingest.table_grid import Grid, GridCell
 
@@ -205,3 +207,50 @@ def test_a_value_beyond_ten_to_the_fifteen_is_flagged_implausible() -> None:
     )
     flagged = [["implausible_magnitude" in c.flags for c in item.cells] for item in p.line_items]
     assert flagged == [[True, True], [False, False]]
+
+
+def test_a_known_total_with_no_values_keeps_its_cells_as_missing() -> None:
+    rows = [
+        ROWS[0],
+        ["Current assets", "", "", ""],
+        ["Total assets", "", "", ""],
+        ["Total comprehensive income attributable to:", "", "", ""],
+        ["Inventories", "", "10", "8"],
+    ]
+    g = grid(rows)
+    layout = parse_header(g, StatementType.BALANCE, None)
+    classification = Classification(type=StatementType.BALANCE, confidence=0.8)
+    p = build_part(
+        g, layout, classification, source=TextSource.OCR, index=LabelIndex(load_taxonomy())
+    )
+    heading, total, other, _ = p.line_items
+    assert heading.cells == [] and other.cells == []
+    assert [c.reported for c in total.cells] == [None, None]
+    assert all({"numbers_missing", "bbox_synthesized"} <= set(c.flags) for c in total.cells)
+
+
+def test_a_value_far_beyond_its_column_is_flagged_implausible() -> None:
+    rows = [
+        ROWS[0],
+        ["Inventories", "", "120,500", "110,200"],
+        ["Receivables", "", "98,300", "91,000"],
+        ["Cash", "", "45,100", "52,700"],
+        ["Prepayments", "", "12,900", "123,456,789,012"],
+        ["Other", "", "7,400", "6,900"],
+        ["Total current assets", "", "284,200", "270,300"],
+        ["Basic earnings per share", "", "2.10", "1.90"],
+    ]
+    g = grid(rows)
+    p = build_part(
+        g,
+        parse_header(g, StatementType.BALANCE, None),
+        Classification(type=StatementType.BALANCE, confidence=0.8),
+        source=TextSource.OCR,
+    )
+    flagged = [
+        (item.raw_label, c.period_key)
+        for item in p.line_items
+        for c in item.cells
+        if "implausible_magnitude" in c.flags
+    ]
+    assert flagged == [("Prepayments", "2024-12-31")]

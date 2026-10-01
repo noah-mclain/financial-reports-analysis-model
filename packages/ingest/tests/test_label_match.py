@@ -42,3 +42,10 @@ def test_subtotal_cues_in_both_languages() -> None:
     assert not has_subtotal_cue("مجموعةالشركات")
     assert not has_subtotal_cue("Totality of assets")
     assert has_subtotal_cue("مجموعالموجودات")
+
+
+def test_the_closing_total_matches_with_equity_named_first() -> None:
+    index = LabelIndex(load_taxonomy())
+    for label in ("Total equity and total liabilities", "إجمالي حقوق الملكية والالتزامات"):
+        item = index.match(label, BALANCE)
+        assert item is not None and item.id == "total_liabilities_and_equity", label

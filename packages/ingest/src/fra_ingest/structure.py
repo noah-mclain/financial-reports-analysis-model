@@ -44,7 +44,7 @@ from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
 from fra_ingest.visual_order import repair_grid, repair_text
 
-STRUCTURE_VERSION = "2"  # bump whenever structure's output can change
+STRUCTURE_VERSION = "3"  # bump whenever structure's output can change
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -146,14 +146,16 @@ def _continued_part(
     titles: Sequence[StatementType],
 ) -> PartialStatement | None:
     """The statement part a low-confidence grid continues: the latest part ending on its page
-    or the page before, whose periods and value columns the grid matches. A page titled as
-    other statements only (``titles``, from locate) continues nothing."""
+    or the page before, whose periods and value columns the grid matches, a column its header
+    leaves undated taking its period from that part first. A page titled as other statements
+    only (``titles``, from locate) continues nothing."""
     previous = next(
         (p for p in reversed(parts) if p.last_page in (grid.page_no, grid.page_no - 1)), None
     )
     if previous is None or (titles and previous.type not in titles):
         return None
-    if not continues_part(parse_header(grid, previous.type, hint), grid, previous):
+    layout = inherit_periods(parse_header(grid, previous.type, hint), grid, previous)
+    if not continues_part(layout, grid, previous):
         return None
     return previous
 
@@ -245,7 +247,7 @@ def structure_document(
             if inputs.page_modes.get(grid.page_no) is PageMode.IMAGE
             else TextSource.TEXT
         )
-        part = build_part(grid, layout, result, source=source)
+        part = build_part(grid, layout, result, source=source, index=index)
         parts.append(part)
         metas.setdefault(
             (part.type, part.first_page),
@@ -385,6 +387,7 @@ def structure_pdf(
             cached is not None
             and cached.version == STRUCTURE_VERSION
             and cached.settings_hash == digest
+            and (out_dir / "table_checks.json").is_file()
         ):
             return cached
 

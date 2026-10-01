@@ -128,3 +128,18 @@ def test_table_checks_are_written_before_the_statements(
     monkeypatch.setattr(structure, "_write", record)
     structure.structure_pdf(PDF, config, None, use_cache=False)
     assert written == ["table_checks.json", "statements.raw.json"]
+
+
+def test_cached_statements_without_their_checks_are_structured_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = IngestConfig(artifact_root=tmp_path)
+    empty = _result("h").model_copy(update={"ranges": []})
+    monkeypatch.setattr(structure, "load_or_locate", lambda *_args: _located())
+    monkeypatch.setattr(structure, "current_convert", lambda *_args: empty)
+    monkeypatch.setattr(structure, "read_pages", lambda *_args, **_kw: [])
+    first = structure.structure_pdf(PDF, config, None)
+    checks = tmp_path / first.sha256 / "table_checks.json"
+    checks.unlink()
+    structure.structure_pdf(PDF, config, None)
+    assert checks.is_file()

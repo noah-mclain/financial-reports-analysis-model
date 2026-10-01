@@ -367,5 +367,5 @@ items:
     natural_sign: "+"
     subtotal: true
     aliases:
-      en: [total liabilities and equity, total equity and liabilities]
-      ar: [إجمالي الالتزامات وحقوق الملكية, مجموع المطلوبات وحقوق المساهمين, إجمالي المطلوبات وحقوق الملكية]
+      en: [total liabilities and equity, total equity and liabilities, total equity and total liabilities]
+      ar: [إجمالي الالتزامات وحقوق الملكية, مجموع المطلوبات وحقوق المساهمين, إجمالي المطلوبات وحقوق الملكية, إجمالي حقوق الملكية والالتزامات]

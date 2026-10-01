@@ -2,12 +2,16 @@
 
 Values are kept as printed, sign applied, before scale. An empty value cell in a row that has
 values elsewhere is kept with ``numbers_missing`` and a box synthesized from its row and
-column, so every gap stays visible and traceable.
+column, so every gap stays visible and traceable. A row with no values at all is a heading,
+unless its label opens with a total cue and names a taxonomy item (``Total assets``): such a
+row never prints without figures, so its cells are kept as missing and the checks report the
+gap. A section heading the taxonomy also knows (``Current assets``) stays a heading.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
+from statistics import median
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,11 +19,15 @@ from fra_core.numbers import parse_number
 from fra_core.schemas import BBox, Cell, LineItem, Period, Provenance, StatementType, TextSource
 from fra_ingest.classify import Classification
 from fra_ingest.header import HeaderLayout, split_note
-from fra_ingest.label_match import squash
+from fra_ingest.label_match import LabelIndex, has_subtotal_cue, squash
 from fra_ingest.table_grid import Grid
 
 # Larger than any printed statement figure, before scale: merged digit groups (OCR).
 IMPLAUSIBLE = 10**15
+# Two merged figures can stay under that limit, so a value is also implausible when it is this
+# many times the median of its own column, given enough values to have a median.
+IMPLAUSIBLE_RATIO = 10**4
+_MIN_COLUMN_VALUES = 5
 _PER_SHARE = tuple(squash(w) for w in ("per share", "للسهم", "ربحية السهم"))
 
 
@@ -71,12 +79,39 @@ def _synthesized_box(grid: Grid, row: int, col: int) -> BBox | None:
     return BBox(left=cols[0], top=rows[0], right=cols[1], bottom=rows[1])
 
 
+def _flag_column_outliers(part: PartialStatement) -> None:
+    """Add ``implausible_magnitude`` to values far beyond their column. Per-share values and
+    zeros are neither judged nor counted."""
+    for period in part.periods:
+        sized = [
+            abs(c.reported)
+            for item in part.line_items
+            for c in item.cells
+            if c.period_key == period.key and c.reported and "per_share" not in c.flags
+        ]
+        if len(sized) < _MIN_COLUMN_VALUES:
+            continue
+        limit = IMPLAUSIBLE_RATIO * median(sized)
+        for n, item in enumerate(part.line_items):
+            cells = [
+                c.model_copy(update={"flags": [*c.flags, "implausible_magnitude"]})
+                if c.period_key == period.key
+                and c.reported
+                and abs(c.reported) > limit
+                and not {"per_share", "implausible_magnitude"} & set(c.flags)
+                else c
+                for c in item.cells
+            ]
+            part.line_items[n] = item.model_copy(update={"cells": cells})
+
+
 def build_part(
     grid: Grid,
     layout: HeaderLayout,
     classification: Classification,
     *,
     source: TextSource,
+    index: LabelIndex | None = None,
 ) -> PartialStatement:
     if classification.type is None:
         msg = "only a classified grid becomes part of a statement"
@@ -122,7 +157,9 @@ def build_part(
             continue
         item_id = f"p{grid.page_no}-{grid.table_index}-r{row}"
         per_share = any(cue in squash(label) for cue in _PER_SHARE)
-        has_values = any(texts.values())
+        known = index.match(label, classification.type) if index is not None else None
+        # A known total with every value lost keeps its cells, each flagged as missing.
+        has_values = any(texts.values()) or (known is not None and has_subtotal_cue(label))
         cells = []
         for col, period in layout.value_cols.items():
             if not has_values:
@@ -176,4 +213,5 @@ def build_part(
             else:
                 indent = label_cell.bbox.left
         part.indents[item_id] = indent
+    _flag_column_outliers(part)
     return part
