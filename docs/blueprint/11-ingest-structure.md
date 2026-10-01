@@ -152,7 +152,7 @@ class TableDecision(BaseModel):
     evidence: list[str]
 
 class StructureResult(BaseModel):   # statements.raw.json
-    version: str                    # STRUCTURE_VERSION, "1"
+    version: str                    # STRUCTURE_VERSION, "2"
     sha256: str
     convert_version: str
     settings_hash: str
@@ -311,6 +311,7 @@ Other bilingual pairs are reported, not gated, until the resolution question is 
 | R31 | docling's JSON changes shape between versions | Our own models of the fields used, and a golden contract test; docling is pinned |
 | R32 | A notes table taken for a primary statement | Note headings, taxonomy hits and period headers as evidence, every decision recorded in `tables`, and the balance identity as a backstop |
 | R33 | Glyph currencies with no currency word near the statement | Country of incorporation from the earliest page naming it, flagged `currency_from_domicile`; else document-level inference, flagged `currency_inferred`; the manifest scores it |
+| R35 | Two statements of one type printed on the same page with the same periods and column layout (consolidated and separate, or as reported and restated) are merged as one continuation | None in the golden set; same-page merging needs aligned columns and matching period keys. Guard to add before such a document enters: refuse the merge when the earlier part already ends in a closing total |
 
 ## Results
 
@@ -333,7 +334,7 @@ Measured 2026-10-01 on the `ingest-structure` branch (`worktree/phase2-extractio
 
 The manifest records `scale: unconfirmed` for the ten Juhayna and Edita documents, so the harness scores only their currency; a statement that could not read a scale carries `scale_missing` and stays at 1. Scale and currency are judged separately: a wrong scale is excused only by `scale_missing` or `scale_conflict`, a wrong currency only by `currency_missing` or `currency_conflict`.
 
-A subtotal right under its section heading is now checked unless that heading cut rows off the run before it, so `subtotal_failed` newly appears on the Edita EAS and IFRS balance sheets, the Juhayna 2025 EN consolidated and standalone comprehensive income statements; each is a mismatch in the values as extracted (a 20,000 misread on the EAS 2024 non-current liabilities total, `implausible_magnitude` cells on the EAS balance sheet and Juhayna 2025 EN comprehensive income; the IFRS total equity and Juhayna standalone total comprehensive income misses are not yet traced). Cells above 10^15 as printed now carry `implausible_magnitude`: four on Juhayna 2025 EN comprehensive income, two on the Juhayna 2024 EN balance sheet p5, three on the Edita EAS balance sheet, three on edita-2024-ar-consolidated.
+A subtotal right under its section heading is now checked unless that heading cut rows off the run before it, so `subtotal_failed` newly appears on the Edita EAS and IFRS balance sheets, the Juhayna 2025 EN consolidated and standalone comprehensive income statements. Three are mismatches in the values as extracted: a 20,000 misread on the EAS 2024 non-current liabilities total, `implausible_magnitude` cells on the EAS balance sheet and Juhayna 2025 EN consolidated comprehensive income, and two columns merged into one cell ("292 020 646 21 527 625") on the Juhayna standalone comprehensive income. The IFRS one is the check's limit, not a misread: "Equity attributable to the Owners" equals its rows exactly in both periods, but the blank 2024 treasury shares cell (`numbers_missing`) keeps it from being recognised as an implicit subtotal, which must match in every period, so total equity is checked against a run that counts it twice. Cells above 10^15 as printed now carry `implausible_magnitude`: four on Juhayna 2025 EN comprehensive income, two on the Juhayna 2024 EN balance sheet p5, three on the Edita EAS balance sheet, three on edita-2024-ar-consolidated.
 
 Unmatched numeric rows in each language edition of a pair (first edition, second edition):
 
