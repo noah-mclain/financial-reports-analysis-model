@@ -47,6 +47,7 @@ written analysis, all on a single Apple Silicon machine (M3 Pro, 18 GB unified m
 | [11-ingest-structure.md](11-ingest-structure.md) | Ingest part 3a: docling tables to statements with provenance, periods, scale and currency, Arabic visual-order repair, continuation, checks |
 | [12-ingest-review.md](12-ingest-review.md) | Ingest part 3b: sum-based hierarchy, row-alignment repair, figure checks, the held-for-review decision, the review report, extraction eval against expected files |
 | [13-unit-caveats.md](13-unit-caveats.md) | Plan: how an unstated scale or currency is carried as a caveat from structure through analytics and narration to a footnote, and what the model is told and held to |
+| [14-run-profiles.md](14-run-profiles.md) | The model route from MLX to llama.cpp: a fused adapter converted to GGUF, agreement with MLX by quantization level, speed on CPU, and the decision for week 3 |
 | [05-verification-and-test.md](05-verification-and-test.md) | Verification work packages (layout) and Test work packages (calculation accuracy) |
 | [06-decisions-and-risks.md](06-decisions-and-risks.md) | Owner decisions, risk register, repository hygiene |
 
