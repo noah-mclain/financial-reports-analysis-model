@@ -520,7 +520,8 @@ passed with two unread dashes, which its sums confirmed as blanks.
 ### Known limits
 
 Found by the review of this branch. The first list is fixed; the second is left as it is, each
-with the case that shows it.
+with the case that shows it. The review made six passes; its report on the last found
+nothing to fix before the merge.
 
 Fixed, each with a test:
 
@@ -552,6 +553,14 @@ Left:
 - **The eval's label rule is a judgement, not a proof.** The residual rates are the ones above.
   A label garbled beyond reading counts its figure wrong even when the figure is on the right
   row.
+- **A per-share heading reaches an amount named with its cue words.** Directly under an
+  earnings-per-share heading, "Profit from continuing operations" or "Basic salaries" would be
+  taken for per-share and leave every sum, with nothing to say so. An unusual order of rows;
+  none in the golden set.
+- **Per-share wording the cues still miss:** "Earnings pershare", "Dividends per equity share".
+- **A small-fraction row with one round period holds its statement.** An unnamed ratio row
+  reading 2.00 and 2.48 gives `fraction_among_whole` on an otherwise clean statement. A wrong
+  hold, not a wrong pass.
 - **Extra rows gate nothing.** An extracted row with values that no expected row aligns to is
   counted and printed, but G1 has no threshold for it.
 - **`period_unbound:0` reads like a count** in the review reasons; the number is a column.
