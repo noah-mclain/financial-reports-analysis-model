@@ -29,6 +29,7 @@ from fra_ingest.convert import CONVERT_VERSION, settings_hash
 from fra_ingest.converter import docling_version
 from fra_ingest.docling_json import DlDocument, load_docling_json
 from fra_ingest.errors import IngestError
+from fra_ingest.figure_checks import check_net_profit_tie
 from fra_ingest.header import parse_header
 from fra_ingest.hierarchy import RowInput, infer_hierarchy
 from fra_ingest.label_match import LabelIndex
@@ -292,6 +293,19 @@ def structure_document(
         for ref in part.table_refs:
             if ref in decision_by_ref:
                 decision_by_ref[ref].statement_id = statement.id
+
+    first: dict[StatementType, int] = {}
+    for position, s in enumerate(statements):
+        first.setdefault(s.type, position)
+    ties: list[CheckResult] = []
+    if StatementType.INCOME in first and StatementType.COMPREHENSIVE_INCOME in first:
+        tied = (first[StatementType.INCOME], first[StatementType.COMPREHENSIVE_INCOME])
+        ties = check_net_profit_tie(statements[tied[0]], statements[tied[1]])
+        checks.extend(ties)
+        if any(t.status == "fail" for t in ties):
+            for position in tied:
+                s = statements[position]
+                statements[position] = s.model_copy(update={"flags": [*s.flags, "tie_failed"]})
 
     found = {s.type for s in statements}
     flags = [f"statement_not_extracted:{t.value}" for t in config.enabled_types if t not in found]

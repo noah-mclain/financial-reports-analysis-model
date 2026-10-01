@@ -1,4 +1,5 @@
-"""The outcome of one arithmetic check on a statement: a subtotal or an accounting identity."""
+"""The outcome of one arithmetic check: a subtotal, an accounting identity, or a tie between
+statements."""
 
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ class CheckResult(BaseModel):
 
     id: str
     statement_id: str
-    kind: Literal["subtotal", "balance_identity"]
+    kind: Literal["subtotal", "balance_identity", "net_profit_tie"]
     period_key: str
     status: Literal["pass", "fail", "skipped"]
     expected: Decimal | None = None

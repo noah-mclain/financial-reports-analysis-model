@@ -1139,20 +1139,20 @@ ASSETS = [
     item(2, "Goodwill", "126", "81"),
     item(3, "Total non-current assets", "4617", "3452", total=True),
     item(4, "Inventories", "3034", "1866"),
-    item(5, "Cash", "518", "1009"),
-    item(6, "Total current assets", "3552", "2875", total=True),
+    item(5, "Cash", "518", "1003"),
+    item(6, "Total current assets", "3552", "2869", total=True),
 ]
 
 
 def test_the_only_cell_one_digit_can_settle_is_the_suspect() -> None:
-    rows = [*ASSETS, item(7, "Total assets", "8169", "6332", total=True)]
+    rows = [*ASSETS, item(7, "Total assets", "8169", "6326", total=True)]
     checked, results = run_checks(statement(rows), INDEX)
     failed = next(r for r in results if r.status == "fail")
     assert failed.difference == Decimal("5")
-    assert failed.detail == "sum_based; single_digit:10^0; suspect:r7=6327"
+    assert failed.detail == "sum_based; single_digit:10^0; suspect:r7=6321"
     flagged = [(i.id, c.period_key) for i in checked.line_items for c in i.cells if "digit_suspect" in c.flags]
     assert flagged == [("r7", P2.key)]
-    assert checked.line_items[6].value_for(P2.key) == Decimal("6332")
+    assert checked.line_items[6].value_for(P2.key) == Decimal("6326")
 
 
 def test_several_cells_that_could_carry_the_digit_are_all_suspect() -> None:
@@ -1160,13 +1160,14 @@ def test_several_cells_that_could_carry_the_digit_are_all_suspect() -> None:
         item(1, "Property", "4491", "3371"),
         item(2, "Right of use", "292", "122"),
         item(3, "Goodwill", "126", "81"),
-        item(4, "Total non-current assets", "4829", "3574", total=True),
+        item(4, "Total non-current assets", "4929", "3574", total=True),
     ]
     checked, results = run_checks(statement(rows), INDEX)
     failed = next(r for r in results if r.status == "fail")
     assert failed.detail == "single_digit:10^1"
     flagged = {i.id for i in checked.line_items for c in i.cells if "digit_suspect" in c.flags}
-    assert flagged == {"r1", "r2", "r4"}
+    # 4491 + 20 and 292 + 20 carry into a second digit, so neither is a candidate.
+    assert flagged == {"r3", "r4"}
 
 
 def test_a_difference_that_is_not_one_digit_names_nothing() -> None:

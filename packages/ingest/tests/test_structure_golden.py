@@ -105,3 +105,25 @@ def test_edita_2024_ar_equity_and_borrowings_sit_on_their_labels(
     assert rows["p5-t0-r25"].value_for("2024-12-31") == Decimal("19343101")
     moved = next(c for c in rows["p5-t0-r22"].cells if c.period_key == "2024-12-31")
     assert moved.provenance.row == 21 and "row_realigned" in moved.flags
+
+
+def test_edita_2024_ar_total_assets_is_the_named_suspect(golden: Callable[[str], Path]) -> None:
+    pdf = golden("edita-2024-ar-consolidated-eas.pdf")
+    balance = statements(golden, "edita-2024-ar-consolidated-eas.pdf")[StatementType.BALANCE]
+    total = next(i for i in balance.line_items if i.id == "p5-t0-r14")
+    suspect = next(c for c in total.cells if c.period_key == "2023-12-31")
+    assert suspect.reported == Decimal("7743342656") and "digit_suspect" in suspect.flags
+    checks = json.loads((artifact_dir(pdf) / "table_checks.json").read_text(encoding="utf-8"))
+    identity = next(
+        c for c in checks if c["kind"] == "balance_identity" and c["period_key"] == "2023-12-31"
+    )
+    assert identity["status"] == "fail"
+    assert identity["detail"].endswith("single_digit:10^0; suspect:p5-t0-r14=7743342651")
+
+
+def test_almarai_net_profit_ties(golden: Callable[[str], Path]) -> None:
+    pdf = golden("almarai-2025-en-annualreport.pdf")
+    statements(golden, "almarai-2025-en-annualreport.pdf")
+    checks = json.loads((artifact_dir(pdf) / "table_checks.json").read_text(encoding="utf-8"))
+    ties = [c for c in checks if c["kind"] == "net_profit_tie"]
+    assert [c["status"] for c in ties] == ["pass", "pass"]
