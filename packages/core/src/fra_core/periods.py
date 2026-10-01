@@ -128,6 +128,8 @@ _YEAR = re.compile(r"(?<!\d)(\d{4})(?!\d)")
 _ISO_DATE = re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})(?!\d)")
 _DMY = re.compile(r"(?<!\d)(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})(?!\d)")
 _SMALL_NUMBER = re.compile(r"(?<!\d)(\d{1,2})(?!\d)")
+# After a number, these make it a count of months ("6 months ended"), not a day.
+_MONTH_COUNT = re.compile(r"\s*(?:months?|شهر|أشهر|اشهر|شهور)", re.IGNORECASE)
 
 
 def parse_period(text: str, *, default_kind: PeriodKind = PeriodKind.INSTANT) -> Period | None:
@@ -207,9 +209,11 @@ def _find_month(lowered: str) -> int | None:
 
 
 def _find_day(cleaned: str, year_span: tuple[int, int]) -> int | None:
-    """The first one or two digit number that is not part of the year."""
+    """The first one or two digit number that is not part of the year or a count of months."""
     for match in _SMALL_NUMBER.finditer(cleaned):
         if match.start() >= year_span[0] and match.end() <= year_span[1]:
+            continue
+        if _MONTH_COUNT.match(cleaned, match.end()):
             continue
         return int(match.group(1))
     return None
