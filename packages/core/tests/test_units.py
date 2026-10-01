@@ -92,3 +92,32 @@ def test_currency_abbreviations_need_word_boundaries(text: str) -> None:
 def test_arabic_currency_words_carry_prefixes_and_suffixes(text: str, code: str) -> None:
     """Arabic attaches ال and plural endings to the stem, so boundary matching cannot apply."""
     assert detect_currency(text) == code
+
+
+@pytest.mark.parametrize(
+    ("text", "code"),
+    [
+        ("£ million", "GBP"),
+        ("GBP '000", "GBP"),
+        ("in millions of pounds sterling", "GBP"),
+        ("$ in millions", "USD"),
+        ("US$ 000", "USD"),
+        ("in millions of US dollars", "USD"),
+        ("(In millions, except per share amounts) $", "USD"),
+        ("KD", "KWD"),
+        ("Kuwaiti Dinars", "KWD"),
+        ("SR '000", "SAR"),
+        ("L.E.", "EGP"),
+    ],
+)
+def test_detects_sterling_dollar_signs_and_gulf_abbreviations(text: str, code: str) -> None:
+    assert detect_currency(text) == code
+
+
+@pytest.mark.parametrize(
+    "text", ["Le Mans", "le groupe", "Sr. Manager", "Australian dollars", "kd", "sterling work"]
+)
+def test_short_abbreviations_are_read_only_in_capitals(text: str) -> None:
+    """LE, SR and KD are currencies only as printed in capitals, and "dollars" alone names no
+    country."""
+    assert detect_currency(text) is None

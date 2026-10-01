@@ -4,6 +4,8 @@ Extraction produces :class:`Statement`, analytics derives :class:`MetricValue` f
 the model writes a :class:`Narrative` that can only cite existing metrics.
 """
 
+from fra_core.schemas.caveat import Caveat
+from fra_core.schemas.check import CheckResult
 from fra_core.schemas.document import Document, PageMode, PageProfile
 from fra_core.schemas.metric import MetricUnit, MetricValue
 from fra_core.schemas.narrative import Claim, Narrative, NarrativeSection, Sentence
@@ -23,7 +25,9 @@ from fra_core.schemas.statement import (
 
 __all__ = [
     "BBox",
+    "Caveat",
     "Cell",
+    "CheckResult",
     "Claim",
     "Document",
     "Framework",

@@ -1,0 +1,600 @@
+{
+  "id": "edita-2025-en-consolidated-ifrs",
+  "sha256": "d79f325d4843db9363b756bee48197856b5f25da6e0ea30aa10168e3ac679af8",
+  "status": "draft",
+  "checked_by": [],
+  "note": "Prepared from the extraction and compared once with the page images of pages 8, 9 and 10, which are scanned and print English digits legibly. Every figure equals the page except six the extraction did not read, corrected here from the page: three printed dashes (fair-value assets and treasury shares for 2024 on the balance sheet, expected credit loss for 2024, each recorded as 0), earnings per share for 2024 (1.05) and both figures of total comprehensive income. Three labels were corrected to the print. One comparison, not two: not hand-checked in the sense of V1.",
+  "statements": [
+    {
+      "type": "balance",
+      "pages": [
+        8
+      ],
+      "page_mode": "scanned",
+      "scale": 1,
+      "currency": "EGP",
+      "periods": [
+        {
+          "key": "2025-12-31",
+          "end_date": "2025-12-31",
+          "kind": "instant",
+          "months": null,
+          "restated": false,
+          "audited": null
+        },
+        {
+          "key": "2024-12-31",
+          "end_date": "2024-12-31",
+          "kind": "instant",
+          "months": null,
+          "restated": true,
+          "audited": null
+        }
+      ],
+      "rows": [
+        {
+          "label": "Property, plant and equipment",
+          "values": {
+            "2025-12-31": "5473026194",
+            "2024-12-31": "4491126453"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Right-of-use assets",
+          "values": {
+            "2025-12-31": "469758484",
+            "2024-12-31": "199536464"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Intangible assets and goodwill",
+          "values": {
+            "2025-12-31": "457686035",
+            "2024-12-31": "343070835"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Deferred tax assets",
+          "values": {
+            "2025-12-31": "90941886",
+            "2024-12-31": "99659439"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Total non-current assets",
+          "values": {
+            "2025-12-31": "6491412599",
+            "2024-12-31": "5133393191"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Inventories",
+          "values": {
+            "2025-12-31": "2315050051",
+            "2024-12-31": "3034025532"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Trade and other receivables",
+          "values": {
+            "2025-12-31": "1280278007",
+            "2024-12-31": "846997383"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Financial assets at amortised cost - treasury bills",
+          "values": {
+            "2025-12-31": "3445357884",
+            "2024-12-31": "805867012"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Cash and cash equivalents",
+          "values": {
+            "2025-12-31": "716765194",
+            "2024-12-31": "518288835"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Financial Assets measured at fair value through p&L",
+          "values": {
+            "2025-12-31": "578992890",
+            "2024-12-31": "0"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Total current assets",
+          "values": {
+            "2025-12-31": "8336444026",
+            "2024-12-31": "5205178762"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "TOTAL ASSETS",
+          "values": {
+            "2025-12-31": "14827856625",
+            "2024-12-31": "10338571953"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Share capital",
+          "values": {
+            "2025-12-31": "280005462",
+            "2024-12-31": "140002731"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Legal reserve",
+          "values": {
+            "2025-12-31": "140002729",
+            "2024-12-31": "72536289"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Cumulative translation reserve",
+          "values": {
+            "2025-12-31": "-143568018",
+            "2024-12-31": "-210241954"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Transactions with non-controlling interest",
+          "values": {
+            "2025-12-31": "-32132098",
+            "2024-12-31": "-32132098"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Treasury shares",
+          "values": {
+            "2025-12-31": "-192608865",
+            "2024-12-31": "0"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Retained earnings",
+          "values": {
+            "2025-12-31": "5459163226",
+            "2024-12-31": "3973831880"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Equity attributable to the Owners of the Company",
+          "values": {
+            "2025-12-31": "5510862436",
+            "2024-12-31": "3943996848"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Non-controlling interest",
+          "values": {
+            "2025-12-31": "367793335",
+            "2024-12-31": "102084427"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Total equity",
+          "values": {
+            "2025-12-31": "5878655771",
+            "2024-12-31": "4046081275"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Borrowings and government grants",
+          "values": {
+            "2025-12-31": "2904566838",
+            "2024-12-31": "2301400165"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Employee benefit obligations",
+          "values": {
+            "2025-12-31": "114366146",
+            "2024-12-31": "75262582"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Deferred tax liabilities",
+          "values": {
+            "2025-12-31": "460608554",
+            "2024-12-31": "402132045"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Lease liabilities",
+          "values": {
+            "2025-12-31": "511267558",
+            "2024-12-31": "229107964"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Total non-current liabilities",
+          "values": {
+            "2025-12-31": "3990809096",
+            "2024-12-31": "3007902756"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Provisions",
+          "values": {
+            "2025-12-31": "111646561",
+            "2024-12-31": "99601868"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Bank overdraft",
+          "values": {
+            "2025-12-31": "771424343",
+            "2024-12-31": "808368965"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Trade and other payables",
+          "values": {
+            "2025-12-31": "2728430277",
+            "2024-12-31": "1743974321"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Current portion of borrowings",
+          "values": {
+            "2025-12-31": "816456335",
+            "2024-12-31": "376582192"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Current Income tax liabilities",
+          "values": {
+            "2025-12-31": "514276098",
+            "2024-12-31": "248382615"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Current portion of lease liabilities",
+          "values": {
+            "2025-12-31": "16158144",
+            "2024-12-31": "7677961"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Total current liabilities",
+          "values": {
+            "2025-12-31": "4958391758",
+            "2024-12-31": "3284587922"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Total liabilities",
+          "values": {
+            "2025-12-31": "8949200854",
+            "2024-12-31": "6292490678"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "TOTAL EQUITY AND LIABILITIES",
+          "values": {
+            "2025-12-31": "14827856625",
+            "2024-12-31": "10338571953"
+          },
+          "unconfirmed": []
+        }
+      ]
+    },
+    {
+      "type": "comprehensive_income",
+      "pages": [
+        10
+      ],
+      "page_mode": "scanned",
+      "scale": 1,
+      "currency": "EGP",
+      "periods": [
+        {
+          "key": "FY2025",
+          "end_date": "2025-12-31",
+          "kind": "duration",
+          "months": 12,
+          "restated": false,
+          "audited": null
+        },
+        {
+          "key": "FY2024",
+          "end_date": "2024-12-31",
+          "kind": "duration",
+          "months": 12,
+          "restated": true,
+          "audited": null
+        }
+      ],
+      "rows": [
+        {
+          "label": "Net profit for the year",
+          "values": {
+            "FY2025": "2442276113",
+            "FY2024": "1446757252"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Exchange differences on translation of foreign operations",
+          "values": {
+            "FY2025": "66673936",
+            "FY2024": "-102915459"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Remeasurements of employee benefit obligations",
+          "values": {
+            "FY2025": "-3645271",
+            "FY2024": "1822034"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Other comprehensive (loss)/income for the year",
+          "values": {
+            "FY2025": "63028665",
+            "FY2024": "-101093425"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "TOTAL COMPREHENSIVE INCOME FOR THE YEAR",
+          "values": {
+            "FY2025": "2505304778",
+            "FY2024": "1345663827"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Owners of the Company",
+          "values": {
+            "FY2025": "2559574453",
+            "FY2024": "1318079926"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Non-controlling interest",
+          "values": {
+            "FY2025": "-54269675",
+            "FY2024": "27583901"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "",
+          "values": {
+            "FY2025": "2505304778",
+            "FY2024": "1345663827"
+          },
+          "unconfirmed": []
+        }
+      ]
+    },
+    {
+      "type": "income",
+      "pages": [
+        9
+      ],
+      "page_mode": "scanned",
+      "scale": 1,
+      "currency": "EGP",
+      "periods": [
+        {
+          "key": "FY2025",
+          "end_date": "2025-12-31",
+          "kind": "duration",
+          "months": 12,
+          "restated": false,
+          "audited": null
+        },
+        {
+          "key": "FY2024",
+          "end_date": "2024-12-31",
+          "kind": "duration",
+          "months": 12,
+          "restated": true,
+          "audited": null
+        }
+      ],
+      "rows": [
+        {
+          "label": "Revenue",
+          "values": {
+            "FY2025": "20915072432",
+            "FY2024": "16146545699"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Cost of sales",
+          "values": {
+            "FY2025": "-13829224507",
+            "FY2024": "-11240232913"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "GROSS PROFIT",
+          "values": {
+            "FY2025": "7085847925",
+            "FY2024": "4906312786"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Distribution cost",
+          "values": {
+            "FY2025": "-2049806740",
+            "FY2024": "-1662351937"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Administrative expenses",
+          "values": {
+            "FY2025": "-1493957620",
+            "FY2024": "-1086699763"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Provision for employee benefit obligations",
+          "values": {
+            "FY2025": "-43901598",
+            "FY2024": "-23800197"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Provision for slow-moving inventory",
+          "values": {
+            "FY2025": "-31332605",
+            "FY2024": "-13403634"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Expected Credit Loss",
+          "values": {
+            "FY2025": "-4729625",
+            "FY2024": "0"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Other income",
+          "values": {
+            "FY2025": "117779113",
+            "FY2024": "101075941"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Other expenses",
+          "values": {
+            "FY2025": "-92264051",
+            "FY2024": "-84715514"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Finance income",
+          "values": {
+            "FY2025": "575446672",
+            "FY2024": "168265279"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Finance cost",
+          "values": {
+            "FY2025": "-602862955",
+            "FY2024": "-402641247"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Foreign exchange (loss)/gain - net",
+          "values": {
+            "FY2025": "-9406493",
+            "FY2024": "101045310"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "PROFIT BEFORE INCOME TAX",
+          "values": {
+            "FY2025": "3450812023",
+            "FY2024": "2003087024"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Income tax expense",
+          "values": {
+            "FY2025": "-1008535910",
+            "FY2024": "-556329772"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "NET PROFIT FOR THE YEAR",
+          "values": {
+            "FY2025": "2442276113",
+            "FY2024": "1446757252"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Owners of the Company",
+          "values": {
+            "FY2025": "2496545788",
+            "FY2024": "1473757771"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Non-controlling interest",
+          "values": {
+            "FY2025": "-54269675",
+            "FY2024": "-27000519"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "",
+          "values": {
+            "FY2025": "2442276113",
+            "FY2024": "1446757252"
+          },
+          "unconfirmed": []
+        },
+        {
+          "label": "Basic and diluted earnings per share",
+          "values": {
+            "FY2025": "2.16",
+            "FY2024": "1.05"
+          },
+          "unconfirmed": []
+        }
+      ]
+    }
+  ]
+}

@@ -103,3 +103,17 @@ def test_non_period_headers_return_none(text: str) -> None:
 
 def test_impossible_date_returns_none() -> None:
     assert parse_period("31 February 2025") is None
+
+
+@pytest.mark.parametrize(
+    ("text", "key"),
+    [
+        ("For the 6 months ended 30 June 2025", "6M-2025-06-30"),
+        ("For the 9 months ended 30 September 2025", "9M-2025-09-30"),
+        ("3 months ended 31 March 2025", "3M-2025-03-31"),
+    ],
+)
+def test_a_month_count_in_digits_is_not_the_day(text: str, key: str) -> None:
+    period = parse_period(text)
+    assert period is not None
+    assert period.key == key

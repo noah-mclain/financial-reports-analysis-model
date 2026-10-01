@@ -7,7 +7,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from fra_core.schemas import Document, PageMode, StatementType, TextSource
+from fra_core.schemas import Document, PageMode, Statement, StatementType, TextSource
+from fra_ingest.review import StatementReview
 
 # A page is a candidate for a type when it names the type and scores at least this much.
 CANDIDATE_THRESHOLD = 4.5
@@ -199,3 +200,36 @@ class ConvertResult(BaseModel):
     def all_failed(self) -> bool:
         attempted = [r for r in self.ranges if r.status != "skipped"]
         return bool(attempted) and all(r.status == "failed" for r in attempted)
+
+
+class TableDecision(BaseModel):
+    """What structure decided about one docling table, and why."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    table_ref: str
+    docling_path: str
+    page_no: int = Field(ge=1)
+    type: StatementType | None
+    confidence: float = Field(ge=0.0, le=1.0)
+    statement_id: str | None = None
+    evidence: list[str] = Field(default_factory=list)
+
+
+class StructureResult(BaseModel):
+    """Output of the structure stage.
+
+    Written to ``<artifact root>/<sha256>/statements.raw.json``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: str
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    convert_version: str
+    settings_hash: str
+    statements: list[Statement] = Field(default_factory=list)
+    tables: list[TableDecision] = Field(default_factory=list)
+    reviews: list[StatementReview] = Field(default_factory=list)
+    flags: list[str] = Field(default_factory=list)
+    timings: dict[str, float] = Field(default_factory=dict)

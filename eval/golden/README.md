@@ -66,6 +66,23 @@ measured traits and checksum for each file.
    is given, so each page is read in Arabic first and again in English when that finds no
    Arabic (R21). A 60-page scanned filing takes 11 to 15 s in Arabic and about 30 s in English.
 
+## Expected files
+
+`expected/<document id>.json` holds what a document's statements print: periods, scale,
+currency, and every row's figures as printed, before scale. `make eval-extraction` scores the
+extraction against them (`docs/blueprint/12-ingest-review.md`, Scoring).
+
+- A file starts as a draft: `make expected-drafts ONLY=<id>` writes it from the extraction, with
+  every figure listed under its row's `unconfirmed`. A draft therefore proves nothing by itself.
+- A period key leaves `unconfirmed` only when its figure has been compared with the page image
+  and found legible and equal, or corrected to what the page prints. Rows the extraction missed
+  are added by hand. `note` says how far the file has been read.
+- `status` becomes `checked`, with the readers in `checked_by`, after two readings with their
+  disagreements resolved against the page (`docs/blueprint/05-verification-and-test.md`, V1).
+- Only checked files count towards Gate G1. The confirmed figures of drafts are scored in a
+  separate block headed provisional. `make expected-drafts` never replaces a checked file or a
+  draft with a confirmed figure.
+
 ## Rules for adding documents
 
 - Public investor relations or exchange sources only. Record the exact URL and retrieval date.

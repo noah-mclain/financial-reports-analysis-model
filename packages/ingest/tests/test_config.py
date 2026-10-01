@@ -114,3 +114,13 @@ def test_an_unknown_convert_key_is_rejected(tmp_path: Path) -> None:
 def test_an_unknown_device_is_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValidationError):
         load_config(write(tmp_path, '[convert]\ndevice = "cuda"\n'))
+
+
+def test_ocr_scale_defaults_to_doclings_own(tmp_path: Path) -> None:
+    assert IngestConfig().ocr_scale == 3.0
+    assert load_config(write(tmp_path, "[convert]\nocr_scale = 4.0\n")).ocr_scale == 4.0
+
+
+def test_structure_confidence_setting(tmp_path: Path) -> None:
+    assert IngestConfig().min_confidence == 0.5
+    assert load_config(write(tmp_path, "[structure]\nmin_confidence = 0.7\n")).min_confidence == 0.7

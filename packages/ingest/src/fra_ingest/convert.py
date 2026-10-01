@@ -37,6 +37,7 @@ def settings_hash(
         "device": config.device,
         "ocr_engine": config.convert_ocr,
         "images_scale": config.images_scale,
+        "ocr_scale": config.ocr_scale,
         "batch_size": config.batch_size,
         "do_cell_matching": config.do_cell_matching,
         "document_timeout_s": config.document_timeout_s,

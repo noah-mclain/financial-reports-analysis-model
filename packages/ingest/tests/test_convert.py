@@ -298,7 +298,9 @@ def test_timings_passed_in_are_kept(tmp_path: Path) -> None:
     assert result.timings["locate"] == 1.5
 
 
-@pytest.mark.parametrize("change", [{"device": "cpu"}, {"do_cell_matching": False}])
+@pytest.mark.parametrize(
+    "change", [{"device": "cpu"}, {"do_cell_matching": False}, {"ocr_scale": 4.0}]
+)
 def test_the_settings_hash_follows_settings_and_plans(
     tmp_path: Path, change: dict[str, object]
 ) -> None:

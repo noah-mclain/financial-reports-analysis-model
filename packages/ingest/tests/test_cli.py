@@ -9,7 +9,7 @@ from support import make_blank_pdf
 
 from fra_ingest import cli
 from fra_ingest.cli import main
-from fra_ingest.results import ConvertResult, LocateResult, RangeConversion
+from fra_ingest.results import ConvertResult, LocateResult, RangeConversion, StructureResult
 
 
 @pytest.mark.golden
@@ -124,3 +124,49 @@ def test_convert_of_an_unreadable_file_exits_with_its_reason(
     path.write_bytes(b"not a pdf")
     assert main(["convert", str(path), "--no-ocr", "--artifacts", str(tmp_path / "a")]) == 2
     assert capsys.readouterr().err.strip().splitlines()[-1].startswith(f"{path}: unreadable_pdf")
+
+
+def test_structure_writes_a_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    pdf = make_blank_pdf(tmp_path / "doc.pdf")
+
+    def fake_structure(
+        pdf_path: Path, config: object, ocr: object, **kwargs: object
+    ) -> StructureResult:
+        return StructureResult(
+            version="1",
+            sha256="c" * 64,
+            convert_version="1",
+            settings_hash="h",
+            flags=["statement_not_extracted:balance"],
+        )
+
+    monkeypatch.setattr(cli, "structure_pdf", fake_structure)
+    assert (
+        main(["structure", str(pdf), "--no-ocr", "--artifacts", str(tmp_path / "a"), "--json"]) == 0
+    )
+    assert StructureResult.model_validate_json(capsys.readouterr().out).flags == [
+        "statement_not_extracted:balance"
+    ]
+
+
+def test_review_report_of_an_unknown_document_exits_with_its_reason(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["review-report", "ee", "--artifacts", str(tmp_path)]) == 2
+    assert capsys.readouterr().err.strip().splitlines()[-1].startswith("ee: unknown_document")
+
+
+def test_review_report_prints_where_it_wrote(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    written = tmp_path / "ab" / "review.html"
+
+    def fake_report(sha256: str, config: object) -> Path:
+        assert sha256 == "ab"
+        return written
+
+    monkeypatch.setattr(cli, "write_review_report", fake_report)
+    assert main(["review-report", "ab", "--artifacts", str(tmp_path)]) == 0
+    assert capsys.readouterr().out.strip() == str(written)

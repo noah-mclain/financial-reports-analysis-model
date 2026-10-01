@@ -13,6 +13,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from fra_core.schemas.caveat import Caveat
+
 _ALLOWED_SCALES = (1, 1_000, 1_000_000, 1_000_000_000)
 
 
@@ -184,6 +186,10 @@ class Statement(BaseModel):
     line_items: list[LineItem] = Field(default_factory=list)
     source_pages: list[int] = Field(default_factory=list)
     flags: list[str] = Field(default_factory=list)
+    caveats: list[Caveat] = Field(
+        default_factory=list,
+        description="Assumptions about unit or currency that every amount rests on",
+    )
 
     @model_validator(mode="after")
     def _check_scale_and_periods(self) -> Statement:
