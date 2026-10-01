@@ -2065,8 +2065,8 @@ git commit -m "Accept a failed identity only on a held statement whose rows name
 - Test: `tests/eval/test_expected.py`, `tests/eval/test_extraction_harness.py`
 
 **Interfaces:**
-- Produces, in `expected.py`: `ExpectedRow(label: str, values: dict[str, Decimal | None], unconfirmed: list[str])`, `ExpectedStatement(type, pages, page_mode: Literal["digital", "scanned"], scale, currency, periods: list[Period], rows)`, `ExpectedFile(id, sha256, status: Literal["draft", "checked"], checked_by: list[str], note: str, statements)`; `draft_expected(document_id: str, result: StructureResult) -> ExpectedFile` (the first statement of each type, rows with values, every valued period listed in `unconfirmed`); `write_draft(path: Path, draft: ExpectedFile) -> bool`, which refuses to replace a file whose status is `checked` or that has any confirmed cell, unless `force`.
-- Produces, in `extraction.py`: `align_rows(expected: Sequence[ExpectedRow], items: Sequence[LineItem]) -> list[int | None]`; `Score(cells, right, sign_cells, sign_right, periods, periods_right, unconfirmed, extra_rows)`; `score_statement(expected: ExpectedStatement, statement: Statement | None) -> Score`; `report(files: Sequence[tuple[ExpectedFile, Mapping[StatementType, Statement]]]) -> tuple[list[str], int]`, the printed lines and the exit code: a block for checked files against G1 and a block headed provisional for the confirmed cells of drafts, 1 only when a checked file misses a threshold; `main` loads the files and the stored statements, prints the report and writes `var/eval/extraction-golden.json`.
+- Produces, in `expected.py`: `ExpectedRow(label: str, values: dict[str, Decimal | None], unconfirmed: list[str])`, `ExpectedStatement(type, pages, page_mode: Literal["digital", "scanned"], scale, currency, periods: list[Period], rows)`, `ExpectedFile(id, sha256, status: Literal["draft", "checked"], checked_by: list[str], note: str, statements)`; `draft_expected(document_id: str, result: StructureResult) -> ExpectedFile` (the first statement of each type, rows that have cells, a lost figure as `null`, every period listed in `unconfirmed`); `load_expected(path) -> ExpectedFile`; `ExpectedFile.confirmed_cells`; `write_draft(path: Path, draft: ExpectedFile) -> bool`, which refuses to replace a file whose status is `checked` or that has any confirmed cell, unless `force`.
+- Produces, in `extraction.py`: `align_rows(expected: Sequence[ExpectedRow], items: Sequence[LineItem]) -> list[int | None]`; `Score(cells, right, sign_cells, sign_right, periods, periods_right, metadata, metadata_right, unconfirmed, extra_rows, wrong)`, `wrong` listing each missed figure with what was read; `score_statement(expected: ExpectedStatement, statement: Statement | None) -> Score`; `report(files: Sequence[tuple[ExpectedFile, Mapping[StatementType, Statement]]]) -> tuple[list[str], int]`, the printed lines and the exit code: a block for checked files against G1 and a block headed provisional for the confirmed cells of drafts, 1 only when a checked file misses a threshold; `main` loads the files and the stored statements, prints the report and writes `var/eval/extraction-golden.json`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2128,7 +2128,7 @@ Expected: FAIL (`ModuleNotFoundError: harness.expected`).
 
 - [ ] **Step 3: Implement**
 
-`align_rows` is a longest-common-subsequence over the two row lists, two rows matching when `squash(label)` is equal and not empty, or when they share an equal non-zero value in one period; it returns, for each expected row, the index of its extracted row or `None`. `score_statement` walks the expected rows: a valued period listed in `unconfirmed` adds to `unconfirmed`; otherwise it adds to `cells`, and to `right` when the aligned row's value equals it; when the absolute values are equal it adds to `sign_cells`, and to `sign_right` when the values are equal. Periods are compared as `(key, end_date, kind, months)`. `extra_rows` counts extracted rows with values that no expected row aligned to. Thresholds are constants beside G1's names: `DIGITAL = 0.995`, `SCANNED = 0.98`, `PERIODS = 1.0`, `SIGN = 0.999`.
+`align_rows` is a longest-common-subsequence over the two row lists, two rows matching when `squash(label)` is equal and not empty, or when they share an equal non-zero value in one period; it returns, for each expected row, the index of its extracted row or `None`. `score_statement` walks the expected rows: a valued period listed in `unconfirmed` adds to `unconfirmed`; otherwise it adds to `cells`, and to `right` when the aligned row's value equals it; when the absolute values are equal it adds to `sign_cells`, and to `sign_right` when the values are equal. Periods are compared as `(key, end_date, kind, months)`. `extra_rows` counts extracted rows with values that no expected row aligned to. Scale and currency add two to `metadata` per statement and to `metadata_right` when equal. Thresholds are constants beside G1's names: `DIGITAL = 0.995`, `SCANNED = 0.98`, `PERIODS = 1.0`, `SIGN = 0.999`, `METADATA = 1.0`.
 
 `main` reads every `eval/golden/expected/*.json` and loads each document's statements through the manifest's file name and `structure_pdf(..., use_cache=True)`. `report` sums the scores by `status` and `page_mode` and returns lines such as:
 
@@ -2149,8 +2149,10 @@ expected-drafts: ## Draft expected files from the extraction (never replaces a c
 
 eval-extraction: ## Score the extraction against eval/golden/expected (G1 on checked files)
 	@$(MAKE) --no-print-directory unhide-pth
-	$(UV) run python eval/harness/extraction.py
+	PYTHONPATH=eval $(UV) run python -m harness.extraction
 ```
+
+`extraction.py` imports `harness.expected`, so it runs as a module with `eval` on the path, as the tests import it.
 
 `eval/golden/README.md` gains a section "Expected files": the format, that a draft comes from the extraction, what `unconfirmed` means, and that only `checked` files count towards G1 (two readings, V1).
 

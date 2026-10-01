@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 UV ?= uv
 
-.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure
+.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure expected-drafts eval-extraction
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -55,6 +55,14 @@ eval-convert: ## Convert the golden set, a child process per document; records t
 eval-structure: ## Structure the golden set: statements, scale and currency, identity, language pairs
 	@$(MAKE) --no-print-directory unhide-pth
 	$(UV) run python eval/harness/structure.py
+
+expected-drafts: ## Draft expected files from the extraction (ONLY=id; keeps checked or confirmed files)
+	@$(MAKE) --no-print-directory unhide-pth
+	$(UV) run python eval/harness/expected.py $(if $(ONLY),--only $(ONLY))
+
+eval-extraction: ## Score the extraction against eval/golden/expected (G1 counts checked files only)
+	@$(MAKE) --no-print-directory unhide-pth
+	PYTHONPATH=eval $(UV) run python -m harness.extraction
 
 corpus-check: ## Validate the corpus pool split (no network)
 	$(UV) run python scripts/corpus.py check
