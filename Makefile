@@ -72,7 +72,7 @@ label-pages: ## Blind labelling sheets for the scanned golden documents (Mac, Vi
 
 eval-locate: ## Score the locator (TARGET=golden, or TARGET=train / dev; model_test needs CHECKPOINT=1)
 	@$(MAKE) --no-print-directory unhide-pth
-	$(UV) run python eval/harness/locate.py $(or $(TARGET),golden) $(if $(CHECKPOINT),--checkpoint)
+	$(UV) run python eval/harness/locate.py $(or $(TARGET),golden) $(if $(filter 1,$(CHECKPOINT)),--checkpoint)
 
 eval-convert: ## Convert the golden set, a child process per document; records time and peak memory
 	@$(MAKE) --no-print-directory unhide-pth
@@ -97,8 +97,8 @@ eval-extraction: ## Score the extraction against eval/golden/expected (G1 counts
 corpus-check: ## Validate the corpus pool split (no network)
 	$(UV) run python scripts/corpus.py check
 
-corpus-fetch: ## Download, measure and dedupe the corpus into var/corpus
-	$(UV) run python scripts/corpus.py fetch
+corpus-fetch: ## Download, measure and dedupe the corpus into var/corpus (NEW=1: only documents not yet measured)
+	$(UV) run python scripts/corpus.py fetch $(if $(filter 1,$(NEW)),--new)
 
 sec-fsds: ## SEC statement labels for training (needs FRA_SEC_USER_AGENT; QUARTERS=8)
 	$(UV) run python training/sources/sec_fsds.py --last $(or $(QUARTERS),8)

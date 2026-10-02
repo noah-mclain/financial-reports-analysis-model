@@ -23,7 +23,7 @@ from fra_core.schemas import Document, StatementType, TextSource
 from fra_core.units import detect_currency, detect_scale
 from fra_ingest.config import IngestConfig
 from fra_ingest.industry import IndustryBook, detect_industry, load_industry_book
-from fra_ingest.pages import document_language, profiles
+from fra_ingest.pages import GARBLED_TEXT_LAYER, document_language, profiles
 from fra_ingest.results import (
     CANDIDATE_THRESHOLD,
     IndustrySignal,
@@ -280,7 +280,7 @@ def locate_flags(
     garbled = sum(
         1
         for page in pages
-        if "garbled_text_layer" in page.flags and page.source is not TextSource.OCR
+        if GARBLED_TEXT_LAYER in page.flags and page.source is not TextSource.OCR
     )
     if garbled:
         flags.append(f"garbled_text_layers_not_read:{garbled}")

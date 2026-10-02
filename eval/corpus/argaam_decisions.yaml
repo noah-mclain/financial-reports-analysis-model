@@ -1,0 +1,375 @@
+# Calls on the companies in Argaam's listing whose names nearly match an issuer the corpus holds
+# (the near-match rule in scripts/argaam_listing.py), each made by reading the two names and the
+# listing's short name. Key: the company as Argaam's page names it. `decision` is `same` (it is
+# the existing issuer named in `issuer`, so its editions join that issuer and pool), `different`
+# (a new issuer, with `against`: the existing issuers and other new companies it was compared with)
+# or `exclude` (left out while a doubt stays open). A decision applies to its company whether or
+# not its name nearly matches anything, which is how a rename is recorded. `collect` reads this file
+# and stops, naming the company, when a near match has no entry here or a `different` decision
+# does not cover everything the company is now near.
+Saudi Basic Industries Corp.:
+  decision: same
+  issuer: SABIC
+  reason: listing short name SABIC; SABIC is the issuer already in the corpus under that name (sabic-2022-ar,
+    train), the parent of SABIC Agri-Nutrients
+National Industrialization Co.:
+  decision: same
+  issuer: National Industrialization (Tasnee)
+  reason: listing short name TASNEE; Tasnee is National Industrialization Company
+Sahara International Petrochemical Co.:
+  decision: same
+  issuer: Sipchem
+  reason: listing short name SIPCHEM; Sipchem is Sahara International Petrochemical Company
+Umm Al-Qura Cement Co.:
+  decision: different
+  reason: 'UACC (Materials) is a separate listed company, not a rename of Umm Al Qura for Development
+    and Construction Co. (MASAR, Real Estate Mgmt & Dev''t), Al Jouf Cement, Al Jouf Cement Co. (JOUF
+    CEMENT, Materials): the names share only ''al'', ''cement'', ''qura'', ''umm'''
+  against:
+  - Umm Al Qura for Development and Construction Co.
+  - Al Jouf Cement
+  - Al Jouf Cement Co.
+Southern Province Cement Co.:
+  decision: different
+  reason: 'SPCC (Materials) is a separate listed company, not a rename of Eastern Province Cement, Eastern
+    Province Cement Co. (EPCCO, Materials): the names share only ''cement'', ''province'''
+  against:
+  - Eastern Province Cement
+  - Eastern Province Cement Co.
+Saudi Aramco Base Oil Co.:
+  decision: same
+  issuer: Luberef
+  reason: listing short name LUBEREF; Luberef is Saudi Aramco Base Oil Company (Saudi Arabian Oil Co.
+    is its parent, a different filer)
+Basic Chemical Industries Co.:
+  decision: different
+  reason: 'BCI (Materials) is a separate listed company, not a rename of Saudi Basic Industries Corp.
+    (SABIC, Materials): the names share only ''basic'', ''industries'''
+  against:
+  - Saudi Basic Industries Corp.
+Saudi Arabian Mining Co.:
+  decision: different
+  reason: 'MAADEN (Materials) is a separate listed company, not a rename of Saudi Arabian Refineries,
+    Saudi Arabian Oil Co. (SAUDI ARAMCO, Energy), Saudi Arabian Amiantit Co. (AMIANTIT, Capital Goods):
+    the names share only ''arabian'', ''saudi'''
+  against:
+  - Saudi Arabian Refineries
+  - Saudi Arabian Oil Co.
+  - Saudi Arabian Amiantit Co.
+Saudi Steel Pipe Co.:
+  decision: same
+  issuer: Saudi Steel Pipes
+  reason: the existing 2024 filing reads Saudi Steel Pipes Company (SSPC), the only listed steel pipe
+    maker of that name; listing short name SSP
+Saudi Vitrified Clay Pipes Co.:
+  decision: different
+  reason: 'SVCP (Materials) is a separate listed company, not a rename of Saudi Steel Pipes: the names
+    share only ''pipes'', ''saudi'''
+  against:
+  - Saudi Steel Pipes
+Saudi Arabian Oil Co.:
+  decision: exclude
+  reason: listing short name SAUDI ARAMCO; the parent of SABIC, Luberef and Rabigh Refining and Petrochemical
+    (Petro Rabigh), existing issuers whose figures it consolidates, so which pool it belongs in is left
+    open
+Saudi Arabia Refineries Co.:
+  decision: same
+  issuer: Saudi Arabian Refineries
+  reason: listing short name SARCO; Saudi Arabia Refineries Company
+Aldawaa Medical Services Co.:
+  decision: same
+  issuer: Al Dawaa Medical Services
+  reason: same name apart from spacing; Mouwasat is a competitor
+Saudi Marketing Co.:
+  decision: same
+  issuer: Saudi Marketing (Farm Superstores)
+  reason: listing short name FARM SUPERSTORES
+Anaam International Holding Group:
+  decision: different
+  reason: 'ANAAM HOLDING (Consumer Staples Distribution & Retail) is a separate listed company, not a
+    rename of International Holding: the names share only ''holding'', ''international'''
+  against:
+  - International Holding
+Lazurde Company for Jewelry:
+  decision: same
+  issuer: L'azurde Company for Jewelry
+  reason: same name apart from an apostrophe
+Naseej International Trading Co.:
+  decision: same
+  issuer: Naseej
+  reason: the existing 2022 filing reads Naseej International Trading Company
+Jahez International Company for Information System Technology:
+  decision: same
+  issuer: Jahez International
+  reason: Jahez International is its short name
+AlSaif Stores for Development and Investment Co.:
+  decision: different
+  reason: 'ALSAIF GALLERY (Consumer Discretionary Distribution & Retail) is a separate listed company,
+    not a rename of Coast Investment and Development, Jazan Development and Investment, Jazan Development
+    and Investment Co. (JAZADCO, Food & Beverages): the names share only ''and'', ''development'', ''investment'''
+  against:
+  - Coast Investment and Development
+  - Jazan Development and Investment
+  - Jazan Development and Investment Co.
+United Electronics Co.:
+  decision: same
+  issuer: United Electronics (eXtra)
+  reason: United Electronics Company is eXtra
+Saudi Automotive Services Co.:
+  decision: different
+  reason: 'SASCO (Consumer Discretionary Distribution & Retail) is a separate listed company, not a rename
+    of Saudi Ground Services Co. (SGS, Transportation), SAL Saudi Logistics Services, SAL Saudi Logistics
+    Services Co. (SAL, Transportation): the names share only ''saudi'', ''services'''
+  against:
+  - Saudi Ground Services Co.
+  - SAL Saudi Logistics Services
+  - SAL Saudi Logistics Services Co.
+Saudi Company for Hardware:
+  decision: same
+  issuer: Saudi Company for Hardware (SACO)
+  reason: SACO is its short name
+Al-Omran Industrial Trading Co.:
+  decision: different
+  reason: 'ALOMRAN (Capital Goods) is a separate listed company, not a rename of Naseej (formerly Al
+    Sorayai Trading and Industrial Group, whose name shared only ''al'', ''industrial'', ''trading'')'
+  against:
+  - Naseej
+Saudi Arabian Amiantit Co.:
+  decision: different
+  reason: 'AMIANTIT (Capital Goods) is a separate listed company, not a rename of Saudi Arabian Refineries,
+    Saudi Arabian Mining Co. (MAADEN, Materials), Saudi Arabian Oil Co. (SAUDI ARAMCO, Energy): the names
+    share only ''arabian'', ''saudi'''
+  against:
+  - Saudi Arabian Refineries
+  - Saudi Arabian Mining Co.
+  - Saudi Arabian Oil Co.
+Al-Babtain Power and Telecommunication Co.:
+  decision: same
+  issuer: Al Babtain Power and Telecommunications
+  reason: same name, singular and plural
+Middle East Specialized Cables Co.:
+  decision: different
+  reason: 'MESC (Capital Goods) is a separate listed company, not a rename of Middle East Healthcare,
+    Middle East Paper, Middle East Paper Co. (MEPCO, Materials): the names share only ''east'', ''middle'''
+  against:
+  - Middle East Healthcare
+  - Middle East Paper
+  - Middle East Paper Co.
+Batic Investments and Logistics Co.:
+  decision: same
+  issuer: Batic Investment and Logistics
+  reason: same name, singular and plural
+National Gas and Industrialization Company Holding:
+  decision: different
+  reason: 'GASCO HOLDING (Utilities) is a separate listed company, not a rename of National Industrialization
+    Co. (TASNEE, Materials): the names share only ''industrialization'', ''national'''
+  against:
+  - National Industrialization Co.
+Saudi Energy Co.:
+  decision: same
+  issuer: Saudi Energy (Saudi Electricity)
+  reason: listing short name SAUDI ENERGY; the utility formerly Saudi Electricity
+Arabian Mills for Food Products Co.:
+  decision: different
+  reason: 'ARABIAN MILLS (Food & Beverages) is a separate listed company, not a rename of Modern Mills
+    for Food Products Co. (MODERN MILLS, Food & Beverages), Nofoth Food Products Co. (NOFOTH, Food & Beverages):
+    the names share only ''food'', ''mills'', ''products'''
+  against:
+  - Modern Mills for Food Products Co.
+  - Nofoth Food Products Co.
+Modern Mills for Food Products Co.:
+  decision: different
+  reason: 'MODERN MILLS (Food & Beverages) is a separate listed company, not a rename of Arabian Mills
+    for Food Products Co. (ARABIAN MILLS, Food & Beverages), Nofoth Food Products Co. (NOFOTH, Food &
+    Beverages): the names share only ''food'', ''mills'', ''products'''
+  against:
+  - Arabian Mills for Food Products Co.
+  - Nofoth Food Products Co.
+Nofoth Food Products Co.:
+  decision: different
+  reason: 'NOFOTH (Food & Beverages) is a separate listed company, not a rename of Arabian Mills for Food
+    Products Co. (ARABIAN MILLS, Food & Beverages), Modern Mills for Food Products Co. (MODERN MILLS,
+    Food & Beverages): the names share only ''food'', ''products'''
+  against:
+  - Arabian Mills for Food Products Co.
+  - Modern Mills for Food Products Co.
+Al Gassim Investment Holding Co.:
+  decision: different
+  reason: 'GACO (Food & Beverages) is a separate listed company, not a rename of Al Kathiri Holding, Orascom
+    Investment Holding, Al Kathiri Holding Co. (ALKATHIRI, Materials): the names share only ''al'', ''holding'',
+    ''investment'''
+  against:
+  - Al Kathiri Holding
+  - Orascom Investment Holding
+  - Al Kathiri Holding Co.
+Tabuk Agricultural Development Co.:
+  decision: different
+  reason: 'TADCO (Food & Beverages) is a separate listed company, not a rename of National Agricultural
+    Development Company, National Agricultural Development Co. (NADEC, Food & Beverages), Al-Jouf Agricultural
+    Development Co. (ALJOUF, Food & Beverages): the names share only ''agricultural'', ''development'''
+  against:
+  - National Agricultural Development Company
+  - National Agricultural Development Co.
+  - Al-Jouf Agricultural Development Co.
+Al-Jouf Agricultural Development Co.:
+  decision: different
+  reason: 'ALJOUF (Food & Beverages) is a separate listed company, not a rename of Al Jouf Cement, National
+    Agricultural Development Company, Al Jouf Cement Co. (JOUF CEMENT, Materials): the names share only
+    ''agricultural'', ''al'', ''development'', ''jouf'''
+  against:
+  - Al Jouf Cement
+  - National Agricultural Development Company
+  - Al Jouf Cement Co.
+Mobile Telecommunication Company Saudi Arabia:
+  decision: same
+  issuer: Zain KSA
+  reason: listing short name ZAIN KSA; Zain KSA is Mobile Telecommunication Company Saudi Arabia
+Arabian Internet and Communications Services Co.:
+  decision: different
+  reason: 'SOLUTIONS (Software & Services) is a separate listed company, not a rename of Saudi Manpower
+    Solutions Co. (SMASCO, Commercial & Professional Svc), Dar Albalad for Business Solutions Co. (DBS,
+    Software & Services): the names share only no word'
+  against:
+  - Saudi Manpower Solutions Co.
+  - Dar Albalad for Business Solutions Co.
+Al Hammadi Holding:
+  decision: different
+  reason: 'ALHAMMADI (Health Care Equipment & Svc) is a separate listed company, not a rename of Al Kathiri
+    Holding, Al Kathiri Holding Co. (ALKATHIRI, Materials), Al Gassim Investment Holding Co. (GACO, Food
+    & Beverages): the names share only ''al'', ''holding'''
+  against:
+  - Al Kathiri Holding
+  - Al Kathiri Holding Co.
+  - Al Gassim Investment Holding Co.
+Scientific and Medical Equipment House Co.:
+  decision: same
+  issuer: Dar Al Medical and Scientific Equipment
+  reason: the existing 2025 filing reads the Arabic of Scientific and Medical Equipment House (listing
+    short name EQUIPMENT HOUSE)
+Saudi Chemical Co.:
+  decision: same
+  issuer: Saudi Chemical Holding
+  reason: the existing filings read Saudi Chemical Holding Company; the listing short name is CHEMICAL
+Sustained Infrastructure Holding Co.:
+  decision: same
+  issuer: Sustained Infrastructure Holding (SISCO)
+  reason: SISCO is its short name
+Saudi Ground Services Co.:
+  decision: different
+  reason: 'SGS (Transportation) is a separate listed company, not a rename of Saudi Automotive Services
+    Co. (SASCO, Consumer Discretionary Distribution & Retail), SAL Saudi Logistics Services, SAL Saudi
+    Logistics Services Co. (SAL, Transportation): the names share only ''saudi'', ''services'''
+  against:
+  - Saudi Automotive Services Co.
+  - SAL Saudi Logistics Services
+  - SAL Saudi Logistics Services Co.
+Saudi Public Transport Co.:
+  decision: same
+  issuer: Saudi Public Transport (SAPTCO)
+  reason: SAPTCO is its short name
+United International Transportation Co.:
+  decision: same
+  issuer: United International Transportation (Budget Saudi)
+  reason: Budget Saudi is its brand
+Middle East Pharmaceutical Industries Co.:
+  decision: different
+  reason: 'AVALON PHARMA (Pharma, Biotech & Life Sciences) is a separate listed company, not a rename
+    of Middle East Healthcare, Middle East Paper, Middle East Paper Co. (MEPCO, Materials): the names
+    share only ''east'', ''middle'''
+  against:
+  - Middle East Healthcare
+  - Middle East Paper
+  - Middle East Paper Co.
+Jamjoom Pharmaceuticals Factory Co.:
+  decision: same
+  issuer: Jamjoom Pharmaceuticals
+  reason: same company, short name
+Saudi Pharmaceutical Industries and Medical Appliances Corp.:
+  decision: same
+  issuer: SPIMACO
+  reason: listing short name SPIMACO
+Umm Al Qura for Development and Construction Co.:
+  decision: different
+  reason: 'MASAR (Real Estate Mgmt & Dev''t) is a separate listed company, not a rename of Al Masar Al
+    Shamil Education Co. (ALMASAR ALSHAMIL, Consumer Services), Umm Al-Qura Cement Co. (UACC, Materials),
+    Makkah Construction and Development Co. (MCDC, Real Estate Mgmt & Dev''t): the names share only ''al'',
+    ''and'', ''construction'', ''development'', ''qura'', ''umm'''
+  against:
+  - Al Masar Al Shamil Education Co.
+  - Umm Al-Qura Cement Co.
+  - Makkah Construction and Development Co.
+Alandalus Property Co.:
+  decision: same
+  issuer: Al Andalus Property
+  reason: same name apart from spacing
+Sumou Real Estate Co.:
+  decision: different
+  reason: 'SUMOU (Real Estate Mgmt & Dev''t) is a separate listed company, not a rename of Saudi Real
+    Estate Co. (ALAKARIA, Real Estate Mgmt & Dev''t), Banan Real Estate Co. (BANAN, Real Estate Mgmt &
+    Dev''t), Alramz Real Estate Co. (AlRAMZ, Real Estate Mgmt & Dev''t): the names share only ''estate'',
+    ''real'''
+  against:
+  - Saudi Real Estate Co.
+  - Banan Real Estate Co.
+  - Alramz Real Estate Co.
+Banan Real Estate Co.:
+  decision: different
+  reason: 'BANAN (Real Estate Mgmt & Dev''t) is a separate listed company, not a rename of Saudi Real
+    Estate Co. (ALAKARIA, Real Estate Mgmt & Dev''t), Sumou Real Estate Co. (SUMOU, Real Estate Mgmt &
+    Dev''t), Alramz Real Estate Co. (AlRAMZ, Real Estate Mgmt & Dev''t): the names share only ''estate'',
+    ''real'''
+  against:
+  - Saudi Real Estate Co.
+  - Sumou Real Estate Co.
+  - Alramz Real Estate Co.
+Alramz Real Estate Co.:
+  decision: different
+  reason: 'AlRAMZ (Real Estate Mgmt & Dev''t) is a separate listed company, not a rename of Saudi Real
+    Estate Co. (ALAKARIA, Real Estate Mgmt & Dev''t), Sumou Real Estate Co. (SUMOU, Real Estate Mgmt &
+    Dev''t), Banan Real Estate Co. (BANAN, Real Estate Mgmt & Dev''t): the names share only ''estate'',
+    ''real'''
+  against:
+  - Saudi Real Estate Co.
+  - Sumou Real Estate Co.
+  - Banan Real Estate Co.
+Dar Al Majed Real Estate Co.:
+  decision: different
+  reason: 'ALMAJDIAH (Real Estate Mgmt & Dev''t) is a separate listed company, not a rename of Dar Alarkan
+    Real Estate Development Co. (DAR ALARKAN, Real Estate Mgmt & Dev''t): the names share only ''dar'',
+    ''estate'', ''real'''
+  against:
+  - Dar Alarkan Real Estate Development Co.
+Makkah Construction and Development Co.:
+  decision: different
+  reason: 'MCDC (Real Estate Mgmt & Dev''t) is a separate listed company, not a rename of Umm Al Qura
+    for Development and Construction Co. (MASAR, Real Estate Mgmt & Dev''t): the names share only ''and'',
+    ''construction'', ''development'''
+  against:
+  - Umm Al Qura for Development and Construction Co.
+Dar Alarkan Real Estate Development Co.:
+  decision: different
+  reason: 'DAR ALARKAN (Real Estate Mgmt & Dev''t) is a separate listed company, not a rename of First
+    Avenue Real Estate Development, Kinan International Real Estate Development, Dar Al Majed Real Estate
+    Co. (ALMAJDIAH, Real Estate Mgmt & Dev''t): the names share only ''dar'', ''development'', ''estate'',
+    ''real'''
+  against:
+  - First Avenue Real Estate Development
+  - Kinan International Real Estate Development
+  - Dar Al Majed Real Estate Co.
+Arabian Contracting Services Co.:
+  decision: different
+  reason: 'ALARABIA (Media and Entertainment) is a separate listed company, not a rename of Gas Arabian
+    Services, Gas Arabian Services Co. (GAS, Capital Goods): the names share only ''arabian'', ''services'''
+  against:
+  - Gas Arabian Services
+  - Gas Arabian Services Co.
+Etihad GO Telecom Co.:
+  decision: same
+  issuer: Etihad Atheeb Telecommunication
+  reason: 'a rename: Etihad Atheeb Telecommunication (Tadawul 7040) is listed as Etihad GO Telecom (listing
+    short name GO TELECOM)'
+Sinad Holding Co.:
+  decision: same
+  issuer: Aseer Trading Tourism Industry Agriculture Real Estate and Contracting
+  reason: 'a rename: Aseer Trading, Tourism, Manufacturing and Real Estate (Tadawul 4080) is listed as
+    Sinad Holding (listing short name SINAD HOLDING)'

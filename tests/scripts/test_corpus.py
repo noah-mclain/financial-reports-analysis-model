@@ -232,3 +232,161 @@ def test_labelled_controls_pass() -> None:
         GOLDEN,
     )
     assert report.errors == []
+
+
+def test_new_leaves_out_documents_that_are_already_measured() -> None:
+    from corpus import to_fetch
+
+    documents = [
+        {**doc("old", "Savola Group", "train"), "id": "old"},
+        {**doc("broken", "Savola Group", "train"), "id": "broken"},
+        {**doc("fresh", "Jarir Marketing", "train"), "id": "fresh"},
+        {**doc("other", "Jarir Marketing", "blind"), "id": "other"},
+    ]
+    fetched = {
+        "old": {"pool": "train", "status": "new", "sha256": "aa"},
+        # A refused download is recorded as failed, with no measurement: a new run tries it again,
+        # as it does when the file has been saved from a browser to the path `fetch` prints.
+        "broken": {"pool": "train", "status": "failed", "error": "PermissionError: refused"},
+    }
+    assert [d["id"] for d in to_fetch(documents, fetched)] == ["old", "broken", "fresh", "other"]
+    assert [d["id"] for d in to_fetch(documents, fetched, new=True)] == ["broken", "fresh", "other"]
+    assert [d["id"] for d in to_fetch(documents, fetched, pool="blind", new=True)] == ["other"]
+
+
+def test_fetch_new_downloads_only_what_is_not_measured(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import corpus
+
+    candidates = tmp_path / "candidates.yaml"
+    candidates.write_text(
+        "documents:\n"
+        "  - {id: old, issuer: Savola Group, pool: train, role: corporate, url: 'https://x.example/old.pdf'}\n"
+        "  - {id: broken, issuer: Savola Group, pool: train, role: corporate, url: 'https://refuses.example/b.pdf'}\n"
+        "  - {id: fresh, issuer: Jarir Marketing, pool: train, role: corporate, url: 'https://x.example/fresh.pdf'}\n",
+        encoding="utf-8",
+    )
+    fetched = tmp_path / "fetched.yaml"
+    fetched.write_text(
+        "documents:\n  old: {pool: train, status: new, sha256: aa, pages: 3, text_layer: digital}\n"
+        "  broken: {pool: train, status: failed, error: 'PermissionError: refused'}\n",
+        encoding="utf-8",
+    )
+    downloaded: list[str] = []
+
+    def fake_download(url: str, dest: Any, polite: Any) -> None:
+        downloaded.append(url)
+        if "refuses" in url:
+            raise PermissionError("disallowed by robots.txt")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"%PDF-1.7 fresh")
+
+    monkeypatch.setattr(corpus, "CANDIDATES", candidates)
+    monkeypatch.setattr(corpus, "FETCHED", fetched)
+    monkeypatch.setattr(corpus, "ROOT", tmp_path)  # the by-hand list prints paths under it
+    monkeypatch.setattr(corpus, "STORE", tmp_path / "store")
+    monkeypatch.setattr(corpus, "download", fake_download)
+    monkeypatch.setattr(
+        corpus,
+        "measure",
+        lambda path: {"pages": 2, "pages_without_text": 0, "text_layer": "digital"},
+    )
+
+    assert corpus.main(["fetch", "--new"]) == 0
+    # The refused file is tried again and recorded as failed, as plain `fetch` records it.
+    assert downloaded == ["https://refuses.example/b.pdf", "https://x.example/fresh.pdf"]
+    recorded = corpus.load_yaml(fetched)["documents"]
+    assert set(recorded) == {"old", "broken", "fresh"}
+    assert recorded["broken"]["status"] == "failed"
+    assert recorded["broken"]["error"].startswith("PermissionError")
+    assert recorded["old"]["sha256"] == "aa"  # earlier measurement untouched
+    assert recorded["fresh"]["pages"] == 2
+
+
+@pytest.mark.parametrize("flags", [[], ["--new"]])
+def test_a_refused_host_is_recorded_and_listed_the_same_way_with_or_without_new(
+    flags: list[str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Any,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import corpus
+
+    candidates = tmp_path / "candidates.yaml"
+    candidates.write_text(
+        "documents:\n"
+        "  - {id: shut, issuer: Savola Group, pool: train, role: corporate, url: 'https://shut.example/s.pdf'}\n",
+        encoding="utf-8",
+    )
+    fetched = tmp_path / "fetched.yaml"
+
+    def refuse(url: str, dest: Any, polite: Any) -> None:
+        raise PermissionError("robots.txt unreachable: Remote end closed connection")
+
+    monkeypatch.setattr(corpus, "CANDIDATES", candidates)
+    monkeypatch.setattr(corpus, "FETCHED", fetched)
+    monkeypatch.setattr(corpus, "ROOT", tmp_path)
+    monkeypatch.setattr(corpus, "STORE", tmp_path / "store")
+    monkeypatch.setattr(corpus, "download", refuse)
+
+    assert corpus.main(["fetch", *flags]) == 0
+    # The convention: the refusal is recorded as failed with its cause, and the file is listed
+    # for saving from a browser; the entry is replaced by the measurement once it is saved.
+    assert corpus.load_yaml(fetched)["documents"] == {
+        "shut": {
+            "pool": "train",
+            "status": "failed",
+            "error": "PermissionError: robots.txt unreachable: Remote end closed connection",
+        }
+    }
+    assert "store/train/shut.pdf" in capsys.readouterr().err
+
+
+def test_fetch_can_be_limited_to_named_documents() -> None:
+    from corpus import to_fetch
+
+    documents = [{**doc(i, "Savola Group", "train"), "id": i} for i in ("a", "b", "c")]
+    fetched = {"a": {"pool": "train", "status": "new", "sha256": "aa"}}
+    assert [d["id"] for d in to_fetch(documents, fetched, ids=["a", "c"])] == ["a", "c"]
+    assert [d["id"] for d in to_fetch(documents, fetched, ids=["a", "c"], new=True)] == ["c"]
+    with pytest.raises(ValueError, match="nope"):
+        to_fetch(documents, fetched, ids=["a", "nope"])
+
+
+def test_a_document_downloaded_again_with_the_same_bytes_keeps_its_retrieval_date(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    import hashlib
+
+    import corpus
+
+    data = b"%PDF-1.7 same bytes"
+    candidates = tmp_path / "candidates.yaml"
+    candidates.write_text(
+        "documents:\n  - {id: old, issuer: Savola Group, pool: train, role: corporate, "
+        "url: 'https://x.example/old.pdf'}\n",
+        encoding="utf-8",
+    )
+    fetched = tmp_path / "fetched.yaml"
+    fetched.write_text(
+        "documents:\n  old: {pool: train, status: new, retrieved: '2026-09-26', "
+        f"sha256: {hashlib.sha256(data).hexdigest()}, pages: 2}}\n",
+        encoding="utf-8",
+    )
+
+    def fake_download(url: str, dest: Any, polite: Any) -> None:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(data)
+
+    monkeypatch.setattr(corpus, "CANDIDATES", candidates)
+    monkeypatch.setattr(corpus, "FETCHED", fetched)
+    monkeypatch.setattr(corpus, "STORE", tmp_path / "store")
+    monkeypatch.setattr(corpus, "download", fake_download)
+    monkeypatch.setattr(
+        corpus,
+        "measure",
+        lambda path: {"pages": 2, "pages_without_text": 0, "text_layer": "digital"},
+    )
+    assert corpus.main(["fetch", "--id", "old"]) == 0
+    assert corpus.load_yaml(fetched)["documents"]["old"]["retrieved"] == "2026-09-26"

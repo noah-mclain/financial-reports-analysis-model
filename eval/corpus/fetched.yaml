@@ -27,6 +27,24 @@ documents:
     sha256: 16a325bd2fc3cafc95a5dc8475717af7f2a2c496e4fe7c0290a1c2ae872eec06
     status: new
     text_layer: mixed
+  ades-holding-2026-ar-interim:
+    bytes: 1075287
+    pages: 29
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 1a02ad6a4d2f1425fb2147b052427cb7cdc05aaf95f88610ff225e8c36aa9b03
+    status: new
+    text_layer: digital
+  ades-holding-2026-en-interim:
+    bytes: 1316335
+    pages: 29
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 6a5c045338c993d4d8c7d4966a3cac4e508c0113fd5c1b21eb897282a019b5ae
+    status: new
+    text_layer: digital
   advanced-building-industries-2025-en:
     bytes: 2891129
     pages: 72
@@ -153,6 +171,24 @@ documents:
     sha256: 6505c2ecc716082f896a7eb262499741b826a2df6e48caf40fd9612556d90378
     status: new
     text_layer: mixed
+  al-kathiri-holding-2026-ar-interim:
+    bytes: 1744544
+    pages: 25
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: b189a0f0e6ea34e9a1e869caab4bb81598ba8a3e23b51dc9ecb5de80310b80a3
+    status: new
+    text_layer: digital
+  al-kathiri-holding-2026-en-interim:
+    bytes: 1616089
+    pages: 27
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 7305fc748103d0545ea635a1405bb43f23b323d1f6be24f3e718e0e5f2142dad
+    status: new
+    text_layer: mixed
   al-kathiri-holding-na-ar:
     bytes: 2225532
     pages: 39
@@ -175,7 +211,7 @@ documents:
     bytes: 1146915
     pages: 63
     pages_without_text: 4
-    pool: model_test
+    pool: train
     retrieved: '2026-09-26'
     sha256: 7c1b5da9d93a865ccd94b9237bc3f97b9529feda6068f303a46fdaa8a418154c
     status: new
@@ -196,6 +232,24 @@ documents:
     pool: blind
     retrieved: '2026-09-26'
     sha256: 3739c85c6251ccb7cb99c47b490b936371311433fae492af76e749fd4d9f7d0c
+    status: new
+    text_layer: mixed
+  alkhaleej-training-and-education-2026-ar-interim:
+    bytes: 1177563
+    pages: 19
+    pages_without_text: 12
+    pool: blind
+    retrieved: '2026-10-02'
+    sha256: 139d5b2880271615280201209d5017dd021f81bf2267a71dd94b66ce900e058d
+    status: new
+    text_layer: mixed
+  alkhaleej-training-and-education-2026-en-interim:
+    bytes: 1158468
+    pages: 20
+    pages_without_text: 13
+    pool: blind
+    retrieved: '2026-10-02'
+    sha256: d60d666cd46c4cff7cf7c7beb09b19dabd03e4e0ead214ab8bafeb030255baf7
     status: new
     text_layer: mixed
   almarai-company-2022-ar:
@@ -225,6 +279,24 @@ documents:
     sha256: 1507325b509b6a326bdb5ab8eb94fd531d8235f027eef902fbc062d31881fd8d
     status: existing_issuer
     text_layer: mixed
+  almoosa-health-2026-ar-interim:
+    bytes: 1108815
+    pages: 21
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: a36bf50b69106471bc41f86dbed307257b80bc219844c3ee91fc1df35e7063d8
+    status: new
+    text_layer: digital
+  almoosa-health-2026-en-interim:
+    bytes: 1878331
+    pages: 21
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 2a8e42ae931096e11bb8e6b39fdac8a56b2909ca5ed2f25763c1b83b9a31c3f6
+    status: new
+    text_layer: digital
   alrajhi-2025-en:
     bytes: 9802593
     pages: 432
@@ -234,6 +306,60 @@ documents:
     sha256: d12f9a719295028e7c65e86fd1421a0690be6ca4b4033d8eacccfc3d3b7a9b3c
     status: new
     text_layer: mixed
+  alramz-real-estate-2026-ar-interim:
+    bytes: 1888514
+    pages: 19
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 7e9241b545835d1b6e1435f8bce90f35a8e9bae87bd48481acd2ecbf52ac7d8a
+    status: new
+    text_layer: mixed
+  alramz-real-estate-2026-en-interim:
+    bytes: 907020
+    pages: 21
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: bfc08050288500a25aa168b467cf3320ec4585aace784cfd16fd456c89e10d5d
+    status: new
+    text_layer: mixed
+  alujain-2026-ar-interim:
+    bytes: 783419
+    pages: 18
+    pages_without_text: 0
+    pool: blind
+    retrieved: '2026-10-02'
+    sha256: aee82eaf227bef1a6d1b2d868873b9d090d2915c8c3f7a04d14c58d65787da05
+    status: new
+    text_layer: digital
+  alujain-2026-en-interim:
+    bytes: 651294
+    pages: 21
+    pages_without_text: 0
+    pool: blind
+    retrieved: '2026-10-02'
+    sha256: 08520f0480e1ef51af7995ce8728a86723f5134a1be7e5564ee40240d6bfe2a2
+    status: new
+    text_layer: digital
+  anaam-international-holding-group-2026-ar-interim:
+    bytes: 2011294
+    pages: 17
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 658d54f6db556684e5c4e567856103fecf630665cf7e55853e8a06d51cd58e15
+    status: new
+    text_layer: mixed
+  anaam-international-holding-group-2026-en-interim:
+    bytes: 1734644
+    pages: 18
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 19ec60e8f8fb96650b5b4b47129289a160be1e0f1455c4c651cb4ad068f01ec3
+    status: new
+    text_layer: digital
   arab-banking-corporation-2025-ar:
     bytes: 2448155
     pages: 92
@@ -243,6 +369,24 @@ documents:
     sha256: a20e9d80fe17746d6ab4e2cf0966db1c55ff037489bf449b9a577efce58831af
     status: new
     text_layer: mixed
+  arab-sea-information-system-2026-ar-interim:
+    bytes: 1024360
+    pages: 22
+    pages_without_text: 0
+    pool: model_test
+    retrieved: '2026-10-02'
+    sha256: c9bdccf9fa408afc2cb44648c6c26db44516598b81af3aba1e8facdd5c925904
+    status: new
+    text_layer: digital
+  arab-sea-information-system-2026-en-interim:
+    bytes: 950064
+    pages: 25
+    pages_without_text: 0
+    pool: model_test
+    retrieved: '2026-10-02'
+    sha256: 5dcb671239c37ea0299136e78dee3d88ae6d98d0079f1d6b78a06415bea4b4f3
+    status: new
+    text_layer: digital
   arabian-cement-2021-en:
     bytes: 1782036
     pages: 64
@@ -270,6 +414,24 @@ documents:
     sha256: 87524b5f5c473fe7a0dc903e2f3524d635a2aa0979a6500c7c419efbfa6560e0
     status: new
     text_layer: mixed
+  arabian-mills-for-food-products-2026-ar-interim:
+    bytes: 889111
+    pages: 25
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 0bb7372b6e28391f5a3f35d62b8646aba5691f7f6bcc7f62556f2442d09a815d
+    status: new
+    text_layer: digital
+  arabian-mills-for-food-products-2026-en-interim:
+    bytes: 1032803
+    pages: 26
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 1f56569a6fe400e69981a1023061bde14e9531855b84f69c734e8f5d473f9277
+    status: new
+    text_layer: digital
   arabian-pipes-2024-en:
     bytes: 3536213
     pages: 46
@@ -288,6 +450,24 @@ documents:
     sha256: 1be92a99213bcd9b830cb6ad30d9d4144db4b1bdd8c95eeae49097fc2b90fdff
     status: new
     text_layer: mixed
+  armah-sports-2026-ar-interim:
+    bytes: 1566768
+    pages: 16
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 79954045b56e250b21ad28d291f72296ea83af40f3a639b1e7e6831536568a26
+    status: new
+    text_layer: digital
+  armah-sports-2026-en-interim:
+    bytes: 2105481
+    pages: 16
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 16b5e51a3c79c45847f3750c01f5e6d13a7b2ba88f40450f0ce694776a5ff716
+    status: new
+    text_layer: digital
   arriyadh-development-2025-en-interim:
     bytes: 2534097
     pages: 27
@@ -358,6 +538,24 @@ documents:
     pool: train
     retrieved: '2026-09-26'
     sha256: c588b3b6c3ec6db1af0ccd942ac7e9f49d07a502767e338a27f32df04cda0f4c
+    status: new
+    text_layer: mixed
+  batic-investment-and-logistics-2026-ar-interim:
+    bytes: 1916875
+    pages: 24
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 55d5db068d9c697661f6fc2ff434cce74323810ea4fa5268104ec551429e9575
+    status: new
+    text_layer: mixed
+  batic-investment-and-logistics-2026-en-interim:
+    bytes: 1746050
+    pages: 23
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 9091951848dd08d5347d25869f580a1b0489d1729d8e289b261a07bca9a8c47c
     status: new
     text_layer: mixed
   bawan-2025-ar:
@@ -514,6 +712,24 @@ documents:
     sha256: d877b4f39415af4eaba685ddfc7d8a592e00cdd498f8dc2885f3b564a0c8c4e4
     status: new
     text_layer: mixed
+  dar-albalad-for-business-solutions-2026-ar-interim:
+    bytes: 1135983
+    pages: 23
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 8b58674a7317cc1238fb9f40d4032c600022e9715371e8664b4e53d662c96dc6
+    status: new
+    text_layer: mixed
+  dar-albalad-for-business-solutions-2026-en-interim:
+    bytes: 627037
+    pages: 22
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: e4f2eb49e3365e93c966ef27253ecc0bf59680bc3d8eab6d1cc78cea842af4ff
+    status: new
+    text_layer: mixed
   deyaar-development-2025-ar-interim:
     bytes: 903708
     pages: 24
@@ -521,6 +737,24 @@ documents:
     pool: train
     retrieved: '2026-09-26'
     sha256: 6ffb51fb54fdbe6f973bd7fbfcd4225096c33d7408d021f37a78e298fafdbb60
+    status: new
+    text_layer: mixed
+  dr-soliman-abdel-kader-fakeeh-hospital-2026-ar-interim:
+    bytes: 1691065
+    pages: 22
+    pages_without_text: 1
+    pool: blind
+    retrieved: '2026-10-02'
+    sha256: 594d0315aad352d6137fcacfe0d3fe8e9d401d698afeed8b4a36cd81a032155c
+    status: new
+    text_layer: mixed
+  dr-soliman-abdel-kader-fakeeh-hospital-2026-en-interim:
+    bytes: 1750281
+    pages: 27
+    pages_without_text: 1
+    pool: blind
+    retrieved: '2026-10-02'
+    sha256: 6b2fc33561d120d05408fa80f88cd4095b4b63cb3760efa00fef3c3eacc97c62
     status: new
     text_layer: mixed
   dr-sulaiman-al-habib-medical-services-2024-en-interim:
@@ -712,6 +946,24 @@ documents:
     sha256: 06837966682a32fd4bb943b3c51fca6c5d231163f393ab5855ceeb2ccbd3c6de
     status: new
     text_layer: mixed
+  emaar-the-economic-city-2026-ar-interim:
+    bytes: 1017125
+    pages: 33
+    pages_without_text: 0
+    pool: model_test
+    retrieved: '2026-10-02'
+    sha256: af6a2f66d989a02a848012a4651286c0b0f1406a16a79b740f7d7b7db917e2f5
+    status: new
+    text_layer: digital
+  emaar-the-economic-city-2026-en-interim:
+    bytes: 960287
+    pages: 35
+    pages_without_text: 0
+    pool: model_test
+    retrieved: '2026-10-02'
+    sha256: e3671ba4087fcd6f0318ddfbdde34c850b075340548e52edb1939796c403e516
+    status: new
+    text_layer: digital
   etihad-atheeb-telecommunication-2025-en-interim:
     bytes: 5979301
     pages: 23
@@ -728,6 +980,15 @@ documents:
     pool: train
     retrieved: '2026-09-26'
     sha256: 3524b45a991dd0d1259a1ee9cc44b92471b7e566743a2a343d6eafa22ae4ae85
+    status: new
+    text_layer: mixed
+  etihad-etisalat-2026-ar-interim:
+    bytes: 1331138
+    pages: 14
+    pages_without_text: 2
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: e1317107b683f34e02fa69606ff084a721d1270383b5d62218495047ada29ff3
     status: new
     text_layer: mixed
   etihad-etisalat-2026-en-interim:
@@ -947,6 +1208,24 @@ documents:
     sha256: c2b379c01e2b6f71ccf486374b0effd9aa9b72a74bd2a8e2cd3755da21cf6945
     status: new
     text_layer: digital
+  jahez-international-2026-ar-interim:
+    bytes: 1885741
+    pages: 32
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 4ae12a55a51098fbb18662b242b22e20d9cd8d4722d881ef5dbb77fcd97a43ba
+    status: new
+    text_layer: digital
+  jahez-international-2026-en-interim:
+    bytes: 1939742
+    pages: 33
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 707a731fba17ff32acd574284d4f7f0c868c4b60707b7d1e17dfdb9e29e9a927
+    status: new
+    text_layer: digital
   jamjoom-pharmaceuticals-2024-en:
     bytes: 2229166
     pages: 54
@@ -1017,6 +1296,24 @@ documents:
     pool: train
     retrieved: '2026-09-26'
     sha256: c6b772ecb19c39d33098f32877b0630aa5ecd2852ef02893ed4584d44dc29401
+    status: new
+    text_layer: mixed
+  l-azurde-company-for-jewelry-2026-ar-interim:
+    bytes: 656149
+    pages: 14
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 9342b54c226e3aca9aed9a516bb51095447baa0e032c045f0dbac55e3aac458a
+    status: new
+    text_layer: mixed
+  l-azurde-company-for-jewelry-2026-en-interim:
+    bytes: 749407
+    pages: 15
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: a598f9b13a8ecb467179e396ed907387ad4d8b931c0952f773cc680531f7facc
     status: new
     text_layer: mixed
   lecico-2025q2-en:
@@ -1109,6 +1406,24 @@ documents:
     sha256: d18c7b1bbf37bb7cd39c4cf33446a2d29cbddfc184f54a17d2f70327e794e862
     status: new
     text_layer: mixed
+  miahona-2026-ar-interim:
+    bytes: 1209860
+    pages: 24
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: a483e477bbc45f699cd796dec35f0fccb0c9abc2f6a62d4e2309d40b7e4b1ae0
+    status: new
+    text_layer: mixed
+  miahona-2026-en-interim:
+    bytes: 2411283
+    pages: 28
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 98300ac7cd325e2f05eca9940ad383a6d769f2a395b04748778c46105b64914c
+    status: new
+    text_layer: digital
   middle-east-financial-investment-2017-en:
     bytes: 477786
     pages: 29
@@ -1208,6 +1523,24 @@ documents:
     sha256: 5329b70e5c8264ee1c0d14478d8dea6203bd3d82291ca96f347080e30a01fb40
     status: new
     text_layer: mixed
+  najran-cement-2026-ar-interim:
+    bytes: 1608966
+    pages: 18
+    pages_without_text: 1
+    pool: blind
+    retrieved: '2026-10-02'
+    sha256: 6c21607f5588746c843432b0629d778098e5021fd32a43ce493745b023f80e30
+    status: new
+    text_layer: mixed
+  najran-cement-2026-en-interim:
+    bytes: 2022318
+    pages: 16
+    pages_without_text: 1
+    pool: blind
+    retrieved: '2026-10-02'
+    sha256: df66df053decc483e06b062c7f15017c84a884732c052e9389e9f176da9a4a4b
+    status: new
+    text_layer: mixed
   naseej-2022-ar:
     bytes: 4387368
     pages: 59
@@ -1271,6 +1604,42 @@ documents:
     sha256: d9f4c21eb7e5c33bb82bd2c2c6995ead4397590a2d36bb02a51e3d6469b45a2f
     status: new
     text_layer: mixed
+  nofoth-food-products-2026-ar-interim:
+    bytes: 2051859
+    pages: 23
+    pages_without_text: 1
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 35c341872a015a04e322ccb2d251c805399356c70037bce8b90ad9ce5f3ed2d4
+    status: new
+    text_layer: mixed
+  nofoth-food-products-2026-en-interim:
+    bytes: 1242139
+    pages: 24
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 47c2d4158c0bc303c405f843a139d6e2077d74faa5aba9dec24b7860366bbaba
+    status: new
+    text_layer: digital
+  northern-region-cement-2026-ar-interim:
+    bytes: 944101
+    pages: 18
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 0272775cff170d7ba45e8acd8e7cc12e58bf2097fe53bdac7ae90f40898a91bc
+    status: new
+    text_layer: digital
+  northern-region-cement-2026-en-interim:
+    bytes: 887862
+    pages: 17
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 437e1b1be8de900d0b9a54340d19073fc7f247d01f6ee1b6abf9f280a0018236
+    status: new
+    text_layer: digital
   orascom-construction-2025-en:
     bytes: 1674617
     pages: 53
@@ -1379,6 +1748,24 @@ documents:
     sha256: 42d71071dd21a3a74edf2c68d1f73ea14e2c4e8b11a2084f0499fe8b65595b37
     status: new
     text_layer: mixed
+  red-sea-international-2026-ar-interim:
+    bytes: 1720070
+    pages: 28
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 3d80ff027ad965e8d8a9b30cc69aca31f1d310b70c7d3200ea5d510a591aaa19
+    status: new
+    text_layer: digital
+  red-sea-international-2026-en-interim:
+    bytes: 1210553
+    pages: 28
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 09fd4166fc4a1b2c41ac91dc6fb7ed07691b2613924780948a6b5ba380516e30
+    status: new
+    text_layer: digital
   retal-urban-development-2023-ar:
     bytes: 2313499
     pages: 59
@@ -1406,6 +1793,24 @@ documents:
     sha256: e3895ddac47907b918cd4db51aeabb1b81701571dbb96cce7bbceb9cef816f5e
     status: new
     text_layer: mixed
+  sabic-2026-ar-interim:
+    bytes: 1279129
+    pages: 22
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 99c059108971965cc919ce5bebe8a621a030aee82e935144d898ab503e43d2b7
+    status: new
+    text_layer: digital
+  sabic-2026-en-interim:
+    bytes: 1093131
+    pages: 20
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 19eab943e3bba1c4d7917bacdbf0061a97b962cdf2a6f98a5fc6e906b96dd3d4
+    status: new
+    text_layer: digital
   sabic-agri-nutrients-2020-en-interim:
     bytes: 1734918
     pages: 16
@@ -1415,6 +1820,15 @@ documents:
     sha256: 163b1c64443ab62a33bc97da24f3e819c3210d6b0d41aabb68bd6f46ad6c8ba5
     status: new
     text_layer: mixed
+  sabic-agri-nutrients-2026-ar-interim:
+    bytes: 1969917
+    pages: 20
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 86d95bdb11ac7564414e2d7f7493a8c440793e89d853e4b23e489d54c72c9f5e
+    status: new
+    text_layer: digital
   sabic-agri-nutrients-2026-en-interim:
     bytes: 1181762
     pages: 20
@@ -1433,6 +1847,24 @@ documents:
     sha256: 9d222fb6278ea52462fa23350f2813da17a9cf36ad3494a3d50da6fa07883725
     status: new
     text_layer: mixed
+  saudi-arabian-mining-2026-ar-interim:
+    bytes: 3665009
+    pages: 33
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 6957e42e6fb80aa505241d85d49ab8692fe9e5b6fa8b42fd9a76a72a274ed894
+    status: new
+    text_layer: digital
+  saudi-arabian-mining-2026-en-interim:
+    bytes: 3497269
+    pages: 33
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: ab70703172af7e1357888e68b8877d47e51bd5c144c51635378e5a8d087c78f4
+    status: new
+    text_layer: digital
   saudi-arabian-refineries-2024-ar-interim:
     bytes: 1287606
     pages: 14
@@ -1440,6 +1872,24 @@ documents:
     pool: train
     retrieved: '2026-09-26'
     sha256: ea1827fff9b6198d8209eb6783f051fca959cd5ecf1140ddb17e7bb6e95aa1ba
+    status: new
+    text_layer: digital
+  saudi-arabian-refineries-2026-ar-interim:
+    bytes: 1236098
+    pages: 14
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: e8f70dc62dcaec9416d72ef3819520d7631a34b1bcd3de30ac4e178d8ebd6b2d
+    status: new
+    text_layer: digital
+  saudi-arabian-refineries-2026-en-interim:
+    bytes: 1282327
+    pages: 15
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 6c029d6272814045b796c4e2894998854438908055d868b709503b16479f4d2a
     status: new
     text_layer: digital
   saudi-cable-2024-en-interim:
@@ -1542,6 +1992,24 @@ documents:
     sha256: 4aa114b93ec015b5cc713cb7befa83e5a232c42a5b196019262328f7a2e87058
     status: new
     text_layer: mixed
+  saudi-fisheries-2026-ar-interim:
+    bytes: 1325769
+    pages: 20
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 32568427cd4162b7259d18162dac60f185896eb355eb1655157ebc90bb96088e
+    status: new
+    text_layer: digital
+  saudi-fisheries-2026-en-interim:
+    bytes: 1347996
+    pages: 22
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: c4f67699efb08e0877399469d83c062dc151d32c3198ad0bbdc341875443a26d
+    status: new
+    text_layer: digital
   saudi-industrial-development-2025-en-interim:
     bytes: 1420456
     pages: 18
@@ -1549,6 +2017,24 @@ documents:
     pool: blind
     retrieved: '2026-09-26'
     sha256: ec896c97f1e666b75f2f3d4df6d9b0f0495169598fa8c5005e37f027f900018b
+    status: new
+    text_layer: digital
+  saudi-industrial-development-2026-ar-interim:
+    bytes: 401631
+    pages: 23
+    pages_without_text: 0
+    pool: blind
+    retrieved: '2026-10-02'
+    sha256: c23a0a76e87187eabd1b8084270674b58e481f5bb7ab51b57848122ae76bc877
+    status: new
+    text_layer: digital
+  saudi-industrial-development-2026-en-interim:
+    bytes: 348436
+    pages: 23
+    pages_without_text: 0
+    pool: blind
+    retrieved: '2026-10-02'
+    sha256: 0991c13f256978132cba17dcd98cf6ba6f1040967ebf8a74bfedc013b83a2bcd
     status: new
     text_layer: digital
   saudi-industrial-export-2025-en-interim:
@@ -1732,6 +2218,24 @@ documents:
     sha256: ecdd3ff5a83cfd0bb123c0086aa7daa05aa94e5984e594f65058cf4423065564
     status: new
     text_layer: digital
+  seera-holding-2026-ar-interim:
+    bytes: 1226493
+    pages: 28
+    pages_without_text: 0
+    pool: blind
+    retrieved: '2026-10-02'
+    sha256: 580a2bb2679c0681677056f7e57bd99524bfde55e0befc1cadeeeccbb2144899
+    status: new
+    text_layer: digital
+  seera-holding-2026-en-interim:
+    bytes: 1277308
+    pages: 27
+    pages_without_text: 0
+    pool: blind
+    retrieved: '2026-10-02'
+    sha256: f7a5efe95704b0d3aaf8d9ed380cf1bd3a3acbcc7f34e2b89fd301b827efada1
+    status: new
+    text_layer: digital
   sipchem-2018-ar:
     bytes: 2291738
     pages: 77
@@ -1840,6 +2344,24 @@ documents:
     sha256: 8dd542c75de3eb7e1623aa660af321b46ac1944999574969bf4fad1bfd9640bf
     status: new
     text_layer: digital
+  specialized-medical-2026-ar-interim:
+    bytes: 3484890
+    pages: 22
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: b1b54c3792665c44841cb79d179536ca22f7e4d7736b2e1cee1019ac73fdd94f
+    status: new
+    text_layer: digital
+  specialized-medical-2026-en-interim:
+    bytes: 1952405
+    pages: 22
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 25e27ff76847419c9d291804501b26e9328f3838fd32a4893cb276a1c140b995
+    status: new
+    text_layer: digital
   spimaco-2025-en-interim:
     bytes: 1473980
     pages: 26
@@ -1847,6 +2369,24 @@ documents:
     pool: train
     retrieved: '2026-09-26'
     sha256: 6cc99c17ad7e79a6f7a15efb15381d82238ab7e29cb47918fcf79c22aa20b954
+    status: new
+    text_layer: digital
+  spimaco-2026-ar-interim:
+    bytes: 1043249
+    pages: 23
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 3b61384741f0bd88aca87a70d978a133c1ee78d15ce128b11033b649031fec8e
+    status: new
+    text_layer: digital
+  spimaco-2026-en-interim:
+    bytes: 925423
+    pages: 22
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: f1c91d9dd527fc5b727066be092aeeb84426660fe6af2b8a8b94589276337810
     status: new
     text_layer: digital
   sultan-food-2025-ar:
@@ -1867,6 +2407,42 @@ documents:
     sha256: dbe6c3a0f1edd84bc37de04ebb8e2082c1c5a1a41d72d6c9fe91a57e97c712dc
     status: new
     text_layer: mixed
+  tabuk-agricultural-development-2026-ar-interim:
+    bytes: 2344636
+    pages: 22
+    pages_without_text: 2
+    pool: blind
+    retrieved: '2026-10-02'
+    sha256: e0f834dc4013cd2f15f761066d57938c17522a2170574211167c8042580a4936
+    status: new
+    text_layer: mixed
+  tabuk-agricultural-development-2026-en-interim:
+    bytes: 2593082
+    pages: 22
+    pages_without_text: 2
+    pool: blind
+    retrieved: '2026-10-02'
+    sha256: d8f0a3eac60c170f3735258fdf7bf693998dd72c2ad9896dc30aa3095723c6a3
+    status: new
+    text_layer: mixed
+  tabuk-cement-2026-ar-interim:
+    bytes: 1081394
+    pages: 23
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 8bd47585fd750d7e838e29874c8ea87604117af6546334505a5ca8db69284c48
+    status: new
+    text_layer: digital
+  tabuk-cement-2026-en-interim:
+    bytes: 1198809
+    pages: 24
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 485c73d6a2b48a23893097c8f17dcd57d29bc39e4270b8ab3e9422f367488c58
+    status: new
+    text_layer: digital
   takween-advanced-industries-na-ar:
     bytes: 4486565
     pages: 52
@@ -1901,6 +2477,24 @@ documents:
     pool: blind
     retrieved: '2026-09-27'
     sha256: 016e77082da46c0cf319d80aa589af936452b215c7bf447d145f5866311be52c
+    status: new
+    text_layer: digital
+  united-carton-industries-2026-ar-interim:
+    bytes: 871508
+    pages: 17
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: dea425ea9cb3bcb77d7161e6902a76f14dbf30c34749c8a3e50291c02edc7d8d
+    status: new
+    text_layer: digital
+  united-carton-industries-2026-en-interim:
+    bytes: 1477962
+    pages: 18
+    pages_without_text: 0
+    pool: train
+    retrieved: '2026-10-02'
+    sha256: 426d22494bf89f39e41250a3e36ba36a840240801f06bf2915547b3c32170c01
     status: new
     text_layer: digital
   united-electronics-2021-ar-interim:
@@ -1948,6 +2542,24 @@ documents:
     sha256: d3dc0cbbaeeb3d49bb4bae927db74660cf3688104cc71c1b061f98f17fef4900
     status: new
     text_layer: mixed
+  united-international-transportation-2026-ar-interim:
+    bytes: 1975977
+    pages: 19
+    pages_without_text: 0
+    pool: blind
+    retrieved: '2026-10-02'
+    sha256: 4bb839bf397e8e53c682954334224c69614e9f22b0ea1f575e79353b94542ce6
+    status: new
+    text_layer: digital
+  united-international-transportation-2026-en-interim:
+    bytes: 2564286
+    pages: 22
+    pages_without_text: 0
+    pool: blind
+    retrieved: '2026-10-02'
+    sha256: ea716d13cbaee06d577083a91965700d7a112d03b386a67576ec3ff7c1c322d0
+    status: new
+    text_layer: digital
   yamama-cement-2023-ar-interim:
     bytes: 1741087
     pages: 16
