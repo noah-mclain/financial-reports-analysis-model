@@ -29,7 +29,7 @@ Every target passes except English scan time, which runs about 10% over because 
 | Digital annual report, 275 pages | under 10 s | 2.2 to 3.6 s |
 | Scanned filing, 64 pages | under 30 s | Arabic 13 to 17 s; English about 31 to 33 s |
 
-The golden set is not held out, since tuning looked at golden pages; the held-out score waits for the `model_test` checkpoint.
+The golden set is not held out, since tuning looked at golden pages; the held-out score waits for the single `model_test` checkpoint, taken after all planned work is complete (D13).
 
 ## To be completed
 
@@ -70,6 +70,6 @@ Start with the revised plan for the schedule and gates, then the execution phase
 ## Open decisions
 
 - [ ] Merge `ingest-locate`: the pull request text is ready in `var/pr/ingest-locate.md` in the worktree.
-- [ ] When to run the `model_test` checkpoint, the only held-out score for part 1. Running it freezes `model_test` and `blind`.
+- [x] When to run the `model_test` checkpoint, the only held-out score for part 1. Running it freezes `model_test` and `blind`. Decided 2026-10-02: once, after all planned work is complete and every check passes (D13).
 - [ ] English scan time: accept about 31 to 33 s per 64 pages, or decide per document which language to read first.
 - [ ] Which of the about 12 ratios need a figure not on the face of the statements. Depreciation for EBITDA is the likely case, and converting the cash flow statement would cover it.

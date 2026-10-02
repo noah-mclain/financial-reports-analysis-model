@@ -16,7 +16,7 @@ from decimal import Decimal
 
 from fra_core.schemas import CheckResult, LineItem, Statement, StatementType
 from fra_ingest.figure_checks import diagnose_digits, flag_fractions, flag_period_outliers
-from fra_ingest.label_match import LabelIndex
+from fra_ingest.label_match import CLOSING_TOTAL_ID, LabelIndex
 from fra_ingest.sum_hierarchy import SumGroup, infer_sums
 
 _HALF = Decimal("0.5")
@@ -128,7 +128,7 @@ def check_identity(statement: Statement, index: LabelIndex) -> list[CheckResult]
     if statement.type is not StatementType.BALANCE:
         return []
     assets = _find(statement, index, "total_assets")
-    both = _find(statement, index, "total_liabilities_and_equity")
+    both = _find(statement, index, CLOSING_TOTAL_ID)
     liabilities = _find(statement, index, "total_liabilities")
     equity = _find(statement, index, "total_equity")
     results: list[CheckResult] = []

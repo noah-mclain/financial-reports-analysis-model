@@ -255,7 +255,8 @@ operators), so each negative control gets `sector: bank | insurer | other_financ
 financial documents. Only `bank`
 and `insurer` have a target here; sub-sector verdicts are reported, and how `other_financial`
 is treated is part of the week 2 decline rule, which can act on the whole group or on one
-sub-sector. Development runs use `dev` and `train`. `model_test` runs at checkpoints only. The harness refuses `blind` (R17).
+sub-sector. Development runs use `dev` and `train`. `model_test` runs at one checkpoint only (D13 in
+[06-decisions-and-risks.md](06-decisions-and-risks.md)). The harness refuses `blind` (R17).
 
 ### Done when
 
@@ -321,8 +322,10 @@ found on 11 of 12 golden documents. Juhayna 2024 AR loses its cash flow title to
 (`قالمة التنفقات`), and the landscape equity statement in Edita IFRS has no title OCR can read.
 
 The golden set is not held out: tuning looked at golden pages, as did the labelling
-reconcile. The held-out score comes from the `model_test` checkpoint, which the owner has
-deferred (running it freezes `model_test` and `blind`, corpus README rule 5).
+reconcile. The held-out score comes from the `model_test` checkpoint, which runs once, after
+all planned work is complete and every check passes (decision D13 in
+[06-decisions-and-risks.md](06-decisions-and-risks.md); running it freezes `model_test` and
+`blind`, corpus README rule 5).
 
 Other financial sub-kinds carry no target: 2 of 4 exchange operators are recognised;
 investment holdings, asset managers and consumer finance companies read as corporate because

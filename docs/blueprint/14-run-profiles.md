@@ -1,11 +1,12 @@
 # 14. Run profiles: the model route from MLX to llama.cpp, and the Docker skeleton
 
-Status: v3, 2026-10-02. The GGUF spike is measured, on two runs, and the Docker skeleton is
+Status: v4, 2026-10-02. The GGUF spike is measured, on two runs, and the Docker skeleton is
 built and measured (last section). This document closes R16 as a question
-([08-revised-plan.md](08-revised-plan.md)): the route works on a small model. It does not yet
-clear the route for the 7B, because the route uses a step that
-[01-constraints.md](01-constraints.md) 1.4 forbids on this machine (see "Decision for week 3").
-It records a first number for R19.
+([08-revised-plan.md](08-revised-plan.md)): the route works on a small model. The route uses a
+step that [01-constraints.md](01-constraints.md) 1.4 forbade on this machine; the owner amended
+that rule on 2026-10-02 for this export only, under conditions (see "Decision for week 3"). The
+7B route has not been run: the rehearsal comes first. This document records a first number for
+R19.
 
 ## The question
 
@@ -226,22 +227,32 @@ Nothing in the spike was run in Docker. The CPU-only figures come from `-ngl 0` 
 
 ## Decision for week 3
 
-**The route needs a standing rule amended, and that is the owner's decision.**
-[01-constraints.md](01-constraints.md) 1.4 says: "Never download full-precision weights. Never
-run `mlx_lm.fuse --dequantize` on this machine." The route is exactly that step. The spike ran
-`--dequantize` on the 0.5B model (about 1 GB). Until the rule is amended for the GGUF export
-only, the route is proven but not permitted for the 7B. What it costs at 7B:
+**The rule was amended on 2026-10-02 (D12 in
+[06-decisions-and-risks.md](06-decisions-and-risks.md)), for the GGUF export only.**
+[01-constraints.md](01-constraints.md) 1.4 used to say: "Never download full-precision weights.
+Never run `mlx_lm.fuse --dequantize` on this machine." The route is exactly the second step. The
+spike ran `--dequantize` on the 0.5B model (about 1 GB). Downloading full-precision weights stays
+forbidden, and so does every other use of `--dequantize`. The conditions under which the export
+may run (rehearsal, disk preflight, stop rule and the rest) are in
+[01-constraints.md](01-constraints.md) 1.4, "Conditions for the GGUF export". This document
+records what each run measured; the conditions are not repeated here. What the route costs at 7B:
 
-- **Disk, estimated:** about 15 GB for the dequantized directory and about 15 GB for the f16
-  GGUF (16-bit weights for 7.6 billion parameters), plus about 5 GB for the quantized file:
-  about 35 GB while all three exist. `df` showed about 68 GB free when measured on 2 October (it
-  moves by a few GB as caches grow; `logs/df-2026-10-02.log`), so about 33 GB would remain,
-  above the 15 GB floor in 1.4. But 1.4 also budgets about 25 GB for the bake-off's worst case,
-  and both at once would leave about 8 GB, under the floor. The intermediates can be deleted
-  once the quantized file is checked.
+- **Disk, estimated:** about 15 GB for the dequantized directory, about 15 GB for the f16 GGUF
+  (16-bit weights for 7.6 billion parameters) and about 5 GB for the quantized file. Kept side
+  by side the three would be about 35 GB (15 + 15 + 5). Under the staged deletion of condition 6
+  in 1.4 they never coexist: the dequantized directory is deleted before quantizing, so the
+  peak is the dequantized directory plus the f16 GGUF, about 30 GB (15 + 15), while the f16 GGUF
+  is written; quantizing needs the f16 GGUF plus the quantized file, about 20 GB (15 + 5). The
+  preflight figure of condition 2 is therefore about 45 GB free (30 + the 15 GB floor). All
+  of these are estimates; the rehearsal's measured sizes replace them here. `df` showed about 68
+  GB free when measured on 2 October (it moves by a few GB as caches grow;
+  `logs/df-2026-10-02.log`), which is above 45 GB at that reading. The bake-off's second
+  candidate (up to 6.0 GB, 1.4) is deleted first under condition 3. Whether the bake-off's
+  worst case of about 25 GB is already counted in that 68 GB reading is not known, so no
+  figure is claimed for the two together; the `df` taken before the run decides.
 - **Memory:** the peak of dequantizing and converting the 7B on 18 GB is not measured.
 
-If the rule is amended:
+The route, as amended:
 
 - **Route:** train the QLoRA adapter on the 4-bit MLX base as planned, then `fuse --dequantize`,
   `convert_hf_to_gguf.py` to f16, `llama-quantize`. The training itself does not change; the
@@ -251,13 +262,16 @@ If the rule is amended:
 - **Complete the snapshot** before fusing.
 - **Send `"cache_prompt": false`** in any comparison between runtimes.
 
+Runs of the 7B export recorded here (condition 7 of 1.4): none yet.
+
 Before and during week 3:
 
 - **Benchmark first.** Run an off-the-shelf Qwen2.5-7B-Instruct Q4_K_M GGUF in the container
   before training anything. Speed does not depend on the adapter, and R19's mitigation, a
   smaller model, needs its own training run.
 - **Rehearse the 7B route** with a throwaway adapter, and record peak memory, disk and any
-  quantize fallbacks.
+  quantize fallbacks (condition 1 in [01-constraints.md](01-constraints.md) 1.4). Nothing is
+  recorded yet.
 - **Quantization level is chosen by measurement, not assumed.** After the real adapter is
   trained, compare MLX with Q4_K_M and Q5_K_M on at least 50 held-out labels. Those labels come
   from a validation split of `train` or `dev` issuers, never from `model_test` or `blind`.
@@ -272,7 +286,6 @@ Before and during week 3:
 
 ## Open
 
-- The owner's decision on the `--dequantize` rule, above.
 - R19: generation speed of the 7B GGUF inside the container.
 
 What the spike cannot have shown about the 7B:
@@ -355,3 +368,16 @@ The build context is an allowlist (`.dockerignore`): the workspace sources, the 
   (checked by file lookup, not by importing). The week 2 OCR work needs either the system
   libraries or the headless wheel in the lock. `import docling` and `fra_ingest` work today,
   and the taxonomy loads (47 items).
+- **Makefile, `.env` with CRLF line endings.** The error says only "LF line endings" and does
+  not name Windows line endings (CRLF) as the cause.
+- **Makefile, ports from the environment.** A port given in the environment or on the make
+  command line is not validated (`FRA_API_PORT="80 80"` reaches the command); the whitelist
+  covers the `.env` file only.
+- **`scripts/spikes/gguf_route.sh`, port preflight.** The port is checked only at step 5, after
+  training and conversion; a preflight next to the tool checks would fail sooner.
+- **`scripts/spikes/gguf_route.sh`, shell details.** The INT and TERM trap is honoured only
+  after the current foreground command returns. `grep -q` under `pipefail` could fail on a large
+  writer (the writer gets SIGPIPE when `grep` exits early). A failing `llama-server --version`
+  gives no message. The mlx-lm version string appears both in the script and in the Python usage
+  docstring.
+- **`scripts/spikes/gguf_spike.py`,** `compare()` has no automated test.

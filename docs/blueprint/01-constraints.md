@@ -114,9 +114,64 @@ Only if the Phase 0 smoke run fails at the default wired limit:
 Rules:
 
 - Keep at least 15 GB free at all times (macOS swap grows on disk).
-- Never download full-precision weights. Never run `mlx_lm.fuse --dequantize` on this machine.
+- Never download full-precision weights.
+- Never run `mlx_lm.fuse --dequantize` on this machine, with one exception: the GGUF export of a
+  fused adapter by the route in [14-run-profiles.md](14-run-profiles.md) ("Decision for week 3"),
+  under the conditions below. Amended 2026-10-02 (decision D12 in
+  [06-decisions-and-risks.md](06-decisions-and-risks.md)): the owner's words were "you can run
+  it, but only very carefully". Every other use of `--dequantize` stays forbidden.
 - `HF_HOME=var/hf` so every model cache is visible to `make disk-report`.
 - `make disk-report` runs before any model or dataset download.
+
+### Conditions for the GGUF export
+
+The export dequantizes a 4-bit model to 16-bit weights, which the 18 GB machine has not been
+shown to hold for the 7B. The owner's words were "only very carefully"; the conditions below are
+the engineering meaning given to them, not the owner's own words. They bind the export of every
+model other than the 0.5B spike model, the 7B first; rerunning the spike (its dequantized
+directory is about 1 GB, measured in document 14) needs only the 15 GB floor. These conditions
+are the only statement of how the export is run, and document 14 holds the sizes they refer to
+and links here without repeating them. All must hold, and a run that breaks one is stopped.
+
+1. **Rehearsal first.** Before the real adapter, the 7B route is run once with a throwaway
+   adapter. The rehearsal records, in document 14: wall time; the size of each intermediate in
+   bytes (from `stat`, not `du -h`); any `llama-quantize` format fallbacks; and peak memory of
+   each step, including the load that verifies the f16 GGUF (condition 6). Peak memory is
+   recorded as the "maximum resident set size" (bytes) that `/usr/bin/time -l` prints for the
+   step. On this machine that field counted a Python child allocating 400 MB under a shell and
+   under `uv run`, while "peak memory footprint" counted only the timed process itself (1.8 MB
+   and 12 MB in those two cases), so the footprint line is not used for a wrapped command.
+   Whether the resident set size counts the memory MLX holds through Metal is not verified, so
+   the rehearsal also times the Python interpreter directly once for the dequantize step, with
+   no `uv run` or shell in between, and records both fields. `sysctl vm.swapusage` is read
+   before, during and after each step, and `sysctl kern.memorystatus_vm_pressure_level` once a
+   minute during it. The peak memory of the 7B dequantize and convert on this machine is not
+   measured yet.
+2. **Disk preflight before every run.** Free space, read with `df` at the time of the run and
+   saved to a log, is at least the peak size of the intermediates plus the 15 GB floor above. The
+   peak is estimated in document 14 until the rehearsal measures it, and the measured peak then
+   replaces the estimate there only. The reading that counts is the `df` taken before the run,
+   not the "44 GB free" of this section's heading, which was a reading from earlier.
+3. **Not while the bake-off's worst case is on disk.** The export does not start until the
+   second bake-off candidate is deleted. Condition 2 then decides whether there is room.
+4. **Nothing else heavy running** during the dequantize, convert, quantize and verification
+   steps: no training run, no docling conversion, no `llama-server` other than the verification
+   load itself, no Docker VM (R4 and R14 in [06-decisions-and-risks.md](06-decisions-and-risks.md)).
+5. **Stop rule.** The run is stopped, the intermediates are deleted, and the result goes back to
+   the owner before any retry, if the machine goes into sustained swap or free disk falls under
+   the 15 GB floor. Until the rehearsal has measured it, "sustained swap" is provisional: the
+   kernel's memory pressure level (`sysctl kern.memorystatus_vm_pressure_level`: 1 normal, 2
+   warning, 4 critical; 1 and 2 have been read on this machine, 4 has not been seen), read once
+   a minute, is 4 on two readings in a row. Swap used is not itself the test, because
+   `vm.swapusage` already showed swap in use on 2 October with no export running. The
+   rehearsal's record replaces this provisional criterion with thresholds it measured; no swap
+   size in GB is fixed before then.
+6. **Intermediates are deleted as soon as the next file is verified.** The dequantized directory
+   goes once the f16 GGUF loads and agrees with MLX, and the f16 GGUF goes once the quantized
+   file passes the acceptance rule in document 14. Each file's sha256 is logged before it is
+   deleted.
+7. **Every run is recorded in document 14:** date, free disk before and after, sizes, peak
+   memory.
 
 ## 1.5 Library facts (verified 2026-09-11, pin exactly)
 
@@ -172,7 +227,8 @@ macOS 13, and mlx publishes no wheels below 14.
   masking, a long prompt can truncate the entire completion away. Task 2.4 makes this a hard failure.
 - LoRA targets every Linear, QuantizedLinear and Embedding module in the last `num_layers`
   blocks by default, so it is architecture-agnostic (Qwen3.5 hybrid layers included).
-- `mlx_lm.fuse --dequantize`; GGUF export only for Llama, Mistral and Mixtral.
+- `mlx_lm.fuse --dequantize`; GGUF export only for Llama, Mistral and Mixtral. The rule on
+  running it is in 1.4.
 - A `qwen3_5` model implementation is present.
 
 **pandas 3.0.5.** Copy-on-Write and the dedicated string dtype are the defaults. Chained
