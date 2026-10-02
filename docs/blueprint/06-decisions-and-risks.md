@@ -2,8 +2,9 @@
 
 ## 6.1 Owner decisions
 
-These change numbers users see. Defaults below are implemented behind
-`configs/analytics.toml` so a decision can change without code changes. Each decision needs
+Most of these change numbers users see; D12 to D15 set how the work is run and what is
+shown. Defaults below are implemented behind `configs/analytics.toml` so a decision can change
+without code changes. Each decision needs
 an owner sign-off before the Phase 1 exit gate.
 
 | ID | Decision | Options | Recommended default |
@@ -19,6 +20,10 @@ an owner sign-off before the Phase 1 exit gate.
 | D9 | Base model after the bake-off | Section 01, 1.6 | Decided by the rule in 1.6 |
 | D10 | A figure the checks can name as misread (a failed sum one digit off, with one cell left as the suspect) | Replace the read figure with the one the checks give, or flag the cell and leave it as read | Decided 2026-10-01: flag only. The cell carries `digit_suspect`, the check names the figure that would settle it, and the statement is held for review ([12](12-ingest-review.md)) |
 | D11 | A statement that prints no unit multiplier (`scale_missing`) | Hold it for review, or use it at scale 1 | Decided 2026-10-01: use it, as a warning and not a reason to hold, with a footnote wherever an amount depends on the assumption, carried through to the written summary ([13](13-unit-caveats.md)) |
+| D12 | Running `mlx_lm.fuse --dequantize`, which 1.4 forbade, for the GGUF export of the 7B ([14](14-run-profiles.md)) | Keep the ban, or permit it for that export only | Decided 2026-10-02: permit it for the GGUF export only; the owner's words were "you can run it, but only very carefully". Downloading full-precision weights and every other use stay forbidden. The conditions (rehearsal, disk preflight, stop rule and others) are the engineering meaning given to "very carefully", not the owner's words, and are in [01-constraints.md](01-constraints.md) 1.4 |
+| D13 | When the `model_test` checkpoint runs (it freezes the `model_test` and `blind` pools, `eval/corpus/README.md` rule 5) | During week 2 or 3, or once at the end | Decided 2026-10-02: "when we're 110% sure that everything is done and correct". Consequence as stated here: the checkpoint is taken once, after all planned work is complete and every check passes, not in weeks 2 or 3; until then Gates A and B are reported on `dev` only and marked "not yet measured on `model_test`" ([08](08-revised-plan.md), Gates) |
+| D14 | Scanned Arabic filings that miss the scanned-page gate after the week 2 OCR bake-off | Show them as held for review, or cut them from the demo | Decided 2026-10-02: they stay in the demo, shown as held for review with their reasons; not cut, and not presented as correct ([08](08-revised-plan.md), R15). Not built yet: how such a filing is identified in the demo. The review step ([12](12-ingest-review.md)) holds a statement on failed checks and flags, and nothing there recognises a scanned Arabic filing that misses the gate |
+| D15 | Two statements of one type on one page with the same periods and layout merged as one continuation (R35) | Refuse the merge, or accept it | Decided 2026-10-02, delegated by the owner: they must not be merged. A guard for balance sheets is built and tested on synthetic parts only; income statements are not covered and R35 stays open for that type. A low-confidence grid that would otherwise have continued a closed balance sheet is left unattached, with the reason recorded. The rest is in R35 of [11-ingest-structure.md](11-ingest-structure.md) |
 
 ## 6.2 Risk register
 

@@ -121,11 +121,17 @@ restore if time is left, not the first thing to add.
 - **E. Blind.** On the blind pool, every document ends in a correct result, a correct
   decline, or a visible `needs_review` with the reason. Zero confident wrong figures.
 
+The `model_test` checkpoint runs once, after all planned work is complete and every check passes
+(D13 in [06-decisions-and-risks.md](06-decisions-and-risks.md)). Until then nothing is scored on
+`model_test`: Gates A and B are reported on `dev` only and marked "not yet measured on
+`model_test`", and the `model_test` parts of the week 2 and week 3 rows and of Gate C's
+normalization score wait for it. What Gate C is measured on before the checkpoint is not decided.
+
 ## Risks added by this revision
 
 | ID | Risk | Mitigation |
 |----|------|------------|
-| R15 | Linux OCR too weak on Arabic scans | Week 2 bake-off decides; if none passes, scanned Arabic is native-only and the demo says so |
+| R15 | Linux OCR too weak on Arabic scans | Week 2 bake-off decides; if none passes, scanned Arabic is native-only and the demo says so. On either profile, a scanned Arabic filing that misses the scanned-page gate stays in the demo, shown as held for review with its reasons, not cut and not presented as correct (D14 in [06-decisions-and-risks.md](06-decisions-and-risks.md)); how such a filing is identified in the demo is not built yet |
 | R16 | Fused adapter does not convert to GGUF cleanly | Week 1 spike, before any training run depends on it |
 | R17 | Blind documents leak into development | Issuer-grouped pools enforced by `make corpus-check`; failures fixed on non-blind documents |
 | R18 | Cloud environment cannot reach most filing hosts | Collection and fetch scripts run unchanged on the Mac; URL and sha256 recorded so the set reproduces |

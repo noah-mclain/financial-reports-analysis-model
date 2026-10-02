@@ -7,7 +7,7 @@ pools so that no score is measured on something the code or the model has alread
 |------|----------|--------------|
 | `dev` | Golden set issuers (Almarai, Juhayna, Edita). Debugging and development | Anyone, any time |
 | `train` | Source documents for model training data | The training data builders |
-| `model_test` | Scoring the model and the full pipeline | Only the eval harness, at checkpoints |
+| `model_test` | Scoring the model and the full pipeline | Only the eval harness, at the one checkpoint (D13, `docs/blueprint/06-decisions-and-risks.md`) |
 | `blind` | Never used in development. Demo documents are picked from here | Only the blind run at the end of each week, and the demo |
 
 ## Rules
