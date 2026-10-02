@@ -70,7 +70,7 @@ fields it uses; a golden contract test fails if docling's JSON stops matching th
 | `fra_ingest/header.py` | `parse_header(grid, statement_type, context) -> HeaderLayout` |
 | `fra_ingest/metadata.py` | `detect_metadata(...) -> Metadata`: scale, currency, entity, consolidated, conflicts |
 | `fra_ingest/hierarchy.py` | `infer_hierarchy(rows) -> list[RowNode]`: depth, parent, subtotal cue |
-| `fra_ingest/continuation.py` | `merge_continuations(parts) -> list[PartialStatement]` |
+| `fra_ingest/continuation.py` | `merge_continuations(parts, index) -> list[PartialStatement]` |
 | `fra_ingest/table_checks.py` | Subtotal checks and the balance sheet identity |
 | `fra_ingest/structure.py` | `structure_pdf(...)`: orchestration, cache, artifacts |
 | `fra_ingest/cli.py` | `fra-ingest structure <pdf>` |
@@ -230,7 +230,11 @@ class StructureResult(BaseModel):   # statements.raw.json
    and their value columns line up (centre x within 5% of page width); repeated header rows
    are dropped. A column whose header carries no date takes its period from the previous
    page by position before that test, on a page classified in its own right and on a tail
-   page below confidence alike.
+   page below confidence alike, also when the part before it is closed. A closed statement is
+   never continued: a balance sheet whose last row carrying values is its closing total
+   (total equity and liabilities) keeps what follows as a separate part, and a tail grid
+   that would otherwise have continued it is left unattached with `after_closed:<type>` in
+   its decision's evidence.
 9. **Hierarchy (light).** Depth from clustering label left edges; a row is a section when it
    has a label and no values, a subtotal when its label opens with a total cue in either
    language (`total`, `إجمالي`, `مجموع`), the taxonomy marks its item as a subtotal, or it has
@@ -293,7 +297,7 @@ Tests are written before the code they cover.
 | `classify` | Balance and income from labels in both languages; a notes table with statement labels rejected | fast |
 | `detect_metadata` | `'000` and `ألف`; glyph currency inferred from document text; conflicting signals flagged | fast |
 | `infer_hierarchy` | Depth from indentation; section rows; total and net cues in both languages | fast |
-| `merge_continuations` | Two parts merged; mismatched periods or columns kept apart; repeated header dropped | fast |
+| `merge_continuations` | Two parts merged; mismatched periods or columns kept apart; a balance sheet closed by its total not continued; repeated header dropped | fast |
 | Checks | Subtotal pass and fail at the D6 tolerance; a subtotal over subtotals skipped; identity pass, fail, skipped; identity through a printed liabilities-and-equity total and through the two totals | fast |
 | End to end | Almarai EN balance sheet (156-158) and income statement (159): figures, periods, scale, currency; Almarai AR the same after repair | `golden` |
 
@@ -326,7 +330,7 @@ Other bilingual pairs are reported, not gated, until the resolution question is 
 | R31 | docling's JSON changes shape between versions | Our own models of the fields used, and a golden contract test; docling is pinned |
 | R32 | A notes table taken for a primary statement | Note headings, taxonomy hits and period headers as evidence, every decision recorded in `tables`, and the balance identity as a backstop |
 | R33 | Glyph currencies with no currency word near the statement | Country of incorporation from the earliest page naming it, flagged `currency_from_domicile`; else document-level inference, flagged `currency_inferred`; the manifest scores it |
-| R35 | Two statements of one type printed on the same page with the same periods and column layout (consolidated and separate, or as reported and restated) are merged as one continuation | None in the golden set; same-page merging needs aligned columns and matching period keys. Guard to add before such a document enters: refuse the merge when the earlier part already ends in a closing total |
+| R35 | Two statements of one type printed on the same page with the same periods and column layout (consolidated and separate, or as reported and restated) are merged as one continuation | Built for balance sheets, on the same page and the next: a part whose last row carrying values is its closing total (total equity and liabilities) is closed and is not continued, so a following balance sheet stays a separate part, both flagged `ambiguous_statement:balance` and the lower-confidence one held as `duplicate_statement` (not necessarily the second). A low-confidence tail grid refused for that reason carries `after_closed:balance` in its decision. Still open, the old merge still happens: income statements, which have no closing total (rows legitimately follow net profit); a closing total whose label is not a taxonomy alias (OCR damage, or wording such as "Total liabilities and shareholders' equity"); and balance sheets that end on something else (a net-assets layout ending on total equity, or valued rows after the total). Accepted: a balance sheet printed liabilities first and assets second across two pages, or with docling numbering the equity-and-liabilities table before the assets table on one page, is now kept as two parts, and the assets half is held as `duplicate_statement`, which is visible but names the wrong cause. No such document is in the golden set, so the guard is tested on synthetic parts only |
 
 ## Results
 
