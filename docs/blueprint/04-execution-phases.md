@@ -346,11 +346,31 @@ that says what the builder does is what it will do.
   run or scoring, it is recorded with its reason and date beside the split, and it only ever
   moves an issuer out of the holdout. After the first look, an issuer that has to leave the
   holdout (because someone debugged one of its documents) is recorded as a spent look and moved
-  to fit, and every earlier holdout score is recomputed without it and shown both ways. One
-  override is made now, before any look: Al Dawaa Medical Services lands in the holdout by the
+  to fit, and every earlier holdout score is recomputed without it and shown both ways. Four
+  overrides are made now, before any look. Al Dawaa Medical Services lands in the holdout by the
   hash, but its 2023 and 2025 pages drove a locator fix
   ([09-ingest-locate.md](09-ingest-locate.md), "What tuning and review changed"), so it goes to
-  fit.
+  fit; the locator was also scored on all the corporate `train` documents, and the table names
+  nine `train` issuers whose pages drove a fix (Al Kathiri, Naba Al Saha, Al Dawaa, Herfy, Jazan,
+  Orient Takaful, Saudi Energy, United Electronics, Egypt Kuwait), of which the hash puts only Al
+  Dawaa in the holdout. Alramz Real Estate lands in the holdout too, and on 2 October, while the
+  corpus was extended, its statement pages were rendered and read by eye, to check that an Arabic
+  filing with an auditor's letter as an image still had its primary statements as text (the clean
+  rule of [eval/corpus/README.md](../../eval/corpus/README.md)); that was not tuning, but the rule
+  above is strict about looks, so it goes to fit as well, dated 2 October. Seven other `train`
+  issuers had pages rendered the same way for the same check (Anaam International Holding, Batic
+  Investment and Logistics, Dar Albalad for Business Solutions, Etihad Etisalat (Mobily),
+  L'azurde, Miahona, Nofoth Food Products) and the hash puts none of them in the holdout. Two more
+  issuers that the hash puts in the holdout had their statement pages rendered and read the same
+  day for the same check: ADES Holding (its Arabic first-quarter file, the located balance sheet
+  and profit or loss pages, found to be real text) and Saudi Industrial Investment Group (its
+  Arabic first-quarter file, page 4, the balance sheet, found to be an image, and the file was
+  then set aside; the issuer stays in `train` with older documents). By the same rule both go to
+  fit, dated 2 October. The four overrides are Al Dawaa Medical Services, Alramz Real Estate, ADES
+  Holding and Saudi Industrial Investment Group. Four more issuers were opened earlier (Nahdi
+  Medical, Aldrees, Catrion Catering, Development Works Food); they are set aside in
+  `eval/corpus/deferred.yaml`, in no pool, so the split does not place them, and one that joins
+  `train` later falls under this rule.
 - **Files.** Fit is `train.jsonl` and validation is `valid.jsonl`, the layout of
   [01-constraints.md](01-constraints.md) 1.5. The holdout is not written as `test.jsonl`, or
   anywhere in the training data directory: whether `mlx_lm lora` reads `test.jsonl` on its own was
@@ -361,25 +381,30 @@ that says what the builder does is what it will do.
   by pool, into the same `labels-<quarter>.jsonl.gz` file as the `train` rows, so the builder's
   filter on pool is the only barrier). Gate C on `model_test` at the checkpoint is scored by the
   eval harness, not from the training directory.
-- **Counts, read from `eval/corpus/candidates.yaml` and `eval/corpus/fetched.yaml` on 2 October.**
-  The `train` pool has 84 issuers and 128 documents (72 corporate issuers, 47 with an Arabic
-  document, 12 that publish both editions, 14 Egyptian). By the hash the corpus issuers fall as 54
-  fit, 12 validation and 18 holdout (85, 19 and 24 documents); after the Al Dawaa override, 55 fit
-  (89 documents), 12 validation (19) and 17 holdout (20 documents, 623 pages). The holdout that
-  will be used has 16 corporate issuers and 1 negative control (Pioneers Holding, a financial
-  company that must be declined), 8 issuers with Arabic documents, 1 with both editions and 3
-  Egyptian. No holdout document is a fully scanned file: 13 have a mixed text layer (some pages
-  have text and some do not), 7 a digital one, and 1 of them has a text layer that is unreadable
-  (`text_layer_undecodable`). In all, 45 of the holdout's 623 pages have no text layer, so a dry
-  run exercises OCR on those pages and on no whole scanned filing. Validation has 12 issuers, of
-  which 5 are negative controls, so 7 corporate issuers (10 documents), 5 with Arabic documents
-  and 1 with both editions (Naba Al Saha); that is enough for early stopping and the 50-label
-  quantization check once the SEC rows are in, and not enough to choose Arabic prompts or
-  templates. SEC filers have not been counted: no SEC output is on disk. `pool_for` already sends
-  15% of filers to `model_test`, so a 15% holdout of the rest is about 13% of all filers (0.85 x
-  0.15), and the filer count is not known. Fit keeps 10 of the 12 issuers that publish both
-  editions, so the aligned Arabic and English training pairs are already thin; a larger holdout
-  would thin them further.
+- **Counts, read from `eval/corpus/candidates.yaml` and `eval/corpus/fetched.yaml` on 2 October,
+  after the corpus was extended that day** (the extension is described in the README's "Current
+  size"). The `train` pool has 97 issuers and 177 documents (85 corporate issuers, 66 with an
+  Arabic document, 37 that publish both editions, 14 Egyptian). By the hash the issuers fall as 61
+  fit, 14 validation and 22 holdout (110, 27 and 40 documents). After the four overrides above, 65
+  fit (121 documents), 14 validation (27) and 18 holdout (29 documents, 839 pages); with only the
+  Al Dawaa override the holdout would have 21 issuers and 36 documents. The holdout that will be
+  used has 17 corporate issuers and 1 negative control (Pioneers Holding, a financial company that
+  must be declined), 12 issuers with Arabic documents (14 documents) and 13 with English ones
+  (15), 7 with both editions, and 3 Egyptian. No holdout document is a fully scanned file: 10 have
+  a mixed text layer (some pages have text and some do not) and 19 a digital one, and 1 of them
+  has a text layer that is unreadable (`text_layer_undecodable`). 24 of the 29 are interim
+  statements. In all, 41 of the holdout's 839 pages have no text layer, so a dry run exercises OCR
+  on those pages and on no whole scanned filing, and the new digital Q1 filings make the holdout
+  lighter on OCR than before. Validation has 14 issuers, of which 5 are negative controls, so 9
+  corporate issuers (18 documents of 27), 8 with Arabic documents and 5 with both editions; that
+  is enough for early stopping and the 50-label quantization check once the SEC rows are in, and
+  not enough to choose Arabic prompts or templates. SEC filers have not been counted: no SEC
+  output is on disk. `pool_for` already sends 15% of filers to `model_test`, so a 15% holdout of
+  the rest is about 13% of all filers (0.85 x 0.15), and the filer count is not known. Fit keeps
+  25 of the 37 issuers that publish both editions (the holdout 7, validation 5), so the aligned
+  Arabic and English training pairs are still thinner than the Arabic and English counts suggest;
+  a larger holdout would thin them further. These counts were derived from the two files by the
+  hash above; the split itself is not built yet.
 - **Dry runs and the holdout.** The full pipeline is rehearsed on the documents of the corpus
   holdout issuers (the pool rules are in [eval/corpus/README.md](../../eval/corpus/README.md),
   rule 6). A dry run is a look at those issuers: it reports Gate A and Gate B (label mapping),
@@ -389,9 +414,9 @@ that says what the builder does is what it will do.
   the corpus (no `train` document in `candidates.yaml` carries a `cik`) and a dry run is a PDF
   pipeline, so the SEC English stratum keeps its independence for Gate C. The residue: for the
   corpus (regional) issuers, the Gate B and Gate C figures measured before the checkpoint are
-  not a first look after the first dry run; `model_test` at the checkpoint is. Splitting the 17
+  not a first look after the first dry run; `model_test` at the checkpoint is. Splitting the 18
   corpus issuers into a dry-run half and a scoring half was considered and rejected: it would
-  leave about 8 issuers on each side.
+  leave about 9 issuers on each side.
 - **Gate C is never pooled across sources.** Pooled, the interval would be driven by US
   English labels and the gate could pass with the regional issuers contributing almost
   nothing. It is reported, each with its own interval, for three strata: SEC English labels,
@@ -400,11 +425,16 @@ that says what the builder does is what it will do.
   issuers for a bootstrap interval to mean something, which this document takes to be about 30.
   That figure is a judgement, not a measurement. A stratum that is too small is reported as
   description with its counts, marked "not shown", and waits for `model_test`. The corpus
-  holdout has 17 issuers in all, 8 with Arabic documents, so the expected outcome (not a
-  certainty, since the SEC rows are not counted yet) is that before the checkpoint Gate C is
-  judged on the SEC English stratum only and the two corpus strata are "not shown". The
-  Arabic claim, in particular, waits for the checkpoint: `model_test` has 30 issuers, 18 with
-  Arabic documents and 6 with both editions (same files).
+  holdout has 18 issuers in all (13 with English documents, 12 with Arabic ones), and `model_test`
+  has 30, 19 with Arabic documents and 8 with both editions. Both holdout strata are under the
+  judgement of about 30, so the expected outcome (not a certainty, since the SEC rows are not
+  counted yet) is still that before the checkpoint Gate C is judged on the SEC English stratum
+  only and the two corpus strata are "not shown". What changed is the description: 12 Arabic
+  issuers, 7 of them also in English, give a per-issuer picture of Arabic that 8 did not, and
+  the paired Arabic and English results of the same issuers can be read side by side. It still
+  supports no Arabic claim: the Arabic claim waits for the checkpoint, where `model_test` is
+  closer to the judgement, still short of it. The holdout is also mostly digital interim
+  statements, so it says little about scans.
 - **Uncertainty without retraining.** A bootstrap resamples a stratum's issuers with
   replacement, recomputes the metric each time and reads the spread: at least 1,000 resamples,
   the seed recorded. The statistic is the paired per-issuer difference between the adapter and
@@ -412,9 +442,9 @@ that says what the builder does is what it will do.
   of Gate C is met only if the lower end of the two-sided 95% interval of that difference is at
   least 5 points; a point estimate above 5 with an interval reaching below it is reported as
   "met on the point estimate, not shown". With under about 30 issuers in a stratum the
-  percentile bootstrap tends to give intervals that are too narrow, and on 16 regional corporate
-  issuers it shows direction and rough size and cannot reliably support a lower bound of exactly
-  5 points. Per-issuer results are published beside every interval.
+  percentile bootstrap tends to give intervals that are too narrow, and on 17 regional corporate
+  issuers (12 for Arabic) it shows direction and rough size and cannot reliably support a lower
+  bound of exactly 5 points. Per-issuer results are published beside every interval.
 - **"Critical items 99% or higher".** The 99% is judged as a one-sided 95% upper bound on the
   true error rate. With no errors seen in n independent examples, that bound is about 3 / n
   (the rule of three; exact: 1 minus 0.05 to the power 1/n). For under 1% that needs n of about

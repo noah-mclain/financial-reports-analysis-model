@@ -139,21 +139,21 @@ pipeline on the documents of the train-holdout issuers, and marked "not yet meas
 
 Run time of the checkpoint, an estimate and not measured. The budget (a target, not a limit) is
 under 1 minute for a digital report and 2 to 4 minutes for a scanned one (principle 3 above). By
-`eval/corpus/fetched.yaml` on 2 October, `model_test` has 49 documents (7 digital, 40 mixed, 2
-scanned) and `blind` has 49 (7 digital, 34 mixed, 3 scanned, and 5 not yet fetched, taken here
+`eval/corpus/fetched.yaml` on 2 October, `model_test` has 52 documents (11 digital, 39 mixed, 2
+scanned) and `blind` has 65 (15 digital, 42 mixed, 3 scanned, and 5 not yet fetched, taken here
 as scanned). A mixed document has some pages with no text layer that need OCR, so it sits
-between the two budgets. At the digital budget for mixed documents: `model_test` 47 x 1 + 2 x 4
-= 55 minutes, `blind` 41 x 1 + 8 x 4 = 73 minutes, 128 minutes in all. At the scanned budget
-(4 minutes) for mixed documents: `model_test` 7 x 1 + 42 x 4 = 175 minutes, `blind` 7 x 1 +
-42 x 4 = 175 minutes, 350 minutes in all. So extraction on one profile takes between about 128
-and about 350 minutes if every document met its budget. Not included, and not measured: model
+between the two budgets. At the digital budget for mixed documents: `model_test` 50 x 1 + 2 x 4
+= 58 minutes, `blind` 57 x 1 + 8 x 4 = 89 minutes, 147 minutes in all. At the scanned budget
+(4 minutes) for mixed documents: `model_test` 11 x 1 + 41 x 4 = 175 minutes, `blind` 15 x 1 +
+50 x 4 = 215 minutes, 390 minutes in all. So extraction on one profile takes between about 147
+and about 390 minutes if every document met its budget. Not included, and not measured: model
 scoring for Gate C on the SEC `model_test` rows, the Docker profile's run for Gate D, and
 narration. The checkpoint is planned for one day, so the first dry run in week 2 should record
 the real time per document, and the 24 October plan is revisited if that measurement says one
 day is not enough.
 
 Open question, not decided: Gate E is "every document" of the blind pool, so a checkpoint that
-runs all 49 leaves no blind document that nobody has run, yet the rehearsal is meant to use
+runs all of `blind` leaves no blind document that nobody has run, yet the rehearsal is meant to use
 documents never seen before. Two options. (1) Reserve a fixed-hash subset of `blind` issuers
 that the checkpoint does not run, so the rehearsal has documents nobody has run; the cost is
 that Gate E is then judged on the rest, not on every document. (2) The checkpoint runs all of
