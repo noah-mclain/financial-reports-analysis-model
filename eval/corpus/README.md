@@ -6,9 +6,9 @@ pools so that no score is measured on something the code or the model has alread
 | Pool | Used for | Who opens it |
 |------|----------|--------------|
 | `dev` | Golden set issuers (Almarai, Juhayna, Edita). Debugging and development | Anyone, any time |
-| `train` | Source documents for model training data | The training data builders |
+| `train` | Source documents for model training data. Split again by issuer into fit, validation and holdout parts (`docs/blueprint/04-execution-phases.md` 2.4); the holdout issuers are used for dry runs (rule 6) | The training data builders; the holdout only as rule 6 says |
 | `model_test` | Scoring the model and the full pipeline | Only the eval harness, at the one checkpoint (D13, `docs/blueprint/06-decisions-and-risks.md`) |
-| `blind` | Never used in development. Demo documents are picked from here | Only the blind run at the end of each week, and the demo |
+| `blind` | Never used in development. Demo documents are picked from here | Only the blind run at the checkpoint (D13, D17), and the demo after it |
 
 ## Rules
 
@@ -19,15 +19,39 @@ pools so that no score is measured on something the code or the model has alread
    marked `existing_issuer` and stays in `dev`, even for a different year. A file whose bytes
    match a golden document is marked `existing_document`.
 3. **Nobody develops against `blind`.** No fixes aimed at one blind document, no reading its
-   statements to tune a rule. When a blind run fails, record the failure class, then reproduce
-   and fix it on a `dev` or `train` document with the same trait. If that is impossible,
-   the document moves to `dev` and is replaced in `blind`.
+   statements to tune a rule. There is no blind run before the checkpoint (D17); dry runs on
+   the train holdout stand in for it (rule 6). When a dry run fails, record the failure class,
+   then reproduce and fix it on a `dev`, fit or validation document with the same trait. If
+   that is impossible, the issuer leaves the holdout (rule 6). When a blind run fails, at or
+   after the checkpoint, record the failure with its class; nothing is moved or replaced,
+   because `blind` is frozen (rule 5).
 4. **Banks and insurers are `negative_control`.** They are in scope only as documents the tool
    must decline with a reason. Each carries `sector`, and other financial companies a `subsector`,
    so the industry signal can be scored (`docs/blueprint/09-ingest-locate.md`).
-5. **`model_test` and `blind` freeze at the first model_test evaluation.** After that only
-   `train` grows, and only to close a gap an evaluation measured (for example, too few Arabic
-   examples of a critical item). Scores from different weeks stay comparable.
+5. **`model_test` and `blind` freeze at the checkpoint, the first `model_test` evaluation.**
+   It runs once, after all planned work is complete (D13), and the first blind run is part of
+   it (D17). After that only `train` grows, and only to close a gap an evaluation measured
+   (for example, too few Arabic examples of a critical item). Scores from different weeks stay
+   comparable.
+6. **Dry runs use the train holdout.** Until the checkpoint, the full pipeline is rehearsed on
+   the documents of the corpus holdout issuers (the part of `train` that is never trained on,
+   defined in `docs/blueprint/04-execution-phases.md` 2.4, which also holds the override rules).
+   A dry run follows rule 3's procedure: run it, record the failure classes, fix them on other
+   documents. Nobody opens a holdout document to debug it; the harness does not enforce this
+   yet, so it is a rule only. A dry run is entered in the scoring log like a model scoring and
+   spends independence of the corpus part of the holdout; the SEC part is not touched, since
+   SEC filers have no PDFs here. An issuer that has to leave the holdout, because a failure
+   cannot be reproduced elsewhere, is moved to the fit part and recorded as a spent look. The
+   limit is stated plainly: the holdout is "not individually tuned against", not "never seen",
+   because `train` documents were already used in aggregate, and some individually. The locator
+   was scored on all 109 corporate `train` documents, and
+   `docs/blueprint/09-ingest-locate.md` ("What tuning and review changed") names nine `train`
+   issuers whose pages drove a fix: Al Kathiri, Naba Al Saha, Al Dawaa, Herfy, Jazan, Orient
+   Takaful, Saudi Energy, United Electronics and Egypt Kuwait (that table also names "ABC",
+   which matches no issuer name in `candidates.yaml`). Those that the hash puts in the
+   holdout go to the fit part by an override; on 2 October that is Al Dawaa. No holdout
+   document is a fully scanned file (45 of the 623 pages have no text layer, in 13 of the 20
+   documents), so a whole scanned filing meets an independent document first at the checkpoint.
 
 `make corpus-check` enforces rules 1 and 2 on `candidates.yaml`. `make corpus-fetch` enforces
 rule 2 again on the downloaded bytes.
@@ -99,4 +123,6 @@ and keeps banks and insurers (SIC 6000 to 6499) as `negative_control`. It needs 
 access to sec.gov and `FRA_SEC_USER_AGENT` set to a name and email.
 
 The `train` documents supply Arabic and regional labels, paired with English ones through
-issuers that publish both editions.
+issuers that publish both editions. The `train` pool is split by issuer into fit, validation
+and holdout parts for the model (`docs/blueprint/04-execution-phases.md` 2.4); no `model_test`
+row will be written to the training data before the checkpoint (the builder is not built yet).

@@ -274,7 +274,8 @@ Before and during week 3:
   recorded yet.
 - **Quantization level is chosen by measurement, not assumed.** After the real adapter is
   trained, compare MLX with Q4_K_M and Q5_K_M on at least 50 held-out labels. Those labels come
-  from a validation split of `train` or `dev` issuers, never from `model_test` or `blind`.
+  from the validation part of the `train` split ([04-execution-phases.md](04-execution-phases.md)
+  2.4), never from the holdout, `model_test` or `blind`.
 - **Fix the acceptance rule in advance:** a margin threshold in log-odds, read on both runtimes,
   and task accuracy against gold, not only agreement with MLX. A change under the threshold is
   noise; a confident answer that changes is a reason to move up a level. `gguf_spike.py margins`

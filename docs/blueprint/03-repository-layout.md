@@ -161,7 +161,7 @@ financial-reports-analysis-model/
 │   ├── build/
 │   │   ├── normalize_set.py
 │   │   ├── narrate_set.py
-│   │   ├── split.py                  # group split by entity first, then by fiscal year
+│   │   ├── split.py                  # group split by issuer (04, 2.4)
 │   │   └── length_audit.py           # fail on any example longer than max_seq_length
 │   ├── eval/{normalize_eval,narrate_eval,compare_adapters}.py
 │   ├── scripts/{smoke.sh,train.sh}
