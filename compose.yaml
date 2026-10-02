@@ -1,0 +1,48 @@
+# Docker run profile. `make docker-up` starts api and worker; the llm service needs a model file
+# and starts only with `--profile llm`. Ports come from .env, which compose reads itself.
+# Nothing is passed with env_file: a port reaches a container only through the lines below, so
+# the mapping, the health check and the process cannot disagree.
+name: fra
+
+services:
+  # The one build: api and worker run the same image, tagged fra-app.
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: fra-app
+    environment:
+      FRA_API_PORT: "${FRA_API_PORT:?set FRA_API_PORT in .env}"
+    ports:
+      - "127.0.0.1:${FRA_API_PORT:?set FRA_API_PORT in .env}:${FRA_API_PORT}"
+    healthcheck:
+      test: ["CMD", "python", "-m", "fra_api.healthcheck", "${FRA_API_PORT}", "--profile", "docker"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+
+  # Placeholder until apps/worker lands (week 4): proves the image carries fra_ingest and the
+  # profile, and stays up. `init` makes docker's stop signal reach it so it exits at once.
+  # The image is built by `docker compose build api` or `make docker-up`; `build worker` builds
+  # nothing, so a lone `up --build worker` would run a stale image.
+  worker:
+    image: fra-app
+    pull_policy: never  # built by api; there is nothing to pull
+    init: true
+    command:
+      - sh
+      - -c
+      - python -c "import fra_ingest" && python -m fra_core.profile && exec sleep infinity
+
+  # The Docker profile's model server (docs/blueprint/14-run-profiles.md): the fused adapter as
+  # a GGUF file, served by llama.cpp on the CPU. Off by default; put the file at
+  # var/models/model.gguf, then `docker compose --profile llm up llm`.
+  llm:
+    profiles: [llm]
+    image: ghcr.io/ggml-org/llama.cpp:server
+    command: ["-m", "/models/model.gguf", "--host", "0.0.0.0", "--port", "${FRA_LLM_PORT:?set FRA_LLM_PORT in .env}", "--jinja", "-ngl", "0"]
+    ports:
+      - "127.0.0.1:${FRA_LLM_PORT:?set FRA_LLM_PORT in .env}:${FRA_LLM_PORT}"
+    volumes:
+      - ./var/models:/models:ro
