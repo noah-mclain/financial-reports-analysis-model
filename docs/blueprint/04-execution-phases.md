@@ -381,30 +381,55 @@ that says what the builder does is what it will do.
   by pool, into the same `labels-<quarter>.jsonl.gz` file as the `train` rows, so the builder's
   filter on pool is the only barrier). Gate C on `model_test` at the checkpoint is scored by the
   eval harness, not from the training directory.
-- **Counts, read from `eval/corpus/candidates.yaml` and `eval/corpus/fetched.yaml` on 2 October,
-  after the corpus was extended that day** (the extension is described in the README's "Current
-  size"). The `train` pool has 97 issuers and 177 documents (85 corporate issuers, 66 with an
-  Arabic document, 37 that publish both editions, 14 Egyptian). By the hash the issuers fall as 61
-  fit, 14 validation and 22 holdout (110, 27 and 40 documents). After the four overrides above, 65
-  fit (121 documents), 14 validation (27) and 18 holdout (29 documents, 839 pages); with only the
-  Al Dawaa override the holdout would have 21 issuers and 36 documents. The holdout that will be
-  used has 17 corporate issuers and 1 negative control (Pioneers Holding, a financial company that
-  must be declined), 12 issuers with Arabic documents (14 documents) and 13 with English ones
-  (15), 7 with both editions, and 3 Egyptian. No holdout document is a fully scanned file: 10 have
-  a mixed text layer (some pages have text and some do not) and 19 a digital one, and 1 of them
-  has a text layer that is unreadable (`text_layer_undecodable`). 24 of the 29 are interim
-  statements. In all, 41 of the holdout's 839 pages have no text layer, so a dry run exercises OCR
-  on those pages and on no whole scanned filing, and the new digital Q1 filings make the holdout
-  lighter on OCR than before. Validation has 14 issuers, of which 5 are negative controls, so 9
-  corporate issuers (18 documents of 27), 8 with Arabic documents and 5 with both editions; that
-  is enough for early stopping and the 50-label quantization check once the SEC rows are in, and
-  not enough to choose Arabic prompts or templates. SEC filers have not been counted: no SEC
-  output is on disk. `pool_for` already sends 15% of filers to `model_test`, so a 15% holdout of
-  the rest is about 13% of all filers (0.85 x 0.15), and the filer count is not known. Fit keeps
-  25 of the 37 issuers that publish both editions (the holdout 7, validation 5), so the aligned
-  Arabic and English training pairs are still thinner than the Arabic and English counts suggest;
-  a larger holdout would thin them further. These counts were derived from the two files by the
-  hash above; the split itself is not built yet.
+- **Counts, read from `eval/corpus/candidates.yaml` and `eval/corpus/fetched.yaml` on 3 October,
+  after the corpus was extended on 2 and 3 October** (the extension is described in the README's
+  "Current size"). The `train` pool has 118 issuers and 208 documents (106 corporate issuers, 87
+  with an Arabic document, 46 that publish both editions, 14 Egyptian). By the hash the issuers
+  fall as 77 fit, 15 validation and 26 holdout (133, 29 and 46 documents). After the four
+  overrides above, 81 fit (144 documents), 15 validation (29) and 22 holdout (35 documents, 955
+  pages); with only the Al Dawaa override the holdout would have 25 issuers and 42 documents. The
+  extension of 3 October put four new issuers in the holdout, all Saudi parallel-market (Nomu)
+  companies with half-year 2026 statements (Basma Adeem Medical, National Environmental Recycling,
+  Natural Gas Distribution, Professional Medical Expertise; 6 documents), and none of the issuers
+  added that day was opened by eye, so no new override is applied; the rule above requires nothing
+  else. The holdout that will be used has 21 corporate issuers and 1 negative control (Pioneers
+  Holding, a financial company that must be declined), 16 issuers with Arabic documents (18
+  documents) and 15 with English ones (17), 9 with both editions, and 3 Egyptian. No holdout
+  document is a fully scanned file: 13 have a mixed text layer (some pages have text and some do
+  not) and 22 a digital one, and 1 of them has a text layer that is unreadable
+  (`text_layer_undecodable`). 30 of the 35 are interim statements and 5 annual. In all, 58 of the
+  holdout's 955 pages have no text layer, so a dry run exercises OCR on those pages and on no
+  whole scanned filing, and the holdout is light on OCR. By period kind (annual / interim, D18):
+  fit 46 / 98 documents, validation 9 / 20, holdout 5 / 30 and `model_test` 26 / 39. Validation
+  has 15 issuers, of which 5 are negative controls, so 10 corporate issuers (20 documents of 29);
+  9 of the 15 have Arabic documents (8 of the 10 corporate) and 6 both editions; that is enough
+  for early stopping and the 50-label quantization check once the SEC rows are in, and not enough
+  to choose Arabic prompts or templates. SEC filers have not been counted: no SEC output is on
+  disk. `pool_for` already sends 15% of filers to `model_test`, so a 15% holdout of the rest is
+  about 13% of all filers (0.85 x 0.15), and the filer count is not known. Fit keeps 31 of the 46
+  issuers that publish both editions (the holdout 9, validation 6), so the aligned Arabic and
+  English training pairs are still thinner than the Arabic and English counts suggest; a larger
+  holdout would thin them further. These counts were derived from the two files by the hash above;
+  the split itself is not built yet.
+- **Period kind is a stratum, not a pool (D18, decided 2026-10-03, in
+  [06-decisions-and-risks.md](06-decisions-and-risks.md)).** Interim and annual statements of one
+  company carry the same line labels, so putting them in different pools, or splitting one
+  issuer's documents by period, would leak labels between training and scoring (the reason for
+  corpus rule 1, risk R7). Period kind is recorded and reported instead, at four points. (1)
+  *Data.* Every document records `period: annual | interim` in `candidates.yaml`, and the dataset
+  builder (week 3, not built yet) will give every training example built from it that value and
+  the length in months of the column it was read from (`Period.months` in
+  `fra_core.schemas.statement`; `Period.kind` there is duration or instant, not annual or
+  interim). (2) *Weight.* The builder will keep identical (issuer, printed label, canonical item)
+  rows once per issuer, so an issuer with several quarterly filings does not count several times
+  for the same labels. Interim-only headers (for example "for the three months ended") are period
+  headers for the parsers, not line items for the model. (3) *Scoring.* Every extraction and
+  mapping score (Gates A, B and E, and every dry run) is reported per period kind beside the
+  total, so simpler quarterly filings cannot flatter an annual score or hide an annual failure.
+  Gate C is reported per period kind as description only, not as an extra judged stratum: the
+  mapping task does not change with the period and the strata are already small. (4) *Analytics
+  and narration.* Numbers come only from the analytics engine; interim periods are handled by D4
+  and D5. The narration rule is in 2.7 below.
 - **Dry runs and the holdout.** The full pipeline is rehearsed on the documents of the corpus
   holdout issuers (the pool rules are in [eval/corpus/README.md](../../eval/corpus/README.md),
   rule 6). A dry run is a look at those issuers: it reports Gate A and Gate B (label mapping),
@@ -414,9 +439,9 @@ that says what the builder does is what it will do.
   the corpus (no `train` document in `candidates.yaml` carries a `cik`) and a dry run is a PDF
   pipeline, so the SEC English stratum keeps its independence for Gate C. The residue: for the
   corpus (regional) issuers, the Gate B and Gate C figures measured before the checkpoint are
-  not a first look after the first dry run; `model_test` at the checkpoint is. Splitting the 18
+  not a first look after the first dry run; `model_test` at the checkpoint is. Splitting the 22
   corpus issuers into a dry-run half and a scoring half was considered and rejected: it would
-  leave about 9 issuers on each side.
+  leave about 11 issuers on each side.
 - **Gate C is never pooled across sources.** Pooled, the interval would be driven by US
   English labels and the gate could pass with the regional issuers contributing almost
   nothing. It is reported, each with its own interval, for three strata: SEC English labels,
@@ -425,16 +450,19 @@ that says what the builder does is what it will do.
   issuers for a bootstrap interval to mean something, which this document takes to be about 30.
   That figure is a judgement, not a measurement. A stratum that is too small is reported as
   description with its counts, marked "not shown", and waits for `model_test`. The corpus
-  holdout has 18 issuers in all (13 with English documents, 12 with Arabic ones), and `model_test`
-  has 30, 19 with Arabic documents and 8 with both editions. Both holdout strata are under the
-  judgement of about 30, so the expected outcome (not a certainty, since the SEC rows are not
-  counted yet) is still that before the checkpoint Gate C is judged on the SEC English stratum
-  only and the two corpus strata are "not shown". What changed is the description: 12 Arabic
-  issuers, 7 of them also in English, give a per-issuer picture of Arabic that 8 did not, and
-  the paired Arabic and English results of the same issuers can be read side by side. It still
-  supports no Arabic claim: the Arabic claim waits for the checkpoint, where `model_test` is
-  closer to the judgement, still short of it. The holdout is also mostly digital interim
-  statements, so it says little about scans.
+  holdout has 22 issuers in all (15 with English documents, 16 with Arabic ones), and `model_test`
+  has 36 (25 with English documents, 25 with Arabic ones, 14 with both editions). Both holdout
+  strata are under the judgement of about 30, so the expected outcome (not a certainty, since the
+  SEC rows are not counted yet) is still that before the checkpoint Gate C is judged on the SEC
+  English stratum only and the two corpus strata are "not shown". What changed is the
+  description: 16 Arabic issuers, 9 of them also in English, give a per-issuer picture of Arabic
+  that 12 did not, and the paired Arabic and English results of the same issuers can be read side
+  by side. It still supports no Arabic claim. At the checkpoint, `model_test` has 36 issuers in
+  all, over the judgement, but its language strata (25 and 25) are still under it, so the
+  limit is not relaxed: reaching about 30 in one stratum would permit judging that stratum's
+  thresholds on its own interval, and none does. The holdout is also mostly digital interim
+  statements (22 of 35 digital, none fully scanned, 30 interim), so it says little about
+  scans.
 - **Uncertainty without retraining.** A bootstrap resamples a stratum's issuers with
   replacement, recomputes the metric each time and reads the spread: at least 1,000 resamples,
   the seed recorded. The statistic is the paired per-issuer difference between the adapter and
@@ -442,8 +470,8 @@ that says what the builder does is what it will do.
   of Gate C is met only if the lower end of the two-sided 95% interval of that difference is at
   least 5 points; a point estimate above 5 with an interval reaching below it is reported as
   "met on the point estimate, not shown". With under about 30 issuers in a stratum the
-  percentile bootstrap tends to give intervals that are too narrow, and on 17 regional corporate
-  issuers (12 for Arabic) it shows direction and rough size and cannot reliably support a lower
+  percentile bootstrap tends to give intervals that are too narrow, and on 21 regional corporate
+  issuers (15 for Arabic) it shows direction and rough size and cannot reliably support a lower
   bound of exactly 5 points. Per-issuer results are published beside every interval.
 - **"Critical items 99% or higher".** The 99% is judged as a one-sided 95% upper bound on the
   true error rate. With no errors seen in n independent examples, that bound is about 3 / n
@@ -515,6 +543,10 @@ lora_parameters:
 
 - `structured.py`: parse, validate, one repair, then fallback.
 - `grounding.py` implements section 02, 2.7.
+- A narrative names the period it describes, and never compares an interim figure with an annual
+  one or annualizes it, unless the metric itself is annualized (D18, with D4 and D5 in
+  [06-decisions-and-risks.md](06-decisions-and-risks.md)); `grounding.py` enforces it as step 5
+  of section 02, 2.7.
 - `templates.py` holds the deterministic sentences.
 
 ### 2.8 Worker integration

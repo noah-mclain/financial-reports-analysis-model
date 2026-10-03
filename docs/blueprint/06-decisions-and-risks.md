@@ -2,7 +2,7 @@
 
 ## 6.1 Owner decisions
 
-Most of these change numbers users see; D12 to D17 set how the work is run and what is
+Most of these change numbers users see; D12 to D18 set how the work is run and what is
 shown. Defaults below are implemented behind `configs/analytics.toml` so a decision can change
 without code changes. Each decision needs
 an owner sign-off before the Phase 1 exit gate.
@@ -26,6 +26,7 @@ an owner sign-off before the Phase 1 exit gate.
 | D15 | Two statements of one type on one page with the same periods and layout merged as one continuation (R35) | Refuse the merge, or accept it | Decided 2026-10-02, delegated by the owner: they must not be merged. A guard for balance sheets is built and tested on synthetic parts only; income statements are not covered and R35 stays open for that type. A low-confidence grid that would otherwise have continued a closed balance sheet is left unattached, with the reason recorded. The rest is in R35 of [11-ingest-structure.md](11-ingest-structure.md) |
 | D16 | What Gate C is measured on before the checkpoint | The `model_test` pool now, or a holdout of whole issuers taken from inside `train` | Decided 2026-10-02, delegated by the owner, who asked for "the most optimal method of measurement for it until then" and, if held-out issuers are the only one, why and how the plan changes: held-out issuers are the only valid kind, because a company's labels repeat across years and editions, but the pool need not be `model_test`. Gate C is measured, per source and never pooled, on a hash-split issuer holdout of `train` and marked provisional, then measured once on `model_test`, which is the number reported. Design, counts and limits: [04](04-execution-phases.md) 2.4 |
 | D17 | Whether the weekly blind run waits for the checkpoint | Weekly blind runs, or all blind runs at the checkpoint | Decided 2026-10-02: "have it wait for the checkpoint so we know that everything is 150% done and correct before freezing it". Consequence: dry runs on the train holdout replace blind runs until then, and the first blind run is part of the checkpoint ([08](08-revised-plan.md), Gates; pool rules in [eval/corpus/README.md](../../eval/corpus/README.md)) |
+| D18 | Whether interim (quarterly, half-year) statements get their own pool or are mixed with annual ones in training and scoring | A separate pool, a period sub-split inside the pools, or one stratum recorded and reported | Decided 2026-10-03, raised and delegated by the owner: "would it not be best to split the quarterly into their own area or subsplit so the model doesn't assess them the same in training and later cause unreasonable results?" Not a separate pool, because a company's quarterly and annual statements carry the same labels and splitting them across pools would leak labels (rule 1, R7). Period kind is a stratum recorded and reported on the data, the training weight, every score and the narration. Design: [04](04-execution-phases.md) 2.4 and 2.7 |
 
 ## 6.2 Risk register
 

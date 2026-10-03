@@ -127,6 +127,11 @@ restore if time is left, not the first thing to add.
 - **E. Blind.** On the blind pool, every document ends in a correct result, a correct
   decline, or a visible `needs_review` with the reason. Zero confident wrong figures.
 
+Gates A, B and E, and every dry run, are reported per period kind (annual and interim) beside
+the total, and Gate C per period kind as description only (D18 in
+[06-decisions-and-risks.md](06-decisions-and-risks.md); how, in
+[04-execution-phases.md](04-execution-phases.md) 2.4).
+
 The checkpoint runs once, after all planned work is complete and every check passes (D13 in
 [06-decisions-and-risks.md](06-decisions-and-risks.md)). The schedule plans it for 24 October,
 after week 4, run by the owner. In order: `model_test` is scored, then the `blind` pool is run
@@ -139,14 +144,14 @@ pipeline on the documents of the train-holdout issuers, and marked "not yet meas
 
 Run time of the checkpoint, an estimate and not measured. The budget (a target, not a limit) is
 under 1 minute for a digital report and 2 to 4 minutes for a scanned one (principle 3 above). By
-`eval/corpus/fetched.yaml` on 2 October, `model_test` has 52 documents (11 digital, 39 mixed, 2
-scanned) and `blind` has 65 (15 digital, 42 mixed, 3 scanned, and 5 not yet fetched, taken here
+`eval/corpus/fetched.yaml` on 3 October, `model_test` has 65 documents (20 digital, 43 mixed, 2
+scanned) and `blind` has 72 (20 digital, 44 mixed, 3 scanned, and 5 not yet fetched, taken here
 as scanned). A mixed document has some pages with no text layer that need OCR, so it sits
-between the two budgets. At the digital budget for mixed documents: `model_test` 50 x 1 + 2 x 4
-= 58 minutes, `blind` 57 x 1 + 8 x 4 = 89 minutes, 147 minutes in all. At the scanned budget
-(4 minutes) for mixed documents: `model_test` 11 x 1 + 41 x 4 = 175 minutes, `blind` 15 x 1 +
-50 x 4 = 215 minutes, 390 minutes in all. So extraction on one profile takes between about 147
-and about 390 minutes if every document met its budget. Not included, and not measured: model
+between the two budgets. At the digital budget for mixed documents: `model_test` 63 x 1 + 2 x 4
+= 71 minutes, `blind` 64 x 1 + 8 x 4 = 96 minutes, 167 minutes in all. At the scanned budget
+(4 minutes) for mixed documents: `model_test` 20 x 1 + 45 x 4 = 200 minutes, `blind` 20 x 1 +
+52 x 4 = 228 minutes, 428 minutes in all. So extraction on one profile takes between about 167
+and about 428 minutes if every document met its budget. Not included, and not measured: model
 scoring for Gate C on the SEC `model_test` rows, the Docker profile's run for Gate D, and
 narration. The checkpoint is planned for one day, so the first dry run in week 2 should record
 the real time per document, and the 24 October plan is revisited if that measurement says one

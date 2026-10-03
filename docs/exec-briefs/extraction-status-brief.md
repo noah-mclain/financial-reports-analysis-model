@@ -11,7 +11,7 @@ Four pieces are done; ingest part 1 is on the `ingest-locate` branch, pushed and
 | Piece | What it delivers | Where it lives |
 | --- | --- | --- |
 | Shared contract | Schemas for documents, statements with provenance on every value, metrics and narratives; parsers for numbers (Arabic-Indic digits, space separators), periods, units and labels; a 47-item bilingual taxonomy | `packages/core` (merged) |
-| Corpus | 229 documents from 145 issuers in Saudi Arabia, Egypt, the UAE, Kuwait, Bahrain, the UK and the US, split by issuer into `dev`, `train`, `model_test` and `blind`; banks, insurers and other financial companies labelled by sector | `eval/corpus`, `scripts/corpus.py` (merged; sector labels on the branch) |
+| Corpus | 348 documents from 194 issuers (229 from 145 when this brief was written, extended on 2 and 3 October; see `eval/corpus/README.md`) in Saudi Arabia, Egypt, the UAE, Kuwait, Bahrain, the UK and the US, split by issuer into `dev`, `train`, `model_test` and `blind`; banks, insurers and other financial companies labelled by sector | `eval/corpus`, `scripts/corpus.py` (merged; sector labels on the branch) |
 | Golden set | 12 hand-vetted Almarai, Juhayna and Edita filings in both languages, digital and scanned, with statement pages labelled for all 12 | `eval/golden` |
 | Ingest part 1: locate | Per-page text or OCR (Apple Vision, Arabic first), a page cache, statement-page scoring for five statement types, the page ranges docling will convert, and a bank/insurer signal for the week 2 decline rule; `fra-ingest locate` CLI; blind labelling tool; locator eval; 322 fast tests; reviewed branch-wide with every finding fixed | `packages/ingest`, `eval/harness/locate.py`, design and results in `docs/blueprint/09-ingest-locate.md` |
 

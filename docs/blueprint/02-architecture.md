@@ -306,9 +306,13 @@ class MetricSpec:
    (rose, grew, increased, fell, declined, narrowed, widened) must agree with the sign of the
    change. Quality words (improved, deteriorated, strengthened, weakened) must also agree with
    the metric's polarity.
-5. **On failure,** regenerate once with the failing spans listed. If that fails too, set
+5. **Check the period** (D18). The period a sentence names must be its claim's `period_key`,
+   and a change claim must compare two periods of the same length in months, so an interim
+   figure is never set against an annual one or annualized unless the metric itself is
+   annualized (D4, D5). A mismatch is an ungrounded claim.
+6. **On failure,** regenerate once with the failing spans listed. If that fails too, set
    `grounding="fallback_template"` and emit deterministic sentences.
-6. **Gate G-N1:** zero ungrounded mentions ship, measured on every golden document.
+7. **Gate G-N1:** zero ungrounded mentions ship, measured on every golden document.
 
 ## 2.8 API surface (`apps/api`)
 
