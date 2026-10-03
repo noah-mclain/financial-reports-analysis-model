@@ -1,6 +1,7 @@
 # Scoring log of the train holdout (docs/blueprint/04-execution-phases.md 2.4).
-# Append-only: one row per look at the holdout, written by fra_core.split before the
-# scoring runs. A dry run is a look, like a model scoring. Never edit or delete a row.
+# Append-only: one row per look at the holdout, written by eval/harness/holdout_records.py
+# before the scoring runs. A dry run is a look, like a model scoring. Never edit or delete
+# a row.
 # kind: dry_run | model_scoring. parts: the split parts looked at, comma-separated, always
 # with holdout. strata: what was reported, comma-separated (for example annual,interim).
 # candidate: the commit or model candidate that was scored.

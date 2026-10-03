@@ -26,7 +26,7 @@ $(error FRA_LLM_PORT is empty: set it in $(ENV_FILE))
 endif
 export FRA_API_PORT FRA_LLM_PORT
 
-.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure expected-drafts eval-extraction verify-expected dev docker-up docker-health
+.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure dry-run expected-drafts eval-extraction verify-expected dev docker-up docker-health
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -72,7 +72,7 @@ label-pages: ## Blind labelling sheets for the scanned golden documents (Mac, Vi
 
 eval-locate: ## Score the locator (TARGET=golden, or TARGET=train / dev; model_test needs CHECKPOINT=1)
 	@$(MAKE) --no-print-directory unhide-pth
-	$(UV) run python eval/harness/locate.py $(or $(TARGET),golden) $(if $(filter 1,$(CHECKPOINT)),--checkpoint)
+	PYTHONPATH=eval $(UV) run python -m harness.locate $(or $(TARGET),golden) $(if $(filter 1,$(CHECKPOINT)),--checkpoint)
 
 eval-convert: ## Convert the golden set, a child process per document; records time and peak memory
 	@$(MAKE) --no-print-directory unhide-pth
@@ -81,6 +81,10 @@ eval-convert: ## Convert the golden set, a child process per document; records t
 eval-structure: ## Structure the golden set: statements, scale and currency, identity, language pairs
 	@$(MAKE) --no-print-directory unhide-pth
 	$(UV) run python eval/harness/structure.py
+
+dry-run: ## One look at the train holdout through the whole pipeline; logged, spent once per candidate, no pool argument
+	@$(MAKE) --no-print-directory unhide-pth
+	PYTHONPATH=eval $(UV) run python -m harness.dry_run
 
 expected-drafts: ## Draft expected files from the extraction (ONLY=id; keeps checked or confirmed files)
 	@$(MAKE) --no-print-directory unhide-pth
@@ -100,7 +104,7 @@ corpus-check: ## Validate the corpus pool split (no network)
 
 corpus-split: ## Fit, validation and holdout of the train pool, as hashed and after the recorded moves
 	@$(MAKE) --no-print-directory unhide-pth
-	$(UV) run python scripts/corpus.py split
+	PYTHONPATH=eval $(UV) run python scripts/corpus.py split
 
 corpus-fetch: ## Download, measure and dedupe the corpus into var/corpus (NEW=1: only documents not yet measured)
 	@$(MAKE) --no-print-directory unhide-pth
