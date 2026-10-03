@@ -308,8 +308,8 @@ Deduplicate on `(stmt, normalized label, parent)`, cap examples per entity, and 
   `num` rows streamed for selected filings only.
 - Targets are 300 analyst-written narratives following the guide in `training/README.md`,
   in the `Narrative` JSON shape with claims.
-- `split.py` splits by issuer and never by document, row or fiscal year, as set out under "The
-  split" below.
+- The split (`fra_core.split` in `packages/core`) is by issuer and never by document, row or
+  fiscal year, as set out under "The split" below.
 - `length_audit.py` tokenizes with the target model's tokenizer and chat template, and fails
   on any example above 2,048 tokens.
 - Fine-tune narration only if the baseline misses its G2 rows.
@@ -323,8 +323,9 @@ issuers. That is the only valid kind; it does not have to be the `model_test` po
 `model_test` pool is the checkpoint (D13, D17), which comes last, and a holdout (issuers kept
 out of training and tuning, scored only to judge a candidate) taken from inside `train` measures
 the same property earlier. Until the checkpoint, Gate C is measured on that holdout and marked
-provisional. Not built yet: the split, its override record and the scoring log are week 2 work
-(the dry runs need the holdout issuers) and the dataset builder is week 3 work. Everything below
+provisional. The split is `fra_core.split` in `packages/core`, its override record is
+`eval/corpus/holdout_moves.yaml` and the scoring log is `eval/corpus/scoring_log.tsv`;
+`make corpus-split` prints the counts below. The dataset builder is week 3 work. Everything below
 that says what the builder does is what it will do.
 
 - **Three parts of the `train` pool, by issuer.** *Fit*: what the adapter trains on.
@@ -410,7 +411,7 @@ that says what the builder does is what it will do.
   issuers that publish both editions (the holdout 9, validation 6), so the aligned Arabic and
   English training pairs are still thinner than the Arabic and English counts suggest; a larger
   holdout would thin them further. These counts were derived from the two files by the hash above;
-  the split itself is not built yet.
+  `make corpus-split` prints them, and a test holds them to this paragraph.
 - **Period kind is a stratum, not a pool (D18, decided 2026-10-03, in
   [06-decisions-and-risks.md](06-decisions-and-risks.md)).** Interim and annual statements of one
   company carry the same line labels, so putting them in different pools, or splitting one

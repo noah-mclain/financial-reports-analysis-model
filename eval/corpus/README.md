@@ -249,6 +249,12 @@ These change the ingest design, not just the dataset:
   period in the market's slot (Q1 on the main market, Q2 on Nomu), and files in the wrong
   language. Not in `candidates.yaml` or
   `fetched.yaml`; `collect` skips them, and their issuers keep the pool recorded there.
+- `holdout_moves.yaml`: issuers moved out of the `train` holdout into fit, each with its reason
+  and date (overrides before the first look, spent looks after). Hand-edited; the rules are in
+  `docs/blueprint/04-execution-phases.md` 2.4.
+- `scoring_log.tsv`: one row per look at the `train` holdout (dry runs and model scorings).
+  Append-only, written before each scoring; the rules are in
+  `docs/blueprint/04-execution-phases.md` 2.4.
 - The PDFs themselves go to `var/corpus/<pool>/` and are never committed. The URL and sha256 are
   enough to reproduce the set.
 
@@ -263,6 +269,7 @@ access to sec.gov and `FRA_SEC_USER_AGENT` set to a name and email.
 The `train` documents supply Arabic and regional labels, paired with English ones through
 issuers that publish both editions. The `train` pool is split by issuer into fit, validation
 and holdout parts for the model (`docs/blueprint/04-execution-phases.md` 2.4, which holds the
-counts and the overrides; also how period kind, annual or interim, is recorded and reported,
+counts and the overrides; the moves are recorded in `holdout_moves.yaml` and every look in
+`scoring_log.tsv`; also how period kind, annual or interim, is recorded and reported,
 D18); no `model_test` row will be written to the training data before the
 checkpoint (the builder is not built yet).
