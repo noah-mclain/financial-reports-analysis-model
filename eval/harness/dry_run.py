@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import shutil
 import statistics
 import subprocess
@@ -69,6 +70,7 @@ PLAN_MINUTES = {"low": 167, "high": 428}
 PROJECTED_POOLS = ("model_test", "blind")
 DIGITAL = "digital"
 UNMEASURED = "unmeasured"  # in a projected pool but not in fetched.yaml with a text layer
+_ID = re.compile(r"[a-z0-9][a-z0-9-]*")  # an id is a file name, never a path
 NEGATIVE_CONTROL = "negative_control"  # the `role` of a bank or insurer in candidates.yaml
 TIMING = {
     "locate": "load_or_locate with the page cache on, as structure_pdf calls it, so the pages "
@@ -491,6 +493,12 @@ def run(
     def pdf_of(document: Mapping[str, Any]) -> Path:
         return store / TRAIN / f"{document['id']}.pdf"
 
+    unsafe = sum(1 for d in documents if not _ID.fullmatch(str(d["id"])))
+    if unsafe:
+        raise PreflightFailed(
+            f"{unsafe} train document ids are not plain names ({_ID.pattern}); an id names a "
+            "file and a directory this run deletes; no look was taken"
+        )
     ready = {
         str(d["id"])
         for d in documents

@@ -398,6 +398,16 @@ def test_a_holdout_document_with_no_measured_text_layer_is_refused_before_the_lo
     assert read_looks(three.log) == []
 
 
+@pytest.mark.parametrize("bad", ["../outside", "a/b", "..", ""])
+def test_an_id_that_is_not_a_plain_name_is_refused_before_the_look(three: Setup, bad: str) -> None:
+    """An id becomes a file name and a directory that is deleted, so it may not hold a path."""
+    three.documents[0]["id"] = bad
+    with pytest.raises(PreflightFailed, match=r"1 train document ids"):
+        three.run(stub_stages())
+    assert read_looks(three.log) == []
+    assert not three.report.exists()
+
+
 @pytest.mark.parametrize("which", ["report", "artifacts"])
 def test_earlier_output_is_refused_so_nothing_can_come_from_a_cache(
     three: Setup, which: str
