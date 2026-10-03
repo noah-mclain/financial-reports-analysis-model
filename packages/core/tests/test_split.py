@@ -1,15 +1,18 @@
 """The issuer split of the train pool: fit, validation and holdout (04-execution-phases.md 2.4)."""
 
 import hashlib
+import inspect
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from fra_core import split
 from fra_core.split import (
     LOG_HEADER,
     Look,
     Part,
+    PartCounts,
     PoolRefused,
     SplitError,
     bucket,
@@ -19,7 +22,7 @@ from fra_core.split import (
     holdout_for_scoring,
     issuer_key,
     log_look,
-    place,
+    part_counts,
     read_looks,
     read_moves,
 )
@@ -27,6 +30,26 @@ from fra_core.split import (
 # Hand-checked: sha256(b"holdout:al dawaa medical services") mod 100 is 14, the last holdout
 # bucket; sha256(b"holdout:cik:320193") mod 100 is 29, the last validation bucket; "almarai" is 99.
 AL_DAWAA = "Al Dawaa Medical Services"
+PUBLIC_API = [
+    "LOG_HEADER",
+    "TRAIN",
+    "Look",
+    "Move",
+    "Part",
+    "PartCounts",
+    "PoolRefused",
+    "SplitError",
+    "bucket",
+    "cik_key",
+    "document_key",
+    "hashed_part",
+    "holdout_for_scoring",
+    "issuer_key",
+    "log_look",
+    "part_counts",
+    "read_looks",
+    "read_moves",
+]
 
 
 def doc(
@@ -113,7 +136,7 @@ def test_corpus_issuer_with_cik_is_keyed_like_its_sec_rows() -> None:
 def test_an_issuer_with_a_cik_on_only_some_documents_is_refused() -> None:
     documents = [doc("Apple Inc.", cik=320193, n=1), doc("Apple Inc.", n=2)]
     with pytest.raises(SplitError, match="every document"):
-        place(documents, [])
+        part_counts(documents, [])
 
 
 def test_cik_given_as_string_is_the_same_key() -> None:
@@ -124,14 +147,14 @@ def test_cik_given_as_string_is_the_same_key() -> None:
 
 
 @pytest.mark.parametrize("pool", ["model_test", "blind"])
-def test_place_refuses_model_test_and_blind(pool: str) -> None:
+def test_counting_refuses_model_test_and_blind(pool: str) -> None:
     with pytest.raises(PoolRefused, match=pool):
-        place([doc("Some Company", pool)], [])
+        part_counts([doc("Some Company", pool)], [])
 
 
-def test_place_refuses_dev_as_not_split() -> None:
+def test_counting_refuses_dev_as_not_split() -> None:
     with pytest.raises(SplitError, match="dev"):
-        place([doc("Almarai Company", "dev")], [])
+        part_counts([doc("Almarai Company", "dev")], [])
 
 
 @pytest.mark.parametrize("pool", ["model_test", "blind"])
@@ -148,14 +171,53 @@ def test_holdout_selection_refuses_model_test_and_blind_and_logs_nothing(
 # ---- placement and overrides ----------------------------------------------------------------
 
 
-def test_place_as_hashed_and_with_an_override(tmp_path: Path) -> None:
-    documents = [doc(AL_DAWAA, n=1), doc(AL_DAWAA, n=2), doc("Almarai Company")]
-    hashed = place(documents, [])
-    assert [d["id"] for d in hashed[Part.HOLDOUT]] == [d["id"] for d in documents[:2]]
+def test_counts_as_hashed_and_with_an_override(tmp_path: Path) -> None:
+    documents = [
+        doc(AL_DAWAA, n=1, language="ar", period="interim"),
+        doc(AL_DAWAA, n=2, language="en", period="annual"),
+        doc("Almarai Company", language="ar", period="annual"),
+    ]
+    hashed = part_counts(documents, [])
+    assert hashed[Part.HOLDOUT] == PartCounts(
+        issuers=1, documents=2, arabic=1, english=1, both=1, annual=1, interim=1
+    )
+    assert hashed[Part.VALIDATION] == PartCounts(0, 0, 0, 0, 0, 0, 0)
     moves = read_moves(write_moves(tmp_path / "m.yaml", move()), [])
-    after = place(documents, moves)
-    assert after[Part.HOLDOUT] == []
-    assert len(after[Part.FIT]) == 3
+    after = part_counts(documents, moves)
+    assert after[Part.HOLDOUT].documents == 0
+    assert (after[Part.FIT].issuers, after[Part.FIT].documents) == (2, 3)
+
+
+def test_public_api_returns_holdout_documents_only_through_a_logged_scoring() -> None:
+    assert sorted(split.__all__) == sorted(PUBLIC_API)
+    defined = {
+        name
+        for name, value in vars(split).items()
+        if not name.startswith("_")
+        and (inspect.isfunction(value) or inspect.isclass(value))
+        and value.__module__ == split.__name__
+    }
+    assert defined <= set(split.__all__)
+    assert not hasattr(split, "place")
+
+
+def test_override_dated_on_the_day_of_the_first_look_is_refused(tmp_path: Path) -> None:
+    log = empty_log(tmp_path / "log.tsv")
+    log_look(log, a_look("2026-10-05"))
+    with pytest.raises(SplitError, match="before the first look"):
+        read_moves(write_moves(tmp_path / "m.yaml", move(date="2026-10-05")), read_looks(log))
+
+
+@pytest.mark.parametrize("missing", ["issuer", "kind", "from", "to", "date", "looks_before"])
+def test_a_move_missing_a_field_names_it(tmp_path: Path, missing: str) -> None:
+    lines = [
+        ln for ln in move().splitlines() if not ln.strip().lstrip("- ").startswith(f"{missing}:")
+    ]
+    if missing == "issuer":
+        lines[1] = lines[1].replace("    kind", "  - kind")
+    path = write_moves(tmp_path / "m.yaml", "\n".join(lines) + "\n")
+    with pytest.raises(SplitError, match=rf"m\.yaml.*'{missing}'"):
+        read_moves(path, [])
 
 
 @pytest.mark.parametrize(("source", "target"), [("holdout", "validation"), ("fit", "holdout")])
@@ -168,13 +230,13 @@ def test_a_move_only_goes_from_holdout_to_fit(tmp_path: Path, source: str, targe
 def test_a_move_of_an_issuer_the_hash_does_not_hold_out_is_refused(tmp_path: Path) -> None:
     moves = read_moves(write_moves(tmp_path / "m.yaml", move(issuer="Almarai Company")), [])
     with pytest.raises(SplitError, match="not in the holdout"):
-        place([doc("Almarai Company")], moves)
+        part_counts([doc("Almarai Company")], moves)
 
 
 def test_a_move_of_an_issuer_not_in_train_is_refused(tmp_path: Path) -> None:
     moves = read_moves(write_moves(tmp_path / "m.yaml", move()), [])
     with pytest.raises(SplitError, match="no train document"):
-        place([doc("Almarai Company")], moves)
+        part_counts([doc("Almarai Company")], moves)
 
 
 def test_an_issuer_moved_twice_is_refused(tmp_path: Path) -> None:
@@ -282,10 +344,11 @@ def test_holdout_scoring_is_logged_before_documents_are_returned(tmp_path: Path)
     assert read_looks(log) == [a_look()]
 
 
-def test_holdout_scoring_without_holdout_in_the_look_is_refused(tmp_path: Path) -> None:
+@pytest.mark.parametrize("parts", [("validation",), ("holdout", "validation"), ("fit", "holdout")])
+def test_holdout_scoring_logs_only_the_holdout_part(tmp_path: Path, parts: tuple[str, ...]) -> None:
     log = empty_log(tmp_path / "log.tsv")
     moves = write_moves(tmp_path / "m.yaml")
-    look = Look("2026-10-05", "dry_run", ("validation",), ("annual",), "abc")
+    look = Look("2026-10-05", "dry_run", parts, ("annual",), "abc")
     with pytest.raises(SplitError, match="holdout"):
         holdout_for_scoring([doc(AL_DAWAA)], moves, log, look)
     assert read_looks(log) == []

@@ -8,7 +8,10 @@ otherwise. Only `train` issuers are placed; `model_test` and `blind` are refused
 
 Two committed records sit beside the corpus files: the moves out of the holdout (overrides made
 before the first look, spent looks after it) and the scoring log, one row per look at the
-holdout. Paths are relative to the repository root; callers join them to their root.
+holdout. Their paths are not known here: the caller passes them in.
+
+Holdout documents leave this module only through `holdout_for_scoring`, which logs the look
+first. Everything else public returns keys, parts or counts, never documents.
 
 This module lives in fra-core because the dry-run harness (eval/), the dataset builder
 (training/) and the corpus tools (scripts/) all need the same rule, and fra-core is the one
@@ -28,8 +31,26 @@ from typing import Any
 
 import yaml
 
-MOVES_FILE = Path("eval/corpus/holdout_moves.yaml")
-SCORING_LOG = Path("eval/corpus/scoring_log.tsv")
+__all__ = [
+    "LOG_HEADER",
+    "TRAIN",
+    "Look",
+    "Move",
+    "Part",
+    "PartCounts",
+    "PoolRefused",
+    "SplitError",
+    "bucket",
+    "cik_key",
+    "document_key",
+    "hashed_part",
+    "holdout_for_scoring",
+    "issuer_key",
+    "log_look",
+    "part_counts",
+    "read_looks",
+    "read_moves",
+]
 
 SALT = "holdout:"
 HOLDOUT_END = 15  # buckets 0 to 14
@@ -43,6 +64,7 @@ REFUSED_POOLS = {
 
 LOOK_KINDS = ("dry_run", "model_scoring")
 MOVE_KINDS = ("override", "spent_look")
+MOVE_FIELDS = ("issuer", "kind", "from", "to", "date", "looks_before", "reason")
 LOG_COLUMNS = ("date", "kind", "parts", "strata", "candidate")
 LOG_HEADER = (
     "# Scoring log of the train holdout (docs/blueprint/04-execution-phases.md 2.4).\n"
@@ -113,7 +135,7 @@ def hashed_part(key: str) -> Part:
     return Part.FIT
 
 
-def require_train(pool: str, what: str) -> None:
+def _require_train(pool: str, what: str) -> None:
     if pool in REFUSED_POOLS:
         raise PoolRefused(f"{what}: {REFUSED_POOLS[pool]}; only train issuers are split")
     if pool != TRAIN:
@@ -194,7 +216,13 @@ def read_moves(path: Path, looks: Sequence[Look]) -> list[Move]:
     if not isinstance(data, dict) or not isinstance(data.get("moves"), list):
         raise SplitError(f"{path}: expected a mapping with a 'moves' list")
     moves: list[Move] = []
-    for entry in data["moves"]:
+    for n, entry in enumerate(data["moves"], start=1):
+        if not isinstance(entry, dict):
+            raise SplitError(f"{path}: move {n} is not a mapping")
+        missing = [k for k in MOVE_FIELDS if k not in entry]
+        if missing:
+            who = entry.get("issuer", f"move {n}")
+            raise SplitError(f"{path}: {who} lacks {', '.join(map(repr, missing))}")
         issuer = str(entry["issuer"])
         if (entry.get("from"), entry.get("to")) != (Part.HOLDOUT, Part.FIT):
             raise SplitError(f"{issuer}: a move only goes from holdout to fit")
@@ -206,7 +234,7 @@ def read_moves(path: Path, looks: Sequence[Look]) -> list[Move]:
             )
         kind = entry["kind"]
         if kind == "override":
-            if looks_before != 0 or (looks and date > looks[0].date):
+            if looks_before != 0 or (looks and date >= looks[0].date):
                 raise SplitError(f"{issuer}: an override is allowed only before the first look")
         elif kind == "spent_look":
             if looks_before < 1:
@@ -225,14 +253,51 @@ def read_moves(path: Path, looks: Sequence[Look]) -> list[Move]:
     return moves
 
 
-def place(
+@dataclass(frozen=True)
+class PartCounts:
+    """What one part holds, counted. Issuers are counted by key; a language counts the issuers
+    with at least one document in it, and `both` those with Arabic and English."""
+
+    issuers: int
+    documents: int
+    arabic: int
+    english: int
+    both: int
+    annual: int
+    interim: int
+
+
+def part_counts(
+    documents: Iterable[Mapping[str, Any]], moves: Sequence[Move]
+) -> dict[Part, PartCounts]:
+    """Counts per part, never the documents themselves. Pass `moves=[]` for the split as
+    hashed. Counting reads only the records, so it is not a look and is not logged."""
+    counts = {}
+    for part, docs in _place(documents, moves).items():
+        languages: dict[str, set[str]] = {}
+        for d in docs:
+            languages.setdefault(document_key(d), set()).add(str(d["language"]))
+        periods = [d["period"] for d in docs]
+        counts[part] = PartCounts(
+            issuers=len(languages),
+            documents=len(docs),
+            arabic=sum("ar" in v for v in languages.values()),
+            english=sum("en" in v for v in languages.values()),
+            both=sum({"ar", "en"} <= v for v in languages.values()),
+            annual=periods.count("annual"),
+            interim=periods.count("interim"),
+        )
+    return counts
+
+
+def _place(
     documents: Iterable[Mapping[str, Any]], moves: Sequence[Move]
 ) -> dict[Part, list[Mapping[str, Any]]]:
-    """Documents by part. Every document must be a `train` one; pass `moves=[]` for the split
-    as hashed."""
+    """Documents by part. Every document must be a `train` one. Private: holdout documents
+    are handed out only by `holdout_for_scoring`."""
     documents = list(documents)
     for d in documents:
-        require_train(str(d["pool"]), str(d.get("id", d["issuer"])))
+        _require_train(str(d["pool"]), str(d.get("id", d["issuer"])))
     names: dict[str, str] = {}
     for d in documents:
         name, key = issuer_key(str(d["issuer"])), document_key(d)
@@ -265,8 +330,12 @@ def holdout_for_scoring(
     """The holdout documents for a dry run or a model scoring. The look is appended to the
     scoring log before the documents are returned, so no holdout scoring goes unlogged."""
     look.validate()
+    if look.parts != (Part.HOLDOUT,):
+        raise SplitError(
+            f"a holdout scoring returns the holdout only; the look lists {','.join(look.parts)}"
+        )
     moves = read_moves(moves_path, read_looks(log_path))
-    holdout = place(documents, moves)[Part.HOLDOUT]
+    holdout = _place(documents, moves)[Part.HOLDOUT]
     log_look(log_path, look)
     return holdout
 

@@ -23,7 +23,7 @@ import urllib.parse
 import urllib.request
 import urllib.robotparser
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field
+from dataclasses import astuple, dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +35,8 @@ from fra_core.split import issuer_key
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATES = ROOT / "eval/corpus/candidates.yaml"
 FETCHED = ROOT / "eval/corpus/fetched.yaml"
+HOLDOUT_MOVES = ROOT / "eval/corpus/holdout_moves.yaml"
+SCORING_LOG = ROOT / "eval/corpus/scoring_log.tsv"
 GOLDEN_MANIFEST = ROOT / "eval/golden/manifest.yaml"
 GOLDEN_DIR = ROOT / "eval/golden"
 STORE = ROOT / "var/corpus"
@@ -440,8 +442,8 @@ def split_report() -> str:
     """Fit, validation and holdout of the train pool, as hashed and after the recorded moves.
     Reads candidates.yaml only; no document is opened."""
     documents = [d for d in load_yaml(CANDIDATES)["documents"] if d["pool"] == split.TRAIN]
-    looks = split.read_looks(ROOT / split.SCORING_LOG)
-    moves = split.read_moves(ROOT / split.MOVES_FILE, looks)
+    looks = split.read_looks(SCORING_LOG)
+    moves = split.read_moves(HOLDOUT_MOVES, looks)
     kinds = Counter(m.kind for m in moves)
     lines = [
         f"train pool: {len({split.document_key(d) for d in documents})} issuers, "
@@ -449,24 +451,12 @@ def split_report() -> str:
         f"scoring log: {len(looks)} looks; moves: {kinds['override']} overrides, "
         f"{kinds['spent_look']} spent looks",
     ]
-    columns = ("issuers", "documents", "arabic", "english", "both", "annual", "interim")
+    columns = [f.name for f in fields(split.PartCounts)]
     header = "".join(f"{c:>10}" for c in columns)
     for title, applied in (("as hashed", []), ("after moves", moves)):
         lines += ["", f"{title:<12}{header}"]
-        for part, docs in split.place(documents, applied).items():
-            languages: dict[str, set[str]] = defaultdict(set)
-            for d in docs:
-                languages[split.document_key(d)].add(d["language"])
-            periods = Counter(d["period"] for d in docs)
-            row = (
-                len(languages),
-                len(docs),
-                sum("ar" in v for v in languages.values()),
-                sum("en" in v for v in languages.values()),
-                sum({"ar", "en"} <= v for v in languages.values()),
-                periods["annual"],
-                periods["interim"],
-            )
+        for part, counts in split.part_counts(documents, applied).items():
+            row = astuple(counts)
             lines.append(f"  {part:<10}" + "".join(f"{n:>10}" for n in row))
     return "\n".join(lines)
 
