@@ -53,6 +53,7 @@ financial-reports-analysis-model/
 │   │   │   ├── numbers.py            # printed number -> Decimal: parentheses, dashes, U+2212, thin spaces, locale digits
 │   │   │   ├── units.py              # scale phrases, ISO currency detection
 │   │   │   ├── periods.py            # header text -> Period
+│   │   │   ├── split.py              # issuer split of train: fit, validation, holdout (04, 2.4)
 │   │   │   └── artifacts.py          # content-addressed paths, stage version registry
 │   │   └── tests/
 │   │
@@ -161,7 +162,6 @@ financial-reports-analysis-model/
 │   ├── build/
 │   │   ├── normalize_set.py
 │   │   ├── narrate_set.py
-│   │   ├── split.py                  # group split by entity first, then by fiscal year
 │   │   └── length_audit.py           # fail on any example longer than max_seq_length
 │   ├── eval/{normalize_eval,narrate_eval,compare_adapters}.py
 │   ├── scripts/{smoke.sh,train.sh}
@@ -169,6 +169,7 @@ financial-reports-analysis-model/
 │   └── adapters/                     # weights gitignored; manifest.json per adapter tracked
 │
 ├── eval/
+│   ├── corpus/                       # pools (README.md); holdout_moves.yaml, scoring_log.tsv (04, 2.4)
 │   ├── golden/
 │   │   ├── documents/                # PDFs through git-lfs
 │   │   ├── expected/                 # hand-verified Statement JSON per document

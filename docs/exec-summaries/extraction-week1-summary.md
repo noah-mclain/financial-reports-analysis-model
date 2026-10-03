@@ -78,8 +78,8 @@ Part 3b was built on `ingest-structure` the same day, so pull request #4 now cov
 - [x] Decide whether a figure the checks can name (Edita 2024 AR's 2023 total assets) stays flagged as read, or is replaced when two printed witnesses agree. Decided 2026-10-01: flag only (D10).
 - [x] A statement with no printed scale: hold it, or use it. Decided 2026-10-01: use it as a warning, with a footnote on every amount that depends on it, through to the summary (D11). Plan: `docs/blueprint/13-unit-caveats.md`.
 - [x] Confirm the scale of the 10 Juhayna and Edita golden documents. Confirmed 2026-10-01 as single pounds from each statement header, which names the currency and no multiplier.
-- [ ] Accept the recorded risk that two statements of the same type, printed on one page with the same layout, would be merged into one. There is no such case in the golden set.
-- [ ] When to run the `model_test` checkpoint. Running it freezes the `model_test` and `blind` pools.
+- [x] Accept the recorded risk that two statements of the same type, printed on one page with the same layout, would be merged into one. There is no such case in the golden set. Decided 2026-10-02: not accepted; they must not be merged (D15). A guard for balance sheets is built; income statements stay open.
+- [x] When to run the `model_test` checkpoint. Running it freezes the `model_test` and `blind` pools. Decided 2026-10-02: once, after all planned work is complete and every check passes (D13).
 
 ## Files to read
 

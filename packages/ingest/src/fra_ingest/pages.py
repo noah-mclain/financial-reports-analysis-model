@@ -38,6 +38,10 @@ _GARBLE_READABLE_SHARE = 0.9
 _TEXT_SETTINGS = ("min_text_chars", "header_fraction", "ocr_dpi", "ocr_languages")
 
 
+# The page flag that says the text layer is noise; the locator and the corpus screening read it.
+GARBLED_TEXT_LAYER = "garbled_text_layer"
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -151,11 +155,11 @@ def _read_page(page: Any, page_no: int, config: IngestConfig, ocr: OcrEngine | N
                 char_count,
                 width,
                 height,
-                flags=["garbled_text_layer"] if garbled else None,
+                flags=[GARBLED_TEXT_LAYER] if garbled else None,
             )
         if garbled and ocr is not None:
             page_text = _ocr_page(page, page_no, config, ocr, char_count, width, height)
-            page_text.flags.append("garbled_text_layer")
+            page_text.flags.append(GARBLED_TEXT_LAYER)
             return page_text
         if ocr is None:
             return _page(

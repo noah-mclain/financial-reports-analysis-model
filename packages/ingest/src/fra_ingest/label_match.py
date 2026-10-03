@@ -13,6 +13,8 @@ from fra_core.schemas import StatementType
 from fra_core.taxonomy.loader import CanonicalItem, Taxonomy
 
 SUBTOTAL_CUES = ("total", "اجمالي", "مجموع")
+# The row that closes a balance sheet: total equity and liabilities.
+CLOSING_TOTAL_ID = "total_liabilities_and_equity"
 
 
 def squash(text: str) -> str:

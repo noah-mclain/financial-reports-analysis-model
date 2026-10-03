@@ -1,0 +1,51 @@
+# Issuers moved out of the train holdout into fit (docs/blueprint/04-execution-phases.md 2.4).
+# Read and checked by fra_core.split against the scoring log (scoring_log.tsv).
+#
+# kind:         override (allowed only before the first look at the holdout)
+#               | spent_look (an issuer that has to leave after a look; earlier holdout scores
+#                 are then recomputed without it and shown both ways)
+# from, to:     always holdout, fit. No move goes any other way.
+# date:         when the move was decided (YYYY-MM-DD).
+# looks_before: the number of rows in the scoring log when the move was recorded: 0 for an
+#               override, at least 1 for a spent look.
+# issuer:       as written in candidates.yaml.
+
+moves:
+  - issuer: Al Dawaa Medical Services
+    kind: override
+    from: holdout
+    to: fit
+    date: '2026-10-02'
+    looks_before: 0
+    reason: >-
+      Its 2023 and 2025 pages drove a locator fix (docs/blueprint/09-ingest-locate.md, "What
+      tuning and review changed").
+  - issuer: Alramz Real Estate
+    kind: override
+    from: holdout
+    to: fit
+    date: '2026-10-02'
+    looks_before: 0
+    reason: >-
+      Its statement pages were rendered and read by eye while the corpus was extended, to check
+      that an Arabic filing with an auditor's letter as an image still had its primary statements
+      as text. Not tuning, but a look.
+  - issuer: ADES Holding
+    kind: override
+    from: holdout
+    to: fit
+    date: '2026-10-02'
+    looks_before: 0
+    reason: >-
+      Its Arabic first-quarter file was rendered and read for the same check: the located balance
+      sheet and profit or loss pages, found to be real text.
+  - issuer: Saudi Industrial Investment Group
+    kind: override
+    from: holdout
+    to: fit
+    date: '2026-10-02'
+    looks_before: 0
+    reason: >-
+      Its Arabic first-quarter file was rendered and read for the same check: page 4, the balance
+      sheet, found to be an image, and the file was set aside. The issuer stays in train with
+      older documents.

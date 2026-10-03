@@ -25,7 +25,7 @@ from fra_ingest.caveats import unit_caveats
 from fra_ingest.child import convert_in_child
 from fra_ingest.classify import Classification, TableContext, classify
 from fra_ingest.config import IngestConfig
-from fra_ingest.continuation import continues_part, inherit_periods, merge_continuations
+from fra_ingest.continuation import continues_part, inherit_periods, is_closed, merge_continuations
 from fra_ingest.convert import CONVERT_VERSION, settings_hash
 from fra_ingest.converter import docling_version
 from fra_ingest.docling_json import DlDocument, load_docling_json
@@ -48,7 +48,7 @@ from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
 from fra_ingest.visual_order import repair_grid, repair_text
 
-STRUCTURE_VERSION = "9"  # bump whenever structure's output can change, reviews included
+STRUCTURE_VERSION = "10"  # bump whenever structure's output can change, reviews included
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -220,13 +220,19 @@ def structure_document(
     domicile_texts = [text for n in sorted(by_page) for text in by_page[n]]
 
     parts: list[PartialStatement] = []
-    metas: dict[tuple[StatementType, int], Metadata] = {}
+    metas: dict[str, Metadata] = {}
     for candidate in sorted(candidates, key=lambda c: c.grid.page_no):
         grid, result, hint = candidate.grid, candidate.result, candidate.hint
         if result.type is None:
             titles = inputs.title_types.get(grid.page_no, ())
             continued = _continued_part(grid, hint, parts, titles)
             if continued is None:
+                continue
+            if is_closed(continued, index):
+                candidate.decision.evidence = [
+                    *result.evidence,
+                    f"after_closed:{continued.type.value}",
+                ]
                 continue
             evidence = f"continuation_of:{continued.type.value}"
             result = result.model_copy(
@@ -267,18 +273,16 @@ def structure_document(
         if realigned.unresolved:
             part.flags.append("row_alignment_unresolved")
         parts.append(part)
-        metas.setdefault(
-            (part.type, part.first_page),
-            detect_metadata(
-                header_text=part.header_text,
-                context_texts=[*candidate.headings, inputs.page_texts.get(grid.page_no, "")],
-                document_texts=document_texts,
-                domicile_texts=domicile_texts,
-            ),
+        # Keyed by the part's first table, which a merged part keeps from its head.
+        metas[part.table_refs[0]] = detect_metadata(
+            header_text=part.header_text,
+            context_texts=[*candidate.headings, inputs.page_texts.get(grid.page_no, "")],
+            document_texts=document_texts,
+            domicile_texts=domicile_texts,
         )
 
     merged = sorted(
-        merge_continuations(parts), key=lambda p: (p.type.value, -p.confidence, p.first_page)
+        merge_continuations(parts, index), key=lambda p: (p.type.value, -p.confidence, p.first_page)
     )
     per_type = Counter(p.type for p in merged)
     decision_by_ref = {f"{d.docling_path}{d.table_ref}": d for d in decisions}
@@ -290,7 +294,7 @@ def structure_document(
                 update={"flags": [*part.flags, f"ambiguous_statement:{part.type.value}"]}
             )
         statement, results = run_checks(
-            _statement(part, metas[(part.type, part.first_page)], inputs, index, number), index
+            _statement(part, metas[part.table_refs[0]], inputs, index, number), index
         )
         statements.append(statement)
         checks.extend(results)

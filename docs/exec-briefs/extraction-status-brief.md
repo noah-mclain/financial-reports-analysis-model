@@ -11,7 +11,7 @@ Four pieces are done; ingest part 1 is on the `ingest-locate` branch, pushed and
 | Piece | What it delivers | Where it lives |
 | --- | --- | --- |
 | Shared contract | Schemas for documents, statements with provenance on every value, metrics and narratives; parsers for numbers (Arabic-Indic digits, space separators), periods, units and labels; a 47-item bilingual taxonomy | `packages/core` (merged) |
-| Corpus | 229 documents from 145 issuers in Saudi Arabia, Egypt, the UAE, Kuwait, Bahrain, the UK and the US, split by issuer into `dev`, `train`, `model_test` and `blind`; banks, insurers and other financial companies labelled by sector | `eval/corpus`, `scripts/corpus.py` (merged; sector labels on the branch) |
+| Corpus | 348 documents from 194 issuers (229 from 145 when this brief was written, extended on 2 and 3 October; see `eval/corpus/README.md`) in Saudi Arabia, Egypt, the UAE, Kuwait, Bahrain, the UK and the US, split by issuer into `dev`, `train`, `model_test` and `blind`; banks, insurers and other financial companies labelled by sector | `eval/corpus`, `scripts/corpus.py` (merged; sector labels on the branch) |
 | Golden set | 12 hand-vetted Almarai, Juhayna and Edita filings in both languages, digital and scanned, with statement pages labelled for all 12 | `eval/golden` |
 | Ingest part 1: locate | Per-page text or OCR (Apple Vision, Arabic first), a page cache, statement-page scoring for five statement types, the page ranges docling will convert, and a bank/insurer signal for the week 2 decline rule; `fra-ingest locate` CLI; blind labelling tool; locator eval; 322 fast tests; reviewed branch-wide with every finding fixed | `packages/ingest`, `eval/harness/locate.py`, design and results in `docs/blueprint/09-ingest-locate.md` |
 
@@ -29,7 +29,7 @@ Every target passes except English scan time, which runs about 10% over because 
 | Digital annual report, 275 pages | under 10 s | 2.2 to 3.6 s |
 | Scanned filing, 64 pages | under 30 s | Arabic 13 to 17 s; English about 31 to 33 s |
 
-The golden set is not held out, since tuning looked at golden pages; the held-out score waits for the `model_test` checkpoint.
+The golden set is not held out, since tuning looked at golden pages; the held-out score waits for the single `model_test` checkpoint, taken after all planned work is complete (D13).
 
 ## To be completed
 
@@ -40,10 +40,11 @@ The immediate work is ingest parts 2 and 3, which close week 1 by extracting Alm
 | Now to Oct 2 (week 1) | **Part 2, Convert:** docling on the located page ranges only, page images, one child process per document | The converter's imports and options pass a smoke test against the pinned docling version; the ranges from `locate.json` convert within the ingest memory budget |
 | Now to Oct 2 (week 1) | **Part 3, Structure:** table grid with cell boxes, headers bound to periods (never to column position), hierarchy and subtotals, statements continued across pages, scale and currency, subtotal checks, review report | Almarai English and Arabic extracted with identical figures |
 | Now to Oct 2 (week 1) | **Docker skeleton** (base image, compose, both run profiles start) and a **spike** fusing an MLX LoRA adapter and running it as GGUF in llama.cpp | `docker compose up` serves a health page; the spike answers risk R16 |
-| Oct 3 to 9 (week 2) | OCR engines behind one interface and a bake-off (Vision, Tesseract, RapidOCR); label mapping; identity checks and about 12 metrics; declining banks and insurers from the stored industry signal; first blind run | Gate A (extraction) and Gate B (mapping) on `dev` and `model_test` |
-| Oct 10 to 16 (week 3) | Training data (SEC statement data, bilingual pairs), QLoRA label normalization against the base model, grounding checker, narration in both languages, GGUF export | Gate C (model) |
-| Oct 17 to 23 (week 4) | Upload page, background jobs, stage timeline, results page with click-to-source, full Docker profile, blind runs | Gate D (portability) and Gate E (blind) |
-| Oct 24 to 26 | Rehearsal on fresh blind documents, accuracy report, README | Two clean end-to-end runs on unseen documents |
+| Oct 3 to 9 (week 2) | OCR engines behind one interface and a bake-off (Vision, Tesseract, RapidOCR); label mapping; identity checks and about 12 metrics; declining banks and insurers from the stored industry signal; first dry run on the train holdout | Gate A (extraction) and Gate B (mapping) on `dev` and the dry run; `model_test` at the checkpoint (D13, D16, D17) |
+| Oct 10 to 16 (week 3) | Training data (SEC statement data, bilingual pairs), QLoRA label normalization against the base model, grounding checker, narration in both languages, GGUF export | Gate C (model), provisional on the train holdout until the checkpoint |
+| Oct 17 to 23 (week 4) | Upload page, background jobs, stage timeline, results page with click-to-source, full Docker profile, dry runs on the train holdout | Gate D (portability); Gate E (blind) waits for the checkpoint |
+| Oct 24 (planned) | Checkpoint, run by the owner: `model_test`, then `blind`, then Gates A to E confirmed | Scores frozen; the date moves only later (D13) |
+| Oct 25 to 26 | Rehearsal, accuracy report, README; which documents the rehearsal uses is an open question (`docs/blueprint/08-revised-plan.md`) | Two clean end-to-end runs on unseen documents, if the open question allows it |
 
 Notes pages stay out of scope: figures come from the primary statements, and following a line item's note reference is a later addition, only if a metric needs it.
 
@@ -70,6 +71,6 @@ Start with the revised plan for the schedule and gates, then the execution phase
 ## Open decisions
 
 - [ ] Merge `ingest-locate`: the pull request text is ready in `var/pr/ingest-locate.md` in the worktree.
-- [ ] When to run the `model_test` checkpoint, the only held-out score for part 1. Running it freezes `model_test` and `blind`.
+- [x] When to run the `model_test` checkpoint, the only held-out score for part 1. Running it freezes `model_test` and `blind`. Decided 2026-10-02: once, after all planned work is complete and every check passes (D13).
 - [ ] English scan time: accept about 31 to 33 s per 64 pages, or decide per document which language to read first.
 - [ ] Which of the about 12 ratios need a figure not on the face of the statements. Depreciation for EBITDA is the likely case, and converting the cash flow statement would cover it.

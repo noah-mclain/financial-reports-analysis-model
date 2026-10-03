@@ -38,6 +38,8 @@ from typing import Any
 
 import yaml
 
+from fra_core.split import cik_key
+
 ROOT = Path(__file__).resolve().parents[2]
 CANDIDATES = ROOT / "eval/corpus/candidates.yaml"
 ZIPS = ROOT / "var/sec_fsds"
@@ -73,7 +75,7 @@ def pinned_ciks(documents: Iterable[dict[str, Any]]) -> dict[int, str]:
 def pool_for(cik: int, pinned: dict[int, str]) -> str:
     if cik in pinned:
         return pinned[cik]
-    bucket = int(hashlib.sha256(f"cik:{cik}".encode()).hexdigest(), 16) % 100
+    bucket = int(hashlib.sha256(cik_key(cik).encode()).hexdigest(), 16) % 100
     return "model_test" if bucket < MODEL_TEST_SHARE else "train"
 
 

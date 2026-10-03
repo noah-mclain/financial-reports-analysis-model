@@ -5,8 +5,13 @@ name = "fra-workspace"
 version = "0.0.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+  "fra-api",
   "fra-core",
   "fra-ingest[mac]",
+  # Direct dependencies only so the sources below apply: uv honours [tool.uv.sources] for a
+  # package only when the project names it itself. They pin the versions both profiles run.
+  "torch==2.14.0",
+  "torchvision==0.29.0",
 ]
 
 [tool.uv]
@@ -15,18 +20,30 @@ package = false
 [tool.uv.workspace]
 # Members are added on the day their package lands, so `uv sync` stays green at every commit.
 # Still to come (see docs/blueprint/08-revised-plan.md): packages/analytics,
-# packages/modeling, apps/api, apps/worker
+# packages/modeling, apps/worker
 members = [
+  "apps/api",
   "packages/core",
   "packages/ingest",
 ]
 
 [tool.uv.sources]
+fra-api = { workspace = true }
 fra-core = { workspace = true }
 fra-ingest = { workspace = true }
+# Linux (the Docker image) gets CPU wheels, which drop the CUDA libraries and triton; macOS
+# keeps the default wheels.
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [dependency-groups]
 dev = [
+  "httpx>=0.28",
   "pytest>=8.4",
   "pytest-cov>=6.0",
   "hypothesis>=6.130",
@@ -56,7 +73,8 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 python_version = "3.12"
 strict = true
 warn_unreachable = true
-mypy_path = "packages/core/src:packages/ingest/src:packages/ingest/tests:packages/analytics/src:packages/modeling/src"
+# Keep in sync with workspace members.
+mypy_path = "apps/api/src:packages/core/src:packages/ingest/src:packages/ingest/tests"
 
 [[tool.mypy.overrides]]
 module = ["docling.*", "docling_core.*", "mlx.*", "mlx_lm.*", "pypdfium2.*", "matplotlib.*", "ocrmac", "ocrmac.*"]
@@ -68,12 +86,12 @@ module = "docling_core.types.doc"
 implicit_reexport = true
 
 [tool.pytest.ini_options]
-# Extend as apps/ lands.
-testpaths = ["packages", "tests"]
+# The directories that hold workspace members' tests; keep in sync with the members list.
+testpaths = ["apps", "packages", "tests"]
 # Keep in sync with workspace members. uv marks editable .pth files hidden on macOS and
 # Python 3.11+ skips hidden .pth files, so tests set the paths directly.
 # `make unhide-pth` fixes it for scripts and `uv run python`.
-pythonpath = ["packages/core/src", "packages/ingest/src", "scripts", "training/sources", "eval"]
+pythonpath = ["apps/api/src", "packages/core/src", "packages/ingest/src", "scripts", "training/sources", "eval"]
 addopts = "-q --strict-markers"
 markers = [
   "slow: needs model weights or OCR, excluded from the default run",

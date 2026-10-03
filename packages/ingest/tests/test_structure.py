@@ -156,6 +156,95 @@ def test_two_balance_sheets_on_one_page_are_flagged_ambiguous() -> None:
     assert all("ambiguous_statement:balance" in s.flags for s in balance)
 
 
+CLOSED = [*PAGE_1, ["Total equity and liabilities", "", "15", "12"]]
+
+
+def _balance_tables(*tables: dict[str, object]) -> DlDocument:
+    return DlDocument.model_validate(
+        {
+            "tables": list(tables),
+            "texts": [],
+            "pages": {
+                "1": {"page_no": 1, "size": {"width": 800, "height": 1000}},
+                "2": {"page_no": 2, "size": {"width": 800, "height": 1000}},
+            },
+        }
+    )
+
+
+def test_a_closed_balance_sheet_is_not_merged_with_one_printed_after_it() -> None:
+    doubled = _balance_tables(table(0, 1, CLOSED), table(1, 1, CLOSED))
+    result, _ = structure_document(inputs([("docling/p1-2.json", doubled)]), IngestConfig())
+    balance = [s for s in result.statements if s.type is StatementType.BALANCE]
+    assert [s.source_pages for s in balance] == [[1], [1]]
+    assert all("ambiguous_statement:balance" in s.flags for s in balance)
+    reviews = {r.statement_id: r for r in result.reviews}
+    assert "duplicate_statement" not in reviews[balance[0].id].reasons
+    assert reviews[balance[1].id].reasons == ["duplicate_statement"]
+
+
+def test_two_balance_sheets_on_one_page_each_keep_their_own_scale_and_currency() -> None:
+    other = [["", "Notes", "31 December 2025 EGP millions", "31 December 2024 EGP millions"]]
+    separate = _balance_tables(table(0, 1, CLOSED), table(1, 1, [*other, *CLOSED[1:]]))
+    result, _ = structure_document(inputs([("docling/p1-2.json", separate)]), IngestConfig())
+    balance = [s for s in result.statements if s.type is StatementType.BALANCE]
+    assert sorted((s.currency, s.scale) for s in balance) == [("EGP", 1_000_000), ("SAR", 1000)]
+
+
+def test_a_statement_after_a_closed_one_still_takes_an_undated_period_by_position() -> None:
+    undated = [["", "Notes", "31 December 2025 SAR '000", ""], *CLOSED[1:]]
+    document = _balance_tables(table(0, 1, CLOSED), table(1, 2, undated))
+    result, _ = structure_document(inputs([("docling/p1-2.json", document)]), IngestConfig())
+    balance = [s for s in result.statements if s.type is StatementType.BALANCE]
+    assert [s.source_pages for s in balance] == [[1], [2]]
+    assert [p.key for p in balance[1].periods] == ["2025-12-31", "2024-12-31"]
+    assert not any(f.startswith("period_unbound") for f in balance[1].flags)
+
+
+def _after_closed(first: list[list[str]]) -> StructureInputs:
+    tail = [HEADER, ["Trade payables", "", "6", "5"]]
+    document = _balance_tables(table(0, 1, first), table(1, 2, tail))
+    base = inputs([("docling/p1-2.json", document)])
+    return base.model_copy(
+        update={
+            "title_types": {1: (StatementType.BALANCE,), 2: ()},
+            "cue_types": {2: (StatementType.BALANCE,)},
+        }
+    )
+
+
+def test_a_tail_grid_after_a_closed_balance_sheet_is_refused_with_its_reason() -> None:
+    structured = _after_closed(CLOSED)
+    result, _ = structure_document(structured, IngestConfig())
+    balance = [s for s in result.statements if s.type is StatementType.BALANCE]
+    assert [s.source_pages for s in balance] == [[1]]
+    assert "Trade payables" not in [i.raw_label for i in balance[0].line_items]
+    decision = next(t for t in result.tables if t.table_ref == "#/tables/1")
+    assert decision.type is None and decision.statement_id is None
+    assert decision.evidence[-1] == "after_closed:balance"
+
+
+def test_a_tail_grid_after_an_open_balance_sheet_still_continues() -> None:
+    structured = _after_closed(PAGE_1)
+    result, _ = structure_document(structured, IngestConfig())
+    decision = next(t for t in result.tables if t.table_ref == "#/tables/1")
+    assert "continuation_of:balance" in decision.evidence
+    assert not any(e.startswith("after_closed:") for e in decision.evidence)
+
+
+def test_a_tail_grid_that_would_not_have_continued_gets_no_closed_reason() -> None:
+    structured = _after_closed(CLOSED)
+    shifted = _balance_tables(
+        table(0, 1, CLOSED), table(1, 2, [HEADER, ["Trade payables", "", "6", "5"]], x0=160)
+    )
+    result, _ = structure_document(
+        structured.model_copy(update={"documents": [("docling/p1-2.json", shifted)]}),
+        IngestConfig(),
+    )
+    decision = next(t for t in result.tables if t.table_ref == "#/tables/1")
+    assert not any(e.startswith("after_closed:") for e in decision.evidence)
+
+
 def test_a_missing_enabled_type_is_flagged() -> None:
     result, _ = structure_document(inputs([("docling/p1-2.json", document())]), IngestConfig())
     assert "statement_not_extracted:income" in result.flags

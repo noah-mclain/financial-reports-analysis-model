@@ -1,0 +1,14 @@
+# Allowlist: the build context is the workspace sources, the lockfile and the config the image
+# reads, and nothing else (no data, environments, history, notes or env files).
+*
+!pyproject.toml
+!uv.lock
+!apps
+!packages
+!configs
+# Not needed to run.
+**/tests
+**/__pycache__
+**/*.py[cod]
+**/node_modules
+**/dist

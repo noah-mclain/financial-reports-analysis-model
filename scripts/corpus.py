@@ -1,12 +1,13 @@
 """Corpus collection: validate the pool split, download candidates, measure them, dedupe.
 
     uv run python scripts/corpus.py check
-    uv run python scripts/corpus.py fetch [--pool train] [--force]
+    uv run python scripts/corpus.py fetch [--pool train] [--force] [--new] [--id ID ...]
 
 `check` enforces the split rules in eval/corpus/README.md and needs no network.
 `fetch` downloads into var/corpus/<pool>/<id>.pdf (gitignored), measures page count and
 text layer per page, compares every file against the golden set and against the rest of the
-corpus, and records the results in eval/corpus/fetched.yaml.
+corpus, and records the results in eval/corpus/fetched.yaml. `--new` leaves out every document
+already measured there, so a few added documents need no re-download of the rest.
 """
 
 from __future__ import annotations
@@ -15,7 +16,6 @@ import argparse
 import datetime as dt
 import hashlib
 import http.client
-import re
 import sys
 import time
 import urllib.error
@@ -23,15 +23,20 @@ import urllib.parse
 import urllib.request
 import urllib.robotparser
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field
+from dataclasses import astuple, dataclass, field, fields
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from fra_core import split
+from fra_core.split import issuer_key
+
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATES = ROOT / "eval/corpus/candidates.yaml"
 FETCHED = ROOT / "eval/corpus/fetched.yaml"
+HOLDOUT_MOVES = ROOT / "eval/corpus/holdout_moves.yaml"
+SCORING_LOG = ROOT / "eval/corpus/scoring_log.tsv"
 GOLDEN_MANIFEST = ROOT / "eval/golden/manifest.yaml"
 GOLDEN_DIR = ROOT / "eval/golden"
 STORE = ROOT / "var/corpus"
@@ -50,28 +55,6 @@ SUBSECTORS = (
 # A page with fewer characters than this has no usable text layer (same rule as the locator).
 MIN_TEXT_CHARS = 50
 USER_AGENT = "Mozilla/5.0 (fra-corpus; research use of public filings)"
-
-_SUFFIXES = {
-    "company",
-    "co",
-    "the",
-    "group",
-    "pjsc",
-    "sae",
-    "plc",
-    "inc",
-    "corporation",
-    "corp",
-    "ltd",
-    "limited",
-    "for",
-}
-
-
-def issuer_key(name: str) -> str:
-    """Normalize an issuer name so 'Almarai Company' and 'ALMARAI CO.' compare equal."""
-    words = re.findall(r"[a-z0-9]+", name.lower().replace(".", ""))
-    return " ".join(w for w in words if w not in _SUFFIXES)
 
 
 @dataclass
@@ -334,6 +317,38 @@ def cmd_check(_: argparse.Namespace) -> int:
     return 1 if report.errors else 0
 
 
+def write_fetched(fetched: dict[str, dict[str, Any]]) -> None:
+    FETCHED.write_text(
+        "# Written by scripts/corpus.py fetch. Measured facts; do not edit by hand.\n"
+        + yaml.safe_dump({"documents": fetched}, sort_keys=True, allow_unicode=True),
+        encoding="utf-8",
+    )
+
+
+def to_fetch(
+    documents: list[dict[str, Any]],
+    fetched: dict[str, dict[str, Any]],
+    *,
+    pool: str | None = None,
+    new: bool = False,
+    ids: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """The candidates one `fetch` run covers: one pool or all, only the documents named in
+    `ids`, and with `new` only those not measured yet. A refused download is recorded as failed
+    with no measurement, so `new` tries it again, which is also how a file saved from a browser
+    gets measured."""
+    unknown = sorted(set(ids or []) - {doc["id"] for doc in documents})
+    if unknown:
+        raise ValueError(f"not in candidates.yaml: {', '.join(unknown)}")
+    return [
+        doc
+        for doc in documents
+        if (not pool or doc["pool"] == pool)
+        and (not ids or doc["id"] in ids)
+        and not (new and "sha256" in fetched.get(doc["id"], {}))
+    ]
+
+
 def cmd_fetch(args: argparse.Namespace) -> int:
     documents = load_yaml(CANDIDATES)["documents"]
     golden_issuers, golden_hashes = golden_index()
@@ -348,9 +363,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     polite = Politeness()
     failures: Counter[str] = Counter()
     by_hand: list[tuple[Path, str]] = []
-    for doc in documents:
-        if args.pool and doc["pool"] != args.pool:
-            continue
+    for doc in to_fetch(documents, fetched, pool=args.pool, new=args.new, ids=args.id):
         doc_id = doc["id"]
         dest = STORE / doc["pool"] / f"{doc_id}.pdf"
         entry: dict[str, Any] = {"pool": doc["pool"]}
@@ -361,6 +374,9 @@ def cmd_fetch(args: argparse.Namespace) -> int:
             else:
                 entry["retrieved"] = fetched.get(doc_id, {}).get("retrieved", today)
             entry["sha256"] = sha256_file(dest)
+            prior = fetched.get(doc_id, {})
+            if prior.get("sha256") == entry["sha256"] and "retrieved" in prior:
+                entry["retrieved"] = prior["retrieved"]  # the same bytes, first retrieved then
             entry["bytes"] = dest.stat().st_size
             entry.update(measure(dest))
             entry["status"] = "new"
@@ -410,11 +426,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         if found and found["status"] == "new" and issuer_key(doc["issuer"]) in golden_issuers:
             found["status"] = "existing_issuer"
 
-    FETCHED.write_text(
-        "# Written by scripts/corpus.py fetch. Measured facts; do not edit by hand.\n"
-        + yaml.safe_dump({"documents": fetched}, sort_keys=True, allow_unicode=True),
-        encoding="utf-8",
-    )
+    write_fetched(fetched)
     leaks = [
         i
         for i, e in fetched.items()
@@ -426,13 +438,46 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     return 0
 
 
+def split_report() -> str:
+    """Fit, validation and holdout of the train pool, as hashed and after the recorded moves.
+    Reads candidates.yaml only; no document is opened."""
+    documents = [d for d in load_yaml(CANDIDATES)["documents"] if d["pool"] == split.TRAIN]
+    looks = split.read_looks(SCORING_LOG)
+    moves = split.read_moves(HOLDOUT_MOVES, looks)
+    kinds = Counter(m.kind for m in moves)
+    lines = [
+        f"train pool: {len({split.document_key(d) for d in documents})} issuers, "
+        f"{len(documents)} documents",
+        f"scoring log: {len(looks)} looks; moves: {kinds['override']} overrides, "
+        f"{kinds['spent_look']} spent looks",
+    ]
+    columns = [f.name for f in fields(split.PartCounts)]
+    header = "".join(f"{c:>10}" for c in columns)
+    for title, applied in (("as hashed", []), ("after moves", moves)):
+        lines += ["", f"{title:<12}{header}"]
+        for part, counts in split.part_counts(documents, applied).items():
+            row = astuple(counts)
+            lines.append(f"  {part:<10}" + "".join(f"{n:>10}" for n in row))
+    return "\n".join(lines)
+
+
+def cmd_split(_: argparse.Namespace) -> int:
+    print(split_report())
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("check", help="validate the pool split").set_defaults(func=cmd_check)
+    sub.add_parser("split", help="fit, validation and holdout of train").set_defaults(
+        func=cmd_split
+    )
     fetch = sub.add_parser("fetch", help="download, measure and dedupe")
     fetch.add_argument("--pool", choices=POOLS)
     fetch.add_argument("--force", action="store_true", help="download again even if present")
+    fetch.add_argument("--new", action="store_true", help="only documents not measured yet")
+    fetch.add_argument("--id", nargs="+", help="only these documents (ids in candidates.yaml)")
     fetch.set_defaults(func=cmd_fetch)
     args = parser.parse_args(argv)
     use_system_trust()
