@@ -18,3 +18,6 @@ training/adapters/*/
 
 # macOS
 .DS_Store
+
+# Notetaking
+.obsidian/
