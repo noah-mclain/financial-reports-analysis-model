@@ -48,9 +48,10 @@ def a_look(date: str = "2026-10-05", kind: str = "dry_run") -> Look:
 # ---- the committed records ------------------------------------------------------------------
 
 
-def test_the_committed_records_read_and_hold_no_look_yet() -> None:
-    assert read_looks(SCORING_LOG) == []
-    assert [m.kind for m in read_moves(HOLDOUT_MOVES, [])] == ["override"] * 4
+def test_the_committed_records_read_together_and_start_with_the_first_dry_run() -> None:
+    looks = read_looks(SCORING_LOG)
+    assert (looks[0].date, looks[0].kind, looks[0].parts) == ("2026-10-04", "dry_run", ("holdout",))
+    assert [m.kind for m in read_moves(HOLDOUT_MOVES, looks)][:4] == ["override"] * 4
 
 
 # ---- the moves record -----------------------------------------------------------------------

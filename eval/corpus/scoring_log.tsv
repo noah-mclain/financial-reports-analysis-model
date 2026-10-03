@@ -6,3 +6,4 @@
 # with holdout. strata: what was reported, comma-separated (for example annual,interim).
 # candidate: the commit or model candidate that was scored.
 date	kind	parts	strata	candidate
+2026-10-04	dry_run	holdout	annual,interim	3abdc22
