@@ -373,3 +373,184 @@ Sinad Holding Co.:
   issuer: Aseer Trading Tourism Industry Agriculture Real Estate and Contracting
   reason: 'a rename: Aseer Trading, Tourism, Manufacturing and Real Estate (Tadawul 4080) is listed as
     Sinad Holding (listing short name SINAD HOLDING)'
+Atlas Elevators General Trading and Contracting Co.:
+  decision: same
+  issuer: Atlas Elevators
+  reason: listing short name ATLAS ELEVATORS is the name of the issuer already in the corpus (atlas-elevators-2024-ar-interim,
+    train)
+Naba Alsaha Medical Services Co.:
+  decision: same
+  issuer: Naba Al Saha Medical Services
+  reason: same name apart from the spacing of Al Saha; short name NABA ALSAHA; same sector as the issuer
+    already in the corpus
+United Mining Industries Co.:
+  decision: different
+  reason: UNITED MINING (Capital Goods) is a separate listed company from United Carton Industries; the
+    names share only 'united' and 'industries'
+  against:
+  - United Carton Industries
+Twareat Medical Care Co.:
+  decision: different
+  reason: TMC (Health Care Equipment & Svc) is a separate company from National Medical Care; the names
+    share only 'medical' and 'care'
+  against:
+  - National Medical Care
+Arabian International Healthcare Holding Co.:
+  decision: different
+  reason: 'TIBBIYAH (Health Care) is a separate company: International Holding is a UAE issuer and Anaam
+    International Holding Group is a different group; the names share only ''international'' and ''holding'''
+  against:
+  - International Holding
+  - Anaam International Holding Group
+Al-Razi Medical Co.:
+  decision: different
+  reason: ALRAZI is a separate company from Al Dawaa Medical Services and from Al-Modawat Specialized
+    Medical (ALMODAWAT); the names share only 'al' and 'medical'
+  against:
+  - Al Dawaa Medical Services
+  - Al-Modawat Specialized Medical Co.
+Al-Modawat Specialized Medical Co.:
+  decision: different
+  reason: ALMODAWAT is listed on Nomu while Specialized Medical sits in the main market listing of the
+    same year, so they are two companies; the short names and Arabic names differ
+  against:
+  - Specialized Medical
+  - Al-Razi Medical Co.
+Edarat Communication and Information Technology Co.:
+  decision: different
+  reason: EDARAT is a separate company from Saudi Azm for Communication and Information Technology, Advance
+    International Company (AICTEC) and Axelerated Solutions; the names share only generic words
+  against:
+  - Saudi Azm for Communication and Information Technology
+  - Advance International Company for Communication and Information Technology
+  - Axelerated Solutions for Information and Communication Technology Co.
+Advance International Company for Communication and Information Technology:
+  decision: different
+  reason: AICTEC is a separate company from Saudi Azm, Edarat and Axelerated Solutions; the names share
+    only generic words
+  against:
+  - Edarat Communication and Information Technology Co.
+  - Saudi Azm for Communication and Information Technology
+  - Axelerated Solutions for Information and Communication Technology Co.
+Axelerated Solutions for Information and Communication Technology Co.:
+  decision: different
+  reason: AXELERATED SOLUTIONS is a separate company from Saudi Azm, Edarat and AICTEC; the names share
+    only generic words
+  against:
+  - Edarat Communication and Information Technology Co.
+  - Saudi Azm for Communication and Information Technology
+  - Advance International Company for Communication and Information Technology
+Naseej for Technology Co.:
+  decision: different
+  reason: NASEEJ TECH (Software & Services, Nomu) is listed beside Naseej (formerly Al Sorayai, main market
+    listing of the same year), so they are two companies; a group link is not evidenced here
+  against:
+  - Naseej
+Saudi Networkers Services Co.:
+  decision: different
+  reason: NETWORKERS is a separate company from Saudi Automotive Services, Saudi Ground Services and SAL
+    Saudi Logistics Services; the names share only 'saudi' and 'services'
+  against:
+  - Saudi Automotive Services
+  - Saudi Ground Services
+  - SAL Saudi Logistics Services
+WSM for Information Technology Co.:
+  decision: different
+  reason: WSM is a separate company from Purity for Information Technology (PURITY); the names share only
+    generic words
+  against:
+  - Purity for Information Technology Co.
+Purity for Information Technology Co.:
+  decision: different
+  reason: PURITY is a separate company from WSM for Information Technology; the names share only generic
+    words
+  against:
+  - WSM for Information Technology Co.
+Bena Steel Industries Co.:
+  decision: different
+  reason: BENA (Materials) is a separate company from Al Yamamah Steel Industries; the names share only
+    'steel' and 'industries'
+  against:
+  - Al Yamamah Steel Industries
+Al Rashid Industrial Co.:
+  decision: different
+  reason: ALRASHID INDUSTRIAL is a separate company from Al Taiseer Group Talco Industrial and Al-Omran
+    Industrial Trading; the names share only 'al' and 'industrial'
+  against:
+  - Al Taiseer Group Talco Industrial
+  - Al-Omran Industrial Trading
+Neft Alsharq Company for Chemical Industries:
+  decision: different
+  reason: NEFT ALSHARQ is a separate company from Basic Chemical Industries; the names share only 'chemical'
+    and 'industries'
+  against:
+  - Basic Chemical Industries
+Albattal Factory for Chemical Industries Co.:
+  decision: different
+  reason: ALBATTAL FACTORY is a separate company from Basic Chemical Industries; the names share only
+    'chemical' and 'industries'
+  against:
+  - Basic Chemical Industries
+International Human Resources Co.:
+  decision: different
+  reason: ALDAWLIAH (Commercial & Professional Svc) is a separate company from Maharah Human Resources;
+    the names share only 'human resources'
+  against:
+  - Maharah Human Resources
+Inmar Company for Real Estate Development and Investment:
+  decision: different
+  reason: INMAR is a separate company from Cairo for Investment and Real Estate Development, Asas Makeen
+    and Coast Investment and Development; the names share only generic words
+  against:
+  - Cairo for Investment and Real Estate Development (CIRA)
+  - Asas Makeen Real Estate Development and Investment Co.
+  - Coast Investment and Development
+Asas Makeen Real Estate Development and Investment Co.:
+  decision: different
+  reason: ASAS MAKEEN is a separate company from Inmar and from Cairo for Investment and Real Estate Development;
+    the names share only generic words
+  against:
+  - Inmar Company for Real Estate Development and Investment
+  - Cairo for Investment and Real Estate Development (CIRA)
+View United Real Estate Development Co.:
+  decision: different
+  reason: VIEW is a separate company from Dar Alarkan, First Avenue and Kinan International Real Estate
+    Development; the names share only generic words
+  against:
+  - Dar Alarkan Real Estate Development
+  - First Avenue Real Estate Development
+  - Kinan International Real Estate Development
+Adeer Real Estate Co.:
+  decision: different
+  reason: ADEER is a separate company from Alramz, Banan and Sumou Real Estate; the names share only 'real
+    estate'
+  against:
+  - Alramz Real Estate
+  - Banan Real Estate
+  - Sumou Real Estate
+Al Mohafaza Company for Education:
+  decision: different
+  reason: ALMOHAFAZA FOR EDUCATION is a separate company from Al Masar Al Shamil Education; the names
+    share only 'al' and 'education'
+  against:
+  - Al Masar Al Shamil Education
+Al Kuzama Trading Co.:
+  decision: different
+  reason: AlKUZAMA is a separate company from Al-Omran Industrial Trading and Zahrat Al Waha for Trading;
+    the names share only 'trading'
+  against:
+  - Al-Omran Industrial Trading
+  - Zahrat Al Waha for Trading
+Riyal Investment and Development Co.:
+  decision: different
+  reason: RIYAL (Transportation) is a separate company from Coast Investment and Development, Jazan Development
+    and Investment and AlSaif Stores; the names share only generic words
+  against:
+  - Coast Investment and Development
+  - Jazan Development and Investment
+  - AlSaif Stores for Development and Investment
+AME Company for Medical Supplies:
+  decision: same
+  issuer: Alf Meem Yaa Medical Supplies
+  reason: AME is the Arabic name ألف-ميم-ياء (Alf Meem Yaa) of the same company; the existing
+    document's URL ends in IRAccessToken=AME, and both are in Health Care Equipment & Svc

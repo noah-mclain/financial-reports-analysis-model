@@ -1,15 +1,17 @@
-"""Interim statement pairs from Argaam's financial-statements listing.
+"""Interim statements from Argaam's financial-statements listing.
 
-    uv run python scripts/argaam_listing.py collect --cache DIR --report FILE [--write]
+    uv run python scripts/argaam_listing.py collect --market main|nomu --cache DIR \
+        --report FILE [--write]
     uv run python scripts/corpus.py fetch --new
-    uv run python scripts/argaam_listing.py screen --cache DIR [--apply]
+    uv run python scripts/argaam_listing.py screen --market main|nomu --cache DIR [--apply]
 
-Argaam lists, for every company on the Saudi market, the Arabic and English edition of each
+Argaam lists, for every company on a Saudi market, the Arabic and English edition of each
 period's statements for the current year. `collect` reads that one table, keeps corporate
-issuers that have both editions of the first quarter, settles which of them the corpus already
-holds, and adds a pair of entries per issuer to eval/corpus/candidates.yaml. `screen` then
-checks the downloaded files (language, period, clean text layer) and takes out the pairs that
-fail: they are set aside in eval/corpus/deferred.yaml, with the reason.
+issuers that have an Arabic edition of the market's period (the first quarter on the main
+market, the half year on Nomu), settles which of them the corpus already holds, and adds an
+entry per edition to eval/corpus/candidates.yaml. `screen` then checks the downloaded files
+(language, period, clean text layer) and takes out the editions that fail: they are set aside
+in eval/corpus/deferred.yaml, with the reason.
 
 The year tabs of earlier years are behind the site's subscription; only the open year is read.
 """
@@ -17,6 +19,7 @@ The year tabs of earlier years are behind the site's subscription; only the open
 from __future__ import annotations
 
 import argparse
+import functools
 import re
 import sys
 import unicodedata
@@ -24,8 +27,10 @@ from collections import Counter, defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
+from itertools import chain
 from pathlib import Path
 from typing import Any, NamedTuple, TypeVar
+from urllib.parse import parse_qs, urlsplit
 
 import yaml
 
@@ -42,10 +47,73 @@ DECISIONS = corpus.ROOT / "eval/corpus/argaam_decisions.yaml"
 SITE = "https://www.argaam.com"
 COUNTRY = "SA"
 FISCAL_YEAR = 2026
-LISTING_URL = f"{SITE}/en/company/financial-pdf/3/{FISCAL_YEAR}?isajax=true"
-PERIOD_END = f"31 March {FISCAL_YEAR}"  # the end of the first quarter
-PERIOD_COLUMN = "Q1"
 LANGUAGES = ("ar", "en")
+_MONTHS = [
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+]
+
+
+# Each month's spellings in Arabic text layers, January first.
+_ARABIC_MONTHS = [
+    ("يناير", "كانون الثاني"),
+    ("فبراير", "شباط"),
+    ("مارس",),
+    ("أبريل", "إبريل", "نيسان"),
+    ("مايو", "أيار"),
+    ("يونيو", "يونية", "حزيران"),
+    ("يوليو", "يولية", "تموز"),
+    ("أغسطس", "آب"),
+    ("سبتمبر", "أيلول"),
+    ("أكتوبر", "تشرين الأول"),
+    ("نوفمبر", "تشرين الثاني"),
+    ("ديسمبر", "كانون الأول"),
+]
+
+
+class Period(NamedTuple):
+    """The period end a listing column holds, in the year collected."""
+
+    day: int
+    month: int
+
+    @property
+    def arabic_month(self) -> tuple[str, ...]:
+        return _ARABIC_MONTHS[self.month - 1]
+
+    @property
+    def label(self) -> str:
+        return f"{self.day} {_MONTHS[self.month - 1].title()} {FISCAL_YEAR}"
+
+
+class Market(NamedTuple):
+    """A listing: Argaam's market id, the column to read and the period that column holds."""
+
+    name: str
+    market_id: int
+    column: str
+    period: Period
+
+    @property
+    def listing_url(self) -> str:
+        return f"{SITE}/en/company/financial-pdf/{self.market_id}/{FISCAL_YEAR}?isajax=true"
+
+
+# The main market reports quarters: its Q1 column holds 31 March. Nomu reports half-yearly: its
+# Q2 column holds the half year, 30 June.
+MAIN = Market("main", 3, "Q1", Period(31, 3))
+NOMU = Market("nomu", 14, "Q2", Period(30, 6))
+MARKETS = {market.name: market for market in (MAIN, NOMU)}
 _EDITION_LABELS = {"Ar": "ar", "En": "en"}
 _BOARD_REPORT = "Board Report"
 # The company table has these columns, except that the REIT tables report halves, not Q2 and Q4.
@@ -79,6 +147,7 @@ CORPORATE_SECTORS = frozenset(
         "Media and Entertainment",
         "Pharma, Biotech & Life Sciences",
         "Household & Personal Products",
+        "Technology Hardware & Equipment",
     }
 )
 
@@ -104,8 +173,8 @@ def is_corporate(row: ListingRow) -> bool:
 # ending right before the first located statement page, and only when the two statements are at
 # most MAX_STATEMENT_GAP pages apart. Images of statements are a longer run (fails the first);
 # a notes page matched for one statement lies far from the other (fails the second) or from the
-# run (fails the first). Page 1 is excepted, a cover is often an image and is not a statement. A
-# pair is kept when both its editions are clean.
+# run (fails the first). Page 1 is excepted, a cover is often an image and is not a statement.
+# Which clean editions are kept is `kept_editions`.
 REQUIRED_STATEMENTS = frozenset({StatementType.BALANCE, StatementType.INCOME})
 _STATEMENT_NAMES = {
     StatementType.BALANCE: "statement of financial position",
@@ -134,7 +203,7 @@ ENGLISH_EDITION_MAX_ARABIC = 0.5
 # The period is read from the first pages with text, the language from every page that has text.
 PERIOD_PAGES = 5
 # A later period named on these first pages with text (the title pages) overrules a mention of
-# 31 March 2026 further on, such as a comparative in the second quarter's statements.
+# the period end further on, such as a comparative in the next quarter's statements.
 TITLE_PAGES = 2
 
 
@@ -296,23 +365,26 @@ def issuer_name(full_name: str) -> str:
     return _LEGAL_FORM.sub("", full_name.strip())
 
 
-def has_both_q1(row: ListingRow) -> bool:
-    return set(row.editions.get(PERIOD_COLUMN, {})) == set(LANGUAGES)
+def has_arabic(row: ListingRow, market: Market) -> bool:
+    return "ar" in row.editions.get(market.column, {})
 
 
 def pair_entries(
     row: ListingRow,
     issuer: str,
     *,
+    market: Market,
     pool: str,
     role: str,
-    languages: tuple[str, ...] = LANGUAGES,
+    languages: tuple[str, ...] | None = None,
 ) -> list[dict[str, Any]]:
-    """The candidates.yaml entries for a row's first-quarter editions, Arabic first."""
-    editions = row.editions.get(PERIOD_COLUMN, {})
+    """The candidates.yaml entries for a row's editions of the market's period, Arabic first;
+    by default the editions the row has."""
+    editions = row.editions.get(market.column, {})
+    languages = languages or tuple(lang for lang in LANGUAGES if lang in editions)
     missing = [lang for lang in languages if lang not in editions]
-    if missing:
-        raise ValueError(f"{row.short_name}: no {PERIOD_COLUMN} edition in {missing}")
+    if missing or not languages:
+        raise ValueError(f"{row.short_name}: no {market.column} edition in {missing or LANGUAGES}")
     return [
         {
             "id": f"{issuer_slug(issuer)}-{FISCAL_YEAR}-{lang}-interim",
@@ -393,6 +465,21 @@ def near_matches(
     return sorted(found, key=lambda f: (f[2] != "alias", -f[1]))[:NEAR_MATCH_LIMIT]
 
 
+URL_TOKEN = "IRAccessToken"  # the query parameter that carries the issuer's short name
+
+
+def url_token_issuers(documents: list[dict[str, Any]]) -> dict[str, set[str]]:
+    """The issuers of the documents by the short name their URLs carry (`?IRAccessToken=AME`),
+    spelled as `_joined` spells a name. The token names the company whatever the issuer is
+    called, so it finds an issuer recorded under a translated or abbreviated name."""
+    found: dict[str, set[str]] = defaultdict(set)
+    for doc in documents:
+        for token in parse_qs(urlsplit(doc["url"]).query).get(URL_TOKEN, []):
+            if _joined(token):
+                found[_joined(token)].add(doc["issuer"])
+    return found
+
+
 _ARABIC_RANGES = ((0x0600, 0x06FF), (0x0750, 0x077F), (0xFB50, 0xFDFF), (0xFE70, 0xFEFF))
 
 
@@ -417,53 +504,73 @@ def script_share(text: str) -> float | None:
 
 _EASTERN_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
 _SEP = r"[\s,.\-/\u200e\u200f]*"
-_MONTH = r"(?:march|مارس)"
-_DAY = r"(?<!\d)31(?!\d)"
 _YEAR = rf"(?<!\d){FISCAL_YEAR}م?(?!\d)"  # Arabic years may carry the م of "Gregorian"
-# 31 March 2026 and March 31, 2026, and the same in the reversed word order that some Arabic
-# text layers give; or the date in numbers.
-_PERIOD_END = re.compile(
-    "|".join(
-        [
-            f"{_DAY}{_SEP}{_MONTH}{_SEP}{_YEAR}",
-            f"{_MONTH}{_SEP}{_DAY}{_SEP}{_YEAR}",
-            f"{_YEAR}{_SEP}{_MONTH}{_SEP}{_DAY}",
-            f"{_YEAR}{_SEP}{_DAY}{_SEP}{_MONTH}",
-            rf"(?<!\d)31[/.-]0?3[/.-]{FISCAL_YEAR}(?!\d)",
-            rf"(?<!\d){FISCAL_YEAR}[/.-]0?3[/.-]31(?!\d)",
-        ]
+
+
+@functools.cache
+def _period_end(period: Period) -> re.Pattern[str]:
+    """The period end as 31 March 2026 and March 31, 2026, and the same in the reversed word
+    order that some Arabic text layers give; or the date in numbers."""
+    month = "(?:" + "|".join([_MONTHS[period.month - 1], *period.arabic_month]) + ")"
+    day = rf"(?<!\d){period.day}(?!\d)"
+    return re.compile(
+        "|".join(
+            [
+                f"{day}{_SEP}{month}{_SEP}{_YEAR}",
+                f"{month}{_SEP}{day}{_SEP}{_YEAR}",
+                f"{_YEAR}{_SEP}{month}{_SEP}{day}",
+                f"{_YEAR}{_SEP}{day}{_SEP}{month}",
+                rf"(?<!\d){period.day}[/.-]0?{period.month}[/.-]{FISCAL_YEAR}(?!\d)",
+                rf"(?<!\d){FISCAL_YEAR}[/.-]0?{period.month}[/.-]{period.day}(?!\d)",
+            ]
+        )
     )
+
+
+def shows_period_end(text: str, period: Period) -> bool:
+    """Whether the text names the period end, in either language and any digit form. Other
+    dates, and a day or month number elsewhere on the page, do not count."""
+    return bool(_period_end(period).search(text.translate(_EASTERN_DIGITS).lower()))
+
+
+_AFTER_PERIOD_WORD = (
+    r"(?:\b(?:ended|ending|as\s+at|as\s+of)\b|المنتهي[ةه]?(?:\s+في)?|كما\s+في)[^0-9a-z]{0,4}"
 )
 
 
-def shows_period_end(text: str) -> bool:
-    """Whether the text names 31 March 2026, in either language and any digit form. Other
-    dates, and a 3 or a 31 elsewhere on the page, do not count."""
-    return bool(_PERIOD_END.search(text.translate(_EASTERN_DIGITS).lower()))
-
-
-_LATER_MONTH = r"(?:april|may|june|july|august|september|october|november|december)"
-_AFTER_PERIOD_WORD = r"\b(?:ended|ending|as\s+at|as\s+of)\b[^0-9a-z]{0,4}"
-_LATER_PERIOD = re.compile(
-    "|".join(
-        [
-            rf"{_AFTER_PERIOD_WORD}(?:\d{{1,2}}\W{{0,3}})?{_LATER_MONTH}\W{{0,4}}(?:\d{{1,2}}\W{{1,3}})?{FISCAL_YEAR}",
-            rf"{_AFTER_PERIOD_WORD}\d{{1,2}}[/.-](?:0?[4-9]|1[0-2])[/.-]{FISCAL_YEAR}",
-        ]
+@functools.cache
+def _later_period(period: Period) -> re.Pattern[str]:
+    months = "|".join(
+        [*_MONTHS[period.month :], *chain.from_iterable(_ARABIC_MONTHS[period.month :])]
     )
-)
+    numbers = "|".join(f"0?{m}" for m in range(period.month + 1, 13))
+    return re.compile(
+        "|".join(
+            [
+                rf"{_AFTER_PERIOD_WORD}(?:\d{{1,2}}\W{{0,3}})?(?:{months})\W{{0,4}}(?:\d{{1,2}}\W{{1,3}})?{FISCAL_YEAR}",
+                rf"{_AFTER_PERIOD_WORD}\d{{1,2}}[/.-](?:{numbers})[/.-]{FISCAL_YEAR}",
+            ]
+        )
+    )
 
 
-def names_later_period(text: str) -> bool:
-    """Whether the text gives a period end in 2026 after March ("ended 30 June 2026", "as at
-    September 30, 2026"), as the title pages of a later quarter do. A report dated in May, or a
-    2025 comparative, is not a later period. English only: the other edition tells."""
-    return bool(_LATER_PERIOD.search(" ".join(text.translate(_EASTERN_DIGITS).lower().split())))
+def names_later_period(text: str, period: Period) -> bool:
+    """Whether the text gives a period end in 2026 after the period's month ("ended 30 June
+    2026" for the first quarter, "as at September 30, 2026" for the half year), as the title
+    pages of a later period do, in either language ("المنتهية في 30 يونيو 2026"). A report dated in
+    that month, or a 2025 comparative, is not a later period."""
+    return bool(
+        _later_period(period).search(" ".join(text.translate(_EASTERN_DIGITS).lower().split()))
+    )
 
 
-def is_clean_pair(arabic: bool | None, english: bool | None) -> bool:
-    """A pair is kept when both editions are clean; an edition that is not there is not judged."""
-    return all(clean for clean in (arabic, english) if clean is not None)
+def kept_editions(arabic: bool | None, english: bool | None) -> frozenset[str]:
+    """Which clean editions of a company are kept (None: there is no such edition). A clean
+    Arabic edition is kept on its own; an English edition only beside a clean Arabic one, so
+    that new additions never widen the gap between the two languages."""
+    if not arabic:
+        return frozenset()
+    return frozenset({"ar", "en"} if english else {"ar"})
 
 
 class LocatedPage(NamedTuple):
@@ -487,7 +594,7 @@ class TextFacts(NamedTuple):
 _PERIOD_PHRASE = re.compile(r"(?:ended|ending)\s+[A-Za-z0-9 ,/.-]{0,24}?20\d\d", re.IGNORECASE)
 
 
-def analyse_pages(pages: list[PageText], book: TitleBook) -> TextFacts:
+def analyse_pages(pages: list[PageText], book: TitleBook, period: Period) -> TextFacts:
     """What a file's pages show: the script, pages whose text layer is noise, whether the first
     pages with text name the period, and which statements the project's locator finds on the
     text pages (pages without text count for nothing: no OCR runs)."""
@@ -507,8 +614,8 @@ def analyse_pages(pages: list[PageText], book: TitleBook) -> TextFacts:
         arabic_share=script_share("\n".join(page.text for page in textful)),
         textful_pages=len(textful),
         garbled_pages=len(textful) - len(readable),
-        shows_period=any(shows_period_end(text) for text in first)
-        and not any(names_later_period(text) for text in first[:TITLE_PAGES]),
+        shows_period=any(shows_period_end(text, period) for text in first)
+        and not any(names_later_period(text, period) for text in first[:TITLE_PAGES]),
         period_seen=seen,
         statements=frozenset(r.type for r in ranges),
         image_pages_before_statements=tuple(
@@ -620,21 +727,23 @@ def build_plan(
     documents: list[dict[str, Any]],
     golden_keys: set[str],
     decisions: dict[str, Decision],
+    market: Market,
 ) -> Plan:
     """Which entries to add, with the count at every step. `names` maps a company path to its
-    full English name; `documents` are the entries already in candidates.yaml."""
+    full English name; `documents` are the entries already in candidates.yaml, those of every
+    market (a company can move between them)."""
     plan = Plan()
 
     def step(label: str, group: list[ListingRow]) -> None:
         plan.funnel.append(
-            (label, len(group), sum(len(r.editions.get(PERIOD_COLUMN, {})) for r in group))
+            (label, len(group), sum(len(r.editions.get(market.column, {})) for r in group))
         )
 
     step("rows in the listing", rows)
-    both = [r for r in rows if has_both_q1(r)]
-    step("with both Q1 editions", both)
-    corporate = [r for r in both if is_corporate(r)]
-    plan.skipped_sectors.update(r.sector for r in both if r not in corporate)
+    arabic = [r for r in rows if has_arabic(r, market)]
+    step(f"with an Arabic {market.column} edition", arabic)
+    corporate = [r for r in arabic if is_corporate(r)]
+    plan.skipped_sectors.update(r.sector for r in arabic if r not in corporate)
     step("after the sector filter", corporate)
     candidates = [r for r in corporate if issuer_key(names[r.path]) not in golden_keys]
     plan.skipped_golden = [names[r.path] for r in corporate if r not in candidates]
@@ -650,6 +759,7 @@ def build_plan(
     by_url = {doc["url"]: issuer_key(doc["issuer"]) for doc in documents}
     key_count = Counter(issuer_key(names[r.path]) for r in candidates)
     existing_names = sorted({e.issuer for e in existing.values()})
+    by_token = url_token_issuers(documents)
 
     groups: dict[str, list[ListingRow]] = defaultdict(list)
     undecided: list[str] = []
@@ -666,17 +776,22 @@ def build_plan(
         match = next(iter(linked), key if key in existing else None)
         if match is not None:
             groups["same issuer as an existing one (name or url)"].append(r)
-            _add_pair(plan, r, existing[match], taken_ids)
+            _add_pair(plan, r, existing[match], taken_ids, market)
             continue
         others = existing_names + [names[o.path] for o in candidates if o is not r]
         near = near_matches(name, others, [r.short_name])
+        near += [
+            (issuer, 1.0, "url token")
+            for issuer in sorted(by_token.get(_joined(r.short_name), ()))
+            if issuer not in {n for n, _, _ in near}
+        ]
         decision = decisions.get(name)
         if decision is None:
             if near:
-                undecided.append(name)
+                undecided.append(f"{name} (near {', '.join(o for o, _, _ in near)})")
             else:
                 groups["new issuer, no near match"].append(r)
-                _add_new(plan, r, issuer_name(name))
+                _add_new(plan, r, issuer_name(name), market, taken_ids)
             continue
         if decision.decision == "same":
             target = existing.get(issuer_key(decision.issuer or ""))
@@ -693,7 +808,7 @@ def build_plan(
                 )
                 for o, sc, _ in near
             ]
-            _add_pair(plan, r, target, taken_ids)
+            _add_pair(plan, r, target, taken_ids, market)
         elif decision.decision == "exclude":
             plan.excluded.append((name, decision.reason))
             groups["decided to leave out"].append(r)
@@ -707,7 +822,7 @@ def build_plan(
                 )
             groups["decided different"].append(r)
             plan.near += [NearRow(name, o, sc, "different", decision.reason) for o, sc, _ in near]
-            _add_new(plan, r, issuer_name(name))
+            _add_new(plan, r, issuer_name(name), market, taken_ids)
         else:
             raise ValueError(
                 f"{name}: decision must be same, different or exclude, got {decision.decision!r}"
@@ -723,27 +838,40 @@ def build_plan(
     return plan
 
 
-def _add_new(plan: Plan, row: ListingRow, name: str) -> None:
-    plan.entries += pair_entries(row, name, pool=assign_pool(name), role="corporate")
+def _add_new(plan: Plan, row: ListingRow, name: str, market: Market, taken_ids: set[str]) -> None:
+    entries = pair_entries(row, name, market=market, pool=assign_pool(name), role="corporate")
+    plan.entries += _unique_ids(entries, taken_ids)
 
 
-def _add_pair(plan: Plan, row: ListingRow, issuer: _Existing, taken_ids: set[str]) -> None:
-    """Entries for the Q1 editions an existing issuer lacks, under its own name, pool and role.
-    A 2026 edition of another quarter does not count as the Q1 edition; the Q1 entry then takes
-    the first four characters of its file name as an id suffix, as other repeated ids do."""
+def _unique_ids(entries: list[dict[str, Any]], taken_ids: set[str]) -> list[dict[str, Any]]:
+    """An entry whose id is taken (by another issuer's, or by the same issuer's edition of
+    another period) takes the first four characters of its file name as an id suffix, as other
+    repeated ids do."""
+    for entry in entries:
+        if entry["id"] in taken_ids:
+            entry["id"] += "-" + entry["url"].rsplit("/", 1)[-1][:4]
+        taken_ids.add(entry["id"])
+    return entries
+
+
+def _add_pair(
+    plan: Plan, row: ListingRow, issuer: _Existing, taken_ids: set[str], market: Market
+) -> None:
+    """Entries for the editions of the market's period an existing issuer lacks, under its own
+    name, pool and role. A 2026 edition of another period does not count as this period's."""
     if issuer.role == "negative_control":
         plan.skipped_existing.append((issuer.issuer, "both", "negative control"))
         return
-    other_quarters = {
+    editions = row.editions[market.column]
+    other_periods = {
         url
-        for period, urls in row.editions.items()
-        if period != PERIOD_COLUMN
+        for column, urls in row.editions.items()
+        if column != market.column
         for url in urls.values()
     }
     urls = {doc["url"] for doc in issuer.docs}
     wanted = []
-    for language in LANGUAGES:
-        q1_url = row.editions[PERIOD_COLUMN][language]
+    for language in (lang for lang in LANGUAGES if lang in editions):
         recent = [
             d
             for d in issuer.docs
@@ -751,9 +879,9 @@ def _add_pair(plan: Plan, row: ListingRow, issuer: _Existing, taken_ids: set[str
             and d["period"] == "interim"
             and d["language"] == language
         ]
-        if q1_url in urls:
+        if editions[language] in urls:
             plan.skipped_existing.append((issuer.issuer, language, "url already in candidates"))
-        elif any(d["url"] not in other_quarters for d in recent):
+        elif any(d["url"] not in other_periods for d in recent):
             plan.skipped_existing.append(
                 (issuer.issuer, language, f"has a {FISCAL_YEAR} interim edition of unknown quarter")
             )
@@ -762,12 +890,14 @@ def _add_pair(plan: Plan, row: ListingRow, issuer: _Existing, taken_ids: set[str
     if not wanted:
         return
     entries = pair_entries(
-        row, issuer.issuer, pool=issuer.pool, role=issuer.role, languages=tuple(wanted)
+        row,
+        issuer.issuer,
+        market=market,
+        pool=issuer.pool,
+        role=issuer.role,
+        languages=tuple(wanted),
     )
-    for entry in entries:
-        if entry["id"] in taken_ids:
-            entry["id"] += "-" + entry["url"].rsplit("/", 1)[-1][:4]
-    plan.entries += entries
+    plan.entries += _unique_ids(entries, taken_ids)
 
 
 _SECTION = re.compile(r"^  # ---- (\w+) ----$")
@@ -877,8 +1007,9 @@ def _report(plan: Plan) -> str:
 def cmd_collect(args: argparse.Namespace) -> int:
     polite = Politeness()
     requests = Requests(args.cache, polite)
-    rows = requests.page(LISTING_URL, "listing.html", parse_listing)
-    wanted = [r for r in rows if has_both_q1(r) and is_corporate(r)]
+    market = MARKETS[args.market]
+    rows = requests.page(market.listing_url, "listing.html", parse_listing)
+    wanted = [r for r in rows if has_arabic(r, market) and is_corporate(r)]
     names = {
         r.path: requests.page(
             SITE + r.path, f"company/{r.path.split('/')[-1]}.html", parse_company_name
@@ -889,10 +1020,10 @@ def cmd_collect(args: argparse.Namespace) -> int:
     documents = corpus.load_yaml(corpus.CANDIDATES)["documents"]
     documents += set_aside_documents()
     golden_keys, _ = corpus.golden_index()
-    plan = build_plan(rows, names, documents, golden_keys, _load_decisions())
+    plan = build_plan(rows, names, documents, golden_keys, _load_decisions(), market)
 
     for label, issuers, editions in plan.funnel:
-        print(f"{label:<48} issuers={issuers:<4} q1 editions={editions}")
+        print(f"{label:<48} issuers={issuers:<4} {market.column} editions={editions}")
     print(f"skipped by sector: {dict(plan.skipped_sectors)}")
     added_issuers = {e["issuer"] for e in plan.entries}
     print(f"entries to add: {len(plan.entries)} for {len(added_issuers)} issuers")
@@ -939,7 +1070,11 @@ def _share(arabic_share: float | None) -> str:
 
 
 def check_document(
-    doc: dict[str, Any], entry: dict[str, Any] | None, config: IngestConfig, book: TitleBook
+    doc: dict[str, Any],
+    entry: dict[str, Any] | None,
+    config: IngestConfig,
+    book: TitleBook,
+    period: Period,
 ) -> DocCheck:
     """Language, period and clean checks for one downloaded file. A file that was not downloaded
     stops the run: it says nothing about the document."""
@@ -950,7 +1085,7 @@ def check_document(
             f"{doc['id']}: not downloaded ({error}); run `corpus.py fetch --id {doc['id']}`"
         )
     result = DocCheck(doc)
-    text = result.text = analyse_pages(read_pages(path, config, None), book)
+    text = result.text = analyse_pages(read_pages(path, config, None), book, period)
     result.clean = is_clean(text)
     # A file with no text, or whose text layer is noise, cannot be read for its language or
     # period; the clean rule sets such a file aside, and the other edition still shows the period.
@@ -963,9 +1098,19 @@ def check_document(
             "a wrong-language file or an undecodable text layer"
         )
     if not text.shows_period:
-        seen = f"they show {text.period_seen!r}" if text.period_seen else "they name no period"
-        result.problems.append(f"the first pages do not show {PERIOD_END}: {seen}")
+        result.problems.append(period_problem(text, period))
     return result
+
+
+def period_problem(text: TextFacts, period: Period) -> str:
+    """Why a file does not show the period: the reader found another period end in its first
+    pages (`period_seen`), or found none, which says nothing of what the file holds."""
+    seen = (
+        f"another period is shown, {text.period_seen!r}"
+        if text.period_seen
+        else "the reader found no period end in them"
+    )
+    return f"the first pages do not show {period.label}: {seen}"
 
 
 def _why_not_clean(check: DocCheck) -> str:
@@ -986,35 +1131,69 @@ def _why_not_clean(check: DocCheck) -> str:
     return f"{_LANGUAGE_NAMES[check.doc['language']]} edition: {', '.join(reasons)}"
 
 
-def judge(checks: list[DocCheck]) -> tuple[str, str]:
-    """One issuer's documents -> (kept | wrong | noisy, reason). `wrong` is a file that holds
-    another period or the wrong language."""
+class Verdict(NamedTuple):
+    """What becomes of one document: `kept`, or set aside as `wrong` (another period or the wrong
+    language), `noisy` (not clean) or `no_arabic` (an English edition with no Arabic edition of
+    the same statements to keep it beside), with the reason."""
+
+    kind: str
+    reason: str
+
+
+def judge(checks: list[DocCheck]) -> dict[str, Verdict]:
+    """One issuer's documents -> a verdict for each. A period or language problem in any edition
+    sets the whole company aside: a file that shows another period says the company's slot holds
+    that period, whichever edition is clean. Otherwise which clean editions are kept is
+    `kept_editions`, and a document that is not kept is set aside with the reasons of the
+    editions that are not good: when the Arabic edition is kept that is the English edition's
+    alone."""
+    by_language = {c.doc["language"]: c for c in checks}
+    clean = {lang: c.clean for lang, c in by_language.items()}
+    kept = (
+        frozenset()
+        if any(c.problems for c in checks)
+        else kept_editions(clean.get("ar"), clean.get("en"))
+    )
+    left_out = _not_kept(checks)  # every reason lies with an edition that is not kept
+    return {
+        c.doc["id"]: Verdict("kept", "") if c.doc["language"] in kept else left_out for c in checks
+    }
+
+
+def _not_kept(checks: list[DocCheck]) -> Verdict:
     problems = [f"{c.doc['id']}: {p}" for c in checks for p in c.problems]
     if problems:
-        return "wrong", "; ".join(problems)
-    by_language = {c.doc["language"]: c.clean for c in checks}
-    if is_clean_pair(by_language.get("ar"), by_language.get("en")):
-        return "kept", ""
+        return Verdict("wrong", "; ".join(problems))
+    reasons = [_why_not_clean(c) for c in checks if not c.clean]
+    if not reasons:
+        return Verdict(
+            "no_arabic",
+            "English edition: no Arabic edition of the same statements was judged; an English "
+            "edition is kept only beside a clean Arabic one",
+        )
     unverified = [
         c.doc["id"]
         for c in checks
         if c.text and (c.text.textful_pages == 0 or c.text.garbled_pages)
     ]
-    reasons = [_why_not_clean(c) for c in checks if not c.clean]
     if unverified:
         reasons.append(f"language and period not checkable in {', '.join(unverified)}")
-    return "noisy", "; ".join(reasons)
+    return Verdict("noisy", "; ".join(reasons))
 
 
-def q1_counterparts(
-    docs: list[dict[str, Any]], rows: list[ListingRow], candidates: list[dict[str, Any]]
+def counterparts(
+    docs: list[dict[str, Any]],
+    rows: list[ListingRow],
+    candidates: list[dict[str, Any]],
+    market: Market,
 ) -> list[dict[str, Any]]:
-    """The corpus documents that are the other Q1 edition of the given documents (by the
-    listing's URLs) and are not among them: a pair that relies on one is judged on both."""
+    """The corpus documents that are the other edition of the given documents (by the listing's
+    URLs in the market's column) and are not among them: an edition that relies on one is
+    judged beside it."""
     editions = {
-        u: row.editions[PERIOD_COLUMN]
+        u: row.editions[market.column]
         for row in rows
-        for u in row.editions.get(PERIOD_COLUMN, {}).values()
+        for u in row.editions.get(market.column, {}).values()
     }
     taken = {d["id"] for d in docs}
     wanted = {u for d in docs for u in editions.get(d["url"], {}).values()}
@@ -1044,14 +1223,17 @@ def cmd_screen(args: argparse.Namespace) -> int:
     documents = {d["id"]: d for d in candidates}
     fetched = (corpus.load_yaml(corpus.FETCHED) or {}).get("documents", {})
     config, book = load_config(), load_title_book()
+    market = MARKETS[args.market]
     rows = parse_listing((args.cache / "listing.html").read_text(encoding="utf-8"))
     # Documents set aside by an earlier run are no longer candidates and are not checked again.
     checked = [documents[i] for i in sorted(added & documents.keys())]
     by_issuer: dict[str, list[DocCheck]] = defaultdict(list)
     for doc in checked:
-        by_issuer[doc["issuer"]].append(check_document(doc, fetched.get(doc["id"]), config, book))
-    for doc in q1_counterparts(checked, rows, candidates):
-        found = check_document(doc, fetched.get(doc["id"]), config, book)
+        by_issuer[doc["issuer"]].append(
+            check_document(doc, fetched.get(doc["id"]), config, book, market.period)
+        )
+    for doc in counterparts(checked, rows, candidates, market):
+        found = check_document(doc, fetched.get(doc["id"]), config, book, market.period)
         found.existing = True
         by_issuer[doc["issuer"]].append(found)
 
@@ -1067,21 +1249,21 @@ def cmd_screen(args: argparse.Namespace) -> int:
             f"{c.doc['id']:<60} {'existing ' if c.existing else ''}{detail} {'; '.join(c.problems)}"
         )
 
-    verdicts = {issuer: judge(checks) for issuer, checks in by_issuer.items()}
-    for kind in ("kept", "wrong", "noisy"):
-        chosen = [i for i, (k, _) in verdicts.items() if k == kind]
-        count = sum(1 for i in chosen for c in by_issuer[i] if not c.existing)
-        print(f"{kind}: {len(chosen)} issuers, {count} documents")
+    verdicts: dict[str, Verdict] = {}
+    for checks in by_issuer.values():
+        verdicts |= judge(checks)
+    for kind in ("kept", "wrong", "noisy", "no_arabic"):
+        chosen = [c for c in all_checks if not c.existing and verdicts[c.doc["id"]].kind == kind]
+        print(f"{kind}: {len({c.doc['issuer'] for c in chosen})} issuers, {len(chosen)} documents")
         if kind != "kept":
-            for issuer in chosen:
-                print(f"  {issuer}: {verdicts[issuer][1]}")
+            for c in chosen:
+                print(f"  {c.doc['id']}: {verdicts[c.doc['id']].reason}")
     if not args.apply:
         return 0
 
-    out = {i: v for i, v in verdicts.items() if v[0] != "kept"}
-    leaving = [c for i in out for c in by_issuer[i] if not c.existing]
+    leaving = [c for c in all_checks if not c.existing and verdicts[c.doc["id"]].kind != "kept"]
     out_ids = {c.doc["id"] for c in leaving}
-    now_set_aside = [{**c.doc, "reason": out[c.doc["issuer"]][1]} for c in leaving]
+    now_set_aside = [{**c.doc, "reason": verdicts[c.doc["id"]].reason} for c in leaving]
     corpus.CANDIDATES.write_text(
         remove_entries(corpus.CANDIDATES.read_text(encoding="utf-8"), out_ids),
         encoding="utf-8",
@@ -1111,12 +1293,15 @@ def write_set_aside(documents: list[dict[str, Any]]) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
-    collect = sub.add_parser("collect", help="read the listing and add candidate pairs")
+    market_help = f"which listing to read: {', '.join(MARKETS)}"
+    collect = sub.add_parser("collect", help="read the listing and add candidate editions")
+    collect.add_argument("--market", choices=sorted(MARKETS), required=True, help=market_help)
     collect.add_argument("--cache", type=Path, required=True, help="where fetched pages are kept")
     collect.add_argument("--report", type=Path, required=True, help="near-match report to write")
     collect.add_argument("--write", action="store_true", help="add the entries to candidates.yaml")
     collect.set_defaults(func=cmd_collect)
-    screen = sub.add_parser("screen", help="check the downloaded pairs and set the failures aside")
+    screen = sub.add_parser("screen", help="check the downloaded files and set the failures aside")
+    screen.add_argument("--market", choices=sorted(MARKETS), required=True, help=market_help)
     screen.add_argument("--cache", type=Path, required=True, help="the collect cache directory")
     screen.add_argument("--apply", action="store_true", help="edit the corpus files, else report")
     screen.add_argument(

@@ -9,10 +9,13 @@ import yaml
 import argaam_listing
 import fra_ingest.locate
 from argaam_listing import (
+    MAIN,
     MIN_STATEMENT_AMOUNTS,
+    NOMU,
     REQUIRED_STATEMENTS,
     SKIPPED_SECTORS,
     Decision,
+    DocCheck,
     ListingRow,
     LocatedPage,
     TextFacts,
@@ -20,17 +23,20 @@ from argaam_listing import (
     analyse_pages,
     build_plan,
     entry_line,
+    has_arabic,
     is_clean,
-    is_clean_pair,
     is_corporate,
     issuer_name,
     issuer_slug,
+    judge,
+    kept_editions,
     language_matches,
     names_later_period,
     near_matches,
     pair_entries,
     parse_company_name,
     parse_listing,
+    period_problem,
     remove_entries,
     script_share,
     shows_period_end,
@@ -47,6 +53,11 @@ S3 = "https://argaamplus.s3.amazonaws.com/"
 
 def rows() -> dict[str, ListingRow]:
     html = (FIXTURES / "argaam_listing_trimmed.html").read_text(encoding="utf-8")
+    return {row.short_name: row for row in parse_listing(html)}
+
+
+def nomu_rows() -> dict[str, ListingRow]:
+    html = (FIXTURES / "argaam_nomu_listing_trimmed.html").read_text(encoding="utf-8")
     return {row.short_name: row for row in parse_listing(html)}
 
 
@@ -118,6 +129,57 @@ def test_listing_with_an_unknown_edition_label_fails_loudly() -> None:
         parse_listing(html.replace(">Ar</a>", ">Fr</a>", 1))
 
 
+def test_the_nomu_listing_has_the_main_markets_shape() -> None:
+    both, arabic_only, empty = (nomu_rows()[n] for n in ("SIGN WORLD", "NGDC", "ALWAHA REIT"))
+    assert both.path == "/en/tadawul/nomu/sign-world"
+    assert both.sector == "Technology Hardware & Equipment"
+    assert set(both.editions["Q2"]) == {"ar", "en"}
+    assert both.arabic_name
+    assert arabic_only.sector == "Utilities"
+    assert set(arabic_only.editions) == {"Q2"} and set(arabic_only.editions["Q2"]) == {"ar"}
+    assert empty.sector == "REITs"
+    assert "Q2" not in empty.editions and set(empty.editions["First half"]) == {"ar", "en"}
+
+
+def test_nomu_takes_the_half_year_column_and_main_the_first_quarter() -> None:
+    assert (MAIN.market_id, MAIN.column) == (3, "Q1")
+    assert (NOMU.market_id, NOMU.column) == (14, "Q2")
+    assert NOMU.listing_url == (
+        "https://www.argaam.com/en/company/financial-pdf/14/2026?isajax=true"
+    )
+    assert MAIN.listing_url.endswith("/financial-pdf/3/2026?isajax=true")
+    sign, ngdc, alwaha = (nomu_rows()[n] for n in ("SIGN WORLD", "NGDC", "ALWAHA REIT"))
+    assert [has_arabic(r, NOMU) for r in (sign, ngdc, alwaha)] == [True, True, False]
+    assert not has_arabic(sign, MAIN)  # the Q1 column of this row is empty
+
+
+def test_a_nomu_company_page_has_the_same_heading() -> None:
+    html = (FIXTURES / "argaam_nomu_company_page_trimmed.html").read_text(encoding="utf-8")
+    assert parse_company_name(html) == "National Signage Industrial Co."
+
+
+def test_a_sector_new_to_nomu_is_a_corporate_one() -> None:
+    assert is_corporate(nomu_rows()["SIGN WORLD"])
+
+
+def test_pair_entries_take_the_markets_column() -> None:
+    sign = nomu_rows()["SIGN WORLD"]
+    ar, en = pair_entries(
+        sign, "National Signage Industrial", market=NOMU, pool="train", role="corporate"
+    )
+    assert ar["url"] == sign.editions["Q2"]["ar"] and en["url"] == sign.editions["Q2"]["en"]
+    assert (ar["period"], ar["fiscal_year"], ar["country"]) == ("interim", 2026, "SA")
+    with pytest.raises(ValueError, match="SIGN WORLD"):
+        pair_entries(
+            sign,
+            "National Signage Industrial",
+            market=MAIN,
+            pool="train",
+            role="corporate",
+            languages=("ar",),
+        )
+
+
 def test_company_name_comes_from_the_page_heading() -> None:
     html = (FIXTURES / "argaam_company_page_trimmed.html").read_text(encoding="utf-8")
     assert parse_company_name(html) == "Jarir Marketing Co."
@@ -161,7 +223,7 @@ def test_issuer_slug_matches_the_existing_id_convention(name: str, slug: str) ->
 
 def test_pair_entries_follow_the_candidates_format() -> None:
     row = rows()["RIBL"]
-    ar, en = pair_entries(row, "Riyad Bank", pool="train", role="corporate")
+    ar, en = pair_entries(row, "Riyad Bank", market=MAIN, pool="train", role="corporate")
     assert ar["id"] == "riyad-bank-2026-ar-interim"
     assert en["id"] == "riyad-bank-2026-en-interim"
     assert (ar["language"], en["language"]) == ("ar", "en")
@@ -177,16 +239,28 @@ def test_pair_entries_follow_the_candidates_format() -> None:
         )
 
 
-def test_pair_entries_refuse_a_row_without_both_q1_editions() -> None:
+def test_pair_entries_default_to_the_editions_the_row_has() -> None:
+    entries = pair_entries(rows()["LADUN"], "Ladun", market=MAIN, pool="train", role="corporate")
+    assert [e["language"] for e in entries] == ["ar"]
+
+
+def test_pair_entries_refuse_an_edition_the_row_lacks() -> None:
     with pytest.raises(ValueError, match="LADUN"):
-        pair_entries(rows()["LADUN"], "Ladun", pool="train", role="corporate")
+        pair_entries(
+            rows()["LADUN"],
+            "Ladun",
+            market=MAIN,
+            pool="train",
+            role="corporate",
+            languages=("ar", "en"),
+        )
 
 
 @pytest.mark.parametrize(
     "issuer", ["Riyad Bank", "Yanbu National Petrochemical (Yansab)", "A, B & C"]
 )
 def test_entry_line_is_one_line_of_valid_yaml(issuer: str) -> None:
-    ar, _ = pair_entries(rows()["RIBL"], issuer, pool="train", role="corporate")
+    ar, _ = pair_entries(rows()["RIBL"], issuer, market=MAIN, pool="train", role="corporate")
     line = entry_line(ar)
     assert "\n" not in line and line.startswith("  - {id: ")
     assert "kind: financial_statements," in line  # plain, as the existing lines are
@@ -257,7 +331,7 @@ def test_script_share_counts_letters_of_each_script() -> None:
     ],
 )
 def test_period_is_found_in_either_language_and_digit_form(text: str) -> None:
-    assert shows_period_end(text)
+    assert shows_period_end(text, MAIN.period)
 
 
 @pytest.mark.parametrize(
@@ -272,18 +346,51 @@ def test_period_is_found_in_either_language_and_digit_form(text: str) -> None:
     ],
 )
 def test_other_dates_are_not_the_period(text: str) -> None:
-    assert not shows_period_end(text)
+    assert not shows_period_end(text, MAIN.period)
 
 
-def test_a_pair_is_clean_only_when_both_editions_are() -> None:
-    assert is_clean_pair(True, True)
-    assert not is_clean_pair(False, True)
-    assert not is_clean_pair(True, False)
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Condensed statements for the six months ended 30 June 2026",
+        "For the period ended June 30, 2026 (unaudited)",
+        "30 يونيو 2026",
+        "٣٠ يونيو ٢٠٢٦",
+        "للفترة المنتهية في 30/06/2026",
+        "2026-06-30",
+        "30 يونية 2026م",
+    ],
+)
+def test_the_half_year_period_is_found_in_either_language_and_digit_form(text: str) -> None:
+    assert shows_period_end(text, NOMU.period)
+    assert not shows_period_end(text, MAIN.period)
 
 
-def test_clean_rule_applies_to_the_edition_that_is_there() -> None:
-    assert is_clean_pair(True, None)
-    assert not is_clean_pair(None, False)
+@pytest.mark.parametrize(
+    "text",
+    ["31 March 2026", "31 مارس 2026", "30 June 2025", "30 September 2026", "Page 30 of 2026"],
+)
+def test_other_dates_are_not_the_half_year_period(text: str) -> None:
+    assert not shows_period_end(text, NOMU.period)
+
+
+@pytest.mark.parametrize(
+    ("arabic", "english", "kept"),
+    [
+        (True, True, {"ar", "en"}),  # both clean: both kept
+        (True, False, {"ar"}),  # a clean Arabic edition is kept on its own
+        (False, True, set()),  # an English edition only comes with a clean Arabic one
+        (False, False, set()),
+        (True, None, {"ar"}),  # an Arabic-only company is kept when clean
+        (False, None, set()),
+        (None, True, set()),  # an English edition with no Arabic edition is not kept
+        (None, None, set()),
+    ],
+)
+def test_a_clean_arabic_edition_is_kept_alone_and_english_only_beside_it(
+    arabic: bool | None, english: bool | None, kept: set[str]
+) -> None:
+    assert kept_editions(arabic, english) == kept
 
 
 # ---- which companies become candidates ----
@@ -327,6 +434,7 @@ NAMES = {
     "/en/tadawul/tasi/yansab": "Yanbu National Petrochemical Co.",
     "/en/tadawul/tasi/siig": "Saudi Industrial Investment Group",
     "/en/tadawul/tasi/mystery": "Saudi Industrial Mystery",
+    "/en/tadawul/tasi/ame": "AME Company for Medical Supplies",
 }
 GOLDEN_KEYS = {issuer_key("Almarai Company")}
 
@@ -336,7 +444,7 @@ def plan_for(
     docs: list[dict[str, Any]],
     decisions: dict[str, Decision] | None = None,
 ):  # type: ignore[no-untyped-def]
-    return build_plan(rows_, NAMES, docs, GOLDEN_KEYS, decisions or {})
+    return build_plan(rows_, NAMES, docs, GOLDEN_KEYS, decisions or {}, MAIN)
 
 
 def test_new_corporate_issuer_gets_a_pair_in_the_hashed_pool() -> None:
@@ -347,6 +455,85 @@ def test_new_corporate_issuer_gets_a_pair_in_the_hashed_pool() -> None:
     ]
     assert {e["pool"] for e in plan.entries} == {assign_pool("Gulf Cement")}
     assert {e["issuer"] for e in plan.entries} == {"Gulf Cement"}
+
+
+def test_an_arabic_only_company_gets_its_arabic_edition_and_an_english_only_one_nothing() -> None:
+    plan = plan_for([row("onlyar", q1=("ar",)), row("new1", q1=("en",))], [])
+    assert [e["id"] for e in plan.entries] == ["only-arabic-2026-ar-interim"]
+
+
+def test_a_new_issuer_whose_id_is_taken_gets_the_four_character_suffix() -> None:
+    held = existing_doc("Gulf Cement (GC)", "ar", year=2026, period="interim")
+    assert held["id"] == "gulf-cement-2026-ar-interim"
+    decision = Decision("different", None, "another company", ("Gulf Cement (GC)",))
+    plan = plan_for([row("new1")], [held], {"Gulf Cement Co.": decision})
+    assert [e["id"] for e in plan.entries] == [
+        "gulf-cement-2026-ar-interim-new1",
+        "gulf-cement-2026-en-interim",
+    ]
+
+
+def nomu_row(short: str, sector: str = "Materials", q2: tuple[str, ...] = ("ar",)) -> ListingRow:
+    editions = {"Q2": {lang: f"{S3}{short.lower()}-q2-{lang}.pdf" for lang in q2}} if q2 else {}
+    return ListingRow(short, f"/en/tadawul/nomu/{short.lower()}", None, sector, editions)
+
+
+def test_the_nomu_plan_reads_the_half_year_column_and_dedupes_against_all_issuers() -> None:
+    names = {
+        "/en/tadawul/nomu/arabic": "Arabic Only Co.",
+        "/en/tadawul/nomu/both": "Both Editions Co.",
+        "/en/tadawul/nomu/mover": "Jarir Marketing Co.",
+        "/en/tadawul/nomu/fund": "A Fund",
+    }
+    held = [existing_doc("Jarir Marketing", "ar", pool="blind", year=2026, period="interim")]
+    rows_ = [
+        nomu_row("arabic"),
+        nomu_row("both", q2=("ar", "en")),
+        nomu_row("mover"),
+        nomu_row("fund", "REITs", q2=("ar",)),
+        nomu_row("none", q2=()),
+    ]
+    plan = build_plan(rows_, names, held, GOLDEN_KEYS, {}, NOMU)
+    steps = {label: (issuers, documents) for label, issuers, documents in plan.funnel}
+    assert steps["rows in the listing"] == (5, 5)  # editions of Q2 listed
+    assert steps["with an Arabic Q2 edition"] == (4, 5)
+    assert steps["after the sector filter"] == (3, 4)
+    assert plan.skipped_sectors == {"REITs": 1}
+    assert {e["id"]: e["pool"] for e in plan.entries if e["issuer"] != "Jarir Marketing"} == {
+        "arabic-only-2026-ar-interim": assign_pool("Arabic Only"),
+        "both-editions-2026-ar-interim": assign_pool("Both Editions"),
+        "both-editions-2026-en-interim": assign_pool("Both Editions"),
+    }
+    # the company that is already an issuer keeps its pool; its Q1 edition is of unknown quarter
+    assert not [e for e in plan.entries if e["issuer"] == "Jarir Marketing"]
+    assert plan.skipped_existing == [
+        ("Jarir Marketing", "ar", "has a 2026 interim edition of unknown quarter")
+    ]
+
+
+def test_a_nomu_company_that_also_has_a_q1_edition_gets_its_q2_one_under_a_suffix() -> None:
+    q1 = f"{S3}mover-q1-ar.pdf"
+    mover = ListingRow(
+        "MOVER",
+        "/en/tadawul/nomu/mover",
+        None,
+        "Materials",
+        {"Q1": {"ar": q1}, "Q2": {"ar": f"{S3}mover-q2-ar.pdf"}},
+    )
+    held = [
+        existing_doc("Jarir Marketing", "ar", pool="blind", year=2026, period="interim", url=q1)
+    ]
+    plan = build_plan(
+        [mover], {"/en/tadawul/nomu/mover": "Jarir Marketing Co."}, held, GOLDEN_KEYS, {}, NOMU
+    )
+    assert [(e["id"], e["pool"]) for e in plan.entries] == [
+        ("jarir-marketing-2026-ar-interim-move", "blind")
+    ]
+
+
+def test_has_arabic_looks_at_the_markets_period_column() -> None:
+    nomu = ListingRow("X", "/en/tadawul/nomu/x", None, "Materials", {"Q1": {"ar": "u"}})
+    assert has_arabic(nomu, MAIN) and not has_arabic(nomu, NOMU)
 
 
 def test_funnel_and_exclusions_are_counted_step_by_step() -> None:
@@ -360,9 +547,9 @@ def test_funnel_and_exclusions_are_counted_step_by_step() -> None:
     plan = plan_for(rows_, [])
     steps = {label: (issuers, documents) for label, issuers, documents in plan.funnel}
     assert steps["rows in the listing"] == (5, 7)  # editions of Q1 listed
-    assert steps["with both Q1 editions"][0] == 3
-    assert steps["after the sector filter"][0] == 2
-    assert steps["after the golden issuers"][0] == 1
+    assert steps["with an Arabic Q1 edition"] == (4, 7)
+    assert steps["after the sector filter"] == (3, 5)
+    assert steps["after the golden issuers"] == (2, 3)
     assert plan.skipped_sectors == {"Banks": 1}
     assert plan.skipped_golden == ["Almarai Co."]
 
@@ -479,6 +666,58 @@ def test_a_company_decided_same_without_a_near_match_joins_the_existing_issuer()
     assert plan.near == []
 
 
+ALF_MEEM_YAA = "Alf Meem Yaa Medical Supplies"
+
+
+def alf_meem_yaa_docs(token: str = "AME") -> list[dict[str, Any]]:
+    url = f"{S3}f2ddfc2b.pdf?IRAccessToken={token}"
+    return [existing_doc(ALF_MEEM_YAA, "en", pool="blind", year=2025, period="interim", url=url)]
+
+
+def test_a_translated_name_shares_no_name_signal_with_the_issuer_it_is() -> None:
+    assert near_matches(NAMES["/en/tadawul/tasi/ame"], [ALF_MEEM_YAA], ["AME"]) == []
+
+
+def test_an_issuer_whose_url_token_is_the_short_name_is_a_near_match_that_needs_a_decision() -> (
+    None
+):
+    with pytest.raises(ValueError, match="AME Company for Medical Supplies") as stopped:
+        plan_for([row("ame")], alf_meem_yaa_docs())
+    assert ALF_MEEM_YAA in str(stopped.value)
+    assert "argaam_decisions.yaml" in str(stopped.value)
+
+
+def test_the_url_token_is_compared_without_case_spacing_or_punctuation() -> None:
+    with pytest.raises(ValueError, match=ALF_MEEM_YAA):
+        plan_for([row("AME")], alf_meem_yaa_docs(token="a-m e"))
+
+
+def test_another_url_token_is_not_a_near_match() -> None:
+    plan = plan_for([row("ame")], alf_meem_yaa_docs(token="sgh"))
+    assert {e["issuer"] for e in plan.entries} == {"AME Company for Medical Supplies"}
+
+
+def test_a_url_token_match_decided_same_joins_the_issuer_and_its_pool() -> None:
+    decisions = {
+        "AME Company for Medical Supplies": Decision("same", ALF_MEEM_YAA, "URL token AME")
+    }
+    plan = plan_for([row("ame")], alf_meem_yaa_docs(), decisions)
+    assert {e["issuer"] for e in plan.entries} == {ALF_MEEM_YAA}
+    assert {e["pool"] for e in plan.entries} == {"blind"}
+    assert plan.near[0].decision == "same"
+
+
+def test_a_url_token_match_decided_different_must_name_the_issuer_in_against() -> None:
+    decision = Decision("different", None, "another company")
+    with pytest.raises(ValueError, match=ALF_MEEM_YAA):
+        plan_for([row("ame")], alf_meem_yaa_docs(), {"AME Company for Medical Supplies": decision})
+    covered = decision._replace(against=(ALF_MEEM_YAA,))
+    plan = plan_for(
+        [row("ame")], alf_meem_yaa_docs(), {"AME Company for Medical Supplies": covered}
+    )
+    assert plan.entries
+
+
 def test_a_sector_in_neither_list_stops_the_run_naming_it() -> None:
     with pytest.raises(ValueError, match="Mystery Sector") as stopped:
         is_corporate(row("new1", "Mystery Sector"))
@@ -490,7 +729,7 @@ def test_a_sector_in_neither_list_stops_the_run_naming_it() -> None:
 def test_two_new_companies_with_one_issuer_key_are_both_left_out() -> None:
     names = {"/en/tadawul/tasi/a1": "Gulf Cement Co.", "/en/tadawul/tasi/a2": "Gulf Cement Company"}
     rows_ = [row("a1"), row("a2")]
-    plan = build_plan(rows_, names, [], GOLDEN_KEYS, {})
+    plan = build_plan(rows_, names, [], GOLDEN_KEYS, {}, MAIN)
     assert plan.entries == []
     assert [reason for _, reason in plan.excluded] == ["same issuer key as another new company"] * 2
 
@@ -564,7 +803,7 @@ def page_of(text: str, number: int = 1, *, body: str = "") -> PageText:
 
 
 def analyse_texts(texts: list[str]) -> TextFacts:
-    return analyse_pages([page_of(t, i + 1) for i, t in enumerate(texts)], BOOK)
+    return analyse_pages([page_of(t, i + 1) for i, t in enumerate(texts)], BOOK, MAIN.period)
 
 
 AMOUNTS = "\n".join(f"Item {i}  {i}1,234,567  {i}2,345,678" for i in range(1, 40))
@@ -584,21 +823,21 @@ NOTES_PAGE = page_of("Notes to the interim condensed financial statements\nGener
 
 
 def test_a_document_with_both_statements_as_text_is_clean() -> None:
-    found = analyse_pages([BALANCE_PAGE, INCOME_PAGE, NOTES_PAGE], BOOK)
+    found = analyse_pages([BALANCE_PAGE, INCOME_PAGE, NOTES_PAGE], BOOK, MAIN.period)
     assert set(REQUIRED_STATEMENTS) <= found.statements
     assert is_clean(found)
 
 
 def test_a_document_missing_a_statement_page_is_not_clean() -> None:
-    only_balance = analyse_pages([BALANCE_PAGE, NOTES_PAGE], BOOK)
+    only_balance = analyse_pages([BALANCE_PAGE, NOTES_PAGE], BOOK, MAIN.period)
     assert not is_clean(only_balance)
-    textless = analyse_pages([BALANCE_PAGE, page_of("", 5), NOTES_PAGE], BOOK)
+    textless = analyse_pages([BALANCE_PAGE, page_of("", 5), NOTES_PAGE], BOOK, MAIN.period)
     assert not is_clean(textless)
 
 
 def test_a_garbled_page_anywhere_makes_a_document_not_clean() -> None:
     garbled = page_of("αβγδεζηθικλμνξοπρστυφχψω " * 8, 7)
-    found = analyse_pages([BALANCE_PAGE, INCOME_PAGE, garbled], BOOK)
+    found = analyse_pages([BALANCE_PAGE, INCOME_PAGE, garbled], BOOK, MAIN.period)
     assert found.garbled_pages == 1
     assert not is_clean(found)
 
@@ -645,7 +884,7 @@ def test_a_later_2026_period_on_the_title_pages_overrules_a_march_mention() -> N
     ],
 )
 def test_months_after_march_2026_are_recognised_as_a_period_end(text: str) -> None:
-    assert names_later_period(text)
+    assert names_later_period(text, MAIN.period)
 
 
 @pytest.mark.parametrize(
@@ -659,7 +898,76 @@ def test_months_after_march_2026_are_recognised_as_a_period_end(text: str) -> No
     ],
 )
 def test_march_earlier_dates_and_report_dates_are_not_a_later_period(text: str) -> None:
-    assert not names_later_period(text)
+    assert not names_later_period(text, MAIN.period)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["ended 30 September 2026", "AS AT DECEMBER 31, 2026", "ended 31/12/2026", "as at 1 July 2026"],
+)
+def test_months_after_june_2026_are_a_later_period_for_the_half_year(text: str) -> None:
+    assert names_later_period(text, NOMU.period)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["ended 30 June 2026", "ended 31 March 2026", "as at 31 December 2025", "ended 30 June 2025"],
+)
+def test_the_half_year_and_earlier_dates_are_not_later_than_the_half_year(text: str) -> None:
+    assert not names_later_period(text, NOMU.period)
+
+
+ARABIC_JUNE = "القوائم المالية الأولية الموجزة للفترة المنتهية في 30 يونيو 2026م"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        ARABIC_JUNE,
+        "المنتهية في ٣٠ يونيو ٢٠٢٦",
+        "المنتهية في 30 يونية 2026",
+        "كما في 30 حزيران 2026",
+        "المنتهية في 30 سبتمبر 2026",
+        "المنتهيه في 31 ديسمبر 2026",
+        "المنتهية في 30/06/2026",
+    ],
+)
+def test_arabic_months_after_march_2026_are_a_later_period(text: str) -> None:
+    assert names_later_period(text, MAIN.period)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "المنتهية في 31 مارس 2026",
+        "المنتهية في 31 ديسمبر 2025",
+        "المنتهية في 30 يونيو 2025",
+        "تاريخ التقرير 12 مايو 2026",
+    ],
+)
+def test_arabic_march_earlier_dates_and_report_dates_are_not_a_later_period(text: str) -> None:
+    assert not names_later_period(text, MAIN.period)
+
+
+def test_the_arabic_half_year_is_not_later_than_itself_but_september_is() -> None:
+    assert not names_later_period("المنتهية في 30 يونيو 2026", NOMU.period)
+    assert names_later_period("المنتهية في 30 سبتمبر 2026", NOMU.period)
+
+
+def test_an_arabic_file_naming_a_later_period_beside_the_march_date_is_not_the_first_quarter() -> (
+    None
+):
+    text = f"{ARABIC_JUNE} مع أرقام المقارنة كما في 31 مارس 2026"
+    assert shows_period_end(text, MAIN.period)  # the march date is on the page ...
+    assert not analyse_texts([text]).shows_period  # ... but the page is another period's
+
+
+def test_a_half_year_file_is_read_for_its_own_period() -> None:
+    half = "Interim statements for the six-month period ended 30 June 2026 and more words " * 2
+    first_quarter = "Interim statements for the three-month period ended 31 March 2026 " * 2
+    assert analyse_pages([page_of(half, 1)], BOOK, NOMU.period).shows_period
+    assert not analyse_pages([page_of(first_quarter, 1)], BOOK, NOMU.period).shows_period
+    assert not analyse_pages([page_of(half, 1)], BOOK, MAIN.period).shows_period
 
 
 def test_pages_without_text_do_not_use_up_the_first_pages() -> None:
@@ -766,20 +1074,20 @@ def layout(textless: set[int], balance: int, income: int, pages: int = 20) -> li
 
 def test_statements_found_on_notes_after_a_run_of_images_are_not_clean() -> None:
     # The primary statements are the images on pages 5 to 8; the pages found are later notes.
-    found = analyse_pages(layout({5, 6, 7, 8}, balance=16, income=18), BOOK)
+    found = analyse_pages(layout({5, 6, 7, 8}, balance=16, income=18), BOOK, MAIN.period)
     assert set(REQUIRED_STATEMENTS) <= found.statements
     assert found.image_pages_before_statements == (5, 6, 7, 8)
     assert not is_clean(found)
 
 
 def test_a_balance_sheet_image_before_a_notes_page_that_names_it_is_not_clean() -> None:
-    found = analyse_pages(layout({4}, balance=11, income=5), BOOK)
+    found = analyse_pages(layout({4}, balance=11, income=5), BOOK, MAIN.period)
     assert found.image_pages_before_statements == (4,)
     assert not is_clean(found)
 
 
 def test_an_image_cover_is_allowed_before_text_statements() -> None:
-    found = analyse_pages(layout({1}, balance=4, income=5), BOOK)
+    found = analyse_pages(layout({1}, balance=4, income=5), BOOK, MAIN.period)
     assert found.image_pages_before_statements == ()
     assert is_clean(found)
 
@@ -801,11 +1109,11 @@ def test_an_image_cover_is_allowed_before_text_statements() -> None:
 def test_images_before_the_statements_are_allowed_only_as_a_short_letter_next_to_them(
     textless: set[int], balance: int, income: int, clean: bool
 ) -> None:
-    assert is_clean(analyse_pages(layout(textless, balance, income), BOOK)) is clean
+    assert is_clean(analyse_pages(layout(textless, balance, income), BOOK, MAIN.period)) is clean
 
 
 def test_images_after_the_last_statement_page_do_not_matter() -> None:
-    found = analyse_pages(layout({6, 7, 8, 20}, balance=4, income=5), BOOK)
+    found = analyse_pages(layout({6, 7, 8, 20}, balance=4, income=5), BOOK, MAIN.period)
     assert is_clean(found)
 
 
@@ -830,7 +1138,7 @@ def test_a_letter_naming_both_statements_with_few_amounts_is_not_clean() -> None
         3,
         body="\n".join(f"Ref  {i}1,234" for i in range(1, 5)),
     )
-    found = analyse_pages([letter, page_of("", 4), page_of("", 5), NOTES_PAGE], BOOK)
+    found = analyse_pages([letter, page_of("", 4), page_of("", 5), NOTES_PAGE], BOOK, MAIN.period)
     assert {p.statement for p in found.located} == set(REQUIRED_STATEMENTS)
     assert {p.page_no for p in found.located} == {3}
     assert {p.amounts for p in found.located} == {4}
@@ -844,7 +1152,7 @@ def test_a_statement_title_without_amounts_is_not_clean() -> None:
         statement_page(StatementType.INCOME, 4, 30),
         NOTES_PAGE,
     ]
-    found = analyse_pages(pages, BOOK)
+    found = analyse_pages(pages, BOOK, MAIN.period)
     assert LocatedPage(StatementType.BALANCE, 3, 0) in found.located
     assert not is_clean(found)
 
@@ -862,7 +1170,7 @@ def test_the_located_page_of_a_range_is_its_best_page_not_its_auditors_letter() 
         statement_page(StatementType.INCOME, 5, 40),
         NOTES_PAGE,
     ]
-    found = analyse_pages(pages, BOOK)
+    found = analyse_pages(pages, BOOK, MAIN.period)
     balance = next(p for p in found.located if p.statement is StatementType.BALANCE)
     assert (balance.page_no, balance.amounts) == (4, 40)
     assert is_clean(found)
@@ -878,7 +1186,7 @@ def test_a_located_page_needs_the_minimum_number_of_amounts(amounts: int, clean:
         statement_page(StatementType.INCOME, 4, MIN_STATEMENT_AMOUNTS + 10),
         NOTES_PAGE,
     ]
-    assert is_clean(analyse_pages(pages, BOOK)) is clean
+    assert is_clean(analyse_pages(pages, BOOK, MAIN.period)) is clean
 
 
 def text_facts(*, clean: bool, language: str, period: bool = True) -> TextFacts:
@@ -898,6 +1206,43 @@ def text_facts(*, clean: bool, language: str, period: bool = True) -> TextFacts:
     )
 
 
+def test_a_period_problem_tells_no_period_found_from_another_period_shown() -> None:
+    other = text_facts(clean=True, language="en", period=False)._replace(
+        period_seen="ENDED DECEMBER 31, 2025"
+    )
+    none = other._replace(period_seen="")
+    assert period_problem(other, MAIN.period) == (
+        "the first pages do not show 31 March 2026: another period is shown, 'ENDED DECEMBER 31, 2025'"
+    )
+    assert period_problem(none, MAIN.period) == (
+        "the first pages do not show 31 March 2026: the reader found no period end in them"
+    )
+
+
+def check(language: str, *, problems: tuple[str, ...] = (), clean: bool = True) -> DocCheck:
+    doc = {"id": f"co-2026-{language}-interim", "language": language}
+    return DocCheck(
+        doc, clean=clean, text=text_facts(clean=clean, language=language), problems=list(problems)
+    )
+
+
+def test_a_period_problem_in_the_english_edition_sets_the_whole_company_aside() -> None:
+    problem = "the first pages do not show 31 March 2026: they show 'ENDED 30 JUNE 2026'"
+    verdicts = judge([check("ar"), check("en", problems=(problem,))])
+    assert {v.kind for v in verdicts.values()} == {"wrong"}
+    assert all(problem in v.reason for v in verdicts.values())
+
+
+def test_a_problem_in_the_arabic_edition_sets_the_whole_company_aside() -> None:
+    verdicts = judge([check("ar", problems=("not Arabic",)), check("en")])
+    assert {v.kind for v in verdicts.values()} == {"wrong"}
+
+
+def test_clean_editions_without_a_problem_are_still_kept() -> None:
+    assert {v.kind for v in judge([check("ar"), check("en")]).values()} == {"kept"}
+    assert {v.kind for v in judge([check("ar")]).values()} == {"kept"}
+
+
 class Screening:
     """A tiny corpus on disk and the seams `screen` reads it through. read_pages hands back the
     file's stem in place of pages and analyse_pages turns that into the facts of a clean, noisy
@@ -909,6 +1254,8 @@ class Screening:
         "noisy": "noisy",
         "wrong": "wrong",
         "half": "clean",
+        "arclean": "clean",  # its English edition is made noisy by the test
+        "enclean": "clean",  # its Arabic edition is made noisy by the test
     }
 
     def __init__(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -924,7 +1271,7 @@ class Screening:
         (self.cache / "listing.html").write_text("", encoding="utf-8")
         self.docs: dict[str, dict[str, Any]] = {}
         self.listing: list[ListingRow] = []
-        self.noisy_counterpart = False
+        self.noisy: set[str] = set()  # ids of documents that read as noisy
         monkeypatch.setattr(argaam_listing, "read_pages", lambda path, config, ocr: [path.stem])
         monkeypatch.setattr(argaam_listing, "analyse_pages", self.analyse)
         monkeypatch.setattr(argaam_listing, "parse_listing", lambda html: self.listing)
@@ -936,18 +1283,23 @@ class Screening:
         monkeypatch.setattr(corpus, "STORE", self.store)
         monkeypatch.setattr(argaam_listing, "DEFERRED", self.deferred)
 
-    def analyse(self, pages: list[str], book: Any) -> TextFacts:
+    def analyse(self, pages: list[str], book: Any, period: Any) -> TextFacts:
         stem = pages[0]
         company = stem.split("-")[0]
         language = stem.split("-")[-2]
-        verdict = self.VERDICTS[company]
-        if company == "half" and language == "en":
-            verdict = "noisy" if self.noisy_counterpart else "clean"
+        verdict = "noisy" if stem in self.noisy else self.VERDICTS[company]
         return text_facts(clean=verdict == "clean", language=language, period=verdict != "wrong")
 
-    def add(self, issuer: str, languages: tuple[str, ...], *, on_disk: bool = True) -> list[str]:
+    def add(
+        self,
+        issuer: str,
+        languages: tuple[str, ...],
+        *,
+        on_disk: bool = True,
+        listed: str = "ar,en",
+    ) -> list[str]:
         ids = []
-        for language in ("ar", "en"):
+        for language in listed.split(","):
             doc = existing_doc(issuer, language, year=2026, period="interim")
             self.docs[doc["id"]] = doc
             ids.append(doc["id"])
@@ -995,7 +1347,9 @@ class Screening:
         (self.cache / "added.yaml").write_text(yaml.safe_dump(added), encoding="utf-8")
 
     def run(self, *flags: str) -> int:
-        return argaam_listing.main(["screen", "--cache", str(self.cache), *flags])
+        return argaam_listing.main(
+            ["screen", "--market", "main", "--cache", str(self.cache), *flags]
+        )
 
     def candidate_ids(self) -> list[str]:
         return [d["id"] for d in self.corpus.load_yaml(self.candidates)["documents"] or []]
@@ -1013,18 +1367,19 @@ def test_screen_apply_keeps_clean_pairs_and_sets_the_rest_aside(
     wrong = screening.add("Wrong Co", ("ar", "en"))
     # An existing issuer that gains its Arabic edition: its English one is a corpus document.
     half = screening.add("Half Co", ("ar", "en"))
-    screening.noisy_counterpart = True
+    screening.noisy.add(half[1])
     screening.write(clean + noisy + wrong + [half[0]])
 
     assert screening.run("--apply") == 0
 
-    assert screening.candidate_ids() == [*clean, half[1]]  # the counterpart stays
-    assert screening.pdfs() == {*clean, *half[1:]}
+    # The Arabic edition is clean, so it is kept although the English one beside it is not.
+    assert screening.candidate_ids() == [*clean, *half]
+    assert screening.pdfs() == {*clean, *half}
     assert sorted(screening.corpus.load_yaml(screening.fetched)["documents"]) == sorted(
-        [*clean, half[1]]
+        [*clean, *half]
     )
     set_aside = {d["id"]: d["reason"] for d in argaam_listing.set_aside_documents()}
-    assert sorted(set_aside) == sorted([*noisy, *wrong, half[0]])
+    assert sorted(set_aside) == sorted([*noisy, *wrong])
     assert "30 JUNE 2026" in set_aside[wrong[0]]
     assert "Arabic edition" in set_aside[noisy[0]] or "English edition" in set_aside[noisy[0]]
     # A second run has nothing left to check and leaves the files as they are.
@@ -1032,6 +1387,42 @@ def test_screen_apply_keeps_clean_pairs_and_sets_the_rest_aside(
     assert screening.run("--apply") == 0
     assert (screening.candidates.read_text(), screening.fetched.read_text()) == before
     assert sorted(d["id"] for d in argaam_listing.set_aside_documents()) == sorted(set_aside)
+
+
+def test_screen_keeps_a_clean_arabic_edition_alone_and_english_only_beside_a_clean_one(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    screening = Screening(tmp_path, monkeypatch)
+    arabic_clean = screening.add("Arclean Co", ("ar", "en"))
+    english_clean = screening.add("Enclean Co", ("ar", "en"))
+    arabic_only = screening.add("Clean Co", ("ar",), listed="ar")
+    both = screening.add("Half Co", ("ar", "en"))
+    screening.noisy |= {arabic_clean[1], english_clean[0]}
+    screening.write(arabic_clean + english_clean + arabic_only + both)
+
+    assert screening.run("--apply") == 0
+
+    assert sorted(screening.candidate_ids()) == sorted([arabic_clean[0], *arabic_only, *both])
+    assert screening.pdfs() == {arabic_clean[0], *arabic_only, *both}
+    set_aside = {d["id"]: d["reason"] for d in argaam_listing.set_aside_documents()}
+    assert sorted(set_aside) == sorted([arabic_clean[1], *english_clean])
+    assert set_aside[arabic_clean[1]].startswith("English edition: ")
+    assert "Arabic edition" in set_aside[english_clean[1]]  # the English edition went with it
+    assert "Arabic edition" in set_aside[english_clean[0]]
+
+
+def test_screen_sets_an_english_edition_aside_when_the_existing_arabic_one_is_noisy(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    screening = Screening(tmp_path, monkeypatch)
+    half = screening.add("Half Co", ("ar", "en"))
+    screening.noisy.add(half[0])
+    screening.write([half[1]])
+
+    assert screening.run("--apply") == 0
+
+    assert screening.candidate_ids() == [half[0]]  # the counterpart is a corpus document, kept
+    assert [d["id"] for d in argaam_listing.set_aside_documents()] == [half[1]]
 
 
 def test_screen_judges_the_existing_counterpart_and_stops_when_it_is_not_on_disk(
