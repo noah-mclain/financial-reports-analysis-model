@@ -1,12 +1,13 @@
 """Corpus collection: validate the pool split, download candidates, measure them, dedupe.
 
     uv run python scripts/corpus.py check
-    uv run python scripts/corpus.py fetch [--pool train] [--force]
+    uv run python scripts/corpus.py fetch [--pool train] [--force] [--new] [--id ID ...]
 
 `check` enforces the split rules in eval/corpus/README.md and needs no network.
 `fetch` downloads into var/corpus/<pool>/<id>.pdf (gitignored), measures page count and
 text layer per page, compares every file against the golden set and against the rest of the
-corpus, and records the results in eval/corpus/fetched.yaml.
+corpus, and records the results in eval/corpus/fetched.yaml. `--new` leaves out every document
+already measured there, so a few added documents need no re-download of the rest.
 """
 
 from __future__ import annotations
@@ -334,6 +335,38 @@ def cmd_check(_: argparse.Namespace) -> int:
     return 1 if report.errors else 0
 
 
+def write_fetched(fetched: dict[str, dict[str, Any]]) -> None:
+    FETCHED.write_text(
+        "# Written by scripts/corpus.py fetch. Measured facts; do not edit by hand.\n"
+        + yaml.safe_dump({"documents": fetched}, sort_keys=True, allow_unicode=True),
+        encoding="utf-8",
+    )
+
+
+def to_fetch(
+    documents: list[dict[str, Any]],
+    fetched: dict[str, dict[str, Any]],
+    *,
+    pool: str | None = None,
+    new: bool = False,
+    ids: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """The candidates one `fetch` run covers: one pool or all, only the documents named in
+    `ids`, and with `new` only those not measured yet. A refused download is recorded as failed
+    with no measurement, so `new` tries it again, which is also how a file saved from a browser
+    gets measured."""
+    unknown = sorted(set(ids or []) - {doc["id"] for doc in documents})
+    if unknown:
+        raise ValueError(f"not in candidates.yaml: {', '.join(unknown)}")
+    return [
+        doc
+        for doc in documents
+        if (not pool or doc["pool"] == pool)
+        and (not ids or doc["id"] in ids)
+        and not (new and "sha256" in fetched.get(doc["id"], {}))
+    ]
+
+
 def cmd_fetch(args: argparse.Namespace) -> int:
     documents = load_yaml(CANDIDATES)["documents"]
     golden_issuers, golden_hashes = golden_index()
@@ -348,9 +381,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     polite = Politeness()
     failures: Counter[str] = Counter()
     by_hand: list[tuple[Path, str]] = []
-    for doc in documents:
-        if args.pool and doc["pool"] != args.pool:
-            continue
+    for doc in to_fetch(documents, fetched, pool=args.pool, new=args.new, ids=args.id):
         doc_id = doc["id"]
         dest = STORE / doc["pool"] / f"{doc_id}.pdf"
         entry: dict[str, Any] = {"pool": doc["pool"]}
@@ -361,6 +392,9 @@ def cmd_fetch(args: argparse.Namespace) -> int:
             else:
                 entry["retrieved"] = fetched.get(doc_id, {}).get("retrieved", today)
             entry["sha256"] = sha256_file(dest)
+            prior = fetched.get(doc_id, {})
+            if prior.get("sha256") == entry["sha256"] and "retrieved" in prior:
+                entry["retrieved"] = prior["retrieved"]  # the same bytes, first retrieved then
             entry["bytes"] = dest.stat().st_size
             entry.update(measure(dest))
             entry["status"] = "new"
@@ -410,11 +444,7 @@ def cmd_fetch(args: argparse.Namespace) -> int:
         if found and found["status"] == "new" and issuer_key(doc["issuer"]) in golden_issuers:
             found["status"] = "existing_issuer"
 
-    FETCHED.write_text(
-        "# Written by scripts/corpus.py fetch. Measured facts; do not edit by hand.\n"
-        + yaml.safe_dump({"documents": fetched}, sort_keys=True, allow_unicode=True),
-        encoding="utf-8",
-    )
+    write_fetched(fetched)
     leaks = [
         i
         for i, e in fetched.items()
@@ -433,6 +463,8 @@ def main(argv: list[str] | None = None) -> int:
     fetch = sub.add_parser("fetch", help="download, measure and dedupe")
     fetch.add_argument("--pool", choices=POOLS)
     fetch.add_argument("--force", action="store_true", help="download again even if present")
+    fetch.add_argument("--new", action="store_true", help="only documents not measured yet")
+    fetch.add_argument("--id", nargs="+", help="only these documents (ids in candidates.yaml)")
     fetch.set_defaults(func=cmd_fetch)
     args = parser.parse_args(argv)
     use_system_trust()
