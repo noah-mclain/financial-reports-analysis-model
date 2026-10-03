@@ -16,7 +16,6 @@ import argparse
 import datetime as dt
 import hashlib
 import http.client
-import re
 import sys
 import time
 import urllib.error
@@ -29,6 +28,9 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+from fra_core import split
+from fra_core.split import issuer_key
 
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATES = ROOT / "eval/corpus/candidates.yaml"
@@ -51,28 +53,6 @@ SUBSECTORS = (
 # A page with fewer characters than this has no usable text layer (same rule as the locator).
 MIN_TEXT_CHARS = 50
 USER_AGENT = "Mozilla/5.0 (fra-corpus; research use of public filings)"
-
-_SUFFIXES = {
-    "company",
-    "co",
-    "the",
-    "group",
-    "pjsc",
-    "sae",
-    "plc",
-    "inc",
-    "corporation",
-    "corp",
-    "ltd",
-    "limited",
-    "for",
-}
-
-
-def issuer_key(name: str) -> str:
-    """Normalize an issuer name so 'Almarai Company' and 'ALMARAI CO.' compare equal."""
-    words = re.findall(r"[a-z0-9]+", name.lower().replace(".", ""))
-    return " ".join(w for w in words if w not in _SUFFIXES)
 
 
 @dataclass
@@ -456,10 +436,53 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     return 0
 
 
+def split_report() -> str:
+    """Fit, validation and holdout of the train pool, as hashed and after the recorded moves.
+    Reads candidates.yaml only; no document is opened."""
+    documents = [d for d in load_yaml(CANDIDATES)["documents"] if d["pool"] == split.TRAIN]
+    looks = split.read_looks(ROOT / split.SCORING_LOG)
+    moves = split.read_moves(ROOT / split.MOVES_FILE, looks)
+    kinds = Counter(m.kind for m in moves)
+    lines = [
+        f"train pool: {len({split.document_key(d) for d in documents})} issuers, "
+        f"{len(documents)} documents",
+        f"scoring log: {len(looks)} looks; moves: {kinds['override']} overrides, "
+        f"{kinds['spent_look']} spent looks",
+    ]
+    columns = ("issuers", "documents", "arabic", "english", "both", "annual", "interim")
+    header = "".join(f"{c:>10}" for c in columns)
+    for title, applied in (("as hashed", []), ("after moves", moves)):
+        lines += ["", f"{title:<12}{header}"]
+        for part, docs in split.place(documents, applied).items():
+            languages: dict[str, set[str]] = defaultdict(set)
+            for d in docs:
+                languages[split.document_key(d)].add(d["language"])
+            periods = Counter(d["period"] for d in docs)
+            row = (
+                len(languages),
+                len(docs),
+                sum("ar" in v for v in languages.values()),
+                sum("en" in v for v in languages.values()),
+                sum({"ar", "en"} <= v for v in languages.values()),
+                periods["annual"],
+                periods["interim"],
+            )
+            lines.append(f"  {part:<10}" + "".join(f"{n:>10}" for n in row))
+    return "\n".join(lines)
+
+
+def cmd_split(_: argparse.Namespace) -> int:
+    print(split_report())
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("check", help="validate the pool split").set_defaults(func=cmd_check)
+    sub.add_parser("split", help="fit, validation and holdout of train").set_defaults(
+        func=cmd_split
+    )
     fetch = sub.add_parser("fetch", help="download, measure and dedupe")
     fetch.add_argument("--pool", choices=POOLS)
     fetch.add_argument("--force", action="store_true", help="download again even if present")

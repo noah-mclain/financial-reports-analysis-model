@@ -26,7 +26,7 @@ $(error FRA_LLM_PORT is empty: set it in $(ENV_FILE))
 endif
 export FRA_API_PORT FRA_LLM_PORT
 
-.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure expected-drafts eval-extraction verify-expected dev docker-up docker-health
+.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure expected-drafts eval-extraction verify-expected dev docker-up docker-health
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -95,12 +95,19 @@ eval-extraction: ## Score the extraction against eval/golden/expected (G1 counts
 	PYTHONPATH=eval $(UV) run python -m harness.extraction
 
 corpus-check: ## Validate the corpus pool split (no network)
+	@$(MAKE) --no-print-directory unhide-pth
 	$(UV) run python scripts/corpus.py check
 
+corpus-split: ## Fit, validation and holdout of the train pool, as hashed and after the recorded moves
+	@$(MAKE) --no-print-directory unhide-pth
+	$(UV) run python scripts/corpus.py split
+
 corpus-fetch: ## Download, measure and dedupe the corpus into var/corpus (NEW=1: only documents not yet measured)
+	@$(MAKE) --no-print-directory unhide-pth
 	$(UV) run python scripts/corpus.py fetch $(if $(filter 1,$(NEW)),--new)
 
 sec-fsds: ## SEC statement labels for training (needs FRA_SEC_USER_AGENT; QUARTERS=8)
+	@$(MAKE) --no-print-directory unhide-pth
 	$(UV) run python training/sources/sec_fsds.py --last $(or $(QUARTERS),8)
 
 dev: ## Serve the API natively (profile native) on FRA_API_PORT
