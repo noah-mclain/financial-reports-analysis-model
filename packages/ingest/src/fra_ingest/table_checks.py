@@ -15,11 +15,10 @@ from collections.abc import Sequence
 from decimal import Decimal
 
 from fra_core.schemas import CheckResult, LineItem, Statement, StatementType
+from fra_ingest import check_tolerance
 from fra_ingest.figure_checks import diagnose_digits, flag_fractions, flag_period_outliers
 from fra_ingest.label_match import CLOSING_TOTAL_ID, LabelIndex
 from fra_ingest.sum_hierarchy import SumGroup, infer_sums
-
-_HALF = Decimal("0.5")
 
 
 def _value(item: LineItem, period_key: str) -> Decimal | None:
@@ -65,7 +64,7 @@ def _sum_results(statement: Statement, group: SumGroup) -> list[CheckResult]:
                 difference=actual - expected
                 if actual is not None and expected is not None
                 else None,
-                tolerance=_HALF * addends if judged else None,
+                tolerance=check_tolerance.rounding_tolerance(addends) if judged else None,
                 line_item_ids=[*outcome.addend_ids, group.total_id],
                 detail="; ".join(d for d in details if d),
             )
@@ -169,9 +168,9 @@ def check_identity(statement: Statement, index: LabelIndex) -> list[CheckResult]
             )
             continue
         expected = sum((p for p in parts if p is not None), Decimal(0))
-        tolerance = _HALF * len(parts)
+        tolerance = check_tolerance.rounding_tolerance(len(parts))
         difference = actual - expected
-        status = "pass" if abs(difference) <= tolerance else "fail"
+        status = "pass" if check_tolerance.within_tolerance(difference, tolerance) else "fail"
         results.append(
             _result(
                 statement,

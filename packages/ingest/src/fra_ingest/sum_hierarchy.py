@@ -15,8 +15,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from fra_core.schemas import LineItem, Statement
+from fra_ingest import check_tolerance
 
-HALF = Decimal("0.5")
 _Fit = Literal["fit", "blank", "clash", "open"]
 
 
@@ -68,7 +68,9 @@ def _fit(item: LineItem, addends: Sequence[LineItem], key: str) -> tuple[_Fit, S
         return "open", missing
     present = [v for v in values if v is not None]
     expected = sum(present, Decimal(0))
-    within = abs(actual - expected) <= HALF * len(present)
+    within = check_tolerance.within_tolerance(
+        actual - expected, check_tolerance.rounding_tolerance(len(present))
+    )
     if blanks and not within:
         return "open", missing
     outcome = SumOutcome(
@@ -148,7 +150,9 @@ def _run_outcomes(
                 and only is not None
                 and previous is not None
                 and prior is not None
-                and abs(actual - prior - only) <= HALF * 2
+                and check_tolerance.within_tolerance(
+                    actual - prior - only, check_tolerance.rounding_tolerance(2)
+                )
             ):
                 outcomes[key] = SumOutcome(
                     status="pass",
@@ -174,7 +178,9 @@ def _run_outcomes(
         if previous is not None and prior is not None:
             candidates.append((plain + prior, (previous.id, *ids)))
         expected, addend_ids = min(candidates, key=lambda c: abs(actual - c[0]))
-        within = abs(actual - expected) <= HALF * len(addend_ids)
+        within = check_tolerance.within_tolerance(
+            actual - expected, check_tolerance.rounding_tolerance(len(addend_ids))
+        )
         status: Literal["pass", "fail", "skipped"] = "pass" if within else "fail"
         detail = ""
         if not within and after_heading:

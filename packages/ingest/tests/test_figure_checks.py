@@ -286,3 +286,81 @@ def test_a_statement_in_decimals_with_some_round_figures_is_not_flagged() -> Non
     ]
     flagged = flag_fractions(statement(rows))
     assert not any("fraction_among_whole" in c.flags for i in flagged.line_items for c in i.cells)
+
+
+def test_net_profit_tie_acceptance_and_metadata_use_the_shared_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fra_ingest import check_tolerance
+
+    monkeypatch.setattr(check_tolerance, "ROUNDING_UNIT", Decimal("0.25"))
+    comprehensive = statement(
+        [item(1, "Profit", "160.375", "140")], StatementType.COMPREHENSIVE_INCOME, "ci"
+    )
+    failed = check_net_profit_tie(INCOME, comprehensive)
+    assert [r.status for r in failed] == ["fail", "fail"]
+    assert all(r.tolerance is None and r.expected is None for r in failed)
+    comprehensive = statement(
+        [item(1, "Profit", "160.25", "140")], StatementType.COMPREHENSIVE_INCOME, "ci"
+    )
+    passed = check_net_profit_tie(INCOME, comprehensive)
+    assert [r.status for r in passed] == ["pass", "pass"]
+    assert all(r.tolerance == Decimal("0.25") for r in passed)
+
+
+@pytest.mark.parametrize("sign", [-1, 1])
+@pytest.mark.parametrize("outside", [False, True])
+@pytest.mark.parametrize("scale", [1, 1000])
+def test_net_profit_tie_boundary_is_inclusive_in_reported_units(
+    sign: int, outside: bool, scale: int
+) -> None:
+    difference = sign * Decimal("0.500001" if outside else "0.5")
+    comprehensive = statement(
+        [item(1, "Net profit", str(Decimal(160) + difference), str(Decimal(140) + difference))],
+        StatementType.COMPREHENSIVE_INCOME,
+        "ci",
+    ).model_copy(update={"scale": scale})
+    income = INCOME.model_copy(update={"scale": scale})
+    results = check_net_profit_tie(income, comprehensive)
+    assert [r.status for r in results] == ["fail" if outside else "pass"] * 2
+    if outside:
+        assert all(r.expected is r.difference is r.tolerance is None for r in results)
+        assert all(r.line_item_ids == ["r1"] and r.detail == "no_income_row_equal" for r in results)
+    else:
+        assert [r.expected for r in results] == [Decimal("160"), Decimal("140")]
+        assert all(r.difference == difference and r.tolerance == Decimal("0.5") for r in results)
+        assert all(r.line_item_ids == ["r2", "r1"] and r.detail == "" for r in results)
+
+
+def test_net_profit_tie_requires_one_candidate_for_all_shared_periods() -> None:
+    income = statement(
+        [item(1, "Profit A", "160", "142"), item(2, "Profit B", "162", "140")],
+        StatementType.INCOME,
+        "inc",
+    )
+    comprehensive = statement(
+        [item(3, "Net profit", "160", "140")], StatementType.COMPREHENSIVE_INCOME, "ci"
+    )
+    results = check_net_profit_tie(income, comprehensive)
+    assert [r.status for r in results] == ["fail", "fail"]
+    assert all(r.tolerance is r.expected is r.difference is None for r in results)
+
+
+def test_net_profit_tie_filters_missing_head_periods() -> None:
+    head = item(1, "Net profit", "160", "140")
+    head = head.model_copy(
+        update={"cells": [head.cells[0].model_copy(update={"reported": None}), head.cells[1]]}
+    )
+    comprehensive = statement([head], StatementType.COMPREHENSIVE_INCOME, "ci")
+    results = check_net_profit_tie(INCOME, comprehensive)
+    assert [(r.period_key, r.status, r.tolerance) for r in results] == [
+        (P2.key, "pass", Decimal("0.5"))
+    ]
+
+
+def test_net_profit_tie_with_values_but_no_shared_periods_has_no_checks() -> None:
+    comprehensive = statement(
+        [item(1, "Profit", "160")], StatementType.COMPREHENSIVE_INCOME, "ci"
+    ).model_copy(update={"periods": [P1]})
+    income = INCOME.model_copy(update={"periods": [P2]})
+    assert check_net_profit_tie(income, comprehensive) == []
