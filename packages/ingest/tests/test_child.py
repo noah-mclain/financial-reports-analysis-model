@@ -80,6 +80,20 @@ def test_the_child_gets_the_pdf_artifacts_config_and_extra_args(tmp_path: Path) 
     ]
 
 
+def test_the_child_is_told_the_engine_the_parent_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pdf, config = setup(tmp_path)
+    write_result(config, pdf, "ok")
+    record = tmp_path / "engine.txt"
+    script = f"import os; open({str(record)!r}, 'w').write(os.environ['FRA_OCR_ENGINE'])"
+    monkeypatch.setenv("FRA_OCR_ENGINE", "ocrmac")
+    convert_in_child(
+        pdf, config.model_copy(update={"convert_ocr": "tesseract"}), command=fake(script)
+    )
+    assert record.read_text() == "tesseract"
+
+
 def test_every_range_failing_raises_convert_failed(tmp_path: Path) -> None:
     pdf, config = setup(tmp_path)
     write_result(config, pdf, "failed")

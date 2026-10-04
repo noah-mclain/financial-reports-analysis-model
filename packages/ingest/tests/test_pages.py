@@ -9,7 +9,7 @@ from support import FakeOcr, make_blank_pdf
 from fra_core.schemas import PageMode, TextSource
 from fra_ingest.config import IngestConfig
 from fra_ingest.errors import IngestError
-from fra_ingest.ocr import OcrLine
+from fra_ingest.ocr import OcrEngineError, OcrLine, OcrUnavailableError
 from fra_ingest.pages import document_language, profiles, read_pages, text_layer_is_garbled
 from fra_ingest.text_match import is_visual_arabic
 
@@ -198,3 +198,65 @@ class BrokenEngine:
 def test_a_programming_error_in_an_engine_is_not_hidden_as_an_ocr_failure(tmp_path: Path) -> None:
     with pytest.raises(TypeError):
         read_pages(make_blank_pdf(tmp_path / "scan.pdf"), IngestConfig(), BrokenEngine())
+
+
+class UnavailableEngine:
+    name = "unavailable"
+
+    def recognize(self, image: object, languages: object) -> list[OcrLine]:
+        msg = "no language data for ara"
+        raise OcrUnavailableError(msg)
+
+
+def test_an_unavailable_engine_stops_the_run_instead_of_flagging_pages(tmp_path: Path) -> None:
+    with pytest.raises(OcrUnavailableError, match="ara"):
+        read_pages(make_blank_pdf(tmp_path / "scan.pdf"), IngestConfig(), UnavailableEngine())
+
+
+class FailingEngine:
+    name = "failing"
+
+    def recognize(self, image: object, languages: object) -> list[OcrLine]:
+        msg = "tesseract exit 1: bad page segmentation mode"
+        raise OcrEngineError(msg)
+
+
+def test_an_engine_that_runs_and_breaks_stops_the_run_instead_of_flagging_pages(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(OcrEngineError, match="exit 1"):
+        read_pages(make_blank_pdf(tmp_path / "scan.pdf"), IngestConfig(), FailingEngine())
+
+
+def test_every_ocr_call_is_timed_on_its_own(tmp_path: Path) -> None:
+    # An Arabic read of an English page finds no Arabic, so the page is read twice.
+    ocr = FakeOcr(by_language={"en-US": [TITLE]})
+    [page] = read_pages(make_blank_pdf(tmp_path / "scan.pdf"), IngestConfig(), ocr)
+    assert ocr.calls == 2
+    assert len(page.ocr_call_seconds) == 2
+    assert page.ocr_seconds == pytest.approx(sum(page.ocr_call_seconds))
+
+
+@pytest.mark.parametrize(
+    "variant", [{"tesseract_psm": 6}, {"tesseract_arabic_language": "ara+eng"}]
+)
+def test_tesseract_settings_that_change_a_read_invalidate_the_cache(
+    tmp_path: Path, variant: dict[str, object]
+) -> None:
+    pdf = make_blank_pdf(tmp_path / "scan.pdf")
+    first = IngestConfig(convert_ocr="tesseract")
+    tesseract = FakeOcr([TITLE])
+    tesseract.name = "tesseract"
+    read_pages(pdf, first, tesseract, cache_dir=tmp_path / "cache")
+    again = FakeOcr([TITLE])
+    again.name = "tesseract"
+    read_pages(pdf, first.model_copy(update=variant), again, cache_dir=tmp_path / "cache")
+    assert again.calls > 0
+
+
+def test_tesseract_settings_do_not_split_the_cache_of_another_engine(tmp_path: Path) -> None:
+    pdf = make_blank_pdf(tmp_path / "scan.pdf")
+    read_pages(pdf, IngestConfig(), FakeOcr([TITLE]), cache_dir=tmp_path / "cache")
+    again = FakeOcr(fail=True)
+    read_pages(pdf, IngestConfig(tesseract_psm=6), again, cache_dir=tmp_path / "cache")
+    assert again.calls == 0

@@ -9,6 +9,7 @@ from support import make_blank_pdf
 
 from fra_ingest import cli
 from fra_ingest.cli import main
+from fra_ingest.ocr import OcrUnavailableError
 from fra_ingest.results import ConvertResult, LocateResult, RangeConversion, StructureResult
 
 
@@ -170,3 +171,19 @@ def test_review_report_prints_where_it_wrote(
     monkeypatch.setattr(cli, "write_review_report", fake_report)
     assert main(["review-report", "ab", "--artifacts", str(tmp_path)]) == 0
     assert capsys.readouterr().out.strip() == str(written)
+
+
+def test_an_engine_that_cannot_run_exits_naming_the_setting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def unavailable(_config: object) -> None:
+        msg = "Tesseract has no language data for ara"
+        raise OcrUnavailableError(msg)
+
+    monkeypatch.setattr(cli, "make_engine", unavailable)
+    pdf = make_blank_pdf(tmp_path / "scan.pdf")
+    assert main(["locate", str(pdf), "--artifacts", str(tmp_path)]) == 2
+    err = capsys.readouterr().err
+    assert "no language data for ara" in err
+    assert "convert.ocr_engine" in err
+    assert "FRA_OCR_ENGINE" in err

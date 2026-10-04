@@ -38,6 +38,8 @@ def settings_hash(
         "ocr_engine": config.convert_ocr,
         "images_scale": config.images_scale,
         "ocr_scale": config.ocr_scale,
+        "tesseract_psm": config.tesseract_psm,
+        "tesseract_arabic_language": config.tesseract_arabic_language,
         "batch_size": config.batch_size,
         "do_cell_matching": config.do_cell_matching,
         "document_timeout_s": config.document_timeout_s,

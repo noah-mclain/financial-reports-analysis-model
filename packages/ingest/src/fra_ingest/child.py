@@ -15,7 +15,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import cast, get_args
 
-from fra_ingest.config import IngestConfig
+from fra_ingest.config import OCR_ENGINE_ENV, IngestConfig
 from fra_ingest.errors import IngestError, IngestErrorReason
 from fra_ingest.pages import sha256_file
 from fra_ingest.results import ConvertResult
@@ -35,9 +35,10 @@ def convert_in_child(
     extra_args: Sequence[str] = (),
     command: Sequence[str] | None = None,
 ) -> ConvertResult:
-    """Only ``artifact_root`` and ``child_timeout_s`` from ``config`` reach the child; every
-    other setting comes from the TOML file the child loads (``config_path``, else
-    ``FRA_INGEST_CONFIG``, else the repository default)."""
+    """Only ``artifact_root``, ``child_timeout_s`` and the OCR engine from ``config`` reach the
+    child; every other setting comes from the TOML file the child loads (``config_path``, else
+    ``FRA_INGEST_CONFIG``, else the repository default). The engine travels in
+    ``FRA_OCR_ENGINE``, so the child converts with the engine its parent reads pages with."""
     if not pdf.is_file():
         raise IngestError("unreadable_pdf", f"{pdf}: not a file")
     sha256 = sha256_file(pdf)
@@ -53,7 +54,11 @@ def convert_in_child(
     argv += list(extra_args)
     # The child sees the same packages as this process: uv writes the workspace .pth files
     # hidden on macOS and Python skips hidden .pth files.
-    env = {**os.environ, "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)}
+    env = {
+        **os.environ,
+        "PYTHONPATH": os.pathsep.join(p for p in sys.path if p),
+        OCR_ENGINE_ENV: config.convert_ocr,
+    }
 
     started = time.perf_counter()
     try:

@@ -45,7 +45,7 @@ NEGATIVE_WEIGHT = 4.0
 CONTINUATION_MIN_NUMBERS = 15
 TITLE_LINE_MAX_WORDS = 7
 
-LOCATE_VERSION = "2"
+LOCATE_VERSION = "3"
 
 _DIGIT = re.compile(r"\d")
 _YEAR = re.compile(r"(?<!\d)(?:19|20)\d{2}(?!\d)")

@@ -22,7 +22,7 @@ from pathlib import Path
 from fra_ingest.config import IngestConfig, load_config
 from fra_ingest.convert import convert_pdf
 from fra_ingest.errors import IngestError
-from fra_ingest.ocr import OcrEngine, default_engine
+from fra_ingest.ocr import OcrEngine, OcrUnavailableError, make_engine
 from fra_ingest.results import ConvertResult, LocateResult, StructureResult
 from fra_ingest.review_report import write_review_report
 from fra_ingest.stage import load_or_locate, locate_pdf, page_ocr_languages
@@ -70,9 +70,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{args.sha256}: {exc.reason} {exc.detail}".rstrip(), file=sys.stderr)
             return EXIT_ERROR
         return 0
-    engine = None if args.no_ocr else default_engine()
 
     try:
+        engine = None if args.no_ocr else make_engine(config)
         if args.command == "convert":
             return _convert(args, config, engine)
         if args.command == "structure":
@@ -82,6 +82,13 @@ def main(argv: list[str] | None = None) -> int:
         result = locate_pdf(args.pdf, config, engine, use_cache=not args.no_cache)
     except IngestError as exc:
         print(f"{args.pdf}: {exc.reason} {exc.detail}".rstrip(), file=sys.stderr)
+        return EXIT_ERROR
+    except OcrUnavailableError as exc:
+        print(
+            f"{exc}; choose another engine with convert.ocr_engine in the settings or "
+            "FRA_OCR_ENGINE, or pass --no-ocr",
+            file=sys.stderr,
+        )
         return EXIT_ERROR
 
     print(result.model_dump_json(indent=2) if args.json else _summary(result))

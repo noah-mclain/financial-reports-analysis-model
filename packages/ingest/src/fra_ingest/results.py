@@ -38,7 +38,12 @@ class PageText(BaseModel):
     ocr_language: str | None = Field(
         default=None, description="The OCR language whose read was kept, for image pages"
     )
-    ocr_seconds: float = Field(default=0.0, ge=0.0)
+    ocr_seconds: float = Field(default=0.0, ge=0.0, description="Sum of ocr_call_seconds")
+    ocr_call_seconds: list[float] = Field(
+        default_factory=list,
+        description="Seconds of each OCR call that read this page: two when the first language "
+        "found none of its script and the page was read again",
+    )
     flags: list[str] = Field(default_factory=list)
 
     @property
@@ -124,6 +129,13 @@ class LocateResult(BaseModel):
     industry: IndustrySignal
     flags: list[str] = Field(default_factory=list)
     timings: dict[str, float] = Field(default_factory=dict)
+    ocr_engine: str | None = Field(
+        default=None, description="The engine that read the image pages; None when none ran"
+    )
+    ocr_key: str = Field(
+        default="",
+        description="Digest of every setting the page reads depend on, filled by locate_pdf",
+    )
 
     @property
     def candidate_share(self) -> float:

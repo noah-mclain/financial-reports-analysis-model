@@ -124,3 +124,49 @@ def test_ocr_scale_defaults_to_doclings_own(tmp_path: Path) -> None:
 def test_structure_confidence_setting(tmp_path: Path) -> None:
     assert IngestConfig().min_confidence == 0.5
     assert load_config(write(tmp_path, "[structure]\nmin_confidence = 0.7\n")).min_confidence == 0.7
+
+
+@pytest.mark.parametrize("engine", ["ocrmac", "tesseract", "none"])
+def test_every_ocr_engine_name_is_accepted(tmp_path: Path, engine: str) -> None:
+    config = load_config(write(tmp_path, f'[convert]\nocr_engine = "{engine}"\n'))
+    assert config.convert_ocr == engine
+
+
+def test_an_unknown_ocr_engine_is_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError, match="convert_ocr"):
+        load_config(write(tmp_path, '[convert]\nocr_engine = "paddle"\n'))
+
+
+def test_an_ocr_engine_argument_overrides_the_file(tmp_path: Path) -> None:
+    path = write(tmp_path, '[convert]\nocr_engine = "ocrmac"\n')
+    assert load_config(path, ocr_engine="tesseract").convert_ocr == "tesseract"
+
+
+def test_the_ocr_engine_can_be_named_in_the_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = write(tmp_path, '[convert]\nocr_engine = "ocrmac"\n')
+    monkeypatch.setenv("FRA_OCR_ENGINE", "tesseract")
+    assert load_config(path).convert_ocr == "tesseract"
+    assert load_config(path, ocr_engine="none").convert_ocr == "none"
+
+
+def test_an_unknown_ocr_engine_in_the_environment_is_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FRA_OCR_ENGINE", "paddle")
+    with pytest.raises(ValidationError, match="convert_ocr"):
+        load_config(write(tmp_path, ""))
+
+
+def test_tesseract_settings_default_to_its_own_behaviour(tmp_path: Path) -> None:
+    config = IngestConfig()
+    assert (config.tesseract_psm, config.tesseract_arabic_language) == (3, "ara")
+    path = write(tmp_path, '[tesseract]\npsm = 6\narabic_language = "ara+eng"\n')
+    config = load_config(path)
+    assert (config.tesseract_psm, config.tesseract_arabic_language) == (6, "ara+eng")
+
+
+def test_an_arabic_language_string_tesseract_does_not_know_is_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError, match="tesseract_arabic_language"):
+        load_config(write(tmp_path, '[tesseract]\narabic_language = "fra"\n'))

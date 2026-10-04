@@ -24,7 +24,7 @@ import yaml
 from fra_core.schemas import StatementType
 from fra_ingest.config import REPO_ROOT, load_config
 from fra_ingest.errors import IngestError
-from fra_ingest.ocr import default_engine
+from fra_ingest.ocr import make_engine
 from fra_ingest.results import LocateResult
 from fra_ingest.stage import locate_pdf
 
@@ -99,7 +99,7 @@ def verdict_label(result: LocateResult) -> str:
 
 def run_golden(no_ocr: bool, fresh: bool = False) -> dict[str, Any]:
     config = load_config()
-    engine = None if no_ocr else default_engine()
+    engine = None if no_ocr else make_engine(config)
     enabled = set(config.enabled_types)
     rows, shares, top_shares, misses, top_misses = [], [], [], [], []
     for doc in yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))["documents"]:
@@ -180,7 +180,7 @@ def pool_summary(rows: list[dict[str, Any]], missing: list[str]) -> dict[str, An
 
 def run_pool(pool: str, no_ocr: bool) -> dict[str, Any]:
     config = load_config()
-    engine = None if no_ocr else default_engine()
+    engine = None if no_ocr else make_engine(config)
     entries = yaml.safe_load(CANDIDATES.read_text(encoding="utf-8"))["documents"]
     rows: list[dict[str, Any]] = []
     missing: list[str] = []

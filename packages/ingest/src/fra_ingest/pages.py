@@ -17,22 +17,34 @@ from typing import Any
 
 import pypdfium2 as pdfium
 import pypdfium2.raw as pdfium_c
+from PIL import Image
 from pydantic import ValidationError
 
 from fra_core.numbers import strip_bidi
 from fra_core.schemas import PageMode, PageProfile, TextSource
 from fra_ingest.config import IngestConfig
 from fra_ingest.errors import IngestError
-from fra_ingest.ocr import OcrEngine, read_with_fallback
+from fra_ingest.ocr import (
+    OcrEngine,
+    OcrEngineError,
+    OcrLine,
+    OcrTimeoutError,
+    OcrUnavailableError,
+    read_with_fallback,
+)
 from fra_ingest.results import PageText
 from fra_ingest.text_match import is_visual_arabic
 
-PAGES_STAGE_VERSION = "3"
+PAGES_STAGE_VERSION = "4"
 
 _FPDF_ERR_PASSWORD = 4
 # Errors that mean the code calling the engine is wrong, not that recognition failed. They are
 # raised, not recorded as ocr_failed, so a broken engine cannot pass as unreadable scans.
 _PROGRAMMING_ERRORS = (TypeError, AttributeError, NameError, IndexError, KeyError)
+# Errors that mean the engine cannot be trusted to read at all (no binary, no language data, no
+# answer in time, a failed exit or output that is not its format). They are raised too: flagging
+# them would score a broken setup as unreadable scans.
+_ENGINE_ERRORS = (OcrUnavailableError, OcrTimeoutError, OcrEngineError)
 _GARBLE_MIN_CHARS = 100
 _GARBLE_READABLE_SHARE = 0.9
 _TEXT_SETTINGS = ("min_text_chars", "header_fraction", "ocr_dpi", "ocr_languages")
@@ -231,10 +243,10 @@ def _ocr_page(
     height: float,
 ) -> PageText:
     image = page.render(scale=config.ocr_dpi / 72).to_pil()
-    started = time.perf_counter()
+    timed = _TimedEngine(ocr)
     try:
-        lines, language = read_with_fallback(ocr, image, config.ocr_languages)
-    except _PROGRAMMING_ERRORS:
+        lines, language = read_with_fallback(timed, image, config.ocr_languages)
+    except (*_PROGRAMMING_ERRORS, *_ENGINE_ERRORS):
         raise
     except Exception:  # Vision failures surface as assorted Objective-C bridge errors.
         return _page(
@@ -248,7 +260,6 @@ def _ocr_page(
             height,
             flags=["ocr_failed"],
         )
-    elapsed = time.perf_counter() - started
     header = "\n".join(line.text for line in lines if line.top < config.header_fraction)
     body = "\n".join(line.text for line in lines if line.top >= config.header_fraction)
     return _page(
@@ -261,8 +272,24 @@ def _ocr_page(
         width,
         height,
         ocr_language=language,
-        ocr_seconds=elapsed,
+        ocr_call_seconds=timed.seconds,
     )
+
+
+class _TimedEngine:
+    """An engine that records how long each of its reads took. A page can take two: Arabic,
+    then English when the Arabic read found no Arabic."""
+
+    def __init__(self, engine: OcrEngine) -> None:
+        self._engine = engine
+        self.name = engine.name
+        self.seconds: list[float] = []
+
+    def recognize(self, image: Image.Image, languages: Sequence[str]) -> list[OcrLine]:
+        started = time.perf_counter()
+        lines = self._engine.recognize(image, languages)
+        self.seconds.append(time.perf_counter() - started)
+        return lines
 
 
 def _page(
@@ -277,7 +304,7 @@ def _page(
     *,
     flags: list[str] | None = None,
     ocr_language: str | None = None,
-    ocr_seconds: float = 0.0,
+    ocr_call_seconds: Sequence[float] = (),
 ) -> PageText:
     text = f"{header}\n{body}"
     return PageText(
@@ -293,7 +320,8 @@ def _page(
         latin_chars=sum(1 for char in text if char.isascii() and char.isalpha()),
         visual_arabic=mode is PageMode.TEXT and is_visual_arabic(text),
         ocr_language=ocr_language,
-        ocr_seconds=ocr_seconds,
+        ocr_seconds=sum(ocr_call_seconds),
+        ocr_call_seconds=list(ocr_call_seconds),
         flags=flags or [],
     )
 
@@ -305,7 +333,22 @@ def _settings(config: IngestConfig, ocr: OcrEngine | None) -> dict[str, Any]:
         "ocr_dpi": config.ocr_dpi,
         "ocr_languages": list(config.ocr_languages),
         "ocr_engine": ocr.name if ocr is not None else None,
+        # What the settings change in a Tesseract read; no other engine looks at them.
+        "ocr_options": (
+            {
+                "psm": config.tesseract_psm,
+                "arabic_language": config.tesseract_arabic_language,
+            }
+            if ocr is not None and ocr.name == "tesseract"
+            else None
+        ),
     }
+
+
+def ocr_key(config: IngestConfig, ocr: OcrEngine | None) -> str:
+    """A digest of everything that decides what the pages read as, for stages that keep
+    results derived from them."""
+    return hashlib.sha256(json.dumps(_settings(config, ocr), sort_keys=True).encode()).hexdigest()
 
 
 def _usable(payload: Any, settings: dict[str, Any]) -> bool:
@@ -324,7 +367,9 @@ def _usable(payload: Any, settings: dict[str, Any]) -> bool:
     if any(cached.get(key) != settings[key] for key in _TEXT_SETTINGS):
         return False
     engine, cached_engine = settings["ocr_engine"], cached.get("ocr_engine")
-    return bool(cached_engine == engine or (engine is None and cached_engine is not None))
+    if engine is None:
+        return cached_engine is not None
+    return bool(cached_engine == engine and cached.get("ocr_options") == settings["ocr_options"])
 
 
 def _load_cache(path: Path, settings: dict[str, Any]) -> list[PageText] | None:
@@ -341,7 +386,22 @@ def _load_cache(path: Path, settings: dict[str, Any]) -> list[PageText] | None:
     except (KeyError, TypeError, ValidationError):
         return None
     # The cache stores text, not this run's cost: no OCR ran for these pages now.
-    return [page.model_copy(update={"ocr_seconds": 0.0}) for page in pages]
+    return [page.model_copy(update={"ocr_seconds": 0.0, "ocr_call_seconds": []}) for page in pages]
+
+
+def recorded_ocr_calls(cache_dir: Path) -> list[float] | None:
+    """The seconds of every OCR call the run that wrote the page cache in ``cache_dir`` made,
+    in page order; None when there is no readable cache. The cache keeps the cost of the run
+    that wrote it, so this is real work only when that run was this one."""
+    path = cache_dir / f"pages.v{PAGES_STAGE_VERSION}.json"
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        pages = [PageText.model_validate(page) for page in payload["pages"]]
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValidationError):
+        return None
+    return [seconds for page in pages for seconds in page.ocr_call_seconds]
 
 
 def _write_cache(path: Path, settings: dict[str, Any], pages: Sequence[PageText]) -> None:

@@ -90,9 +90,9 @@ verify-expected: ## Independent evidence for every figure of the expected files 
 	@$(MAKE) --no-print-directory unhide-pth
 	PYTHONPATH=eval $(UV) run python -m harness.verify_expected
 
-eval-extraction: ## Score the extraction against eval/golden/expected (G1 counts checked files only)
+eval-extraction: ## Score the extraction against eval/golden/expected (OCR=ocrmac|tesseract|none, LABEL=name, FRESH=1 try one engine)
 	@$(MAKE) --no-print-directory unhide-pth
-	PYTHONPATH=eval $(UV) run python -m harness.extraction
+	PYTHONPATH=eval $(UV) run python -m harness.extraction $(if $(OCR),--ocr $(OCR)) $(if $(LABEL),--label $(LABEL)) $(if $(FRESH),--fresh)
 
 corpus-check: ## Validate the corpus pool split (no network)
 	@$(MAKE) --no-print-directory unhide-pth
