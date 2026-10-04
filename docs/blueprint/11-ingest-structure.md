@@ -46,7 +46,7 @@ which parses to 2025-12-31 with scale 1000.
 |----|-----|
 | Balance, income and comprehensive income (the enabled types) | Cash flow and equity (converted only when enabled; structured the same way then) |
 | Grids with boxes in PDF points, top-left origin | The HTML review report (3b) |
-| Classification of tables into statement types, notes rejected | Label normalization to canonical ids (week 2) |
+| Classification of tables into statement types, notes rejected | Label normalization to canonical ids (`label_mapping.py`, run after the checks; 02, Data model) |
 | Header rows bound to periods; note column | Sum-based hierarchy inference (3b) |
 | Scale, currency, entity, consolidated | Extraction accuracy against hand-checked expected files (3b) |
 | Visual-order repair on `visual_arabic` pages | OCR recovery for unreadable scans beyond the task 1 setting (week 2 bake-off) |

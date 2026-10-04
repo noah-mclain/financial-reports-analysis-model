@@ -128,8 +128,10 @@ class LineItem(BaseModel):
     id: str
     raw_label: str
     canonical_id: str | None
-    mapping_source: Literal["lexicon", "model", "user"] | None
+    mapping_source: Literal["lexicon", "anchor", "model", "user"] | None
     mapping_confidence: float | None
+    mapping_flag: Literal["unmapped", "ambiguous"] | None  # exclusive with canonical_id
+    mapping_evidence: str | None  # how it was mapped, or why it is flagged
     depth: int
     is_subtotal: bool
     parent_id: str | None
@@ -151,6 +153,10 @@ class Statement(BaseModel):
     language: str = "en"
     flags: list[str] = []
 ```
+
+`anchor` is a mapping read from structure that the checks confirmed (the heading above a
+section, a sum of mapped totals), not from a label. A row with values that nothing resolves is
+flagged, never guessed; `fra_ingest/label_mapping.py` sets these fields (see 11).
 
 ```python
 # fra_core/schemas/metric.py

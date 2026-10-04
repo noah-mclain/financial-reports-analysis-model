@@ -26,7 +26,7 @@ $(error FRA_LLM_PORT is empty: set it in $(ENV_FILE))
 endif
 export FRA_API_PORT FRA_LLM_PORT
 
-.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure expected-drafts eval-extraction verify-expected dev docker-up docker-health
+.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping expected-drafts eval-extraction verify-expected dev docker-up docker-health
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -85,6 +85,10 @@ eval-structure: ## Structure the golden set: statements, scale and currency, ide
 expected-drafts: ## Draft expected files from the extraction (ONLY=id; keeps checked or confirmed files)
 	@$(MAKE) --no-print-directory unhide-pth
 	$(UV) run python eval/harness/expected.py $(if $(ONLY),--only $(ONLY))
+
+eval-mapping: ## Label mapping over the golden set: the critical items: mapped, flagged or missing, and what the expected files say
+	@$(MAKE) --no-print-directory unhide-pth
+	PYTHONPATH=eval $(UV) run python -m harness.mapping
 
 verify-expected: ## Independent evidence for every figure of the expected files (Mac, Vision OCR)
 	@$(MAKE) --no-print-directory unhide-pth

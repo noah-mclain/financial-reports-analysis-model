@@ -41,9 +41,15 @@ class CanonicalItem:
     # A mappingproxy cannot be a dataclass default: it is unhashable, and dataclasses reject
     # unhashable defaults. The built instances below are wrapped in MappingProxyType instead.
     aliases: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    # How statements print the heading of the section this total closes ("Current assets").
+    # Not aliases: a heading never names the total, it only tells which total sits under it.
+    headings: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
     def aliases_for(self, language: str) -> tuple[str, ...]:
         return self.aliases.get(language, ())
+
+    def headings_for(self, language: str) -> tuple[str, ...]:
+        return self.headings.get(language, ())
 
 
 @dataclass(frozen=True)
@@ -94,6 +100,7 @@ def load_taxonomy(path: Path | None = None) -> Taxonomy:
     items = tuple(_build_item(entry) for entry in entries)
     by_id = _index_by_id(items)
     by_alias = _index_by_alias(items)
+    _check_headings(items, by_alias)
     return Taxonomy(version=version, items=items, _by_id=by_id, _by_alias=by_alias)
 
 
@@ -137,15 +144,37 @@ def _build_item(entry: Any) -> CanonicalItem:
             raise ValueError(msg)
         aliases[language] = tuple(str(v) for v in values)
 
+    subtotal = bool(entry.get("subtotal", False))
+    headings = _build_headings(item_id, subtotal, entry.get("headings", {}))
+
     return CanonicalItem(
         id=item_id,
         statement=StatementType(entry["statement"]),
         natural_sign=sign,
         critical=bool(entry.get("critical", False)),
-        subtotal=bool(entry.get("subtotal", False)),
+        subtotal=subtotal,
         per_share=bool(entry.get("per_share", False)),
         aliases=MappingProxyType(aliases),
+        headings=MappingProxyType(headings),
     )
+
+
+def _build_headings(item_id: str, subtotal: bool, raw: Any) -> dict[str, tuple[str, ...]]:
+    if not raw:
+        return {}
+    if not subtotal:
+        msg = f"{item_id}: headings are only for a subtotal item"
+        raise ValueError(msg)
+    if not isinstance(raw, dict):
+        msg = f"{item_id}: headings must be a mapping of language to list"
+        raise ValueError(msg)
+    headings: dict[str, tuple[str, ...]] = {}
+    for language, values in raw.items():
+        if language not in _REQUIRED_LANGUAGES or not isinstance(values, list):
+            msg = f"{item_id}: headings need a list for each of {_REQUIRED_LANGUAGES}"
+            raise ValueError(msg)
+        headings[language] = tuple(str(v) for v in values)
+    return headings
 
 
 def _index_by_id(items: tuple[CanonicalItem, ...]) -> Mapping[str, CanonicalItem]:
@@ -175,3 +204,18 @@ def _index_by_alias(
                     raise ValueError(msg)
                 index[key] = item
     return MappingProxyType(index)
+
+
+def _check_headings(
+    items: tuple[CanonicalItem, ...], by_alias: Mapping[tuple[StatementType, str], CanonicalItem]
+) -> None:
+    for item in items:
+        for language in _REQUIRED_LANGUAGES:
+            for heading in item.headings_for(language):
+                owner = by_alias.get((item.statement, normalize_label(heading)))
+                if owner is not None and owner.id != item.id:
+                    msg = (
+                        f"heading {heading!r} of {item.id!r} is an alias of {owner.id!r} "
+                        f"within the {item.statement.value} statement"
+                    )
+                    raise ValueError(msg)

@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -48,6 +49,7 @@ class PeriodKind(StrEnum):
 
 class MappingSource(StrEnum):
     LEXICON = "lexicon"
+    ANCHOR = "anchor"
     EMBEDDING = "embedding"
     MODEL = "model"
     USER = "user"
@@ -155,11 +157,33 @@ class LineItem(BaseModel):
     canonical_id: str | None = None
     mapping_source: MappingSource | None = None
     mapping_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    mapping_flag: Literal["unmapped", "ambiguous"] | None = Field(
+        default=None,
+        description="Set on a row with values that was not mapped: unmapped when nothing "
+        "resolves it, ambiguous when more than one item or an anchor disagrees. Never a guess.",
+    )
+    mapping_evidence: str | None = Field(
+        default=None,
+        description="How the mapping was made, or why the row is flagged, for a reviewer",
+    )
     depth: int = Field(default=0, ge=0, description="Indentation level within the statement")
     is_subtotal: bool = False
     parent_id: str | None = None
     note_ref: str | None = None
     cells: list[Cell] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _check_mapping_state(self) -> LineItem:
+        if self.mapping_flag is not None and self.canonical_id is not None:
+            msg = (
+                f"line item {self.id!r}: mapping_flag {self.mapping_flag!r} and "
+                f"canonical_id {self.canonical_id!r} exclude each other"
+            )
+            raise ValueError(msg)
+        if self.mapping_source is not None and self.canonical_id is None:
+            msg = f"line item {self.id!r}: mapping_source is set without a canonical_id"
+            raise ValueError(msg)
+        return self
 
     def value_for(self, period_key: str) -> Decimal | None:
         for cell in self.cells:

@@ -33,6 +33,7 @@ from fra_ingest.errors import IngestError
 from fra_ingest.figure_checks import check_net_profit_tie
 from fra_ingest.header import parse_header
 from fra_ingest.hierarchy import RowInput, infer_hierarchy
+from fra_ingest.label_mapping import map_statement
 from fra_ingest.label_match import LabelIndex
 from fra_ingest.metadata import Metadata, detect_metadata
 from fra_ingest.ocr import OcrEngine
@@ -48,7 +49,7 @@ from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
 from fra_ingest.visual_order import repair_grid, repair_text
 
-STRUCTURE_VERSION = "10"  # bump whenever structure's output can change, reviews included
+STRUCTURE_VERSION = "12"  # bump whenever structure's output can change, reviews included
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -296,6 +297,7 @@ def structure_document(
         statement, results = run_checks(
             _statement(part, metas[part.table_refs[0]], inputs, index, number), index
         )
+        statement = map_statement(statement, index, results)
         statements.append(statement)
         checks.extend(results)
         for ref in part.table_refs:
