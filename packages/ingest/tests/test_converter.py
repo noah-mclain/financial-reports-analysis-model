@@ -59,7 +59,7 @@ def test_options_follow_the_plan_and_the_settings() -> None:
     ("engine", "options_class", "language"),
     [
         ("ocrmac", "OcrMacOptions", "ar-SA"),
-        ("tesseract", "TesseractCliOcrOptions", "ara"),
+        ("tesseract", "TesseractCliOcrOptions", "ara+eng"),
     ],
 )
 def test_the_ocr_engine_setting_picks_the_docling_options(

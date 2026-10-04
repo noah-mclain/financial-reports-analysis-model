@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 from PIL import Image, ImageDraw, ImageFont
+from support import make_blank_pdf
 
 from fra_ingest import ocr
 from fra_ingest.config import IngestConfig
@@ -24,6 +25,7 @@ from fra_ingest.ocr import (
     lines_from_tesseract_tsv,
     make_engine,
 )
+from fra_ingest.pages import read_pages
 
 HEADER = (
     "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext"
@@ -112,17 +114,20 @@ def fake_tesseract(
     exit_code: int = 0,
     languages: Sequence[str] = ("ara", "eng"),
     sleep_s: int = 0,
+    stdout: bytes = TSV.encode("utf-8"),
+    list_exit_code: int = 0,
 ) -> str:
-    """A stand-in executable: it lists ``languages`` and prints canned TSV for a read, after
-    ``sleep_s`` seconds. The arguments of a read are written to ``args.txt``."""
+    """A stand-in executable: it lists ``languages`` (and exits ``list_exit_code``) and prints
+    ``stdout``, canned TSV by default, for a read, after ``sleep_s`` seconds. The arguments of a
+    read are written to ``args.txt``."""
     script = tmp_path / "tesseract"
     tsv = tmp_path / "out.tsv"
-    tsv.write_text(TSV, encoding="utf-8")
+    tsv.write_bytes(stdout)
     listing = "\\n".join(languages)
     script.write_text(
         "#!/bin/sh\n"
         f'if [ "$1" = "--list-langs" ]; then printf "List of available languages ({len(languages)}):'
-        f'\\n{listing}\\n"; exit 0; fi\n'
+        f'\\n{listing}\\n"; exit {list_exit_code}; fi\n'
         f'echo "$*" > "{tmp_path}/args.txt"\nsleep {sleep_s}\ncat "{tsv}"\nexit {exit_code}\n',
         encoding="utf-8",
     )
@@ -164,6 +169,32 @@ def test_a_failing_tesseract_run_is_an_error_not_an_empty_page(tmp_path: Path) -
     engine = TesseractOcr(TESSERACT, command=fake_tesseract(tmp_path, exit_code=1))
     with pytest.raises(OcrEngineError, match="exit 1"):
         engine.recognize(Image.new("RGB", (10, 10), "white"), ("en-US",))
+
+
+def test_a_tsv_cell_that_is_not_a_number_is_an_engine_error() -> None:
+    broken = TSV.replace("90.0\tTotal", "high\tTotal")
+    with pytest.raises(OcrEngineError, match=r"conf 'high', not a number"):
+        lines_from_tesseract_tsv(broken, (1000, 500))
+
+
+def test_tesseract_output_that_is_not_utf8_is_an_engine_error(tmp_path: Path) -> None:
+    engine = TesseractOcr(TESSERACT, command=fake_tesseract(tmp_path, stdout=b"level\t\xff\xfe"))
+    with pytest.raises(OcrEngineError, match="not UTF-8"):
+        engine.recognize(Image.new("RGB", (10, 10), "white"), ("en-US",))
+
+
+def test_a_language_listing_that_fails_is_an_engine_error(tmp_path: Path) -> None:
+    with pytest.raises(OcrEngineError, match=r"--list-langs.*exit 3"):
+        TesseractOcr(TESSERACT, command=fake_tesseract(tmp_path, list_exit_code=3))
+
+
+def test_a_tesseract_with_broken_output_stops_read_pages_instead_of_flagging_pages(
+    tmp_path: Path,
+) -> None:
+    broken = TSV.replace("90.0\tTotal", "high\tTotal").encode("utf-8")
+    engine = TesseractOcr(TESSERACT, command=fake_tesseract(tmp_path, stdout=broken))
+    with pytest.raises(OcrEngineError, match="not a number"):
+        read_pages(make_blank_pdf(tmp_path / "scan.pdf"), TESSERACT, engine)
 
 
 def test_vision_without_ocrmac_is_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:

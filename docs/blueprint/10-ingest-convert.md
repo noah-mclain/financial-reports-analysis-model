@@ -22,7 +22,7 @@ PyTorch on the GPU returns to the system when the child exits (ADR 0007).
 | In | Out |
 |----|-----|
 | docling 2.126.0, pinned exactly, with the options of 04, 1.2 | Tables to grids, periods, hierarchy (Part 3) |
-| OCR mode and OCR language chosen per range | Tesseract and RapidOCR in docling (week 2 bake-off) |
+| OCR mode and OCR language chosen per range | Tesseract in docling (week 2 bake-off, [14](14-run-profiles.md)); RapidOCR was cut |
 | Page images at `images_scale = 2.0` for the pages converted | The `fra_worker` package, job table and heavy lease (week 4) |
 | A child process per document, with its peak memory recorded | Table model comparison and the VLM re-read (04, 1.9) |
 | `fra-ingest convert` CLI | Docker parity: the seams are here, the Linux OCR engine is not |
@@ -30,13 +30,13 @@ PyTorch on the GPU returns to the system when the child exits (ADR 0007).
 
 ### Run profiles
 
-Mac only this week, with the seams Docker needs. The device and the OCR engine come from
-`configs/ingest.toml`:
+The Mac profile is the default; Docker has its OCR engine since week 2. The device and the
+OCR engine come from `configs/ingest.toml`:
 
-| Setting | Mac (default) | Docker, until week 2 |
-|---------|---------------|----------------------|
-| `convert.device` | `mps` | `cpu` |
-| `convert.ocr_engine` | `ocrmac` | `none`: text ranges convert, image ranges are skipped and flagged |
+| Setting | Mac (default) | Docker |
+|---------|---------------|--------|
+| `convert.device` | `mps` | `mps` in the shipped file, which a Linux container cannot use; `cpu` only through a copy of the file named by `FRA_INGEST_CONFIG`. A per-profile value is week 4 work ([14](14-run-profiles.md)) |
+| `convert.ocr_engine` | `ocrmac` | `tesseract`, set by `FRA_OCR_ENGINE` in the image; `none` skips image ranges and flags them |
 
 ## Components
 
@@ -113,7 +113,7 @@ class ConvertResult(BaseModel):      # written to <artifact root>/<sha256>/conve
 | Key | Default | Notes |
 |-----|---------|-------|
 | `device` | `"mps"` | `mps`, `cpu` or `auto` |
-| `ocr_engine` | `"ocrmac"` | `ocrmac` or `none` |
+| `ocr_engine` | `"ocrmac"` | `ocrmac`, `tesseract` or `none` |
 | `images_scale` | `2.0` | Page images at 144 dpi |
 | `batch_size` | `2` | OCR, layout and table batch sizes (01, 1.5) |
 | `do_cell_matching` | `true` | Task 1.9 compares it with `false` |

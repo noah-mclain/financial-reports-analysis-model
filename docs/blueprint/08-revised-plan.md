@@ -53,7 +53,7 @@ components get a Linux counterpart behind one interface each.
 
 | Component | Native Mac (demo) | Docker (portable) | Interface |
 |-----------|-------------------|-------------------|-----------|
-| OCR | Apple Vision via ocrmac, accurate mode | Tesseract or RapidOCR, chosen by the week 2 bake-off | `fra_ingest.ocr.OcrEngine` |
+| OCR | Apple Vision via ocrmac, accurate mode | Tesseract in Docker, chosen by the week 2 bake-off ([14](14-run-profiles.md)); Vision stays native | `fra_ingest.ocr.OcrEngine` |
 | docling device | MPS | CPU | `configs/ingest.toml` |
 | Language model | MLX, 4-bit Qwen with LoRA adapter | llama.cpp server, GGUF of the same fused model | `fra_model.runtime.ModelRuntime` |
 
@@ -97,7 +97,7 @@ so the classifier learns to decline them.
 | Week | Work | Done when |
 |------|------|-----------|
 | 1: Sep 26 to Oct 2 | Corpus expansion and fetch. `packages/ingest`: per-page text layer, locator, docling on candidate pages, grid with provenance, header and period binding, scale and currency, page continuation. Docker skeleton (base image, compose, both profiles start). Spike: fuse an MLX LoRA adapter and run it as GGUF in llama.cpp | Almarai English and Arabic extracted with identical figures. Locator recall 100% on `dev`. `docker compose up` serves a health page |
-| 2: Oct 3 to 9 | OCR engines behind one interface, bake-off on the golden scans (Vision vs Tesseract vs RapidOCR). Label mapping: aliases, fuzzy match, structural anchors. Identity checks, 12 metrics with D1 to D6 defaults, decline for banks and insurers. First dry run on the train holdout | Gate A and Gate B on `dev` and the dry run; `model_test` at the checkpoint. OCR engine chosen for Docker with measured accuracy |
+| 2: Oct 3 to 9 | OCR engines behind one interface, bake-off on the golden scans (Vision vs Tesseract; RapidOCR was cut, see 14). Label mapping: aliases, fuzzy match, structural anchors. Identity checks, 12 metrics with D1 to D6 defaults, decline for banks and insurers. First dry run on the train holdout | Gate A and Gate B on `dev` and the dry run; `model_test` at the checkpoint. OCR engine chosen for Docker with measured accuracy |
 | 3: Oct 10 to 16 | SEC FSDS and bilingual-pair datasets, issuer-grouped split, length audit. Baseline vs QLoRA for normalization on the train holdout, with training data smaller by the holdout share. Grounding checker, templates, narration in both languages. GGUF export of the promoted adapter | Gate C, provisional until the checkpoint. Normalization beats baseline on held-out issuers |
 | 4: Oct 17 to 23 | Upload page, background job, stage timeline, results page (statements with click-to-source, metrics with formulas, summary with citations, right-to-left for Arabic). Docker profile complete. Dry runs on the train holdout, fix the most common failure classes on non-holdout documents | Gate D. Gate E waits for the checkpoint |
 | Oct 24 (planned) | Checkpoint, run by the owner: `model_test`, then `blind`, then Gates A to E confirmed | Scores frozen. The date is a plan that moves only later, never earlier than "all planned work complete and every check passing" (D13) |

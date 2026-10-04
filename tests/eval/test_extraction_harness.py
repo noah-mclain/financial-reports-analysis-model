@@ -550,14 +550,16 @@ def test_only_a_runs_own_artifact_root_may_be_deleted(tmp_path: Path) -> None:
             remove_artifacts(root)
 
 
-def test_a_delete_that_fails_is_not_silent(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_delete_that_fails_is_not_silent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def refuse(path: object) -> None:
         raise PermissionError(str(path))
 
-    monkeypatch.setattr(Path, "exists", lambda self: True)
+    root = tmp_path / "var" / "artifacts-test-label"
+    root.mkdir(parents=True)
+    monkeypatch.setattr("harness.extraction.REPO_ROOT", tmp_path)
     monkeypatch.setattr("harness.extraction.shutil.rmtree", refuse)
     with pytest.raises(PermissionError):
-        remove_artifacts(REPO_ROOT / "var" / "artifacts-test-label")
+        remove_artifacts(root)
 
 
 def test_the_traineddata_files_are_hashed_from_the_directory_tesseract_lists(

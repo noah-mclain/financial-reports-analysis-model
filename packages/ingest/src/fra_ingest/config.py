@@ -83,9 +83,10 @@ class IngestConfig(BaseModel):
     images_scale: float = Field(default=2.0, gt=0.0, le=4.0)
     ocr_scale: float = Field(default=3.0, gt=0.0, le=6.0)
     # Tesseract only. Page segmentation mode (3 is Tesseract's own default) and the language
-    # string for an Arabic page: Arabic alone, or Arabic with English for the Latin in it.
+    # string for an Arabic page: Arabic alone, or Arabic with English for the Latin in it. The
+    # default is "ara+eng": Arabic alone read no English page at all (docs/blueprint/14).
     tesseract_psm: int = Field(default=3, ge=0, le=13)
-    tesseract_arabic_language: Literal["ara", "ara+eng"] = "ara"
+    tesseract_arabic_language: Literal["ara", "ara+eng"] = "ara+eng"
     batch_size: int = Field(default=2, ge=1)
     do_cell_matching: bool = True
     document_timeout_s: float = Field(default=600.0, gt=0.0)

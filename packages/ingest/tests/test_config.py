@@ -159,12 +159,12 @@ def test_an_unknown_ocr_engine_in_the_environment_is_rejected(
         load_config(write(tmp_path, ""))
 
 
-def test_tesseract_settings_default_to_its_own_behaviour(tmp_path: Path) -> None:
+def test_tesseract_defaults_are_the_bake_off_choice(tmp_path: Path) -> None:
     config = IngestConfig()
-    assert (config.tesseract_psm, config.tesseract_arabic_language) == (3, "ara")
-    path = write(tmp_path, '[tesseract]\npsm = 6\narabic_language = "ara+eng"\n')
+    assert (config.tesseract_psm, config.tesseract_arabic_language) == (3, "ara+eng")
+    path = write(tmp_path, '[tesseract]\npsm = 6\narabic_language = "ara"\n')
     config = load_config(path)
-    assert (config.tesseract_psm, config.tesseract_arabic_language) == (6, "ara+eng")
+    assert (config.tesseract_psm, config.tesseract_arabic_language) == (6, "ara")
 
 
 def test_an_arabic_language_string_tesseract_does_not_know_is_rejected(tmp_path: Path) -> None:

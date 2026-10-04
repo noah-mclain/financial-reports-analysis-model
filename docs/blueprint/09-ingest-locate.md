@@ -41,7 +41,7 @@ Consequences:
 | In | Out |
 |----|-----|
 | Per-page text layer and OCR of image pages | docling, tables, cell values (Parts 2 and 3) |
-| Scoring every page for five statement types | Tesseract and RapidOCR engines (week 2 bake-off) |
+| Scoring every page for five statement types | Tesseract engine (week 2 bake-off, [14](14-run-profiles.md)); RapidOCR was cut |
 | Ranges and `convert_ranges` for the enabled types | Declining banks and insurers (week 2 builds the rule on the signal stored here) |
 | Industry signal: corporate, bank, insurer | Job table, workers, API |
 | Labelling the 9 scanned golden documents | |

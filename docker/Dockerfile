@@ -20,12 +20,18 @@ COPY packages packages
 RUN uv sync --frozen --no-dev --no-editable
 
 FROM python:3.12-slim
+# Tesseract is the Docker profile's OCR engine (docs/blueprint/14-run-profiles.md): Vision is
+# Mac-only. Only the Arabic and English data, which is all the settings name.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/*
 RUN useradd --create-home --uid 1000 app
 COPY --from=build /opt/venv /opt/venv
 COPY configs /app/configs
 ENV PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     FRA_PROFILE=docker \
+    FRA_OCR_ENGINE=tesseract \
     FRA_ROOT=/app
 WORKDIR /app
 USER app

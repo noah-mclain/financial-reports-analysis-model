@@ -237,9 +237,7 @@ def test_every_ocr_call_is_timed_on_its_own(tmp_path: Path) -> None:
     assert page.ocr_seconds == pytest.approx(sum(page.ocr_call_seconds))
 
 
-@pytest.mark.parametrize(
-    "variant", [{"tesseract_psm": 6}, {"tesseract_arabic_language": "ara+eng"}]
-)
+@pytest.mark.parametrize("variant", [{"tesseract_psm": 6}, {"tesseract_arabic_language": "ara"}])
 def test_tesseract_settings_that_change_a_read_invalidate_the_cache(
     tmp_path: Path, variant: dict[str, object]
 ) -> None:

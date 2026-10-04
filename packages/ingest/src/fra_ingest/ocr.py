@@ -119,17 +119,17 @@ def lines_from_tesseract_tsv(tsv: str, size: tuple[int, int]) -> list[OcrLine]:
             continue
         record = dict(zip(columns, cells, strict=True))
         text = record["text"].strip(f" {_DIRECTION_MARKS}")
-        if record["level"] != "5" or not text or float(record["conf"]) < 0:
+        if record["level"] != "5" or not text or _number(record, "conf", float) < 0:
             continue
         key = (record["block_num"], record["par_num"], record["line_num"])
         words.setdefault(key, []).append(
             (
                 text,
-                float(record["conf"]) / 100,
-                int(record["left"]),
-                int(record["top"]),
-                int(record["width"]),
-                int(record["height"]),
+                _number(record, "conf", float) / 100,
+                _number(record, "left", int),
+                _number(record, "top", int),
+                _number(record, "width", int),
+                _number(record, "height", int),
             )
         )
     lines = []
@@ -149,6 +149,15 @@ def lines_from_tesseract_tsv(tsv: str, size: tuple[int, int]) -> list[OcrLine]:
             )
         )
     return sort_lines(lines)
+
+
+def _number[T: (int, float)](record: Mapping[str, str], column: str, kind: type[T]) -> T:
+    """One numeric cell of a TSV row; a cell that is not a number means the engine broke."""
+    try:
+        return kind(record[column])
+    except ValueError:
+        msg = f"tesseract output has {column} {record[column]!r}, not a number"
+        raise OcrEngineError(msg) from None
 
 
 def sort_lines(lines: Iterable[OcrLine]) -> list[OcrLine]:
@@ -236,7 +245,12 @@ class TesseractOcr:
             tail = done.stderr.decode("utf-8", errors="replace").strip()[-_STDERR_CHARS:]
             msg = f"tesseract exit {done.returncode}: {tail}"
             raise OcrEngineError(msg)
-        return lines_from_tesseract_tsv(done.stdout.decode("utf-8"), image.size)
+        try:
+            tsv = done.stdout.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            msg = f"tesseract output is not UTF-8: {exc}"
+            raise OcrEngineError(msg) from None
+        return lines_from_tesseract_tsv(tsv, image.size)
 
     def _require(self, codes: Sequence[str]) -> None:
         """``codes`` are language strings such as ``ara+eng``; each part needs its data."""
@@ -253,12 +267,16 @@ class TesseractOcr:
                     [self._command, "--list-langs"],
                     capture_output=True,
                     text=True,
-                    check=True,
+                    check=False,
                     timeout=TESSERACT_LIST_TIMEOUT_S,
                 )
             except subprocess.TimeoutExpired:
                 msg = f"tesseract --list-langs did not finish within {TESSERACT_LIST_TIMEOUT_S} s"
                 raise OcrTimeoutError(msg) from None
+            if done.returncode != 0:
+                tail = done.stderr.strip()[-_STDERR_CHARS:]
+                msg = f"tesseract --list-langs exit {done.returncode}: {tail}"
+                raise OcrEngineError(msg)
             # The first line is a heading, then one language code per line.
             self._installed = {line.strip() for line in done.stdout.splitlines()[1:]}
         return self._installed
@@ -278,12 +296,12 @@ def read_with_fallback(
     for index, language in enumerate(languages):
         lines = engine.recognize(image, [language])
         last = index == len(languages) - 1
-        if last or _script_chars(lines, language) >= MIN_SCRIPT_CHARS:
+        if last or script_chars(lines, language) >= MIN_SCRIPT_CHARS:
             return lines, language
     return lines, languages[-1]
 
 
-def _script_chars(lines: Sequence[OcrLine], language: str) -> int:
+def script_chars(lines: Sequence[OcrLine], language: str) -> int:
     text = "".join(line.text for line in lines)
     if language.startswith("ar"):
         return sum(1 for char in text if "\u0600" <= char <= "\u06ff")

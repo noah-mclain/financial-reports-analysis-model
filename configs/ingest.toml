@@ -27,8 +27,8 @@ low_selectivity_share = 0.25
 device = "mps"
 # One of: ocrmac (Apple Vision, the Mac only), tesseract (needs the tesseract executable and
 # its ara and eng language data), none (text ranges convert, image ranges are skipped and
-# flagged ocr_unavailable). The week 2 bake-off compares them; FRA_OCR_ENGINE overrides it for
-# one run.
+# flagged ocr_unavailable). The week 2 bake-off compared them (14): the Docker image sets
+# FRA_OCR_ENGINE=tesseract; FRA_OCR_ENGINE also overrides this for one run.
 ocr_engine = "ocrmac"
 # Page images at 2x (144 dpi), for the review report and click-to-source.
 images_scale = 2.0
@@ -50,8 +50,10 @@ memory_budget_gb = 3.5
 # Used only when ocr_engine is tesseract, by our own page reads and by docling alike.
 # Page segmentation mode; 3 is Tesseract's own default (fully automatic).
 psm = 3
-# Language string for an Arabic page: "ara", or "ara+eng" to read the Latin in it too.
-arabic_language = "ara"
+# Language string for an Arabic page: "ara", or "ara+eng" to read the Latin in it too. "ara+eng"
+# because with "ara" the Arabic read of an English scan is not empty: it invents Arabic
+# letters, passes the script check and is kept. The counts are in 14, the OCR bake-off.
+arabic_language = "ara+eng"
 
 [structure]
 # A table is a statement when its best statement type reaches this confidence (spec 11).

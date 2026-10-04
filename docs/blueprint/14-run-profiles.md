@@ -1,7 +1,8 @@
 # 14. Run profiles: the model route from MLX to llama.cpp, and the Docker skeleton
 
-Status: v4, 2026-10-02. The GGUF spike is measured, on two runs, and the Docker skeleton is
-built and measured (last section). This document closes R16 as a question
+Status: v5, 2026-10-04. The GGUF spike is measured, on two runs, the Docker skeleton is built
+and measured ("The Docker skeleton"), and the week 2 OCR bake-off is recorded ("The OCR
+bake-off", the last section). This document closes R16 as a question
 ([08-revised-plan.md](08-revised-plan.md)): the route works on a small model. The route uses a
 step that [01-constraints.md](01-constraints.md) 1.4 forbade on this machine; the owner amended
 that rule on 2026-10-02 for this export only, under conditions (see "Decision for week 3"). The
@@ -310,7 +311,7 @@ misspelled, the process stops and says so. `make dev` sets `native`, the image s
 | Service | Today | Later |
 |---------|-------|-------|
 | `api` | FastAPI 0.141.1 under uvicorn: `/health` (status, package version, profile) and a one-line HTML page at `/`, and no other route. The generated `/docs`, `/redoc` and `/openapi.json` are switched off and return with the real API in week 4. Healthy once `/health` answers with profile `docker` | Upload, job status, results (week 4) |
-| `worker` | The same image. Imports `fra_ingest`, prints the profile and sleeps. Proves the image carries docling and the locked dependencies | The job runner from `apps/worker` (week 4) |
+| `worker` | The same image. Imports `cv2`, builds the OCR engine the settings name (Tesseract and its language data in the image), prints the profile and sleeps. Proves the image carries the locked dependencies and a working engine | The job runner from `apps/worker` (week 4) |
 | `llm` | Defined, not started. `ghcr.io/ggml-org/llama.cpp:server` on the CPU, reading `var/models/model.gguf` from a read-only mount. Behind the `llm` compose profile, and `docker compose --profile llm config` validates | Serves the fused adapter as GGUF by the route in "Decision for week 3"; needs the file that week 3 produces |
 
 Ports live in `.env` (`FRA_API_PORT`, `FRA_LLM_PORT`), which compose and the Makefile both read.
@@ -355,8 +356,6 @@ compose run --rm --no-deps worker python -c "import cv2"` must exit 0.
 - No job queue, database or upload page (week 4).
 - No `apps/worker` package; the worker service is a command in `compose.yaml`.
 - No model in the image. The `llm` service waits for a GGUF file and was never started.
-- No OCR engine in the image. The Apple Vision engine is Mac-only; the Linux engines arrive with
-  week 2, and the image must grow them then.
 - Not measured: the image on x86-64. The numbers above are aarch64; the lock does carry hashed
   CPU wheels for x86-64, but nothing was built there.
 
@@ -386,3 +385,194 @@ compose run --rm --no-deps worker python -c "import cv2"` must exit 0.
   gives no message. The mlx-lm version string appears both in the script and in the Python usage
   docstring.
 - **`scripts/spikes/gguf_spike.py`,** `compare()` has no automated test.
+
+## The OCR bake-off
+
+Status: 2026-10-04. Vision, five Tesseract settings on the Mac and Tesseract in the Docker
+image were scored on the golden set with the extraction eval
+(`make eval-extraction OCR=... LABEL=...`, [12](12-ingest-review.md) for the scoring). This
+section closes the Docker engine choice that [08](08-revised-plan.md) left to the bake-off, and
+applies R15 and D14.
+
+### What the numbers can and cannot say
+
+- The scanned golden pages are two documents of one issuer, Edita: one Arabic and one English,
+  each with three statements. Engines whose scores differ by less than the intervals' half-width
+  (last lines of the generated block) cannot be told apart, and a result on
+  Edita's scans is not a result on other issuers' scans.
+- 98.0% is the gate for scanned cells. At 128 cells it can be neither shown (a perfect score
+  has a lower bound below it) nor ruled out in general (one document); see the last lines of
+  the generated block.
+- The expected files were drafted from a Vision extraction and then checked against the page
+  images and by arithmetic and sibling filings (`make verify-expected`). Vision's agreement
+  with its own draft is therefore flattered, which is why "value only" (the same alignment
+  without the label check) is shown beside the accuracy.
+- Times measured on the Mac say nothing about Docker. The Docker row was run in the container
+  below, on the same Mac; Docker Desktop gave the VM 12 CPUs and 14,111,502,336 bytes
+  (`docker info --format '{{.NCPU}} {{.MemTotal}}'`, read 2026-10-04).
+- RapidOCR was cut. Its Arabic recognition model (`rapidocr/models/arabic_PP-OCRv4_rec_mobile.pth`)
+  has a final layer of 164 outputs (`head.fc.weight`, read with `torch.load`), and its
+  dictionary file (`arabic_dict.txt`) has 161 lines (`wc -l`); with the CTC blank, and a space
+  when the engine adds one, that is 162 or 163 names for 164 outputs, so the model and the
+  dictionary do not match. It also needs `python-bidi`, which is not in the lock. The plan
+  allowed the cut ([plan, Task 3](../plans/2026-10-03-week2.md)).
+
+### Results
+
+Scanned statements of the checked expected files, per language. "Statements extracted" is how
+many of the three expected statements the pipeline produced after structure (`statements_found`
+in `eval/harness/extraction.py`); the cells of an expected statement that was not extracted
+count as wrong. "Convert s per page" is n/a when no range was converted in that run. It is not
+a statement count: the Docker Arabic row extracted 0 of 3 statements and still has a convert
+time. The platform column is the platform string each run recorded about itself.
+
+<!-- bakeoff:begin (generated by harness.bakeoff_table) -->
+
+| Engine and setting | Language | Right of n | Accuracy | 95% interval | Value only | Statements extracted | s per OCR call | Convert s per page | Platform |
+|---|:-:|--:|--:|:-:|--:|:-:|--:|--:|---|
+| Vision (ocrmac), accurate | ar | 98 of 128 | 76.6% | 68.5% to 83.1% | 77.3% | 3 of 3 | 0.22 | 3.40 | `macOS-27.2-arm64-arm-64bit` |
+| Vision (ocrmac), accurate | en | 120 of 126 | 95.2% | 90.0% to 97.8% | 95.2% | 3 of 3 | 0.22 | 3.29 | `macOS-27.2-arm64-arm-64bit` |
+| Tesseract `ara`, psm 3 | ar | 0 of 128 | 0.0% | 0.0% to 2.9% | 0.0% | 1 of 3 | 1.26 | 5.32 | `macOS-27.2-arm64-arm-64bit` |
+| Tesseract `ara`, psm 3 | en | 0 of 126 | 0.0% | 0.0% to 3.0% | 0.0% | 0 of 3 | 2.30 | n/a | `macOS-27.2-arm64-arm-64bit` |
+| Tesseract `ara`, psm 6 | ar | 0 of 128 | 0.0% | 0.0% to 2.9% | 0.0% | 1 of 3 | 1.21 | 4.98 | `macOS-27.2-arm64-arm-64bit` |
+| Tesseract `ara`, psm 6 | en | 0 of 126 | 0.0% | 0.0% to 3.0% | 0.0% | 0 of 3 | 2.14 | n/a | `macOS-27.2-arm64-arm-64bit` |
+| Tesseract `ara`, psm 3, ocr_scale 4.0 | ar | 0 of 128 | 0.0% | 0.0% to 2.9% | 0.0% | 1 of 3 | 1.23 | 6.15 | `macOS-27.2-arm64-arm-64bit` |
+| Tesseract `ara`, psm 3, ocr_scale 4.0 | en | 0 of 126 | 0.0% | 0.0% to 3.0% | 0.0% | 0 of 3 | 2.29 | n/a | `macOS-27.2-arm64-arm-64bit` |
+| Tesseract `ara+eng`, psm 3 | ar | 0 of 128 | 0.0% | 0.0% to 2.9% | 0.0% | 1 of 3 | 2.32 | 5.90 | `macOS-27.2-arm64-arm-64bit` |
+| Tesseract `ara+eng`, psm 3 | en | 115 of 126 | 91.3% | 85.0% to 95.1% | 91.3% | 3 of 3 | 1.73 | 4.20 | `macOS-27.2-arm64-arm-64bit` |
+| Tesseract `ara+eng`, psm 3, 300 dpi page reads | ar | 0 of 128 | 0.0% | 0.0% to 2.9% | 0.0% | 1 of 3 | 3.31 | 6.04 | `macOS-27.2-arm64-arm-64bit` |
+| Tesseract `ara+eng`, psm 3, 300 dpi page reads | en | 113 of 126 | 89.7% | 83.1% to 93.9% | 89.7% | 3 of 3 | 2.34 | 4.22 | `macOS-27.2-arm64-arm-64bit` |
+| Tesseract `ara+eng`, psm 3, in Docker | ar | 0 of 128 | 0.0% | 0.0% to 2.9% | 0.0% | 0 of 3 | 1.79 | 9.81 | `Linux-6.10.11-linuxkit-aarch64-with-glibc2.41` |
+| Tesseract `ara+eng`, psm 3, in Docker | en | 114 of 126 | 90.5% | 84.1% to 94.5% | 90.5% | 3 of 3 | 1.39 | 7.01 | `Linux-6.10.11-linuxkit-aarch64-with-glibc2.41` |
+
+Tesseract runs, version and data:
+
+- `macOS-27.2-arm64-arm-64bit`: tesseract 5.5.3; ara.traineddata sha256 `e3206d3dc87fd50c24a0fb9f01838615911d25168f4e64415244b67d2bb3e729`; eng.traineddata sha256 `7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2`
+- `Linux-6.10.11-linuxkit-aarch64-with-glibc2.41`: tesseract 5.5.0; ara.traineddata sha256 `e3206d3dc87fd50c24a0fb9f01838615911d25168f4e64415244b67d2bb3e729`; eng.traineddata sha256 `7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2`
+
+Tesseract settings per run (page-read resolution `ocr_dpi`, docling's `ocr_scale`):
+
+- Tesseract `ara`, psm 3: psm 3, Arabic language ara, ocr_dpi 100, ocr_scale 3.0
+- Tesseract `ara`, psm 6: psm 6, Arabic language ara, ocr_dpi 100, ocr_scale 3.0
+- Tesseract `ara`, psm 3, ocr_scale 4.0: psm 3, Arabic language ara, ocr_dpi 100, ocr_scale 4.0
+- Tesseract `ara+eng`, psm 3: psm 3, Arabic language ara+eng, ocr_dpi 100, ocr_scale 3.0
+- Tesseract `ara+eng`, psm 3, 300 dpi page reads: psm 3, Arabic language ara+eng, ocr_dpi 300, ocr_scale 3.0
+- Tesseract `ara+eng`, psm 3, in Docker: psm 3, Arabic language ara+eng, ocr_dpi 100, ocr_scale 3.0
+
+Read from the table:
+
+- Best scanned-Arabic score: 98 of 128 (76.6%), Vision (ocrmac), accurate. The gate (98.0%) needs 126 of 128. 7 of 7 runs are below it.
+- A perfect score on 128 cells has a 95% lower bound of 97.1%, so 98.0% cannot be shown at this n. The highest upper bound among the Arabic runs is 83.1%; that rules 98.0% out for this one document, not for Arabic scans in general.
+- Among runs with a nonzero score, the widest 95% interval is plus or minus 7.3 points: runs closer than that cannot be told apart.
+
+<!-- bakeoff:end -->
+
+### Why Tesseract with `ara` read no English
+
+With `arabic_language = "ara"`, English statements were located 0 of 3 and scored 0 of 126.
+The cause, measured on three scanned pages (8, 9 and 10) of `edita-2025-en-consolidated-ifrs`,
+a dev document, at 100 dpi:
+
+`read_with_fallback` reads each page in `ar-SA` first and keeps the read when it holds at least
+`MIN_SCRIPT_CHARS` (10) Arabic letters. Vision returns none for an English page, so the page is
+re-read in English. Tesseract with `ara` does not return none: it invents Arabic letters from
+Latin print, so the Arabic read passes the check, is kept, and holds no Latin letter at all.
+
+| Page | `ara`: Arabic letters in the `ar-SA` read | `ara+eng`: Arabic letters in the `ar-SA` read | `ara+eng`: Latin letters in the `ar-SA` read |
+|---|--:|--:|--:|
+| 8 | 931 | 9 | 1,203 |
+| 9 | 534 | 0 | 640 |
+| 10 | 537 | 7 | 626 |
+
+The `ara` read of every page has 0 Latin letters. With `ara+eng` the Arabic read of the same
+pages holds 0 to 9 Arabic letters, below the threshold, so the fallback moves to English. Page
+8 is one letter short of the threshold. The fallback rule was not changed.
+
+To reproduce: `uv run pytest packages/ingest/tests/test_ocr_arabic_default_golden.py -m slow`
+reads page 9 with each setting and asserts the mechanism (an `ara` read has at least
+`MIN_SCRIPT_CHARS` Arabic letters, an `ara+eng` read has fewer); it needs the `tesseract`
+executable and skips by name without it. The counts in the table were re-measured on
+2026-10-04 by reading pages 8, 9 and 10 at `ocr_dpi` 100 through `TesseractOcr.recognize` and
+counting with `script_chars`; the test is the kept check, the full table is not generated.
+
+### Why Tesseract's Arabic score is 0
+
+Every Tesseract run scored exactly 0 of 128 on the Arabic scan, and five of the six had one
+statement extracted from it. Read from the artifacts of the `ara+eng` run
+(`var/artifacts-tesseract-ara-eng`, read-only) and its report, for `edita-2024-ar-consolidated`:
+
+- The one extracted statement is the balance sheet: 38 rows and 37 cells. The report lists all
+  76 expected balance cells with an empty value read, none right. Its one period is
+  `1117-12-01` where two (2023 and 2024) were expected, and it carries `period_unbound`,
+  `row_alignment_unresolved` and `scale_missing`.
+- None of its 37 cells holds an Arabic-Indic digit, which is how the filing prints numbers;
+  30 hold a Latin letter (`VAN ATY TAT`, `Tvs Ver`) and 4 are only ASCII digits and separators
+  (`0211`, `02010`, `31132351337`, `0`). Vision's run on the same document has 121 of 126 cells
+  with an Arabic-Indic digit and none with an ASCII digit.
+- Over the 61 pages Tesseract read in that run, its text holds 475 Arabic-Indic digits and 2,171
+  ASCII digits; Vision's holds 14,134 and 16.
+
+The cause class is digit forms: Tesseract with `ara+eng` reads few of the Arabic-Indic digits
+as digits and writes Latin look-alikes in their place. 4 of the 37 cells have a value and none
+matches an expected cell, which also leaves the period unbound and the rows unaligned. Digit
+order, thousands separators, sign and row alignment could not be examined, because no cell
+holds a right number to compare. Not examined: whether `ara` alone or a digit whitelist changes
+it (only the `ara+eng` artifacts were read, and no pipeline code
+was changed). The two statements not extracted were not examined either.
+
+A known limit of the engine path: docling's own Tesseract call logs an error and skips the
+region when Tesseract fails on it (`tesseract_ocr_cli_model.py` catches
+`CalledProcessError`, logs it and continues), so a broken Tesseract inside docling never
+raises. Our own page reads do raise (`OcrEngineError`), and the worker's start command builds
+the engine, but nothing checks docling's call.
+
+### In Docker
+
+- Image: `docker compose build api` with Tesseract 5.5.0 added: 1,650,213,085 bytes before (the
+  OpenCV paragraph above), 1,755,392,844 after (+105,179,759), both from
+  `docker image inspect fra-app --format '{{.Size}}'`; the second re-read 2026-10-04. Debian
+  packages, from `docker run --rm --entrypoint dpkg fra-app -l tesseract-ocr tesseract-ocr-ara
+  tesseract-ocr-eng`: `tesseract-ocr` 5.5.0-1+b1, `tesseract-ocr-ara` and `tesseract-ocr-eng`
+  1:4.1.0-2.
+- `ara.traineddata` and `eng.traineddata` in the image have the same sha256 as the Mac's (the
+  generated block shows both). The Mac ran Tesseract 5.5.3, the image 5.5.0.
+- Run: `harness.extraction --ocr tesseract --label docker-tesseract --fresh` inside `fra-app`,
+  with the repository's `eval/` mounted read-only at `/app/eval`, a scratch directory under
+  `var/docker-bakeoff/` mounted at `/app/var`, `PYTHONPATH=/app/eval`, and a copy of
+  `configs/ingest.toml` with `device = "cpu"`, passed through `FRA_INGEST_CONFIG`. No eval code
+  is in the image.
+- The image as built cannot run convert. The shipped `configs/ingest.toml` has
+  `device = "mps"`, which a Linux container cannot use, and nothing switches it by profile:
+  the measurement above needed the copy with `device = "cpu"`. A per-profile `device` (and
+  engine) setting is week 4 work, with the worker. The worker's start command builds the
+  engine but does not run a conversion, so its guard does not cover this.
+- Peak memory: the container's cgroup `memory.peak` at the end of the run was 2,603,044,864
+  bytes, the last line of `var/docker-bakeoff/run1/run.log`. It includes page cache, so it is
+  an upper bound on resident memory.
+- Docker's Arabic run extracted 0 of 3 statements where the Mac's `ara+eng` run extracted 1 of
+  3. Both are 0 right of 128; they are not different results on this measure.
+
+### Decision
+
+The Docker profile uses Tesseract with `ara+eng`. Scanned Arabic is native-only: Vision is the
+only engine with any correct Arabic cell (see the table), and it is below the gate, so no
+engine reaches 98.0% on scanned Arabic and R15 and D14 apply. A scanned Arabic filing is shown
+held for review with its reasons, not cut and not presented as correct.
+
+Scanned English is below the gate too, on both profiles. Native Vision scored 120 of 126
+(95.2%, interval 90.0% to 97.8%; the gate needs 124 of 126), and Tesseract `ara+eng` in Docker
+114 of 126 (90.5%). D14 and R15 are written for scanned Arabic only, so no rule in
+[06](06-decisions-and-risks.md) covers scanned English. It is held for review by the same
+review-stage rule (a statement is held on failed checks and flags, [12](12-ingest-review.md)),
+and that is a point for the owner to confirm, not a rule this section adds. The decision follows
+the table; the owner can overrule it.
+
+How the profile picks the engine: `docker/Dockerfile` sets `FRA_OCR_ENGINE=tesseract` beside
+`FRA_PROFILE=docker`, and `load_config` already lets that variable replace
+`convert.ocr_engine`; the file's own value stays `ocrmac` for the native profile. The worker's
+start command builds the engine with `make_engine(load_config())`, so a missing executable or
+language data fails `make docker-up`. Arabic stays with `ara+eng` (`tesseract.arabic_language`,
+the default), for the reason in the section above.
+
+Not done: how a filing is recognised as scanned Arabic in the demo (D14 says the same), and a
+`device` and engine setting per profile (week 4, with the worker).
