@@ -335,8 +335,9 @@ that says what the builder does is what it will do.
   Every scoring is entered in one log: date, what ran, what was looked at. A dry run (below) is
   a scoring and is entered like a model scoring, because each look spends some of the holdout's
   independence. The same parts apply to narration payloads.
-- **How an issuer is placed.** A stable hash, in the manner of `pool_for` in
-  `training/sources/sec_fsds.py` and `assign_pool` in `scripts/corpus.py`: SHA-256 of
+- **How an issuer is placed.** Top-level pools first follow the recorded cross-source
+  assignments in `fra_core.pools` ([operational rules](../../eval/corpus/README.md#model-data)).
+  The separate train subdivision in `fra_core.split` uses SHA-256 of
   `holdout:` plus the issuer's key, modulo 100. The key is `cik:<number>` for an issuer that has
   a CIK and `corpus.issuer_key` of its name otherwise, so the SEC data and the PDF corpus agree
   on one issuer only if its corpus documents carry the `cik` field; a US issuer added to `train`

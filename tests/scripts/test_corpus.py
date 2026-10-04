@@ -283,6 +283,8 @@ def test_fetch_new_downloads_only_what_is_not_measured(
         dest.write_bytes(b"%PDF-1.7 fresh")
 
     monkeypatch.setattr(corpus, "CANDIDATES", candidates)
+    monkeypatch.setattr(corpus, "POOL_METADATA", tmp_path / "issuer-pools.json")
+    monkeypatch.setattr(corpus, "SEC_OUT", tmp_path / "sec")
     monkeypatch.setattr(corpus, "FETCHED", fetched)
     monkeypatch.setattr(corpus, "ROOT", tmp_path)  # the by-hand list prints paths under it
     monkeypatch.setattr(corpus, "STORE", tmp_path / "store")
@@ -325,6 +327,8 @@ def test_a_refused_host_is_recorded_and_listed_the_same_way_with_or_without_new(
         raise PermissionError("robots.txt unreachable: Remote end closed connection")
 
     monkeypatch.setattr(corpus, "CANDIDATES", candidates)
+    monkeypatch.setattr(corpus, "POOL_METADATA", tmp_path / "issuer-pools.json")
+    monkeypatch.setattr(corpus, "SEC_OUT", tmp_path / "sec")
     monkeypatch.setattr(corpus, "FETCHED", fetched)
     monkeypatch.setattr(corpus, "ROOT", tmp_path)
     monkeypatch.setattr(corpus, "STORE", tmp_path / "store")
@@ -380,6 +384,8 @@ def test_a_document_downloaded_again_with_the_same_bytes_keeps_its_retrieval_dat
         dest.write_bytes(data)
 
     monkeypatch.setattr(corpus, "CANDIDATES", candidates)
+    monkeypatch.setattr(corpus, "POOL_METADATA", tmp_path / "issuer-pools.json")
+    monkeypatch.setattr(corpus, "SEC_OUT", tmp_path / "sec")
     monkeypatch.setattr(corpus, "FETCHED", fetched)
     monkeypatch.setattr(corpus, "STORE", tmp_path / "store")
     monkeypatch.setattr(corpus, "download", fake_download)
@@ -390,3 +396,28 @@ def test_a_document_downloaded_again_with_the_same_bytes_keeps_its_retrieval_dat
     )
     assert corpus.main(["fetch", "--id", "old"]) == 0
     assert corpus.load_yaml(fetched)["documents"]["old"]["retrieved"] == "2026-09-26"
+
+
+def test_cik_equivalent_names_cannot_span_pools() -> None:
+    documents = [
+        {**doc("a", "Old Name", "train"), "cik": 1111},
+        {**doc("b", "New Name", "blind"), "cik": "0000001111"},
+    ]
+    assert any("spans pools" in error for error in check(documents, GOLDEN).errors)
+
+
+@pytest.mark.parametrize(
+    "issuer,cik,pool",
+    [
+        (None, None, "train"),
+        ("", None, "train"),
+        ("Acme", "bad", "train"),
+        ("Acme", 0, "train"),
+        ("Acme", None, None),
+    ],
+)
+def test_invalid_identity_and_pool_are_reported(issuer: object, cik: object, pool: object) -> None:
+    record = {**doc("bad", "Acme", "train"), "issuer": issuer, "pool": pool}
+    if cik is not None:
+        record["cik"] = cik
+    assert check([record], GOLDEN).errors

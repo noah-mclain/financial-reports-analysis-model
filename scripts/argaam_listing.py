@@ -36,6 +36,14 @@ import yaml
 
 import corpus
 from corpus import Politeness, assign_pool, issuer_key
+from fra_core.pools import (
+    Identity,
+    PoolError,
+    PoolRegistry,
+    locked_registry,
+    record_pdf_metadata,
+    save_registry,
+)
 from fra_core.schemas import PageMode, StatementType
 from fra_ingest.config import IngestConfig, load_config
 from fra_ingest.locate import TitleBook, find_ranges, load_title_book, score_page
@@ -728,10 +736,15 @@ def build_plan(
     golden_keys: set[str],
     decisions: dict[str, Decision],
     market: Market,
+    registry: PoolRegistry | None = None,
 ) -> Plan:
     """Which entries to add, with the count at every step. `names` maps a company path to its
     full English name; `documents` are the entries already in candidates.yaml, those of every
     market (a company can move between them)."""
+    registry = registry if registry is not None else PoolRegistry()
+    for key in golden_keys:
+        registry.register(Identity(key), "dev")
+    registry.record_documents(documents)
     plan = Plan()
 
     def step(label: str, group: list[ListingRow]) -> None:
@@ -776,7 +789,8 @@ def build_plan(
         match = next(iter(linked), key if key in existing else None)
         if match is not None:
             groups["same issuer as an existing one (name or url)"].append(r)
-            _add_pair(plan, r, existing[match], taken_ids, market)
+            registry.alias(name, Identity.from_document(existing[match].docs[0]))
+            _add_pair(plan, r, existing[match], taken_ids, market, registry)
             continue
         others = existing_names + [names[o.path] for o in candidates if o is not r]
         near = near_matches(name, others, [r.short_name])
@@ -791,7 +805,7 @@ def build_plan(
                 undecided.append(f"{name} (near {', '.join(o for o, _, _ in near)})")
             else:
                 groups["new issuer, no near match"].append(r)
-                _add_new(plan, r, issuer_name(name), market, taken_ids)
+                _add_new(plan, r, issuer_name(name), market, taken_ids, registry)
             continue
         if decision.decision == "same":
             target = existing.get(issuer_key(decision.issuer or ""))
@@ -808,7 +822,8 @@ def build_plan(
                 )
                 for o, sc, _ in near
             ]
-            _add_pair(plan, r, target, taken_ids, market)
+            registry.alias(name, Identity.from_document(target.docs[0]))
+            _add_pair(plan, r, target, taken_ids, market, registry)
         elif decision.decision == "exclude":
             plan.excluded.append((name, decision.reason))
             groups["decided to leave out"].append(r)
@@ -822,7 +837,7 @@ def build_plan(
                 )
             groups["decided different"].append(r)
             plan.near += [NearRow(name, o, sc, "different", decision.reason) for o, sc, _ in near]
-            _add_new(plan, r, issuer_name(name), market, taken_ids)
+            _add_new(plan, r, issuer_name(name), market, taken_ids, registry)
         else:
             raise ValueError(
                 f"{name}: decision must be same, different or exclude, got {decision.decision!r}"
@@ -833,13 +848,27 @@ def build_plan(
             f"{DECISIONS.name}; add one (same, different or exclude, with a reason) for: "
             + "; ".join(undecided)
         )
+    registry.record_documents(plan.entries)
     for label, group in groups.items():
         step(label, group)
     return plan
 
 
-def _add_new(plan: Plan, row: ListingRow, name: str, market: Market, taken_ids: set[str]) -> None:
-    entries = pair_entries(row, name, market=market, pool=assign_pool(name), role="corporate")
+def _add_new(
+    plan: Plan,
+    row: ListingRow,
+    name: str,
+    market: Market,
+    taken_ids: set[str],
+    registry: PoolRegistry,
+) -> None:
+    entries = pair_entries(
+        row, name, market=market, pool=assign_pool(name, registry), role="corporate"
+    )
+    cik = registry.cik_for(Identity(name))
+    if cik is not None:
+        for entry in entries:
+            entry["cik"] = cik
     plan.entries += _unique_ids(entries, taken_ids)
 
 
@@ -855,7 +884,12 @@ def _unique_ids(entries: list[dict[str, Any]], taken_ids: set[str]) -> list[dict
 
 
 def _add_pair(
-    plan: Plan, row: ListingRow, issuer: _Existing, taken_ids: set[str], market: Market
+    plan: Plan,
+    row: ListingRow,
+    issuer: _Existing,
+    taken_ids: set[str],
+    market: Market,
+    registry: PoolRegistry,
 ) -> None:
     """Entries for the editions of the market's period an existing issuer lacks, under its own
     name, pool and role. A 2026 edition of another period does not count as this period's."""
@@ -889,6 +923,15 @@ def _add_pair(
             wanted.append(language)
     if not wanted:
         return
+    identities = [Identity.from_document(doc) for doc in issuer.docs]
+    ciks = {identity.cik for identity in identities}
+    known_cik = registry.cik_for(identities[0])
+    if len(ciks) != 1 or (known_cik is not None and None in ciks):
+        raise PoolError(
+            f"{issuer.issuer}: coordinated CIK metadata review is required for all existing "
+            "editions before collecting new ones; preserve the recorded pools and review "
+            "the salted train split before adding a known CIK"
+        )
     entries = pair_entries(
         row,
         issuer.issuer,
@@ -897,6 +940,9 @@ def _add_pair(
         role=issuer.role,
         languages=tuple(wanted),
     )
+    if known_cik is not None:
+        for entry in entries:
+            entry["cik"] = known_cik
     plan.entries += _unique_ids(entries, taken_ids)
 
 
@@ -1005,6 +1051,14 @@ def _report(plan: Plan) -> str:
 
 
 def cmd_collect(args: argparse.Namespace) -> int:
+    with locked_registry(
+        corpus.POOL_METADATA, corpus.SEC_OUT.glob("labels-*.jsonl.gz")
+    ) as registry:
+        record_pdf_metadata(registry, corpus.CANDIDATES.parent, corpus.GOLDEN_MANIFEST)
+        return _collect(args, registry)
+
+
+def _collect(args: argparse.Namespace, registry: PoolRegistry) -> int:
     polite = Politeness()
     requests = Requests(args.cache, polite)
     market = MARKETS[args.market]
@@ -1020,7 +1074,7 @@ def cmd_collect(args: argparse.Namespace) -> int:
     documents = corpus.load_yaml(corpus.CANDIDATES)["documents"]
     documents += set_aside_documents()
     golden_keys, _ = corpus.golden_index()
-    plan = build_plan(rows, names, documents, golden_keys, _load_decisions(), market)
+    plan = build_plan(rows, names, documents, golden_keys, _load_decisions(), market, registry)
 
     for label, issuers, editions in plan.funnel:
         print(f"{label:<48} issuers={issuers:<4} {market.column} editions={editions}")
@@ -1030,6 +1084,7 @@ def cmd_collect(args: argparse.Namespace) -> int:
     print(f"requests to the site: {requests.made}" + (" (and robots.txt)" if requests.made else ""))
     args.report.write_text(_report(plan), encoding="utf-8")
     if args.write:
+        save_registry(registry, corpus.POOL_METADATA)
         corpus.CANDIDATES.write_text(
             add_entries(corpus.CANDIDATES.read_text(encoding="utf-8"), plan.entries),
             encoding="utf-8",

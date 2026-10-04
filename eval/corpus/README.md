@@ -48,7 +48,7 @@ pools so that no score is measured on something the code or the model has alread
    kinds, scanned and mixed files, pages without a text layer) are stated once, in
    `docs/blueprint/04-execution-phases.md` 2.4, and not repeated here.
 
-`make corpus-check` enforces rules 1 and 2 on `candidates.yaml`. `make corpus-fetch` enforces
+`make corpus-check` enforces rules 1 and 2 on recorded identity/pool metadata. `make corpus-fetch` enforces
 rule 2 again on the downloaded bytes.
 
 ## Current size
@@ -262,9 +262,108 @@ These change the ingest design, not just the dataset:
 
 `make sec-fsds` (`training/sources/sec_fsds.py`) streams SEC Financial Statement Data Sets
 into `training/data/sec_fsds/`: one row per distinct filer, statement, label and tag. It
-applies the same split by filer (CIK), drops any CIK pinned to `blind` in `candidates.yaml`,
+uses the shared `fra_core.pools` identity/assignment contract, excludes `blind` filers,
 and keeps banks and insurers (SIC 6000 to 6499) as `negative_control`. It needs network
 access to sec.gov and `FRA_SEC_USER_AGENT` set to a name and email.
+
+Recorded pools in `candidates.yaml`, `deferred.yaml`, fetched metadata and the local
+`var/issuer-pools.json` are authoritative. Golden identities are always `dev`. Conflicting
+records fail; a later pin cannot replace an earlier assignment. Identity links use normalized
+names (the existing legal-suffix normalization), equivalent numeric CIKs, and explicit Argaam
+rename/URL matches. Distinct CIKs under one normalized name require review. Unrelated names
+without a CIK or an explicit recorded alias cannot be inferred to be the same issuer.
+
+The two legacy defaults are preserved only for unseen identities: PDF names use 65% train,
+20% model_test and 15% blind; SEC CIKs use 85% train and 15% model_test. The first recorded
+assignment wins in either source order. SEC extraction registers its name and CIK before
+writing any labels, including identities excluded as blind. PDF collection carries a known
+CIK into entries for brand-new issuers so that the separate salted train subdivision can
+match SEC rows. New editions of an existing issuer preserve its uniform identity metadata.
+If its editions mix name-only and CIK keys, or a known CIK would need adding to old editions,
+collection stops before writes: a coordinated metadata and salted split review is required.
+Collection never rewrites existing candidates to add a CIK.
+`collect --write` and `fetch` persist PDF assignments before writing their source artifacts.
+A collection preview does not reserve new assignments. Metadata writers share a file lock
+and sync the temporary file before replacement, then sync the containing directory. Keep
+each checkout's registry with its corresponding data and back them up together; they are
+local data, not tracked manifests. When transferring data to another checkout, transfer its
+reviewed registry too; do not independently recreate it or share one mutable registry with
+concurrent unrelated tasks. `corpus-check` also checks deferred and fetched pools and
+cross-source recorded assignments, without opening labels or document contents.
+
+**Historical SEC outputs without metadata.** Existing `labels-<quarter>.jsonl.gz` files must
+have entries in the registry's `sec_outputs` list. Without that coverage, strict
+`corpus-check` fails and PDF and SEC source commands stop before downloads or assignment
+changes. The old outputs did not record their
+allocation-time PDF pins separately, so applying today's pins or either hash is not a safe
+migration. Recover identity/pool metadata from independently retained allocation-time records
+and have it reviewed, including name/CIK aliases, the covered output names and any conflicts.
+If such records do not exist, keep the outputs quarantined and stop cross-source additions
+until a separately authorized reconciliation establishes their assignments. Do not inspect
+held-out labels to debug, silently regenerate outputs, edit pins to pass a check, or create
+an empty registry and mark historical files covered. This change does not migrate any data.
+A failed SEC output write can leave reserved assignments and an output name in metadata;
+retaining them is conservative, and a retry uses those same assignments.
+
+**Reviewed registry recovery.** The sanctioned recovery input is a hand-authored JSON
+registry, reviewed against independently retained allocation-time identity/pool records.
+It is not reconstructed from label rows, held-out examples, today's pins or legacy hashes.
+The version 1 schema below is a synthetic example, not production allocations:
+
+```json
+{
+  "version": 1,
+  "assignments": [
+    {"names": ["acme"], "cik": 1111, "pool": "train"},
+    {"names": ["acme"], "cik": 2222, "pool": "model_test"},
+    {"names": ["regional widgets", "widgets brand"], "cik": null, "pool": "blind"}
+  ],
+  "sec_outputs": ["labels-2025q1.jsonl.gz"],
+  "ambiguous_names": ["acme"]
+}
+```
+
+`version` is the integer 1. Each assignment has a `names` list of normalized issuer keys,
+a positive numeric CIK (integer or up to ten decimal digits), or `null` for a name-only
+identity, and a pool of `dev`, `train`, `model_test` or `blind`. At least one usable name or
+CIK is required; an empty `names` list is permitted for a CIK-only identity. Names within
+an assignment are reviewed aliases. `sec_outputs` lists covered basenames exactly as
+`labels-YYYYqN.jsonl.gz`, where N is 1 through 4. Coverage requires complete allocation-time
+records of all issuers for those outputs, including excluded blind issuers. An empty registry
+with covered output names does not constitute recovery. Legacy version 1 files may omit
+`ambiguous_names`; omission means no declared ambiguity.
+
+1. Stop source writers in the affected checkout. Retain backups of its existing registry
+   and data. Inventory output basenames only; do not open labels or held-out documents.
+2. Build a proposed registry outside tracked source from independently retained records,
+   preserving every recorded pool, CIK and alias. Reconcile it with candidate, deferred,
+   fetched and golden identity/pool metadata. A fetched id without a corresponding candidate
+   or deferred identity needs restoration from reviewed records, not deletion to pass checks.
+   A pool mismatch needs an owner-authorized reconciliation; a later pin cannot override it.
+3. Have another reviewer verify identities, complete output coverage, pool preservation and
+   any ambiguity against those records. If records are absent or conflict, keep the outputs
+   quarantined and request an owner decision on a separate reconciliation task. Neither
+   quarantine nor missing records permits bypassing the strict guard or silent regeneration.
+4. With writers stopped, install the reviewed registry at `var/issuer-pools.json` in the
+   checkout that owns the corresponding data. Run `make corpus-check`; resume additions only
+   after it passes and the salted train identity metadata is consistent. Keep the review and
+   allocation-time evidence with the private data backup, outside Git.
+
+**Reviewed name ambiguity.** Normalized-name collisions reject by default and report both
+CIKs. Only a reviewed normalized name in `ambiguous_names` stops being a linking key; its
+SEC and PDF identities must then supply a CIK. The list contains unique, nonempty normalized
+keys, not raw company names. In the example, both Acme CIKs retain their separate pools and
+a PDF called Acme without a CIK fails. Usable, unlisted SEC names still undergo collision
+checks; an empty or unusable SEC name can use its valid CIK alone.
+
+Before declaring ambiguity in an existing registry, review the preserved CIK assignments
+and every name-only record for that name. The loader refuses an ambiguous name-only
+assignment, and source commands refuse an ambiguous name-only candidate, deferred or golden
+identity. Assign those existing records explicit reviewed CIK identities together, preserving
+their pools and aliases and reviewing the salted train split; do not drop or reassign them.
+If a previous name-only group conflates different issuers, preserve all recorded pools in the
+proposed disambiguation and reconcile any conflict separately before installing it. A reviewed
+CIK-pinned assignment needs no pool change when its name is declared ambiguous.
 
 The `train` documents supply Arabic and regional labels, paired with English ones through
 issuers that publish both editions. The `train` pool is split by issuer into fit, validation
