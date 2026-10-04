@@ -340,6 +340,16 @@ The image is a frozen sync of `uv.lock`, so it holds the locked, hash-checked ve
 The build context is an allowlist (`.dockerignore`): the workspace sources, the lockfile and
 `configs/`.
 
+**OpenCV.** `import cv2` failed in the image until week 2: `ImportError: libxcb.so.1: cannot open
+shared object file`. Only `rapidocr`, which docling pulls in, asked for `opencv-python`, the GUI
+build, and the slim base lacks `libxcb`, `libGL`, `libglib-2.0`, `libSM` and `libXext`. The lock now
+carries `opencv-python-headless` (pinned at 5.0.0.93) instead: the root `pyproject.toml` names it,
+and `override-dependencies` switches off rapidocr's `opencv-python` requirement, so only one of the
+two wheels is ever installed. No system library was added. The image went from 1,687,613,290 bytes
+(1.69 GB) to 1,650,213,085 bytes (1.65 GB), measured with `docker image inspect fra-app`. The
+worker's start command now imports `cv2`, so `make docker-up` fails if it breaks. By hand: `docker
+compose run --rm --no-deps worker python -c "import cv2"` must exit 0.
+
 ### Deliberately missing
 
 - No job queue, database or upload page (week 4).
@@ -363,12 +373,6 @@ The build context is an allowlist (`.dockerignore`): the workspace sources, the 
 - **Build cache.** A uv cache mount for the dependency layer.
 - **Restart policy,** with the job queue.
 - **x86-64** is not built.
-- **OpenCV.** `import cv2` fails in the image: `ImportError: libxcb.so.1: cannot open shared
-  object file`. The lock has `opencv-python`, not the headless build. The slim base lacks
-  `libxcb.so.1`, and also `libGL.so.1`, `libglib-2.0.so.0`, `libSM.so.6` and `libXext.so.6`
-  (checked by file lookup, not by importing). The week 2 OCR work needs either the system
-  libraries or the headless wheel in the lock. `import docling` and `fra_ingest` work today,
-  and the taxonomy loads (47 items).
 - **Makefile, `.env` with CRLF line endings.** The error says only "LF line endings" and does
   not name Windows line endings (CRLF) as the cause.
 - **Makefile, ports from the environment.** A port given in the environment or on the make

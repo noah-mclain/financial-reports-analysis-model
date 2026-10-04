@@ -12,10 +12,16 @@ dependencies = [
   # package only when the project names it itself. They pin the versions both profiles run.
   "torch==2.14.0",
   "torchvision==0.29.0",
+  # Named here, with the override below, in place of the GUI build that rapidocr asks for.
+  "opencv-python-headless==5.0.0.93",
 ]
 
 [tool.uv]
 package = false
+# rapidocr (pulled in by docling) asks for opencv-python, whose GUI build needs libxcb, libGL and
+# more than the slim image has. Disable that requirement and take the headless wheel, which
+# provides the same cv2 module; the two wheels must never be installed side by side.
+override-dependencies = ["opencv-python ; sys_platform == 'never'"]
 
 [tool.uv.workspace]
 # Members are added on the day their package lands, so `uv sync` stays green at every commit.
