@@ -28,7 +28,8 @@ from fra_core.schemas import (
     StatementType,
 )
 from fra_ingest.config import IngestConfig
-from fra_ingest.results import StructureResult
+from fra_ingest.industry import industry_decision
+from fra_ingest.results import IndustrySignal, StructureResult
 from fra_ingest.review import StatementReview
 
 P = Period(key="2025-12-31", end_date=date(2025, 12, 31), kind=PeriodKind.INSTANT)
@@ -190,6 +191,7 @@ def _run_main(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     found: dict[str, tuple[list[Statement], list[CheckResult]]],
+    declined: frozenset[str] = frozenset(),
 ) -> tuple[int, dict[str, object]]:
     manifest = tmp_path / "golden" / "manifest.yaml"
     manifest.parent.mkdir()
@@ -214,8 +216,20 @@ def _run_main(
         (out / "table_checks.json").write_text(
             json.dumps([c.model_dump(mode="json") for c in checks]), encoding="utf-8"
         )
+        decision = (
+            industry_decision(
+                IndustrySignal(kind="bank", score=14.0, distinct_cues=5, evidence=[(3, "deposits")])
+            )
+            if pdf.stem in declined
+            else None
+        )
         return StructureResult(
-            version="2", sha256=sha, convert_version="1", settings_hash="", statements=statements
+            version="2",
+            sha256=sha,
+            convert_version="1",
+            settings_hash="",
+            statements=statements,
+            industry=decision,
         )
 
     monkeypatch.setattr(harness, "MANIFEST", manifest)
@@ -265,3 +279,18 @@ def test_a_clean_run_passes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
         {"en": ([statement(["10"])], [passed]), "ar": ([statement(["10"])], [passed])},
     )
     assert code == 0 and written["reasons"] == []
+
+
+def test_a_declined_document_is_reported_with_its_reason_and_fails_the_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    code, written = _run_main(
+        tmp_path,
+        monkeypatch,
+        {"en": ([], []), "ar": ([statement(["10"])], [])},
+        declined=frozenset({"en"}),
+    )
+    assert code == 1
+    assert "en: declined:bank" in written["reasons"]
+    documents = {d["id"]: d for d in written["documents"]}
+    assert "declined:bank" in documents["en"]["error"]

@@ -14,6 +14,7 @@ IngestErrorReason = Literal[
     "unknown_document",
     "ambiguous_document",
     "artifact_missing",
+    "declined",
 ]
 
 

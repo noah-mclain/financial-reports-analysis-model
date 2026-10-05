@@ -396,7 +396,8 @@ that says what the builder does is what it will do.
   Natural Gas Distribution, Professional Medical Expertise; 6 documents), and none of the issuers
   added that day was opened by eye, so no new override is applied; the rule above requires nothing
   else. The holdout that will be used has 21 corporate issuers and 1 negative control (Pioneers
-  Holding, a financial company that must be declined), 16 issuers with Arabic documents (18
+  Holding, a financial company that structure holds for review when the locator reads it as
+  `other_financial`, and passes as corporate otherwise; the structural test to decline it is not built), 16 issuers with Arabic documents (18
   documents) and 15 with English ones (17), 9 with both editions, and 3 Egyptian. No holdout
   document is a fully scanned file: 13 have a mixed text layer (some pages have text and some do
   not) and 22 a digital one, and 1 of them has a text layer that is unreadable

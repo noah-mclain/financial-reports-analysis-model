@@ -6,7 +6,7 @@ found, every page is read, but each cue counts once and at least three different
 appear: an ordinary report repeats one phrase on many pages (a utility's "deposits from
 customers", a group's consumer finance subsidiary), while a bank or insurer uses the whole
 vocabulary. The verdict is stored on the locate
-result; declining is decided in week 2.
+result; ``industry_decision`` turns it into a decline or a hold for review.
 """
 
 from __future__ import annotations
@@ -15,12 +15,14 @@ from collections import defaultdict
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 import yaml
 
 from fra_core.schemas import StatementType
 from fra_ingest.results import (
+    IndustryDecision,
+    IndustryHoldCode,
     IndustryKind,
     IndustrySignal,
     IndustrySubkind,
@@ -32,6 +34,10 @@ from fra_ingest.text_match import PhraseIndex, canonical, reading_variants
 VERDICT_THRESHOLD = 6.0
 # Distinct cues the whole-document fallback needs, each counted once.
 WHOLE_DOCUMENT_MIN_CUES = 3
+# other_financial is held for review, never declined: its sub-kinds read as corporate, so a
+# decline there would be a guess the verdict cannot back.
+# A corporate verdict whose score is within this of VERDICT_THRESHOLD is a near miss.
+UNCERTAIN_MARGIN = 2.0
 _EVIDENCE_LIMIT = 12
 _STATEMENT_TYPES = (StatementType.BALANCE, StatementType.INCOME)
 
@@ -108,14 +114,18 @@ def _verdict(
         return IndustrySignal(kind="corporate")
     group, score = max(totals.items(), key=lambda item: (item[1], -book.order.index(item[0])))
     shown = [(page_no, phrase) for page_no, g, phrase in evidence if g == group]
-    too_narrow = whole_document and len(distinct[group]) < WHOLE_DOCUMENT_MIN_CUES
+    cues = len(distinct[group])
+    too_narrow = whole_document and cues < WHOLE_DOCUMENT_MIN_CUES
     if score < VERDICT_THRESHOLD or too_narrow:
-        return IndustrySignal(kind="corporate", score=score, evidence=shown[:_EVIDENCE_LIMIT])
+        return IndustrySignal(
+            kind="corporate", score=score, distinct_cues=cues, evidence=shown[:_EVIDENCE_LIMIT]
+        )
     kind, _, subkind = group.partition("/")
     return IndustrySignal(
         kind=cast(IndustryKind, kind),
         subkind=cast(IndustrySubkind, subkind) if subkind else None,
         score=score,
+        distinct_cues=cues,
         evidence=shown[:_EVIDENCE_LIMIT],
     )
 
@@ -127,3 +137,49 @@ def _without(book: IndustryBook, text: str) -> str:
         # A placeholder word, so the words on either side cannot join into a cue.
         normalized = normalized.replace(f" {phrase} ", " excluded ")
     return normalized
+
+
+def industry_decision(signal: IndustrySignal) -> IndustryDecision | None:
+    """Decline a bank or an insurer the verdict is sure of; hold for review what it cannot settle:
+
+    - ``weak_verdict``: a bank or insurer scoring under VERDICT_THRESHOLD + UNCERTAIN_MARGIN,
+      or resting on fewer than WHOLE_DOCUMENT_MIN_CUES different cue phrases;
+    - ``no_verdict``: kind ``unknown``, the document was not read;
+    - ``other_financial``: a financial company that is neither bank nor insurer;
+    - ``too_narrow``: a corporate verdict scoring at least VERDICT_THRESHOLD, which only
+      the whole-document fallback's WHOLE_DOCUMENT_MIN_CUES rule can produce;
+    - ``near_threshold``: a corporate verdict scoring within UNCERTAIN_MARGIN of
+      VERDICT_THRESHOLD.
+
+    Any other corporate verdict is neither: None.
+    """
+    outcome: Literal["declined", "needs_review"]
+    code: Literal["bank", "insurer"] | IndustryHoldCode
+    if signal.kind == "bank" or signal.kind == "insurer":
+        sure = (
+            signal.score >= VERDICT_THRESHOLD + UNCERTAIN_MARGIN
+            and signal.distinct_cues >= WHOLE_DOCUMENT_MIN_CUES
+        )
+        outcome, code = ("declined", signal.kind) if sure else ("needs_review", "weak_verdict")
+    elif signal.kind == "unknown":
+        outcome, code = "needs_review", "no_verdict"
+    elif signal.kind == "other_financial":
+        outcome, code = "needs_review", "other_financial"
+    elif signal.score >= VERDICT_THRESHOLD:
+        outcome, code = "needs_review", "too_narrow"
+    elif signal.score >= VERDICT_THRESHOLD - UNCERTAIN_MARGIN:
+        outcome, code = "needs_review", "near_threshold"
+    else:
+        return None
+    label = signal.kind + (f"/{signal.subkind}" if signal.subkind else "")
+    evidence = ", ".join(f"page {page} '{phrase}'" for page, phrase in signal.evidence) or "none"
+    prefix = "declined" if outcome == "declined" else "industry_uncertain"
+    return IndustryDecision(
+        outcome=outcome,
+        code=code,
+        signal=signal,
+        reason=f"{prefix}:{code}: {label}, score {signal.score:.1f}, "
+        f"{signal.distinct_cues} distinct cues "
+        f"(verdict threshold {VERDICT_THRESHOLD:.1f}, margin {UNCERTAIN_MARGIN:.1f}); "
+        f"evidence: {evidence}",
+    )

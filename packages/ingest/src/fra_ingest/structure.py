@@ -33,6 +33,7 @@ from fra_ingest.errors import IngestError
 from fra_ingest.figure_checks import check_net_profit_tie
 from fra_ingest.header import parse_header
 from fra_ingest.hierarchy import RowInput, infer_hierarchy
+from fra_ingest.industry import industry_decision
 from fra_ingest.label_mapping import map_statement
 from fra_ingest.label_match import LabelIndex
 from fra_ingest.metadata import Metadata, detect_metadata
@@ -40,8 +41,14 @@ from fra_ingest.ocr import OcrEngine
 from fra_ingest.ocr_policy import plan_ranges
 from fra_ingest.pages import read_pages
 from fra_ingest.parts import PartialStatement, build_part
-from fra_ingest.results import ConvertResult, LocateResult, StructureResult, TableDecision
-from fra_ingest.review import StatementReview, review_statement
+from fra_ingest.results import (
+    ConvertResult,
+    IndustryDecision,
+    LocateResult,
+    StructureResult,
+    TableDecision,
+)
+from fra_ingest.review import StatementReview, hold_for_industry, review_statement
 from fra_ingest.row_alignment import realign_rows
 from fra_ingest.stage import load_or_locate, page_ocr_languages
 from fra_ingest.table_checks import run_checks
@@ -49,7 +56,7 @@ from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
 from fra_ingest.visual_order import repair_grid, repair_text
 
-STRUCTURE_VERSION = "12"  # bump whenever structure's output can change, reviews included
+STRUCTURE_VERSION = "14"  # bump whenever structure's output can change, reviews included
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -69,6 +76,9 @@ class StructureInputs(BaseModel):
     cue_types: dict[int, tuple[StatementType, ...]]
     documents: list[tuple[str, DlDocument]]
     convert: ConvertResult
+    industry_hold: str | None = Field(
+        default=None, description="Why the industry verdict is uncertain: holds every statement"
+    )
     domicile_texts: dict[int, list[str]] = Field(
         default_factory=dict, description="Part 1's page texts and their reading variants, by page"
     )
@@ -325,12 +335,17 @@ def structure_document(
             own += ties  # recorded on comprehensive income; they vouch for this statement too
         review = review_statement(s, own, primary=s.type not in seen)
         seen.add(s.type)
+        if inputs.industry_hold is not None:
+            s, review = hold_for_industry(s, review, inputs.industry_hold)
+            statements[position] = s
         reviews.append(review)
-        if review.status == "needs_review":
+        if review.status == "needs_review" and "needs_review" not in s.flags:
             statements[position] = s.model_copy(update={"flags": [*s.flags, "needs_review"]})
 
     found = {s.type for s in statements}
     flags = [f"statement_not_extracted:{t.value}" for t in config.enabled_types if t not in found]
+    if inputs.industry_hold is not None:
+        flags.append(f"industry_uncertain:{inputs.industry_hold}")
     flags += [
         f"range_not_converted:{r.first_page}-{r.last_page}"
         for r in inputs.convert.ranges
@@ -413,6 +428,18 @@ def current_convert(
     return converted
 
 
+def _declined(located: LocateResult, decision: IndustryDecision) -> StructureResult:
+    """The end state of a bank or an insurer: the reason, and no statements."""
+    return StructureResult(
+        version=STRUCTURE_VERSION,
+        sha256=located.document.sha256,
+        convert_version="",  # convert never ran
+        settings_hash="",
+        industry=decision,
+        flags=[f"declined:{decision.code}"],
+    )
+
+
 def structure_pdf(
     pdf: Path,
     config: IngestConfig,
@@ -424,6 +451,16 @@ def structure_pdf(
     started = time.perf_counter()
     located = load_or_locate(pdf, config, ocr)
     out_dir = config.artifact_root / located.document.sha256
+    decision = industry_decision(located.industry)
+    if decision is not None and decision.outcome == "declined":
+        # Decided here, before convert, the expensive stage.
+        declined = _declined(located, decision).model_copy(
+            update={"timings": {"structure": time.perf_counter() - started}}
+        )
+        out_dir.mkdir(parents=True, exist_ok=True)
+        _write(out_dir / "table_checks.json", "[]")  # statements.raw.json promises these
+        _write(out_dir / "statements.raw.json", declined.model_dump_json(indent=2))
+        return declined
     converted = current_convert(pdf, config, ocr, located, convert)
 
     digest = _settings_hash(config, converted)
@@ -447,6 +484,7 @@ def structure_pdf(
         sha256=located.document.sha256,
         language=located.document.language,
         industry_flags=(f"likely_{kind}",) if kind in _FINANCIAL else (),
+        industry_hold=decision.code if decision is not None else None,
         page_modes={p.page_no: p.mode for p in pages},
         visual_pages={p.page_no for p in pages if p.visual_arabic},
         page_texts={p.page_no: repair_text(p.text, visual=False) for p in pages},
@@ -462,7 +500,11 @@ def structure_pdf(
     )
     result, checks = structure_document(inputs, config)
     result = result.model_copy(
-        update={"settings_hash": digest, "timings": {"structure": time.perf_counter() - started}}
+        update={
+            "settings_hash": digest,
+            "industry": decision,
+            "timings": {"structure": time.perf_counter() - started},
+        }
     )
     out_dir.mkdir(parents=True, exist_ok=True)
     # Checks first: a present statements.raw.json promises the checks beside it are current.

@@ -192,3 +192,16 @@ def test_a_tie_goes_to_the_kind_listed_first() -> None:
         "Insurance contract liabilities\nReinsurance contract assets"
     )
     assert detect_industry(pages, ranges, BOOK).kind == "bank"
+
+
+def test_the_signal_counts_distinct_cues_before_the_evidence_is_cut() -> None:
+    # One phrase on 15 statement pages: the evidence shows 12 of them, but it is one cue.
+    pages, ranges = on_statement_pages(*["Deposits from customers"] * 15)
+    signal = detect_industry(pages, ranges, BOOK)
+    assert len(signal.evidence) == 12
+    assert signal.distinct_cues == 1
+    pages, ranges = on_statement_pages(
+        "Deposits from customers\nLoans and advances to customers\n"
+        "Balances with the central bank\nDeposits from customers"
+    )
+    assert detect_industry(pages, ranges, BOOK).distinct_cues == 3

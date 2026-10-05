@@ -147,6 +147,10 @@ def main(argv: list[str] | None = None) -> int:
             rows.append({"id": entry["id"], "error": f"{exc.reason} {exc.detail}".strip()})
             reasons.append(f"{entry['id']}: {exc.reason}")
             continue
+        if result.industry is not None and result.industry.outcome == "declined":
+            rows.append({"id": entry["id"], "error": result.industry.reason})
+            reasons.append(f"{entry['id']}: declined:{result.industry.code}")
+            continue
         checks = _load_checks(config.artifact_root / result.sha256 / "table_checks.json")
         reviews = {r.statement_id: r for r in result.reviews}
         found: dict[StatementType, Statement] = {}

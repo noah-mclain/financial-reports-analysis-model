@@ -102,7 +102,7 @@ IndustrySubkind = Literal[
 
 
 class IndustrySignal(BaseModel):
-    """What kind of company issued the document. Stored now; the decline rule is week 2."""
+    """What kind of company issued the document; ``industry.industry_decision`` acts on it."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -111,7 +111,32 @@ class IndustrySignal(BaseModel):
         default=None, description="Set only when kind is other_financial"
     )
     score: float = 0.0
+    distinct_cues: int = Field(
+        default=0,
+        description="Different cue phrases behind the verdict, counted before the evidence "
+        "is cut to its limit",
+    )
     evidence: list[tuple[int, str]] = Field(default_factory=list)
+
+
+IndustryHoldCode = Literal[
+    "no_verdict", "other_financial", "too_narrow", "near_threshold", "weak_verdict"
+]
+
+
+class IndustryDecision(BaseModel):
+    """What the industry verdict does to a document: it ends in a decline, or its statements
+    are held for review. ``signal`` is the verdict acted on, with its score and evidence;
+    ``reason`` is the message a person reads."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    outcome: Literal["declined", "needs_review"]
+    code: Literal["bank", "insurer"] | IndustryHoldCode = Field(
+        description="Short, stable: the kind when declined, else why unsure"
+    )
+    signal: IndustrySignal
+    reason: str
 
 
 class LocateResult(BaseModel):
@@ -243,5 +268,10 @@ class StructureResult(BaseModel):
     statements: list[Statement] = Field(default_factory=list)
     tables: list[TableDecision] = Field(default_factory=list)
     reviews: list[StatementReview] = Field(default_factory=list)
+    industry: IndustryDecision | None = Field(
+        default=None,
+        description="Set when the industry verdict declined the document (no statements) "
+        "or holds its statements for review",
+    )
     flags: list[str] = Field(default_factory=list)
     timings: dict[str, float] = Field(default_factory=dict)

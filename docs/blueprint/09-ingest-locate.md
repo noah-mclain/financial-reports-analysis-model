@@ -180,7 +180,13 @@ PDF ─► read_pages ─► PageText[] ─► score_page ─► PageScore[] ─
    business it is while a corporate annual report can mention banking in its narrative. Excluded corporate phrases are
    removed before matching. A financial company that is neither a bank nor an insurer is
    `other_financial` with a sub-kind: `investment_holding`, `brokerage`, `exchange_operator`,
-   `consumer_finance`, `asset_manager` or `other`. The verdict is stored; nothing is declined in this part.
+   `consumer_finance`, `asset_manager` or `other`. The verdict is stored here. Structure acts on it
+   (`industry_decision` in `industry.py`): a bank or an insurer is declined, with the verdict's
+   score and evidence and no convert run, only when its score reaches the threshold plus
+   `UNCERTAIN_MARGIN` and it rests on at least `WHOLE_DOCUMENT_MIN_CUES` different cue phrases
+   (`distinct_cues` on the signal); any other uncertain verdict (a weaker bank or insurer,
+   `unknown`, `other_financial`, a score within `UNCERTAIN_MARGIN` of the threshold, or too narrow
+   in the whole-document fallback) holds the statements as `needs_review` with the reason.
 
 ### Arabic word and letter order in text layers
 
@@ -215,7 +221,7 @@ Every failure is visible; none turns into a blank or a guess.
 | An enabled type has no range | `statement_not_found:<type>`; later stages carry on and the results page shows the gap |
 | No enabled type found | Empty `convert_ranges` and `no_statements_found`; the pipeline stops with that reason |
 | Candidate pages above `low_selectivity_share` of the document | `low_selectivity`; the run goes ahead and the eval counts it |
-| Industry verdict bank, insurer or other financial | `likely_bank`, `likely_insurer` or `likely_other_financial:<subkind>`; no decline yet |
+| Industry verdict bank, insurer or other financial | `likely_bank`, `likely_insurer` or `likely_other_financial:<subkind>`; structure declines banks and insurers and holds the uncertain |
 
 ## Testing
 
@@ -329,8 +335,9 @@ all planned work is complete and every check passes (decision D13 in
 
 Other financial sub-kinds carry no target: 2 of 4 exchange operators are recognised;
 investment holdings, asset managers and consumer finance companies read as corporate because
-their statements use ordinary line items. The week 2 decline rule needs a structural test for
-them (an income statement without revenue or cost of sales).
+their statements use ordinary line items. Structure holds the `other_financial` sub-kinds for
+review and passes the ones that read as corporate; it does not decline them. The structural test
+that would (an income statement without revenue or cost of sales) is not built.
 
 ### What tuning and review changed
 

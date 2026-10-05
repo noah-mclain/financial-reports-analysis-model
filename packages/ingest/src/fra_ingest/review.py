@@ -110,3 +110,19 @@ def review_statement(
         checked_cells=sum(1 for i, c in numeric if (i, c.period_key) in vouched),
         flagged_cells=sum(1 for _, c in cells if is_critical(c)),
     )
+
+
+def hold_for_industry(
+    statement: Statement, review: StatementReview, code: str
+) -> tuple[Statement, StatementReview]:
+    """A statement of a document whose industry verdict is uncertain, held with its reason."""
+    flags = (
+        statement.flags if "needs_review" in statement.flags else [*statement.flags, "needs_review"]
+    )
+    held = review.model_copy(
+        update={
+            "status": "needs_review",
+            "reasons": [*review.reasons, f"industry_uncertain:{code}"],
+        }
+    )
+    return statement.model_copy(update={"flags": flags}), held

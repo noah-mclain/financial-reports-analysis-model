@@ -298,6 +298,9 @@ def write_review_report(sha256: str, config: IngestConfig) -> Path:
         return path.read_text(encoding="utf-8")
 
     result = StructureResult.model_validate_json(read("statements.raw.json"))
+    if result.industry is not None and result.industry.outcome == "declined":
+        # No convert ran for it; a convert.json beside it is from an earlier run.
+        raise IngestError("declined", result.industry.reason)
     checks = TypeAdapter(list[CheckResult]).validate_json(read("table_checks.json"))
     convert = ConvertResult.model_validate_json(read("convert.json"))
 

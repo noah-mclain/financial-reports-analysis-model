@@ -7,9 +7,11 @@ fra-ingest review-report <sha256> [--config PATH] [--artifacts DIR]
 
 convert exits 0 when it wrote a result, 2 on an ingest error and 3 when every range it
 attempted failed. It is the child process of convert_in_child (spec 10). structure exits 0
-when it wrote a result and 2 on an ingest error. review-report takes a document's sha256 under
-the artifact root, or a unique prefix of it, writes review.html beside the stored results and
-prints its path; it runs no stage and exits 2 when the document or an artifact is missing.
+when it wrote a result, 2 on an ingest error and 4 when the document was declined (a bank or
+an insurer: the reason is printed on stderr, no convert ran, no statements were written).
+review-report takes a document's sha256 under the artifact root, or a unique prefix of it,
+writes review.html beside the stored results and prints its path; it runs no stage, exits 2
+when the document or an artifact is missing and 4 for a declined document, with the reason.
 """
 
 from __future__ import annotations
@@ -30,6 +32,7 @@ from fra_ingest.structure import structure_pdf
 
 EXIT_ERROR = 2
 EXIT_ALL_FAILED = 3
+EXIT_DECLINED = 4
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -68,7 +71,7 @@ def main(argv: list[str] | None = None) -> int:
             print(write_review_report(args.sha256, config))
         except IngestError as exc:
             print(f"{args.sha256}: {exc.reason} {exc.detail}".rstrip(), file=sys.stderr)
-            return EXIT_ERROR
+            return EXIT_DECLINED if exc.reason == "declined" else EXIT_ERROR
         return 0
 
     try:
@@ -78,6 +81,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "structure":
             result_s = structure_pdf(args.pdf, config, engine, use_cache=not args.no_cache)
             print(result_s.model_dump_json(indent=2) if args.json else _structure_summary(result_s))
+            if result_s.industry is not None and result_s.industry.outcome == "declined":
+                print(f"{args.pdf}: {result_s.industry.reason}", file=sys.stderr)
+                return EXIT_DECLINED
             return 0
         result = locate_pdf(args.pdf, config, engine, use_cache=not args.no_cache)
     except IngestError as exc:
@@ -150,6 +156,8 @@ def _convert_summary(result: ConvertResult) -> str:
 
 def _structure_summary(result: StructureResult) -> str:
     lines = [f"{result.sha256[:12]}  structure {result.version}"]
+    if result.industry is not None:
+        lines.append(f"  {result.industry.outcome}  {result.industry.reason}")
     reviews = {r.statement_id: r for r in result.reviews}
     for s in result.statements:
         periods = ", ".join(p.key for p in s.periods)
