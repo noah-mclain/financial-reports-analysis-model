@@ -328,7 +328,7 @@ The image is a frozen sync of `uv.lock`, so it holds the locked, hash-checked ve
 
 | Piece | Value |
 |-------|-------|
-| Base | `python:3.12-slim`, multi-stage, non-root user |
+| Base | `python:3.12-slim` multi-stage image pinned by registry digest, non-root user; the `uv:0.8.3` tool image is pinned by digest too |
 | mac extra | Not installed. The lock gives the `ocrmac` dependency the marker `sys_platform == 'darwin'`, so a Linux sync skips it and the pyobjc packages that only it pulls in; `import ocrmac` fails in the container |
 | torch | 2.14.0+cpu and torchvision 0.29.0+cpu on Linux, 2.14.0 and 0.29.0 on the Mac: the same versions on both profiles. The root `pyproject.toml` pins both and sends them to PyTorch's CPU index on Linux |
 | CUDA | Before this setting the lock held 19 packages the container cannot use (15 `nvidia-*`, 3 `cuda-*`, `triton`). It now holds none, and the image has none (checked: no installed distribution starts with `nvidia`, `cuda` or `triton`); `torch.cuda.is_available()` is `False` |
@@ -356,19 +356,18 @@ The build context is an allowlist (`.dockerignore`): the workspace sources, the 
   `var/artifacts`, so the `app` user cannot write there until a volume owned by uid 1000 is
   mounted at `/app/var`, and another for the docling model cache.
 - **Memory limits** for the services.
-- **Pinned images.** `llama.cpp:server` and `python:3.12-slim` are floating tags; pin them by
-  digest when the model service first runs.
+- **Pinned model image.** `llama.cpp:server` remains a floating tag; pin it by digest before
+  the model service is used.
 - **Healthcheck cadence.** Use `start_interval` with a longer `interval` once the API does real
   work.
 - **Build cache.** A uv cache mount for the dependency layer.
 - **Restart policy,** with the job queue.
 - **x86-64** is not built.
-- **OpenCV.** `import cv2` fails in the image: `ImportError: libxcb.so.1: cannot open shared
-  object file`. The lock has `opencv-python`, not the headless build. The slim base lacks
-  `libxcb.so.1`, and also `libGL.so.1`, `libglib-2.0.so.0`, `libSM.so.6` and `libXext.so.6`
-  (checked by file lookup, not by importing). The week 2 OCR work needs either the system
-  libraries or the headless wheel in the lock. `import docling` and `fra_ingest` work today,
-  and the taxonomy loads (47 items).
+- **OpenCV.** The lock has `opencv-python`, not the headless build. The slim runtime image
+  installs `libxcb1`, `libgl1`, `libglib2.0-0`, `libsm6` and `libxext6`, matching the missing
+  shared libraries recorded above. CI imports `cv2` and `docling.document_converter` in the
+  built Linux image. A hosted Linux build has not yet run for this change, so the fix remains
+  pending that evidence.
 - **Makefile, `.env` with CRLF line endings.** The error says only "LF line endings" and does
   not name Windows line endings (CRLF) as the cause.
 - **Makefile, ports from the environment.** A port given in the environment or on the make
