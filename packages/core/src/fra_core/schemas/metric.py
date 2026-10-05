@@ -10,6 +10,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from fra_core.schemas.caveat import CaveatId
+
 
 class MetricUnit(StrEnum):
     RATIO = "ratio"
@@ -40,6 +42,10 @@ class MetricValue(BaseModel):
     )
     formula_version: str
     flags: list[str] = Field(default_factory=list)
+    caveats: list[CaveatId] = Field(
+        default_factory=list,
+        description="Caveat ids carried by this metric; analytics determines applicability.",
+    )
 
     @property
     def is_defined(self) -> bool:
