@@ -23,6 +23,7 @@ from dataclasses import dataclass
 
 from fra_analytics.frame import FrameStatement
 from fra_core.schemas import MetricUnit
+from fra_core.schemas.caveat import CaveatId
 
 # Statement flags that say a unit or a currency was assumed, missing or contradicted.
 UNIT_FLAGS = (
@@ -39,7 +40,7 @@ _AMOUNTS = (MetricUnit.CURRENCY, MetricUnit.PER_SHARE)
 
 @dataclass(frozen=True)
 class UnitNotes:
-    caveats: tuple[str, ...]
+    caveats: tuple[CaveatId, ...]
     flags: tuple[str, ...]
     blocked: bool
     """The statements cannot be combined into this unit: the metric is null."""
@@ -56,7 +57,7 @@ def unit_notes(unit: MetricUnit, statements: Sequence[FrameStatement]) -> UnitNo
     if len({s.scale for s in ordered}) > 1:
         flags.append("scale_mismatch")
         blocked = blocked or unit in _AMOUNTS
-    caveats: set[str] = set()
+    caveats: set[CaveatId] = set()
     if (unit in _AMOUNTS or len(ordered) > 1) and not blocked:
         for statement in ordered:
             caveats.update(statement.caveats)

@@ -24,7 +24,7 @@ financial-reports-analysis-model/
 ├── configs/
 │   ├── runtime.toml                  # memory thresholds, lease timings, model and adapter ids, paths
 │   ├── ingest.toml                   # OCR engine and languages, table model, batch sizes, images_scale
-│   ├── analytics.toml                # owner decisions D1 to D6
+│   ├── analytics.toml                # owner decisions that are settings: D1 margin, D3, D4; D2, D5, D6 are rules in code
 │   ├── profiles/
 │   │   ├── dev.toml                  # per-document ingest child, model unloads when idle
 │   │   ├── demo.toml                 # persistent ingest process, model kept loaded, preflight thresholds
@@ -77,14 +77,16 @@ financial-reports-analysis-model/
 │   │   │   └── review_report.py      # HTML report with extracted cells drawn on page images
 │   │   └── tests/
 │   │
-│   ├── analytics/                    # fra-analytics: deterministic numbers and charts
+│   ├── analytics/                    # fra-analytics: pure margins built; broader engine planned
 │   │   ├── pyproject.toml
 │   │   ├── src/fra_analytics/
 │   │   │   ├── frame.py              # statements -> tidy frame of typed rows (statement, canonical_id, period, reported, scale, value, provenance); no pandas yet
-│   │   │   ├── policy.py             # Policy loaded from configs/analytics.toml (D3, D4)
+│   │   │   ├── policy.py             # Policy (D1 margins, D3, D4) loaded from the flat configs/analytics.toml; no defaults
 │   │   │   ├── identities.py         # balance identity and subtotal ties, D6 tolerance from fra_core.tolerance
 │   │   │   ├── unit_caveats.py       # scale and currency caveats and flags carried into each metric
 │   │   │   ├── period_math.py        # opening balance, prior-year period, actual days
+│   │   │   ├── metrics/profitability.py  # compute_margins(Statement, policy): gross, operating, net, the one margin formula
+│   │   │   ├── metrics/division.py   # the one ratio division and its D1 flags
 │   │   │   ├── metrics/{registry,inputs}.py   # formulas; the reader that applies D1, D2, D4 and records provenance (cash-flow metrics not built: structure converts no cash-flow statement)
 │   │   │   ├── formatting.py         # display precision, shared with grounding and UI payloads
 │   │   │   ├── charts/{style,trend,margins,composition,waterfall}.py

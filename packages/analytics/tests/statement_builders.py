@@ -22,7 +22,11 @@ from fra_core.schemas import (
 )
 from fra_core.schemas.caveat import CaveatId
 
-POLICY = Policy(include_lease_liabilities=True, day_count_basis=365)
+POLICY = Policy(
+    negative_margin_denominator="compute_and_flag",
+    include_lease_liabilities=True,
+    day_count_basis=365,
+)
 SHA = "0" * 64
 
 Figures = Mapping[str, int | str]

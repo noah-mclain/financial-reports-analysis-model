@@ -12,6 +12,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from fra_core.schemas.caveat import CaveatId
 from fra_core.schemas.statement import Provenance
 
 
@@ -61,10 +62,11 @@ class MetricValue(BaseModel):
     )
     formula_version: str
     flags: list[str] = Field(default_factory=list)
-    caveats: list[str] = Field(
+    caveats: list[CaveatId] = Field(
         default_factory=list,
-        description="Caveat ids of the statements behind a currency or per-share value. "
-        "Ratios, times and days carry none.",
+        description="Caveat ids carried by this metric; analytics determines applicability. A "
+        "currency or per-share value takes those of the statements behind it; a ratio, times "
+        "or days figure built from one statement carries none.",
     )
 
     @model_validator(mode="after")

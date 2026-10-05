@@ -6,6 +6,7 @@ The statements are Acme's in ``statement_builders``: annual 2024 and 2025, whole
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 
@@ -126,7 +127,7 @@ def test_the_registry_uses_only_taxonomy_items_and_unique_ids() -> None:
 
 
 def test_d3_leases_count_in_debt_by_default_and_leave_it_when_the_policy_says() -> None:
-    without = Policy(include_lease_liabilities=False, day_count_basis=365)
+    without = replace(POLICY, include_lease_liabilities=False)
     found = metrics(acme(), without)
     assert found[("total_debt", "2025-12-31")].value == 100 + 50 + 350  # 500
     assert found[("debt_to_equity", "2025-12-31")].value == 0.5
@@ -304,7 +305,7 @@ def test_d4_a_three_month_period_uses_its_actual_90_days() -> None:
 
 
 def test_d4_the_policy_sets_the_annual_day_count() -> None:
-    p360 = Policy(include_lease_liabilities=True, day_count_basis=360)
+    p360 = replace(POLICY, day_count_basis=360)
     assert metrics(acme(), p360)[("dso", "FY2025")].value == 200 / 1000 * 360
 
 

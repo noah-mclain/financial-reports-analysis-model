@@ -217,7 +217,16 @@ Numeric representation:
 - Identity checks run on `Decimal` values in reported units, so they are exact apart from
   the printed rounding tolerated by D6.
 - Ratios are computed in `Decimal` from `reported x scale` and converted to `float` once, when
-  the `MetricValue` is built (D19).
+  the `MetricValue` is built (D19). One division, `fra_analytics.metrics.division.divide`, serves
+  every ratio: precision 34, half-even, all traps set. Undefined or unrepresentable results are
+  null with a flag, never an infinity or a silent nonzero underflow. Zero denominators are
+  `undefined_zero_denominator`; a negative denominator is `undefined_negative_denominator`, and
+  the one exception is a margin under the tracked D1 policy (`negative_margin_denominator`,
+  provisional pending owner sign-off), which is computed and flagged `negative_base`. Margins
+  are `fra_analytics.compute_margins` over one income statement, where same-statement scale
+  cancels; the registry takes them from it and holds no margin formula of its own. Every result
+  carries its input cells with provenance, and propagates the statement's and the cells' flags.
+  Analytics does not approve or hold a document: that is integration's decision.
 - Display precision lives in one place, `fra_analytics.formatting`, shared by the UI
   payload and the grounding checker.
 

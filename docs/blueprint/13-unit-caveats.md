@@ -76,8 +76,9 @@ none) and `median_figure`; for the two currency caveats it is the `currency` tak
 ### 2. Analytics
 
 - `to_frame` carries each statement's caveat ids on its rows.
-- `MetricValue` gains `caveats: list[str]`. A metric takes a caveat when its unit is `currency`
-  or `per_share` and any input row carries it. Ratios, times and days take none.
+- `MetricValue` carries `caveats: list[CaveatId]` (the schema contract is implemented; deciding
+  applicability and propagating caveats remain planned). A metric takes a caveat when its unit is
+  `currency` or `per_share` and any input row carries it. Ratios, times and days take none.
 - Growth and CAGR between periods of one statement take none: both periods share the
   assumption, so it cancels. Across two documents they take it when the documents differ.
 - Charts: an axis in currency whose series carries the caveat labels the unit as assumed

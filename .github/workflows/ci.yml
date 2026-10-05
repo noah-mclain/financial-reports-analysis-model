@@ -1,0 +1,154 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish a manually validated version tag to GHCR
+        type: boolean
+        required: true
+        default: false
+      version:
+        description: Existing canonical tag (vMAJOR.MINOR.PATCH) at this main commit
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  UV_LOCKED: 'true'
+  HF_HUB_OFFLINE: '1'
+  TRANSFORMERS_OFFLINE: '1'
+
+jobs:
+  quality:
+    name: Quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read the locked uv version
+        id: uv-version
+        shell: bash
+        run: |
+          version="$(sed -n 's/^ARG UV_IMAGE=ghcr.io\/astral-sh\/uv:\([^@]*\)@.*/\1/p' docker/Dockerfile)"
+          test -n "$version"
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+          printf 'python-version=%s\n' "$(cat .python-version)" >> "$GITHUB_OUTPUT"
+      - name: Set up uv and managed Python
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ steps.uv-version.outputs.version }}
+          python-version: ${{ steps.uv-version.outputs.python-version }}
+          enable-cache: false
+      - name: Record reviewed source
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Check lock consistency
+        run: uv lock --check
+      - name: Install locked workspace
+        run: uv sync --locked --all-packages
+      - name: Run required quality gates
+        run: |
+          make test
+          make lint
+          make typecheck
+          make docs-check
+          make corpus-check
+          make ci-workflows-check
+
+  container-smoke:
+    name: Container smoke
+    runs-on: ubuntu-24.04
+    needs: quality
+    timeout-minutes: 35
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Record reviewed source
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Build and smoke-test Linux containers
+        run: make container-smoke
+
+  publish:
+    name: Publish validated container
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish }}
+    runs-on: ubuntu-24.04
+    needs: [quality, container-smoke]
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out the exact gated source and its tags
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      - name: Validate release inputs and gate identities
+        id: release
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "${{ needs.quality.outputs.source_sha }}" = "$GITHUB_SHA"
+          test "${{ needs.container-smoke.outputs.source_sha }}" = "$GITHUB_SHA"
+          sha="$(python3 scripts/ci/release.py --tag "$RELEASE_VERSION" --ref "$GITHUB_REF" --sha "$GITHUB_SHA")"
+          printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
+      - name: Rebuild and smoke-test the exact image to publish
+        run: make container-smoke
+      - name: Tag and publish the validated image
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_VERSION: ${{ inputs.version }}
+          SOURCE_SHA: ${{ steps.release.outputs.sha }}
+        shell: bash
+        run: |
+          repository="ghcr.io/${GITHUB_REPOSITORY,,}"
+          image_id="$(docker image inspect --format '{{.Id}}' fra-app:latest)"
+          test -n "$image_id"
+          export DOCKER_CONFIG
+          DOCKER_CONFIG="$(mktemp -d)"
+          cleanup() {
+            status=$?
+            cleanup_failed=0
+            trap - EXIT
+            docker logout ghcr.io || cleanup_failed=1
+            rm -rf "$DOCKER_CONFIG" || cleanup_failed=1
+            if (( status == 0 && cleanup_failed != 0 )); then status=1; fi
+            exit "$status"
+          }
+          trap cleanup EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker tag "$image_id" "$repository:$IMAGE_VERSION"
+          docker tag "$image_id" "$repository:$SOURCE_SHA"
+          version_output="$(docker push "$repository:$IMAGE_VERSION")"
+          printf '%s\n' "$version_output"
+          digest="$(printf '%s\n' "$version_output" | sed -n 's/.*digest: \(sha256:[0-9a-f]\{64\}\).*/\1/p' | tail -n 1)"
+          test -n "$digest"
+          docker push "$repository:$SOURCE_SHA"
+          printf 'Published %s:%s and %s:%s at %s\n' "$repository" "$IMAGE_VERSION" "$repository" "$SOURCE_SHA" "$digest"

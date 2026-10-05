@@ -1,25 +1,24 @@
-"""The owner's decisions D3 and D4, read from ``configs/analytics.toml``.
+"""Explicit policy for the metrics, loaded at the configuration boundary.
 
-D1, D2, D5 and D6 are fixed rules and live in the code that applies them. The caller names the
-file: nothing here reads the environment.
+D1 for margins, D3 and D4 are settings; D2, D5 and D6 are fixed rules and live in the code that
+applies them. The caller names the file: nothing here reads the environment, and there is no
+implicit default for any setting.
 """
 
 from __future__ import annotations
 
 import tomllib
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
-
-from pydantic import BaseModel, ConfigDict, ValidationError
-
-# The one table of the file; its keys are the field names of ``Policy``.
-_SECTION = "metrics"
+from typing import Literal
 
 
-class Policy(BaseModel):
-    """No defaults: a missing setting is an error, not a quiet choice."""
+@dataclass(frozen=True)
+class Policy:
+    """Every setting is required; a missing one is an error, not a quiet choice."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    negative_margin_denominator: Literal["compute_and_flag", "null"]
+    """D1 (provisional): a margin on a negative revenue is computed and flagged, or null."""
 
     include_lease_liabilities: bool
     """D3: IFRS 16 lease liabilities count in total debt."""
@@ -27,26 +26,36 @@ class Policy(BaseModel):
     day_count_basis: Literal[360, 365]
     """D4: days in a year for DSO, DIO and DPO. Interim periods use their actual days."""
 
+    def __post_init__(self) -> None:
+        option = self.negative_margin_denominator
+        if not isinstance(option, str) or option not in ("compute_and_flag", "null"):
+            raise ValueError(
+                f"negative_margin_denominator must be 'compute_and_flag' or 'null', got {option!r}"
+            )
+        if not isinstance(self.include_lease_liabilities, bool):
+            raise ValueError(
+                f"include_lease_liabilities must be true or false, got "
+                f"{self.include_lease_liabilities!r}"
+            )
+        basis = self.day_count_basis
+        if isinstance(basis, bool) or not isinstance(basis, int) or basis not in (360, 365):
+            raise ValueError(f"day_count_basis must be 360 or 365, got {basis!r}")
+
+
+_REQUIRED = ("negative_margin_denominator", "include_lease_liabilities", "day_count_basis")
+
 
 def load_policy(path: Path) -> Policy:
-    """Read the settings, rejecting any key the policy does not know."""
-    with path.open("rb") as handle:
-        data = tomllib.load(handle)
-    values: dict[str, Any] = {}
-    for section, table in data.items():
-        if not isinstance(table, dict):
-            msg = f"{path}: [{section}] must be a table"
-            raise ValueError(msg)
-        for key, value in table.items():
-            if section != _SECTION or key not in Policy.model_fields:
-                msg = f"{path}: unknown setting {section}.{key}"
-                raise ValueError(msg)
-            values[key] = value
-    try:
-        return Policy.model_validate(values)
-    except ValidationError as error:
-        problems = "; ".join(
-            f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in error.errors()
+    """Load the required settings, refusing unknown keys, sections and invalid values."""
+    with path.open("rb") as source:
+        raw = tomllib.load(source)
+    if set(raw) != set(_REQUIRED):
+        raise ValueError(
+            f"{path}: required keys {sorted(_REQUIRED)}; missing "
+            f"{sorted(set(_REQUIRED) - raw.keys())}, unknown {sorted(raw.keys() - set(_REQUIRED))}"
         )
-        msg = f"{path}: {problems}"
-        raise ValueError(msg) from error
+    return Policy(
+        negative_margin_denominator=raw["negative_margin_denominator"],
+        include_lease_liabilities=raw["include_lease_liabilities"],
+        day_count_basis=raw["day_count_basis"],
+    )

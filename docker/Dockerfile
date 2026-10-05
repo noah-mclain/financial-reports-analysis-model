@@ -5,8 +5,13 @@
 # CUDA libraries, no triton), and the `mac` extra's ocrmac edge carries a darwin marker, so
 # ocrmac, and pyobjc which only it pulls in, are never installed here.
 
-FROM python:3.12-slim AS build
-COPY --from=ghcr.io/astral-sh/uv:0.8.3 /uv /usr/local/bin/uv
+ARG PYTHON_IMAGE=python:3.12-slim@sha256:02108f5d322dd89f1c9e552442c25acb0543dfdbc455693a5599624f20d9155d
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.8.3@sha256:ef11ed817e6a5385c02cd49fdcc99c23d02426088252a8eace6b6e6a2a511f36
+
+FROM ${UV_IMAGE} AS uv
+
+FROM ${PYTHON_IMAGE} AS build
+COPY --from=uv /uv /usr/local/bin/uv
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never
 WORKDIR /src
@@ -19,13 +24,13 @@ COPY apps apps
 COPY packages packages
 RUN uv sync --frozen --no-dev --no-editable
 
-FROM python:3.12-slim
+FROM ${PYTHON_IMAGE}
 # Tesseract is the Docker profile's OCR engine (docs/blueprint/14-run-profiles.md): Vision is
 # Mac-only. Only the Arabic and English data, which is all the settings name.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng \
-    && rm -rf /var/lib/apt/lists/*
-RUN useradd --create-home --uid 1000 app
+    && apt-get install --no-install-recommends -y tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 1000 app
 COPY --from=build /opt/venv /opt/venv
 COPY configs /app/configs
 ENV PATH=/opt/venv/bin:$PATH \

@@ -1,8 +1,9 @@
 # 14. Run profiles: the model route from MLX to llama.cpp, and the Docker skeleton
 
-Status: v5, 2026-10-04. The GGUF spike is measured, on two runs, the Docker skeleton is built
-and measured ("The Docker skeleton"), and the week 2 OCR bake-off is recorded ("The OCR
-bake-off", the last section). This document closes R16 as a question
+Status: v5, 2026-10-06. The GGUF spike is measured, on two runs, the Docker skeleton is built
+and measured ("The Docker skeleton"), the week 2 OCR bake-off is recorded ("The OCR
+bake-off", the last section), and a hosted Linux container smoke run covers x86-64 for the
+image as it stood on 2026-10-05. This document closes R16 as a question
 ([08-revised-plan.md](08-revised-plan.md)): the route works on a small model. The route uses a
 step that [01-constraints.md](01-constraints.md) 1.4 forbade on this machine; the owner amended
 that rule on 2026-10-02 for this export only, under conditions (see "Decision for week 3"). The
@@ -329,7 +330,7 @@ The image is a frozen sync of `uv.lock`, so it holds the locked, hash-checked ve
 
 | Piece | Value |
 |-------|-------|
-| Base | `python:3.12-slim`, multi-stage, non-root user |
+| Base | `python:3.12-slim` multi-stage image pinned by registry digest, non-root user; the `uv:0.8.3` tool image is pinned by digest too |
 | mac extra | Not installed. The lock gives the `ocrmac` dependency the marker `sys_platform == 'darwin'`, so a Linux sync skips it and the pyobjc packages that only it pulls in; `import ocrmac` fails in the container |
 | torch | 2.14.0+cpu and torchvision 0.29.0+cpu on Linux, 2.14.0 and 0.29.0 on the Mac: the same versions on both profiles. The root `pyproject.toml` pins both and sends them to PyTorch's CPU index on Linux |
 | CUDA | Before this setting the lock held 19 packages the container cannot use (15 `nvidia-*`, 3 `cuda-*`, `triton`). It now holds none, and the image has none (checked: no installed distribution starts with `nvidia`, `cuda` or `triton`); `torch.cuda.is_available()` is `False` |
@@ -351,13 +352,36 @@ two wheels is ever installed. No system library was added. The image went from 1
 worker's start command now imports `cv2`, so `make docker-up` fails if it breaks. By hand: `docker
 compose run --rm --no-deps worker python -c "import cv2"` must exit 0.
 
+### Hosted Linux smoke evidence
+
+On 2026-10-05, the [Container smoke run for source
+`00063d681218365584e21a740694521a948e28d6`](https://github.com/noah-mclain/financial-reports-analysis-model/actions/runs/37326680288)
+passed on the hosted Ubuntu 24.04 runner. Its Docker build installed Debian `amd64` packages,
+so this verifies a Linux x86-64 build of the image. The smoke check imported `cv2`,
+`docling.document_converter` and the FRA modules in the built image, checked the non-root
+identity and CPU-only dependencies, started the API and placeholder worker, observed healthy
+services and successful API health responses, then requested and observed bounded shutdown.
+
+The run built the image before the week 2 changes: it carried the GUI `opencv-python` wheel
+and the five system libraries for it, and no OCR engine. The image is now different (headless
+OpenCV, Tesseract), so this run is evidence for the smoke script and the base image, not for
+this image.
+
+This is container build, import, health and lifecycle evidence only. The worker still only
+imports `fra_ingest`, reports its profile and sleeps; this run did not exercise document
+conversion, OCR accuracy, extraction, Gate D, model serving or production deployment. The run
+does not replace the earlier aarch64 image-size, build-time or lifecycle measurements above.
+
 ### Deliberately missing
 
 - No job queue, database or upload page (week 4).
 - No `apps/worker` package; the worker service is a command in `compose.yaml`.
 - No model in the image. The `llm` service waits for a GGUF file and was never started.
-- Not measured: the image on x86-64. The numbers above are aarch64; the lock does carry hashed
-  CPU wheels for x86-64, but nothing was built there.
+- Not measured: the image as it is now on x86-64. The numbers above are aarch64; the lock does
+  carry hashed CPU wheels for x86-64, and the hosted smoke run of 2026-10-05 built an earlier
+  image there (see [hosted smoke evidence](#hosted-linux-smoke-evidence)), but nothing built the
+  headless-OpenCV image with Tesseract on x86-64, and no x86-64 size, build time or start/stop
+  timing was recorded.
 
 ### Left for later
 
@@ -365,13 +389,13 @@ compose run --rm --no-deps worker python -c "import cv2"` must exit 0.
   `var/artifacts`, so the `app` user cannot write there until a volume owned by uid 1000 is
   mounted at `/app/var`, and another for the docling model cache.
 - **Memory limits** for the services.
-- **Pinned images.** `llama.cpp:server` and `python:3.12-slim` are floating tags; pin them by
-  digest when the model service first runs.
+- **Pinned model image.** `llama.cpp:server` remains a floating tag; pin it by digest before
+  the model service is used.
 - **Healthcheck cadence.** Use `start_interval` with a longer `interval` once the API does real
   work.
 - **Build cache.** A uv cache mount for the dependency layer.
 - **Restart policy,** with the job queue.
-- **x86-64** is not built.
+- **x86-64** is not built with Tesseract, and the hosted smoke does not run OCR.
 - **Makefile, `.env` with CRLF line endings.** The error says only "LF line endings" and does
   not name Windows line endings (CRLF) as the cause.
 - **Makefile, ports from the environment.** A port given in the environment or on the make

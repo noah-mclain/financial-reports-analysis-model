@@ -34,6 +34,7 @@ from fra_analytics.metrics.inputs import Inputs
 from fra_analytics.policy import Policy
 from fra_analytics.unit_caveats import unit_notes
 from fra_core.schemas import MetricInput, MetricUnit, MetricValue, Period, StatementType
+from fra_core.schemas.caveat import CaveatId
 
 FORMULA_VERSION = "1"
 
@@ -371,7 +372,7 @@ def _compute_one(spec: MetricSpec, frame: Frame, policy: Policy, period: Period)
         value: Decimal | None,
         flags: list[str],
         inputs: dict[str, list[MetricInput]] | None = None,
-        caveats: tuple[str, ...] = (),
+        caveats: tuple[CaveatId, ...] = (),
     ) -> MetricValue:
         return MetricValue(
             metric_id=spec.id,

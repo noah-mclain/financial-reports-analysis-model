@@ -25,6 +25,7 @@ from datetime import date
 from decimal import Decimal
 
 from fra_core.schemas import Period, Provenance, Statement, StatementType
+from fra_core.schemas.caveat import CaveatId
 
 
 @dataclass(frozen=True)
@@ -35,7 +36,7 @@ class FrameStatement:
     type: StatementType
     scale: int
     currency: str
-    caveats: tuple[str, ...]
+    caveats: tuple[CaveatId, ...]
     flags: tuple[str, ...]
     periods: tuple[Period, ...]
     unmapped_rows: int

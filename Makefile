@@ -26,7 +26,7 @@ $(error FRA_LLM_PORT is empty: set it in $(ENV_FILE))
 endif
 export FRA_API_PORT FRA_LLM_PORT
 
-.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping eval-gates dry-run expected-drafts eval-extraction verify-expected dev docker-up docker-health
+.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping eval-gates dry-run expected-drafts eval-extraction verify-expected dev docker-up docker-health ci-workflows-check container-smoke
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -50,10 +50,11 @@ lint: ## Lint without fixing
 	$(UV) run ruff format --check .
 	$(UV) run ruff check .
 
-typecheck: ## Type check the packages, the apps, the analytics golden test and the eval harness
+typecheck: ## Type check the packages, apps, the analytics golden test, eval harness and release validation
 	@$(MAKE) --no-print-directory unhide-pth
 	$(UV) run mypy packages $(wildcard apps) tests/analytics
 	$(UV) run mypy eval/harness
+	$(UV) run mypy scripts/ci/release.py
 
 test: ## Fast tests (no models, no OCR)
 	@$(MAKE) --no-print-directory unhide-pth
@@ -132,6 +133,12 @@ docker-up: ## Build and start the Docker profile (api and worker); fails if a se
 docker-health: ## Check the Docker profile's API from the host: status ok, profile docker
 	@$(MAKE) --no-print-directory unhide-pth
 	$(UV) run python -m fra_api.healthcheck $(FRA_API_PORT) --profile docker
+
+ci-workflows-check: ## Validate GitHub Actions workflows with actionlint
+	bash scripts/ci/check-workflows.sh
+
+container-smoke: ## Build and smoke-test the Docker API and placeholder worker
+	bash scripts/ci/container-smoke.sh
 
 clean: ## Remove caches and build artifacts
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
