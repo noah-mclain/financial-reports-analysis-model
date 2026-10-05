@@ -24,7 +24,7 @@ financial-reports-analysis-model/
 ├── configs/
 │   ├── runtime.toml                  # memory thresholds, lease timings, model and adapter ids, paths
 │   ├── ingest.toml                   # OCR engine and languages, table model, batch sizes, images_scale
-│   ├── analytics.toml                # owner decisions D1 to D6
+│   ├── analytics.toml                # margin D1 setting built; D2 to D6 deferred
 │   ├── profiles/
 │   │   ├── dev.toml                  # per-document ingest child, model unloads when idle
 │   │   ├── demo.toml                 # persistent ingest process, model kept loaded, preflight thresholds
@@ -76,13 +76,14 @@ financial-reports-analysis-model/
 │   │   │   └── review_report.py      # HTML report with extracted cells drawn on page images
 │   │   └── tests/
 │   │
-│   ├── analytics/                    # fra-analytics: deterministic numbers and charts
+│   ├── analytics/                    # fra-analytics: pure margins built; broader engine planned
 │   │   ├── pyproject.toml
 │   │   ├── src/fra_analytics/
 │   │   │   ├── frame.py              # statements -> tidy frame (statement, canonical_id, period_key, value)
-│   │   │   ├── policy.py             # Policy dataclass loaded from configs/analytics.toml
+│   │   │   ├── policy.py             # frozen margin Policy loaded from configs/analytics.toml (built)
 │   │   │   ├── identities.py         # accounting identities, cross-statement ties
-│   │   │   ├── metrics/{registry,profitability,liquidity,leverage,efficiency,cash_flow,growth}.py
+│   │   │   ├── metrics/profitability.py  # compute_margins(Statement, policy): gross, operating, net (built)
+│   │   │   ├── metrics/{registry,liquidity,leverage,efficiency,cash_flow,growth}.py  # planned
 │   │   │   ├── formatting.py         # display precision, shared with grounding and UI payloads
 │   │   │   ├── charts/{style,trend,margins,composition,waterfall}.py
 │   │   │   └── reference/naive.py    # independent Decimal implementation, imported only by tests

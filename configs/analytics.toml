@@ -1,0 +1,3 @@
+# Provisional D1 margin default, pending owner sign-off before the Phase 1 exit gate.
+# Zero revenue always returns null with undefined_zero_denominator.
+negative_margin_denominator = "compute_and_flag"

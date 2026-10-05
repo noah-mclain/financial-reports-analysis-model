@@ -206,7 +206,17 @@ Numeric representation:
 - `Decimal` in the contract, serialized as strings in JSON.
 - Identity checks run on `Decimal` values in reported units, so they are exact apart from
   the printed rounding tolerated by D6.
-- Ratios run on float64 (`reported x scale`) in pandas.
+- The broader ratio engine is planned around float64 (`reported x scale`) in pandas.
+  The first pure slice, `fra_analytics.compute_margins`, instead divides signed reported
+  `Decimal` values under an explicit precision-34, half-even context, then converts once to
+  the existing float `MetricValue` boundary. Same-statement scale cancels; values are fractions.
+  Undefined or unrepresentable results are null with explicit flags, never infinity or silent
+  nonzero underflow. Zero revenue uses `undefined_zero_denominator`; the tracked negative-revenue
+  policy computes with `negative_base`, with an explicit null alternative. These D1 defaults
+  remain provisional pending owner sign-off. Input row IDs are statement-scoped: retain the
+  source `Statement` alongside results to resolve cells and page regions. This slice propagates
+  uncertainty flags and does not approve documents; production review/industry gates, identities,
+  other metrics, charts and the full Task 5 golden-pipeline acceptance remain deferred.
 - Display precision lives in one place, `fra_analytics.formatting`, shared by the UI
   payload and the grounding checker.
 
