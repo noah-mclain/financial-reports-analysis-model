@@ -9,6 +9,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from fra_core.schemas import Cell, CheckResult, LineItem, Statement
+from fra_core.tolerance import rounding_tolerance, within_rounding
 
 OUTLIER_RATIO = 1000
 # Zeros that may sit between a lost leading digit and the digits read.
@@ -17,7 +18,6 @@ _ZEROS_LOST = 2
 _LARGE_FRACTION = 1000
 # Above this share of fractional amounts, the statement is printed with decimals.
 FRACTION_SHARE = Decimal("0.2")
-_HALF = Decimal("0.5")
 _NOT_COMPARED = {"per_share", "percent", "implausible_magnitude"}
 
 
@@ -185,7 +185,7 @@ def check_net_profit_tie(income: Statement, comprehensive: Statement) -> list[Ch
 
     def equal(item: LineItem) -> bool:
         return all(
-            (v := item.value_for(k)) is not None and abs(v - head.value_for(k)) <= _HALF  # type: ignore[operator]
+            (v := item.value_for(k)) is not None and within_rounding(v - head.value_for(k), 1)  # type: ignore[operator]
             for k in keys
         )
 
@@ -206,7 +206,7 @@ def check_net_profit_tie(income: Statement, comprehensive: Statement) -> list[Ch
                 difference=actual - expected
                 if actual is not None and expected is not None
                 else None,
-                tolerance=_HALF if match is not None else None,
+                tolerance=rounding_tolerance(1) if match is not None else None,
                 line_item_ids=[match.id, head.id] if match is not None else [head.id],
                 detail="" if match is not None else "no_income_row_equal",
             )

@@ -169,11 +169,15 @@ class MetricValue(BaseModel):
     metric_id: str  # "net_margin"
     period_key: str
     value: float | None
-    unit: Literal["ratio", "currency", "days", "times", "per_share"]
-    inputs: dict[str, list[str]]  # role -> line item ids
+    unit: MetricUnit  # ratio, currency, days, times, per_share
+    formula: str  # as text, for the source view
+    inputs: dict[str, list[MetricInput]]  # role -> the printed cells used, with provenance
     formula_version: str
     flags: list[str] = []
+    caveats: list[str] = []  # caveat ids behind a currency or per-share value
 ```
+
+A value has at least one input cell; a null value has at least one flag.
 
 ```python
 # fra_core/schemas/narrative.py
@@ -212,7 +216,8 @@ Numeric representation:
 - `Decimal` in the contract, serialized as strings in JSON.
 - Identity checks run on `Decimal` values in reported units, so they are exact apart from
   the printed rounding tolerated by D6.
-- Ratios run on float64 (`reported x scale`) in pandas.
+- Ratios are computed in `Decimal` from `reported x scale` and converted to `float` once, when
+  the `MetricValue` is built (D19).
 - Display precision lives in one place, `fra_analytics.formatting`, shared by the UI
   payload and the grounding checker.
 
@@ -246,8 +251,8 @@ optional `parent`.
 
 `avg(x)` is the mean of the opening and closing balance (D2). `days` follows D4. Growth
 metrics compare periods of equal length only. Flows use magnitudes where `natural_sign` is
-negative (`capital_expenditure`, `finance_costs`, `dividends_paid`). A sign that contradicts
-`natural_sign` adds flag `sign_unexpected`.
+negative (`capital_expenditure`, `finance_costs`, `dividends_paid`), whichever sign the
+statement prints, so the sign changes no result and raises no flag.
 
 | Metric id | Formula | Unit | Polarity |
 |-----------|---------|------|----------|
@@ -282,21 +287,29 @@ Registry entry shape:
 # fra_analytics/metrics/registry.py
 from collections.abc import Callable
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Literal
 
-import pandas as pd
+from fra_analytics.metrics.inputs import Inputs
+from fra_core.schemas import MetricUnit, StatementType
 
 
 @dataclass(frozen=True)
 class MetricSpec:
     id: str
+    formula: str  # as text
+    unit: MetricUnit
+    anchor: StatementType  # whose periods the metric is computed for
     inputs: tuple[str, ...]  # canonical ids
-    unit: Literal["ratio", "currency", "days", "times", "per_share"]
-    polarity: Literal["higher", "lower", "neutral"]
-    min_periods: int  # 2 for averages and growth, 3 for CAGR
-    formula_version: str
-    fn: Callable[[pd.DataFrame, "Policy"], pd.Series]  # indexed by period_key
+    fn: Callable[[Inputs], Decimal | None]  # reads figures through the reader, which flags
+    interim: Literal["compute", "skip"] = "compute"  # D5
 ```
+
+Built in v1: every metric above except `free_cash_flow`, `fcf_margin` and `cash_conversion`
+(no cash flow statement is converted), `eps_growth` and `revenue_cagr`; the cash-flow add-back
+to `ebitda` is not built either. Polarity is not carried yet. A zero or negative denominator
+gives a null for every ratio except a margin (D1), and a growth rate from a zero or negative
+base is null.
 
 ## 2.7 Grounding checker (`fra_model.grounding`)
 

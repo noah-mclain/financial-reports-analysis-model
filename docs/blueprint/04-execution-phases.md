@@ -201,15 +201,17 @@ version with a smoke test.
 
 ### 1B.1 Frame, policy, identities (parallel track, needs only G0)
 
-- `to_frame(statements: list[Statement]) -> pd.DataFrame` with columns
-  `statement, canonical_id, period_key, reported, scale, value`.
+- `to_frame(statements: Sequence[Statement]) -> Frame`, a tuple of typed rows with the columns
+  `statement, canonical_id, period, reported, scale, value, provenance` (D19).
 - `load_policy(path: Path) -> Policy`.
-- `check_identities(frame: pd.DataFrame, statements: list[Statement], policy: Policy) -> list[CheckResult]`.
+- `check_identities(frame: Frame) -> list[CheckResult]`; the frame carries the statements, and
+  the identity tolerance is D6, so no policy is passed.
 
 ### 1B.2 Metric registry
 
-`compute(frame: pd.DataFrame, policy: Policy) -> list[MetricValue]` covers every metric in
-section 02, 2.6, with the flags defined by D1 to D5.
+`compute(frame: Frame, policy: Policy) -> list[MetricValue]` covers the metrics of section 02,
+2.6 that the converted statements support, with the flags defined by D1 to D5; the others are
+listed there.
 
 ### 1B.3 Reference implementation
 

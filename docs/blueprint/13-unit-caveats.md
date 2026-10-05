@@ -30,7 +30,7 @@ From the golden output, structure version 4.
 | How common is an unstated multiplier? | 10 of 12 documents, every Juhayna and Edita statement, carry `scale_missing`. Almarai states thousands | It is the usual case for this market. Holding on it would hold everything |
 | What do the pages say? | On the six pages compared with their images (Edita IFRS 8 to 10, Edita 2024 AR 5 to 7), the header names the currency (`EGP`, `جنيه مصري`) and no multiplier | "Currency named, multiplier absent" is a recognisable state of its own, different from "nothing found" |
 | Do magnitudes support the assumption? | Median printed figure on the first statements with no multiplier: 3.4 x 10^7 to 1.9 x 10^9, leaving out three statements whose cells are merged or mostly lost. On Almarai, printed in thousands: 2.2 x 10^5 to 1.4 x 10^6 | Large printed figures are evidence for units, recorded beside the assumption. They cannot prove it: a small company in units and a large one in thousands overlap |
-| Which outputs depend on the multiplier? | Ratios, times and days are scale-invariant (T2 tests this). Only amounts in currency, and growth between two documents with different assumptions, depend on it | The footnote belongs on currency amounts, not on margins or ratios. Most of a summary needs none |
+| Which outputs depend on the multiplier? | Ratios, times and days built from one statement are scale-invariant (T2 tests this); built from two, an assumed scale on either decides them. Only amounts in currency, and growth between two documents with different assumptions, depend on it | The footnote belongs on currency amounts, not on margins or ratios. Most of a summary needs none |
 
 ## Design
 
@@ -150,7 +150,7 @@ Measured 2026-10-01, structure version 5, golden set.
 | Area | Cases |
 |------|-------|
 | Structure | No multiplier and a currency in the header gives scale 1, `scale_missing` and the caveat with its evidence; a stated multiplier gives no caveat; a notes table in thousands does not rescale the statements beside it; median under the threshold gives `scale_implausible` and a hold; the caveat alone does not hold |
-| Analytics | A currency metric from a caveated statement carries the caveat; a ratio from the same rows does not; growth within one statement does not; scaling every input by 1,000 changes caveated amounts and no ratio (extends T2) |
+| Analytics | A currency metric from a caveated statement carries the caveat; a ratio from the rows of one statement does not, and one across two statements does; growth within one statement does not; scaling every input by 1,000 changes caveated amounts and no ratio (extends T2) |
 | Narration | A sentence with a claim on a caveated amount gets the footnote; a sentence with only ratio claims gets none; the template fallback attaches it; a sentence that restates a caveated amount with an unformatted "million" fails; footnote text comes from the template in the narrative's language (extends T8) |
 | End to end | Edita IFRS: the summary's amounts carry one footnote, its margins none. Almarai: no scale footnote, one currency footnote (`currency_from_domicile`) |
 

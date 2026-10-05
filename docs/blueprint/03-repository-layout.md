@@ -54,6 +54,7 @@ financial-reports-analysis-model/
 │   │   │   ├── units.py              # scale phrases, ISO currency detection
 │   │   │   ├── periods.py            # header text -> Period
 │   │   │   ├── split.py              # issuer split of train: fit, validation, holdout (04, 2.4)
+│   │   │   ├── tolerance.py          # the D6 identity tolerance, n x 0.5 reported units, used by ingest and analytics
 │   │   │   └── artifacts.py          # content-addressed paths, stage version registry
 │   │   └── tests/
 │   │
@@ -79,10 +80,12 @@ financial-reports-analysis-model/
 │   ├── analytics/                    # fra-analytics: deterministic numbers and charts
 │   │   ├── pyproject.toml
 │   │   ├── src/fra_analytics/
-│   │   │   ├── frame.py              # statements -> tidy frame (statement, canonical_id, period_key, value)
-│   │   │   ├── policy.py             # Policy dataclass loaded from configs/analytics.toml
-│   │   │   ├── identities.py         # accounting identities, cross-statement ties
-│   │   │   ├── metrics/{registry,profitability,liquidity,leverage,efficiency,cash_flow,growth}.py
+│   │   │   ├── frame.py              # statements -> tidy frame of typed rows (statement, canonical_id, period, reported, scale, value, provenance); no pandas yet
+│   │   │   ├── policy.py             # Policy loaded from configs/analytics.toml (D3, D4)
+│   │   │   ├── identities.py         # balance identity and subtotal ties, D6 tolerance from fra_core.tolerance
+│   │   │   ├── unit_caveats.py       # scale and currency caveats and flags carried into each metric
+│   │   │   ├── period_math.py        # opening balance, prior-year period, actual days
+│   │   │   ├── metrics/{registry,inputs}.py   # formulas; the reader that applies D1, D2, D4 and records provenance (cash-flow metrics not built: structure converts no cash-flow statement)
 │   │   │   ├── formatting.py         # display precision, shared with grounding and UI payloads
 │   │   │   ├── charts/{style,trend,margins,composition,waterfall}.py
 │   │   │   └── reference/naive.py    # independent Decimal implementation, imported only by tests
@@ -179,6 +182,7 @@ financial-reports-analysis-model/
 │   └── thresholds.toml               # gate values read by CI and by adapter promotion
 │
 ├── tests/
+│   ├── analytics/                    # analytics on extracted golden statements (the one place it meets ingest)
 │   ├── integration/                  # API, workers, SQLite, stub model runtime
 │   └── contract/                     # OpenAPI snapshot vs generated client; import boundaries
 │
@@ -198,7 +202,7 @@ financial-reports-analysis-model/
 
 ```text
 fra-core  <-  fra-ingest     (docling, pypdfium2, ocrmac)
-fra-core  <-  fra-analytics  (pandas, pyarrow, matplotlib)
+fra-core  <-  fra-analytics  (matplotlib, when the charts land; no pandas, D19)
 fra-core  <-  fra-model      (mlx, mlx-lm, jinja2)  <- fra-analytics (formatting only)
 fra-core  <-  fra-api        (fastapi, uvicorn, sqlalchemy, alembic)
 fra-core, fra-ingest, fra-analytics, fra-model  <-  fra-worker

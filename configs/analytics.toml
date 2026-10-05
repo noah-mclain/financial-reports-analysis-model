@@ -1,0 +1,9 @@
+# Analytics settings: the owner decisions D3 and D4 of docs/blueprint/06-decisions-and-risks.md.
+# Every key maps to a field of fra_analytics.policy.Policy and every key is required.
+# D1, D2, D5 and D6 are fixed rules, not settings: they live in the code and its tests.
+
+[metrics]
+# D3: IFRS 16 lease liabilities count in total debt.
+include_lease_liabilities = true
+# D4: days in a year for DSO, DIO and DPO. Interim periods use their actual days.
+day_count_basis = 365
