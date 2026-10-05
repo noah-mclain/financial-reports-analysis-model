@@ -318,7 +318,9 @@ Built in v1: every metric above except `free_cash_flow`, `fcf_margin` and `cash_
 (no cash flow statement is converted), `eps_growth` and `revenue_cagr`; the cash-flow add-back
 to `ebitda` is not built either. Polarity is not carried yet. A zero or negative denominator
 gives a null for every ratio except a margin (D1), and a growth rate from a zero or negative
-base is null.
+base is null. The three margins are not registry entries: `compute(statements, policy)` is the
+one entry point, takes them from `compute_margins`, and refuses two income statements (choose one
+with `primary_statements`). `fra_analytics.METRIC_IDS` lists all 21.
 
 ## 2.7 Grounding checker (`fra_model.grounding`)
 

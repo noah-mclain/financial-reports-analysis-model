@@ -77,17 +77,17 @@ financial-reports-analysis-model/
 │   │   │   └── review_report.py      # HTML report with extracted cells drawn on page images
 │   │   └── tests/
 │   │
-│   ├── analytics/                    # fra-analytics: pure margins built; broader engine planned
+│   ├── analytics/                    # fra-analytics: 21 metrics, identities and unit caveats built; charts, formatting planned
 │   │   ├── pyproject.toml
 │   │   ├── src/fra_analytics/
 │   │   │   ├── frame.py              # statements -> tidy frame of typed rows (statement, canonical_id, period, reported, scale, value, provenance); no pandas yet
 │   │   │   ├── policy.py             # Policy (D1 margins, D3, D4) loaded from the flat configs/analytics.toml; no defaults
 │   │   │   ├── identities.py         # balance identity and subtotal ties, D6 tolerance from fra_core.tolerance
-│   │   │   ├── unit_caveats.py       # scale and currency caveats and flags carried into each metric
+│   │   │   ├── unit_caveats.py       # which caveat ids (CaveatId) and unit flags a metric takes from its statements
 │   │   │   ├── period_math.py        # opening balance, prior-year period, actual days
 │   │   │   ├── metrics/profitability.py  # compute_margins(Statement, policy): gross, operating, net, the one margin formula
 │   │   │   ├── metrics/division.py   # the one ratio division and its D1 flags
-│   │   │   ├── metrics/{registry,inputs}.py   # formulas; the reader that applies D1, D2, D4 and records provenance (cash-flow metrics not built: structure converts no cash-flow statement)
+│   │   │   ├── metrics/{registry,inputs}.py   # compute(statements, policy), the one entry point for all 21 metrics; the other 18 formulas and the reader that applies D1, D2, D4 and records provenance (cash-flow metrics not built: structure converts no cash-flow statement)
 │   │   │   ├── formatting.py         # display precision, shared with grounding and UI payloads
 │   │   │   ├── charts/{style,trend,margins,composition,waterfall}.py
 │   │   │   └── reference/naive.py    # independent Decimal implementation, imported only by tests

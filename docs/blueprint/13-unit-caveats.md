@@ -76,9 +76,18 @@ none) and `median_figure`; for the two currency caveats it is the `currency` tak
 ### 2. Analytics
 
 - `to_frame` carries each statement's caveat ids on its rows.
-- `MetricValue` carries `caveats: list[CaveatId]` (the schema contract is implemented; deciding
-  applicability and propagating caveats remain planned). A metric takes a caveat when its unit is
-  `currency` or `per_share` and any input row carries it. Ratios, times and days take none.
+- `MetricValue` carries `caveats: list[CaveatId]`, built (`fra_analytics.unit_caveats`).
+  A metric takes a caveat when its unit is `currency` or `per_share` and any input row carries
+  it. Ratios, times and days take none, unless they are built from several statements: then an
+  assumed scale on one of them decides the result and the ratio takes their caveats. The caveat
+  is the only carrier of an assumption: `scale_missing`, `currency_from_domicile` and
+  `currency_inferred` are not copied onto a metric as flags. What no caveat covers is: a metric
+  built from several statements takes `<flag>:<statement id>` for `scale_conflict`,
+  `scale_implausible`, `currency_missing` and `currency_conflict`, is null with
+  `currency_mismatch` when the statements print different currencies, and with `scale_mismatch`
+  when an amount would add different scales (a ratio is computed and flagged). The margins come
+  from one income statement and so take no caveat; `compute_margins` passes the statement's own
+  flags on, `scale_missing` included.
 - Growth and CAGR between periods of one statement take none: both periods share the
   assumption, so it cancels. Across two documents they take it when the documents differ.
 - Charts: an axis in currency whose series carries the caveat labels the unit as assumed
