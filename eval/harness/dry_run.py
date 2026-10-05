@@ -53,8 +53,8 @@ from typing import Any
 
 import yaml
 
-from fra_analytics.frame import primary_statements, to_frame
-from fra_analytics.metrics.registry import REGISTRY, compute
+from fra_analytics.frame import primary_statements
+from fra_analytics.metrics.registry import METRIC_IDS, compute
 from fra_analytics.policy import load_policy
 from fra_core.schemas import CheckResult, MetricValue, Statement, StatementType
 from fra_core.split import (
@@ -167,7 +167,7 @@ def real_stages(config: IngestConfig) -> Stages:
         structure=lambda pdf, config, convert: structure_pdf(pdf, config, ocr, convert=convert),
         checks=lambda config, sha: load_checks(config.artifact_root / sha / "table_checks.json"),
         critical=lambda result: critical_states(result, taxonomy, index),
-        metrics=lambda statements: compute(to_frame(primary_statements(statements)), policy),
+        metrics=lambda statements: compute(primary_statements(statements), policy),
     )
 
 
@@ -627,8 +627,8 @@ def _has_flag_class(metric: str, flag_class: str) -> Test:
 
 
 def _metric_ids(rows: Sequence[dict[str, Any]]) -> list[str]:
-    """Every metric of the registry, so one never attempted is listed at zero, not left out."""
-    return sorted({spec.id for spec in REGISTRY} | {m for r in rows for m in r["metrics"]})
+    """Every metric `compute` produces, so one never attempted is listed at zero, not left out."""
+    return sorted({*METRIC_IDS, *(m for r in rows for m in r["metrics"])})
 
 
 def _metric_availability(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:

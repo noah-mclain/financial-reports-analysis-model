@@ -1278,17 +1278,17 @@ def stub_stages_with(**changes: Any) -> Stages:
 
 
 def test_a_metric_never_attempted_is_told_from_one_computed_zero_times() -> None:
-    from fra_analytics.metrics.registry import REGISTRY
+    from fra_analytics.metrics.registry import METRIC_IDS
 
     computed_never = {"net_margin": {"attempted": 2, "computed": 0, "null": 2, "flag_classes": []}}
     a = aggregate([row("annual", 1, critical=CRIT, metrics=computed_never)])
     figures = a["metrics"]
-    assert set(figures) >= {spec.id for spec in REGISTRY}  # every registry metric is listed
+    assert set(figures) >= set(METRIC_IDS)  # every metric, margins included, is listed
     assert figures["net_margin"]["attempted"]["total"] == 2
     assert figures["net_margin"]["computed"]["total"] == 0
     assert figures["net_margin"]["documents_attempted"]["total"] == 1
     assert figures["net_margin"]["documents_computed"]["total"] == 0
-    other = next(spec.id for spec in REGISTRY if spec.id != "net_margin")
+    other = next(m for m in METRIC_IDS if m != "net_margin")
     assert figures[other]["attempted"] == {"annual": 0, "interim": 0, "total": 0}
     assert a["metrics_stage"]["ran"]["total"] == 1
 

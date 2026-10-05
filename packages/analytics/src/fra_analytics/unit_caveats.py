@@ -1,11 +1,14 @@
 """The unit-caveat stage: what a statement's scale and currency assumptions mean for a metric.
 
-Structure records what it assumed (blueprint 13): a caveat when no multiplier or no currency is
-printed, and flags such as ``scale_missing``, ``scale_conflict`` and ``currency_missing``. Here
-each metric takes the ones that touch it and no others, and nothing changes a value:
+Structure records what it assumed (blueprint 13) as a ``Caveat`` on the statement, one of the
+``CaveatId``s of ``fra_core.schemas.caveat``, and as flags for what it could not settle. The
+caveats are the one carrier of an assumed scale or currency: ``scale_missing``,
+``currency_from_domicile`` and ``currency_inferred`` are not repeated as flags here. Each metric
+takes the ones that touch it and no others, and nothing changes a value:
 
 - A currency amount or a per-share amount carries the caveat ids of every statement it was
-  built from, and a flag ``<flag>:<statement id>`` for each unit flag those statements hold.
+  built from, and a flag ``<flag>:<statement id>`` for each of the other unit flags those
+  statements hold (``UNIT_FLAGS``: a contradiction or a missing unit, which no caveat covers).
 - A ratio, a times figure or a number of days built from one statement is scale-invariant and
   carries neither. Built from several statements it is not: an assumed scale on one of them
   decides the result, so it carries the same caveats and flags a currency amount does.
@@ -25,15 +28,13 @@ from fra_analytics.frame import FrameStatement
 from fra_core.schemas import MetricUnit
 from fra_core.schemas.caveat import CaveatId
 
-# Statement flags that say a unit or a currency was assumed, missing or contradicted.
+# Statement flags that say a unit or a currency was contradicted or missing. An assumed one is a
+# caveat, not a flag.
 UNIT_FLAGS = (
-    "scale_missing",
     "scale_conflict",
     "scale_implausible",
     "currency_missing",
     "currency_conflict",
-    "currency_from_domicile",
-    "currency_inferred",
 )
 _AMOUNTS = (MetricUnit.CURRENCY, MetricUnit.PER_SHARE)
 

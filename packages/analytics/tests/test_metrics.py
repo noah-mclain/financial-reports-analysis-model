@@ -26,8 +26,9 @@ from statement_builders import (
     row,
 )
 
-from fra_analytics.frame import primary_statements, to_frame
-from fra_analytics.metrics.registry import REGISTRY, compute
+from fra_analytics.frame import primary_statements
+from fra_analytics.metrics.profitability import MARGIN_IDS, compute_margins
+from fra_analytics.metrics.registry import METRIC_IDS, REGISTRY, compute
 from fra_analytics.policy import Policy
 from fra_core.schemas import MetricUnit, MetricValue, Period, Statement, StatementType
 from fra_core.taxonomy.loader import load_taxonomy
@@ -36,7 +37,7 @@ Metrics = dict[tuple[str, str], MetricValue]
 
 
 def metrics(statements: Sequence[Statement], policy: Policy = POLICY) -> Metrics:
-    return {(m.metric_id, m.period_key): m for m in compute(to_frame(statements), policy)}
+    return {(m.metric_id, m.period_key): m for m in compute(statements, policy)}
 
 
 def approx(expected: float) -> object:
@@ -172,17 +173,18 @@ def with_revenue(figure: int) -> Metrics:
 def test_d1_margins_on_a_negative_revenue_are_computed_and_flagged() -> None:
     found = with_revenue(-1000)
     assert found[("net_margin", "FY2025")].value == approx(120 / -1000)
-    assert found[("net_margin", "FY2025")].flags == ["negative_base"]
-    assert found[("gross_margin", "FY2025")].flags == ["negative_base"]
-    assert found[("operating_margin", "FY2025")].flags == ["negative_base"]
+    # sign_unexpected: revenue is printed negative, which the margin function reports (main's
+    # rule); negative_base is D1's computed-and-flagged result.
+    for metric_id in ("net_margin", "gross_margin", "operating_margin"):
+        assert found[(metric_id, "FY2025")].flags == ["sign_unexpected", "negative_base"]
 
 
 def test_d1_a_zero_denominator_is_null_with_a_flag_never_infinity() -> None:
     found = with_revenue(0)
     for metric_id in ("gross_margin", "operating_margin", "net_margin"):
         assert found[(metric_id, "FY2025")].value is None, metric_id
-    assert found[("net_margin", "FY2025")].flags == ["zero_denominator"]
-    assert found[("dso", "FY2025")].flags == ["zero_denominator"]
+    assert found[("net_margin", "FY2025")].flags == ["undefined_zero_denominator"]
+    assert found[("dso", "FY2025")].flags == ["undefined_zero_denominator"]
     assert found[("revenue_growth", "FY2025")].value == approx(0 / 800 - 1)  # a 100% fall
 
 
@@ -221,7 +223,7 @@ def test_d1_every_ratio_other_than_a_margin_is_null_on_a_negative_denominator() 
         INCOME_ROWS, "finance_costs", row("finance_costs", {"FY2025": 0, "FY2024": -30})
     )
     assert metrics(acme_with(income=costs))[("interest_coverage", "FY2025")].flags == [
-        "zero_denominator"
+        "undefined_zero_denominator"
     ]
     revenue = with_revenue(-1000)
     # DIO and DPO divide by cost of revenue, which stays positive: only DSO has the negative.
@@ -244,7 +246,7 @@ def test_d1_net_debt_to_ebitda_on_negative_or_zero_ebitda_is_null() -> None:
     assert negative[("net_debt_to_ebitda", "FY2025")].value is None
     assert negative[("net_debt_to_ebitda", "FY2025")].flags == ["undefined_negative_denominator"]
     zero = with_operating_income(-50)  # ebitda = 0
-    assert zero[("net_debt_to_ebitda", "FY2025")].flags == ["zero_denominator"]
+    assert zero[("net_debt_to_ebitda", "FY2025")].flags == ["undefined_zero_denominator"]
 
 
 def test_d1_growth_from_a_zero_or_a_negative_base_is_null_and_says_which() -> None:
@@ -254,10 +256,10 @@ def test_d1_growth_from_a_zero_or_a_negative_base_is_null_and_says_which() -> No
     ]
     found = metrics([build("i", StatementType.INCOME, [annual(2025), annual(2024)], rows)])
     assert found[("net_income_growth", "FY2025")].value is None
-    assert found[("net_income_growth", "FY2025")].flags == ["undefined_negative_base"]
+    assert found[("net_income_growth", "FY2025")].flags == ["undefined_negative_denominator"]
     rows[1] = row("net_income", {"FY2025": 120, "FY2024": 0})
     found = metrics([build("i", StatementType.INCOME, [annual(2025), annual(2024)], rows)])
-    assert found[("net_income_growth", "FY2025")].flags == ["zero_denominator"]
+    assert found[("net_income_growth", "FY2025")].flags == ["undefined_zero_denominator"]
 
 
 def test_the_first_year_has_no_growth_and_says_which_input_is_missing() -> None:
@@ -341,29 +343,17 @@ def test_d5_an_eighteen_month_period_is_not_an_interim_and_has_no_annual_only_ra
     assert found[("net_margin", "FY2025-18m")].value == approx(0.1)
 
 
-def test_an_instant_period_on_an_income_statement_gives_null_flags_and_no_exception() -> None:
-    # The schema allows an instant period on any statement; a flow metric over it has no length.
+def test_an_instant_period_on_an_income_statement_is_refused_by_name() -> None:
+    # The schema allows an instant period on any statement; a margin over one has no length, and
+    # compute_margins refuses it rather than return a figure for it.
     income = build(
         "i",
         StatementType.INCOME,
         [closing(2025)],
         [row("revenue", {"2025-12-31": 1000}), row("net_income", {"2025-12-31": 100})],
     )
-    balance = build(
-        "b",
-        StatementType.BALANCE,
-        [closing(2025), closing(2024)],
-        [
-            row("total_assets", {"2025-12-31": 2000, "2024-12-31": 1600}),
-            row("trade_receivables", {"2025-12-31": 250, "2024-12-31": 150}),
-        ],
-    )
-    found = metrics([income, balance])
-    assert found[("roa", "2025-12-31")].value is None
-    assert found[("roa", "2025-12-31")].flags == ["period_not_a_duration"]
-    assert found[("dso", "2025-12-31")].value is None
-    assert found[("dso", "2025-12-31")].flags == ["period_not_a_duration"]
-    assert found[("net_margin", "2025-12-31")].value == approx(0.1)
+    with pytest.raises(ValueError, match=r"period '2025-12-31' must be a duration with months"):
+        metrics([income])
 
 
 def test_growth_compares_periods_of_equal_length_only() -> None:
@@ -427,7 +417,7 @@ def test_two_rows_on_one_item_make_it_ambiguous_not_a_guess() -> None:
     found = metrics(acme_with(income=rows))
     margin = found[("net_margin", "FY2025")]
     assert margin.value is None
-    assert margin.flags == ["ambiguous_input:revenue"]
+    assert margin.flags == ["duplicate_input:revenue"]
 
 
 def test_a_missing_statement_type_gives_no_metrics_of_that_basis() -> None:
@@ -494,7 +484,7 @@ def test_every_computed_value_names_the_cells_it_came_from() -> None:
     cells = {
         (s.id, i.id, c.period_key): c for s in statements for i in s.line_items for c in i.cells
     }
-    produced = compute(to_frame(statements), POLICY)
+    produced = compute(statements, POLICY)
     assert produced
     for metric in produced:
         if metric.value is None:
@@ -513,10 +503,32 @@ def test_net_margin_traces_to_the_two_printed_cells() -> None:
     income = acme()[0]
     margin = metrics(acme())[("net_margin", "FY2025")]
     revenue_item = next(i for i in income.line_items if i.canonical_id == "revenue")
-    [revenue] = margin.inputs["revenue"]
+    [revenue] = margin.inputs["denominator"]
     assert revenue.line_item_id == revenue_item.id
     assert revenue.provenance == revenue_item.cells[0].provenance
-    assert list(margin.inputs) == ["net_income", "revenue"]
+    [net_income] = margin.inputs["numerator"]
+    assert net_income.canonical_id == "net_income"
+    assert list(margin.inputs) == ["numerator", "denominator"]
+
+
+def test_margins_are_the_one_implementation_of_compute_margins() -> None:
+    statements = acme()
+    found = metrics(statements)
+    for margin in compute_margins(statements[0], policy=POLICY):
+        assert found[(margin.metric_id, margin.period_key)] == margin
+
+
+def test_no_registry_spec_repeats_a_margin_and_every_metric_id_is_listed_once() -> None:
+    assert not {spec.id for spec in REGISTRY} & set(MARGIN_IDS)
+    assert len(METRIC_IDS) == len(set(METRIC_IDS)) == 21
+    assert {m.metric_id for m in compute(acme(), POLICY)} == set(METRIC_IDS)
+
+
+def test_two_income_statements_are_refused_until_one_is_chosen() -> None:
+    parent_only = build("parent-income", StatementType.INCOME, [annual(2025)], INCOME_ROWS)
+    with pytest.raises(ValueError, match=r"one income statement.*acme-income.*parent-income"):
+        metrics([*acme(), parent_only])
+    assert metrics(primary_statements([*acme(), parent_only]))
 
 
 def test_a_composite_metric_traces_through_to_every_component_cell() -> None:
@@ -572,7 +584,7 @@ def test_an_ambiguous_opening_balance_is_null_and_named_not_averaged() -> None:
     rows = [*BALANCE_ROWS, row("total_assets", {"2025-12-31": 2000, "2024-12-31": 999})]
     found = metrics(acme_with(balance=rows))
     # Two total_assets rows make the closing balance ambiguous too, so look at the opening alone.
-    assert found[("roa", "FY2025")].flags == ["ambiguous_input:total_assets"]
+    assert found[("roa", "FY2025")].flags == ["duplicate_input:total_assets"]
     only_opening = [
         *replace_row(BALANCE_ROWS, "total_assets", row("total_assets", {"2025-12-31": 2000})),
         row("total_assets", {"2024-12-31": 1600}),
@@ -580,7 +592,7 @@ def test_an_ambiguous_opening_balance_is_null_and_named_not_averaged() -> None:
     ]
     roa = metrics(acme_with(balance=only_opening))[("roa", "FY2025")]
     assert roa.value is None
-    assert roa.flags == ["ambiguous_input:total_assets@opening"]
+    assert roa.flags == ["duplicate_input:total_assets@opening"]
 
 
 def test_two_statements_of_one_type_make_every_input_ambiguous_until_one_is_chosen() -> None:
@@ -591,8 +603,8 @@ def test_two_statements_of_one_type_make_every_input_ambiguous_until_one_is_chos
     found = metrics(both)
     assert found[("current_ratio", "2025-12-31")].value is None
     assert found[("current_ratio", "2025-12-31")].flags == [
-        "ambiguous_input:total_current_assets",
-        "ambiguous_input:total_current_liabilities",
+        "duplicate_input:total_current_assets",
+        "duplicate_input:total_current_liabilities",
     ]
     chosen = metrics(primary_statements(both))
     assert chosen[("current_ratio", "2025-12-31")].value == approx(800 / 350)

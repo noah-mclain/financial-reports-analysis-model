@@ -1,8 +1,10 @@
 """The metric registry: formulas, their inputs and the order they are computed in.
 
-``compute(frame, policy)`` follows the blueprint's shape (04, 1B.2) with a plain-typed frame in
-place of a pandas one. Every formula is a function of the reader in ``inputs``; the rules D1 to
-D5 sit in the reader and in ``compute``, not in each formula.
+``compute(statements, policy)`` follows the blueprint's shape (04, 1B.2) with a plain-typed frame
+in place of a pandas one. Every formula is a function of the reader in ``inputs``; the rules D1
+to D5 sit in the reader and in ``compute``, not in each formula. Gross, operating and net margin
+are not formulas of the registry: ``profitability.compute_margins`` is their one implementation,
+and ``compute`` is the one entry point for all 21.
 
 Blueprint 02, 2.6 lists metrics this registry leaves out, each for a stated reason:
 
@@ -16,24 +18,34 @@ Blueprint 02, 2.6 lists metrics this registry leaves out, each for a stated reas
 - ``eps_growth`` is a growth rate of ``eps_basic``, which the taxonomy has; it is not built
   because the week 2 plan asks for about twelve metrics and this registry already holds more.
 
-Rules for the nulls (D1): a margin is computed on a negative base and flagged; every other
-ratio is null on a zero or negative denominator; growth from a zero or negative base is null.
+Rules for the nulls (D1): a margin follows the policy's ``negative_margin_denominator``
+(computed and flagged ``negative_base``, or null); every other ratio is null on a zero or
+negative denominator; growth from a zero or negative base is null. The flag names are those of
+``division.divide``.
 A component a total needs (borrowings, short-term investments) that is not printed leaves the
 total null and names the component: it is never read as zero.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal
 
-from fra_analytics.frame import Frame, FrameRow
+from fra_analytics.frame import Frame, FrameRow, to_frame
 from fra_analytics.metrics.inputs import Inputs
+from fra_analytics.metrics.profitability import MARGIN_IDS, compute_margins
 from fra_analytics.policy import Policy
 from fra_analytics.unit_caveats import unit_notes
-from fra_core.schemas import MetricInput, MetricUnit, MetricValue, Period, StatementType
+from fra_core.schemas import (
+    MetricInput,
+    MetricUnit,
+    MetricValue,
+    Period,
+    Statement,
+    StatementType,
+)
 from fra_core.schemas.caveat import CaveatId
 
 FORMULA_VERSION = "1"
@@ -84,11 +96,6 @@ def _ebitda(i: Inputs) -> Decimal | None:
 
 
 # Formulas --------------------------------------------------------------------------------
-
-
-def _margin(numerator: str) -> Formula:
-    # D1: the one family computed on a negative base, and flagged.
-    return lambda i: i.ratio(i.flow(numerator), i.flow("revenue"), negative="flag")
 
 
 def _roa(i: Inputs) -> Decimal | None:
@@ -165,30 +172,6 @@ _RATIO, _TIMES, _DAYS, _CURRENCY = (
 )
 
 REGISTRY: tuple[MetricSpec, ...] = (
-    MetricSpec(
-        "gross_margin",
-        "gross_profit / revenue",
-        _RATIO,
-        INCOME,
-        ("gross_profit", "revenue"),
-        _margin("gross_profit"),
-    ),
-    MetricSpec(
-        "operating_margin",
-        "operating_income / revenue",
-        _RATIO,
-        INCOME,
-        ("operating_income", "revenue"),
-        _margin("operating_income"),
-    ),
-    MetricSpec(
-        "net_margin",
-        "net_income / revenue",
-        _RATIO,
-        INCOME,
-        ("net_income", "revenue"),
-        _margin("net_income"),
-    ),
     MetricSpec(
         "ebitda",
         "operating_income + depreciation_amortization",
@@ -405,13 +388,30 @@ def _compute_one(spec: MetricSpec, frame: Frame, policy: Policy, period: Period)
     return result(value, flags, used, notes.caveats)
 
 
-def compute(frame: Frame, policy: Policy) -> list[MetricValue]:
-    """Every metric of the registry for every period of the statements it is anchored on, in
-    registry order then period order. A metric with a missing input is present, null, with a
-    flag naming the input. A metric whose anchoring statement type is not in the frame has no
-    period to be computed for and is absent."""
+def compute(statements: Sequence[Statement], policy: Policy) -> list[MetricValue]:
+    """Every metric for every period of the statements it is anchored on: the margins first,
+    from ``compute_margins``, then the registry in order, each in period order. Pass the primary
+    statements (``frame.primary_statements``): one of each type, so no input is ambiguous across
+    statements. A metric with a missing input is present, null, with a flag naming the input. A
+    metric whose anchoring statement type is not among the statements has no period to be
+    computed for and is absent."""
+    incomes = [s for s in statements if s.type is StatementType.INCOME]
+    if len(incomes) > 1:
+        raise ValueError(
+            f"margins are computed over one income statement, got {[s.id for s in incomes]}: "
+            "choose one with fra_analytics.frame.primary_statements"
+        )
+    frame = to_frame(statements)
+    margins = [m for income in incomes for m in compute_margins(income, policy=policy)]
     return [
-        _compute_one(spec, frame, policy, period)
-        for spec in REGISTRY
-        for period in frame.periods(spec.anchor)
+        *margins,
+        *(
+            _compute_one(spec, frame, policy, period)
+            for spec in REGISTRY
+            for period in frame.periods(spec.anchor)
+        ),
     ]
+
+
+METRIC_IDS = (*MARGIN_IDS, *(spec.id for spec in REGISTRY))
+"""Every metric id ``compute`` can produce, in the order it produces them."""

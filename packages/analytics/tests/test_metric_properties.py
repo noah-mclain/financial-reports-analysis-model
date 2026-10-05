@@ -9,7 +9,6 @@ from hypothesis import example, given, settings
 from hypothesis import strategies as st
 from statement_builders import POLICY, Row, annual, build, closing, row
 
-from fra_analytics.frame import to_frame
 from fra_analytics.metrics.registry import compute
 from fra_core.schemas import MetricUnit, MetricValue, Statement, StatementType
 
@@ -79,9 +78,7 @@ def statements(drawn: dict[str, tuple[int, int]], scale: int) -> list[Statement]
 
 
 def run(drawn: dict[str, tuple[int, int]], scale: int) -> dict[tuple[str, str], MetricValue]:
-    return {
-        (m.metric_id, m.period_key): m for m in compute(to_frame(statements(drawn, scale)), POLICY)
-    }
+    return {(m.metric_id, m.period_key): m for m in compute(statements(drawn, scale), POLICY)}
 
 
 def close(a: float, b: float) -> bool:
@@ -126,7 +123,7 @@ def test_any_figures_give_a_finite_value_or_a_null_with_a_flag(
 ) -> None:
     # Zero and negative figures everywhere: never an infinity, never a NaN, never a null that
     # does not say why (MetricValue rejects each of those when it is built).
-    produced = compute(to_frame(statements(drawn, 1)), POLICY)
+    produced = compute(statements(drawn, 1), POLICY)
     assert produced
     for metric in produced:
         assert metric.value is not None or metric.flags, metric.metric_id
@@ -143,7 +140,7 @@ def test_growth_matches_the_exact_ratio_and_is_zero_for_no_change(a: int, b: int
             [annual(2025), annual(2024)],
             [row("revenue", {"FY2025": now, "FY2024": before})],
         )
-        value = {(m.metric_id, m.period_key): m for m in compute(to_frame([income]), POLICY)}[
+        value = {(m.metric_id, m.period_key): m for m in compute([income], POLICY)}[
             ("revenue_growth", "FY2025")
         ].value
         assert value is not None

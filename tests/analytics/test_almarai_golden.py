@@ -74,7 +74,7 @@ def arabic() -> tuple[list[Statement], list[CheckResult]]:
 
 
 def metrics_of(statements: list[Statement]) -> Metrics:
-    return {(m.metric_id, m.period_key): m for m in compute(to_frame(statements), POLICY)}
+    return {(m.metric_id, m.period_key): m for m in compute(statements, POLICY)}
 
 
 @pytest.mark.parametrize("edition", ["english", "arabic"])
@@ -116,8 +116,12 @@ def test_every_value_traces_to_printed_cells_and_recomputes_from_them(
         ("net_margin", "net_income"),
     ]:
         metric = found[(name, "FY2025")]
-        numerator = metric.inputs[top][0].reported
-        denominator = metric.inputs["revenue"][0].reported
+        [numerator_cell] = metric.inputs["numerator"]
+        assert numerator_cell.canonical_id == top
+        numerator = numerator_cell.reported
+        [revenue] = metric.inputs["denominator"]
+        assert revenue.canonical_id == "revenue"
+        denominator = revenue.reported
         assert metric.value == pytest.approx(float(numerator / denominator), rel=1e-12)
         assert denominator > Decimal(0)
 
@@ -137,7 +141,7 @@ def test_english_and_arabic_agree_wherever_both_compute(
     for key in set(en) - set(both):
         for side in (en[key], ar[key]):
             if side.value is None:
-                assert side.flags[0].startswith("missing_input:"), (key, side.flags)
+                assert any(f.startswith("missing_input:") for f in side.flags), (key, side.flags)
 
 
 @pytest.mark.parametrize("edition", ["english", "arabic"])

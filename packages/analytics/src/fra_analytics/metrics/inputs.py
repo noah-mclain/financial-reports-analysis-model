@@ -5,8 +5,9 @@ or ``None``, and the reader records what it was given (the cells, for provenance
 gave nothing (the flags). That is how a metric with a missing input comes out null with a flag
 naming it, and how every value comes out with the cells it rests on.
 
-D1 (zero and negative denominators), D2 (averages with no opening balance) and D4 (days) are
-applied here, once, so no formula can forget them.
+D1 (zero and negative denominators, through ``division.divide``), D2 (averages with no opening
+balance) and D4 (days) are applied here, once, so no formula can forget them. Margins are not
+read here: they come from ``profitability.compute_margins``, which owns their D1 setting.
 
 Signs. A line item whose taxonomy ``natural_sign`` is minus (an expense) is read as a
 magnitude: issuers print costs in brackets or without them, and a ratio must not depend on
@@ -18,17 +19,13 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from typing import Literal
 
 from fra_analytics.frame import Frame, FrameRow
+from fra_analytics.metrics.division import divide
 from fra_analytics.period_math import months_before
 from fra_analytics.policy import Policy
 from fra_core.schemas import Period
 from fra_core.taxonomy.loader import load_taxonomy
-
-NegativeBase = Literal["flag", "null"]
-"""D1 for a negative denominator: compute and flag ``negative_base`` (margins only), or null
-with ``undefined_negative_denominator`` (every other ratio)."""
 
 
 class Inputs:
@@ -62,7 +59,7 @@ class Inputs:
         role = role or item
         rows = self._frame.lookup(item, canonical.statement, end_date=end_date, months=months)
         if len(rows) > 1:
-            self.flag(f"ambiguous_input:{role}")
+            self.flag(f"duplicate_input:{role}")
             self._cite(role, rows)
             return None
         if not rows:
@@ -101,7 +98,7 @@ class Inputs:
             item, canonical.statement, end_date=opening_date, months=None
         )
         if len(opening_rows) > 1:
-            self.flag(f"ambiguous_input:{item}@opening")
+            self.flag(f"duplicate_input:{item}@opening")
             return None
         if not opening_rows:
             self.flag("average_fallback_to_closing")
@@ -135,40 +132,21 @@ class Inputs:
             return None
         return sum((v for v in values if v is not None), Decimal(0))
 
-    def ratio(
-        self,
-        numerator: Decimal | None,
-        denominator: Decimal | None,
-        *,
-        negative: NegativeBase = "null",
-    ) -> Decimal | None:
-        """D1. Null when a part is missing; null with ``zero_denominator`` for a zero; for a
-        negative denominator, per ``negative``: only a margin asks for ``flag``."""
-        if numerator is None or denominator is None:
-            return None
-        if denominator == 0:
-            self.flag("zero_denominator")
-            return None
-        if denominator < 0:
-            if negative == "null":
-                self.flag("undefined_negative_denominator")
-                return None
-            self.flag("negative_base")
-        return numerator / denominator
+    def ratio(self, numerator: Decimal | None, denominator: Decimal | None) -> Decimal | None:
+        """D1 through ``divide``: null when a part is missing, and null with the reason flagged
+        for a zero or negative denominator."""
+        flags: list[str] = []
+        value = divide(numerator, denominator, negative="null", flags=flags)
+        for name in flags:
+            self.flag(name)
+        return value
 
     def growth(self, current: Decimal | None, prior: Decimal | None) -> Decimal | None:
-        """The change from ``prior`` to ``current`` as a fraction. A growth rate from a zero
-        base is undefined (``zero_denominator``) and from a negative base is meaningless
-        (``undefined_negative_base``): null with that flag, whatever the current figure."""
-        if current is None or prior is None:
-            return None
-        if prior == 0:
-            self.flag("zero_denominator")
-            return None
-        if prior < 0:
-            self.flag("undefined_negative_base")
-            return None
-        return current / prior - 1
+        """The change from ``prior`` to ``current`` as a fraction. A growth rate from a zero or a
+        negative base is undefined: null with the flag ``divide`` gives, whatever the current
+        figure."""
+        ratio = self.ratio(current, prior)
+        return None if ratio is None else ratio - 1
 
     def days(self) -> Decimal | None:
         """D4: the policy's day count for a year, the actual days for any other period. None
