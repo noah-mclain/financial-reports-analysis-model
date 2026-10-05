@@ -16,6 +16,7 @@ import argparse
 import json
 import sys
 from collections import Counter
+from collections.abc import Iterable
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,7 @@ import yaml
 from fra_core.schemas import CheckResult, Statement, StatementType
 from fra_ingest.config import REPO_ROOT, load_config
 from fra_ingest.errors import IngestError
+from fra_ingest.results import StructureResult
 from fra_ingest.review import StatementReview
 from fra_ingest.structure import structure_pdf
 
@@ -123,7 +125,19 @@ def _statement_summary(row: dict[str, Any]) -> str:
     return f"{row['lines']} lines {row['identity']} {held}"
 
 
-def _load_checks(path: Path) -> dict[str, list[CheckResult]]:
+def first_statements(
+    result: StructureResult, types: Iterable[StatementType]
+) -> dict[StatementType, Statement]:
+    """The first statement the stage found of each wanted type."""
+    wanted = set(types)
+    found: dict[StatementType, Statement] = {}
+    for statement in result.statements:
+        if statement.type in wanted:
+            found.setdefault(statement.type, statement)
+    return found
+
+
+def load_checks(path: Path) -> dict[str, list[CheckResult]]:
     by_statement: dict[str, list[CheckResult]] = {}
     for raw in json.loads(path.read_text(encoding="utf-8")):
         check = CheckResult.model_validate(raw)
@@ -151,11 +165,9 @@ def main(argv: list[str] | None = None) -> int:
             rows.append({"id": entry["id"], "error": result.industry.reason})
             reasons.append(f"{entry['id']}: declined:{result.industry.code}")
             continue
-        checks = _load_checks(config.artifact_root / result.sha256 / "table_checks.json")
+        checks = load_checks(config.artifact_root / result.sha256 / "table_checks.json")
         reviews = {r.statement_id: r for r in result.reviews}
-        found: dict[StatementType, Statement] = {}
-        for extracted in result.statements:
-            found.setdefault(extracted.type, extracted)
+        found = first_statements(result, config.enabled_types)
         by_id[entry["id"]] = found
         row: dict[str, Any] = {"id": entry["id"], "flags": result.flags, "statements": {}}
         for statement_type in config.enabled_types:

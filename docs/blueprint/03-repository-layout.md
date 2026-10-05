@@ -53,7 +53,7 @@ financial-reports-analysis-model/
 │   │   │   ├── numbers.py            # printed number -> Decimal: parentheses, dashes, U+2212, thin spaces, locale digits
 │   │   │   ├── units.py              # scale phrases, ISO currency detection
 │   │   │   ├── periods.py            # header text -> Period
-│   │   │   ├── split.py              # issuer split of train: fit, validation, holdout (04, 2.4)
+│   │   │   ├── split.py              # issuer split of train: fit, validation, holdout, pure rules (04, 2.4)
 │   │   │   ├── tolerance.py          # the D6 identity tolerance, n x 0.5 reported units, used by ingest and analytics
 │   │   │   └── artifacts.py          # content-addressed paths, stage version registry
 │   │   └── tests/
@@ -178,6 +178,9 @@ financial-reports-analysis-model/
 │   │   ├── expected/                 # hand-verified Statement JSON per document
 │   │   └── manifest.yaml             # id, source URL, retrieval date, layout traits
 │   ├── harness/{extraction,metrics,end_to_end,report}.py
+│   ├── harness/holdout_records.py    # the one reader and writer of holdout_moves.yaml, scoring_log.tsv
+│   ├── harness/paths.py              # where the corpus records live, for the harness
+│   ├── harness/dry_run.py            # first look at the train holdout: make dry-run
 │   ├── reports/<wp-id>/              # Verification and Test run reports (section 05, 5.1)
 │   └── thresholds.toml               # gate values read by CI and by adapter promotion
 │

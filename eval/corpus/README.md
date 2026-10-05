@@ -37,8 +37,9 @@ pools so that no score is measured on something the code or the model has alread
    the documents of the corpus holdout issuers (the part of `train` that is never trained on,
    defined in `docs/blueprint/04-execution-phases.md` 2.4, which also holds the override rules).
    A dry run follows rule 3's procedure: run it, record the failure classes, fix them on other
-   documents. Nobody opens a holdout document to debug it; the harness does not enforce this
-   yet, so it is a rule only. A dry run is entered in the scoring log like a model scoring and
+   documents. Nobody opens a holdout document to debug it; `make dry-run` (`eval/harness/dry_run.py`)
+   reports ids, timings, outcomes and failure classes only, never a label or a value, so there is
+   nothing to read. A dry run is entered in the scoring log like a model scoring and
    spends independence of the corpus part of the holdout; the SEC part is not touched, since
    SEC filers have no PDFs here. An issuer that has to leave the holdout, because a failure
    cannot be reproduced elsewhere, is moved to the fit part and recorded as a spent look. The
@@ -251,10 +252,12 @@ These change the ingest design, not just the dataset:
   `fetched.yaml`; `collect` skips them, and their issuers keep the pool recorded there.
 - `holdout_moves.yaml`: issuers moved out of the `train` holdout into fit, each with its reason
   and date (overrides before the first look, spent looks after). Hand-edited; the rules are in
-  `docs/blueprint/04-execution-phases.md` 2.4.
+  `docs/blueprint/04-execution-phases.md` 2.4 and the file format is read by
+  `eval/harness/holdout_records.py`. `make corpus-split` prints the split; run directly,
+  `scripts/corpus.py split` needs `PYTHONPATH=eval`, which no other command does.
 - `scoring_log.tsv`: one row per look at the `train` holdout (dry runs and model scorings).
-  Append-only, written before each scoring; the rules are in
-  `docs/blueprint/04-execution-phases.md` 2.4.
+  Append-only, written before each scoring by `eval/harness/holdout_records.py` (`make dry-run` is
+  the first writer); the rules are in `docs/blueprint/04-execution-phases.md` 2.4.
 - The PDFs themselves go to `var/corpus/<pool>/` and are never committed. The URL and sha256 are
   enough to reproduce the set.
 

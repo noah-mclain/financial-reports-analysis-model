@@ -325,8 +325,9 @@ issuers. That is the only valid kind; it does not have to be the `model_test` po
 `model_test` pool is the checkpoint (D13, D17), which comes last, and a holdout (issuers kept
 out of training and tuning, scored only to judge a candidate) taken from inside `train` measures
 the same property earlier. Until the checkpoint, Gate C is measured on that holdout and marked
-provisional. The split is `fra_core.split` in `packages/core`, its override record is
-`eval/corpus/holdout_moves.yaml` and the scoring log is `eval/corpus/scoring_log.tsv`;
+provisional. The split rules are `fra_core.split` in `packages/core`, which does no file I/O;
+its override record is `eval/corpus/holdout_moves.yaml` and the scoring log is
+`eval/corpus/scoring_log.tsv`, both read and written only by `eval/harness/holdout_records.py`;
 `make corpus-split` prints the counts below. The dataset builder is week 3 work. Everything below
 that says what the builder does is what it will do.
 

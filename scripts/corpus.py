@@ -2,12 +2,15 @@
 
     uv run python scripts/corpus.py check
     uv run python scripts/corpus.py fetch [--pool train] [--force] [--new] [--id ID ...]
+    PYTHONPATH=eval uv run python scripts/corpus.py split
 
 `check` enforces the split rules in eval/corpus/README.md and needs no network.
 `fetch` downloads into var/corpus/<pool>/<id>.pdf (gitignored), measures page count and
 text layer per page, compares every file against the golden set and against the rest of the
 corpus, and records the results in eval/corpus/fetched.yaml. `--new` leaves out every document
 already measured there, so a few added documents need no re-download of the rest.
+`split` prints the split of the train pool; it reads the records through eval/harness, so it
+alone needs PYTHONPATH=eval (`make corpus-split` sets it).
 """
 
 from __future__ import annotations
@@ -35,8 +38,6 @@ from fra_core.split import issuer_key
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATES = ROOT / "eval/corpus/candidates.yaml"
 FETCHED = ROOT / "eval/corpus/fetched.yaml"
-HOLDOUT_MOVES = ROOT / "eval/corpus/holdout_moves.yaml"
-SCORING_LOG = ROOT / "eval/corpus/scoring_log.tsv"
 GOLDEN_MANIFEST = ROOT / "eval/golden/manifest.yaml"
 GOLDEN_DIR = ROOT / "eval/golden"
 STORE = ROOT / "var/corpus"
@@ -441,9 +442,14 @@ def cmd_fetch(args: argparse.Namespace) -> int:
 def split_report() -> str:
     """Fit, validation and holdout of the train pool, as hashed and after the recorded moves.
     Reads candidates.yaml only; no document is opened."""
+    # The records are read by the harness, which is on the path only for this command
+    # (PYTHONPATH=eval); the other commands, and scripts importing this module, need no harness.
+    from harness.holdout_records import read_looks, read_moves
+    from harness.paths import HOLDOUT_MOVES, SCORING_LOG
+
     documents = [d for d in load_yaml(CANDIDATES)["documents"] if d["pool"] == split.TRAIN]
-    looks = split.read_looks(SCORING_LOG)
-    moves = split.read_moves(HOLDOUT_MOVES, looks)
+    looks = read_looks(SCORING_LOG)
+    moves = read_moves(HOLDOUT_MOVES, looks)
     kinds = Counter(m.kind for m in moves)
     lines = [
         f"train pool: {len({split.document_key(d) for d in documents})} issuers, "

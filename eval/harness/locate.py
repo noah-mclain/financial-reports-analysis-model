@@ -1,8 +1,8 @@
 """Score the statement page locator (spec 09, Scoring).
 
-    uv run python eval/harness/locate.py golden
-    uv run python eval/harness/locate.py train
-    uv run python eval/harness/locate.py model_test --checkpoint
+    PYTHONPATH=eval uv run python -m harness.locate golden
+    PYTHONPATH=eval uv run python -m harness.locate train
+    PYTHONPATH=eval uv run python -m harness.locate model_test --checkpoint
 
 Golden: recall per type against labelled pages, candidate share and time. Corpus pools: whether
 each corporate document has a balance and an income range, candidate share, and industry
@@ -27,10 +27,9 @@ from fra_ingest.errors import IngestError
 from fra_ingest.ocr import make_engine
 from fra_ingest.results import LocateResult
 from fra_ingest.stage import locate_pdf
+from harness.paths import CANDIDATES, CORPUS
 
 MANIFEST = REPO_ROOT / "eval" / "golden" / "manifest.yaml"
-CANDIDATES = REPO_ROOT / "eval" / "corpus" / "candidates.yaml"
-CORPUS = REPO_ROOT / "var" / "corpus"
 OUT = REPO_ROOT / "var" / "eval"
 MANIFEST_KEYS = {
     "financial_position": StatementType.BALANCE,
