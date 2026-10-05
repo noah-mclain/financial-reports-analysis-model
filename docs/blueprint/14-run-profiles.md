@@ -1,7 +1,8 @@
 # 14. Run profiles: the model route from MLX to llama.cpp, and the Docker skeleton
 
-Status: v4, 2026-10-02. The GGUF spike is measured, on two runs, and the Docker skeleton is
-built and measured (last section). This document closes R16 as a question
+Status: v5, 2026-10-05. The GGUF spike is measured, on two runs, and the Docker skeleton is
+built and measured (last section); a hosted Linux container smoke run now covers x86-64. This
+document closes R16 as a question
 ([08-revised-plan.md](08-revised-plan.md)): the route works on a small model. The route uses a
 step that [01-constraints.md](01-constraints.md) 1.4 forbade on this machine; the owner amended
 that rule on 2026-10-02 for this export only, under conditions (see "Decision for week 3"). The
@@ -340,6 +341,21 @@ The image is a frozen sync of `uv.lock`, so it holds the locked, hash-checked ve
 The build context is an allowlist (`.dockerignore`): the workspace sources, the lockfile and
 `configs/`.
 
+### Hosted Linux smoke evidence
+
+On 2026-10-05, the [Container smoke run for source
+`00063d681218365584e21a740694521a948e28d6`](https://github.com/noah-mclain/financial-reports-analysis-model/actions/runs/37326680288)
+passed on the hosted Ubuntu 24.04 runner. Its Docker build installed Debian `amd64` packages,
+so this verifies a Linux x86-64 build of the image. The smoke check imported `cv2`,
+`docling.document_converter` and the FRA modules in the built image, checked the non-root
+identity and CPU-only dependencies, started the API and placeholder worker, observed healthy
+services and successful API health responses, then requested and observed bounded shutdown.
+
+This is container build, import, health and lifecycle evidence only. The worker still only
+imports `fra_ingest`, reports its profile and sleeps; this run did not exercise document
+conversion, OCR accuracy, extraction, Gate D, model serving or production deployment. The run
+does not replace the earlier aarch64 image-size, build-time or lifecycle measurements above.
+
 ### Deliberately missing
 
 - No job queue, database or upload page (week 4).
@@ -347,8 +363,10 @@ The build context is an allowlist (`.dockerignore`): the workspace sources, the 
 - No model in the image. The `llm` service waits for a GGUF file and was never started.
 - No OCR engine in the image. The Apple Vision engine is Mac-only; the Linux engines arrive with
   week 2, and the image must grow them then.
-- Not measured: the image on x86-64. The numbers above are aarch64; the lock does carry hashed
-  CPU wheels for x86-64, but nothing was built there.
+- Hosted Ubuntu 24.04 CI built and smoke-tested the Linux x86-64 image on 2026-10-05 (see
+  [hosted smoke evidence](#hosted-linux-smoke-evidence)). The size, cold-build time and local
+  start/stop timings above remain aarch64 measurements; no corresponding x86-64 metrics were
+  recorded.
 
 ### Left for later
 
@@ -362,12 +380,10 @@ The build context is an allowlist (`.dockerignore`): the workspace sources, the 
   work.
 - **Build cache.** A uv cache mount for the dependency layer.
 - **Restart policy,** with the job queue.
-- **x86-64** is not built.
 - **OpenCV.** The lock has `opencv-python`, not the headless build. The slim runtime image
-  installs `libxcb1`, `libgl1`, `libglib2.0-0`, `libsm6` and `libxext6`, matching the missing
-  shared libraries recorded above. CI imports `cv2` and `docling.document_converter` in the
-  built Linux image. A hosted Linux build has not yet run for this change, so the fix remains
-  pending that evidence.
+  installs `libxcb1`, `libgl1`, `libglib2.0-0`, `libsm6` and `libxext6`; the hosted x86-64 smoke
+  run imported both `cv2` and `docling.document_converter` successfully in the built image.
+  This verifies imports on that Linux architecture, not OCR behavior or accuracy.
 - **Makefile, `.env` with CRLF line endings.** The error says only "LF line endings" and does
   not name Windows line endings (CRLF) as the cause.
 - **Makefile, ports from the environment.** A port given in the environment or on the make
