@@ -26,7 +26,7 @@ $(error FRA_LLM_PORT is empty: set it in $(ENV_FILE))
 endif
 export FRA_API_PORT FRA_LLM_PORT
 
-.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping dry-run expected-drafts eval-extraction verify-expected dev docker-up docker-health
+.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping eval-gates dry-run expected-drafts eval-extraction verify-expected dev docker-up docker-health
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -70,9 +70,9 @@ label-pages: ## Blind labelling sheets for the scanned golden documents (Mac, Vi
 	@$(MAKE) --no-print-directory unhide-pth
 	$(UV) run python scripts/label_statement_pages.py serve
 
-eval-locate: ## Score the locator (TARGET=golden, or TARGET=train / dev; model_test needs CHECKPOINT=1)
+eval-locate: ## Score the locator (TARGET=golden, dev, or train = the fit and validation parts, never the holdout; model_test needs CHECKPOINT=1)
 	@$(MAKE) --no-print-directory unhide-pth
-	PYTHONPATH=eval $(UV) run python -m harness.locate $(or $(TARGET),golden) $(if $(filter 1,$(CHECKPOINT)),--checkpoint)
+	PYTHONPATH=eval $(UV) run python -m harness.locate $(or $(TARGET),golden) $(if $(filter 1,$(CHECKPOINT)),--checkpoint) $(if $(LIMIT),--limit $(LIMIT))
 
 eval-convert: ## Convert the golden set, a child process per document; records time and peak memory
 	@$(MAKE) --no-print-directory unhide-pth
@@ -82,17 +82,21 @@ eval-structure: ## Structure the golden set: statements, scale and currency, ide
 	@$(MAKE) --no-print-directory unhide-pth
 	$(UV) run python eval/harness/structure.py
 
-dry-run: ## One look at the train holdout through the whole pipeline; logged, spent once per candidate, no pool argument
+dry-run: ## One look at the train holdout through the whole pipeline; logged, spent once per candidate, no pool argument; EARLIER=path compares with an earlier run's report
 	@$(MAKE) --no-print-directory unhide-pth
-	PYTHONPATH=eval $(UV) run python -m harness.dry_run
+	PYTHONPATH=eval $(UV) run python -m harness.dry_run $(if $(EARLIER),--earlier $(EARLIER))
 
 expected-drafts: ## Draft expected files from the extraction (ONLY=id; keeps checked or confirmed files)
 	@$(MAKE) --no-print-directory unhide-pth
 	$(UV) run python eval/harness/expected.py $(if $(ONLY),--only $(ONLY))
 
-eval-mapping: ## Label mapping over the golden set: the critical items: mapped, flagged or missing, and what the expected files say
+eval-mapping: ## Label mapping: TARGET=golden (default) the critical items and the expected files; TARGET=fit [LIMIT=n] unmapped labels by failure class
 	@$(MAKE) --no-print-directory unhide-pth
-	PYTHONPATH=eval $(UV) run python -m harness.mapping
+	PYTHONPATH=eval $(UV) run python -m harness.mapping $(or $(TARGET),golden) $(if $(LIMIT),--limit $(LIMIT))
+
+eval-gates: ## Gate A and Gate B over the golden set (dev), per period kind; marked not yet measured on model_test
+	@$(MAKE) --no-print-directory unhide-pth
+	PYTHONPATH=eval $(UV) run python -m harness.gates
 
 verify-expected: ## Independent evidence for every figure of the expected files (Mac, Vision OCR)
 	@$(MAKE) --no-print-directory unhide-pth

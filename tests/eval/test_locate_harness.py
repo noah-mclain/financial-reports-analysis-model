@@ -1,6 +1,9 @@
 """Scoring rules of the locator eval."""
 
+from pathlib import Path
+
 import pytest
+import yaml
 from harness.locate import (
     check_target,
     found_pages,
@@ -98,12 +101,230 @@ def test_industry_labels_line_up() -> None:
 
 def test_errored_and_missing_documents_are_counted_not_dropped() -> None:
     rows = [
-        {"id": "a", "truth": "corporate", "verdict": "corporate", "covered": True},
-        {"id": "b", "truth": "corporate", "error": "unreadable_pdf"},
-        {"id": "c", "truth": "bank", "verdict": "bank", "covered": True},
+        {
+            "id": "a",
+            "period": "annual",
+            "truth": "corporate",
+            "verdict": "corporate",
+            "covered": True,
+        },
+        {"id": "b", "period": "annual", "truth": "corporate", "error": "unreadable_pdf"},
+        {"id": "c", "period": "annual", "truth": "bank", "verdict": "bank", "covered": True},
     ]
     summary = pool_summary(rows, missing=["d"])
     assert summary["coverage"] == 0.5  # the unreadable corporate counts as not covered
     assert summary["uncovered"] == ["b"]
     assert summary["errored"] == ["b"]
     assert summary["missing"] == ["d"]
+
+
+# ---- the decline check: the industry decision against the sector label ------------------------
+
+from harness.locate import (  # noqa: E402
+    decision_label,
+    decline_summary,
+    judge_decision,
+    pool_entries,
+)
+
+from fra_ingest.industry import industry_decision  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    ("truth", "decision", "judgement"),
+    [
+        ("bank", "declined/bank", "right"),
+        ("insurer", "declined/insurer", "right"),
+        ("bank", "declined/insurer", "wrong"),  # declined, but the reason names the wrong kind
+        ("bank", "needs_review/weak_verdict", "held"),
+        ("bank", "pass", "wrong"),  # a bank that passes as corporate
+        ("insurer", "pass", "wrong"),
+        ("other_financial/brokerage", "needs_review/other_financial", "held"),
+        ("other_financial/brokerage", "pass", "wrong"),
+        ("other_financial/brokerage", "declined/bank", "wrong"),
+        ("corporate", "pass", "right"),
+        ("corporate", "needs_review/near_threshold", "held"),
+        ("corporate", "declined/bank", "wrong"),  # a corporate document declined
+    ],
+)
+def test_a_decision_is_right_held_or_wrong_for_its_sector_label(
+    truth: str, decision: str, judgement: str
+) -> None:
+    assert judge_decision(truth, decision) == judgement
+
+
+def test_the_decision_label_reads_the_decision_not_the_verdict() -> None:
+    assert decision_label(None) == "pass"
+    held = industry_decision(IndustrySignal(kind="unknown"))
+    assert decision_label(held) == "needs_review/no_verdict"
+    sure = industry_decision(IndustrySignal(kind="bank", score=20.0, distinct_cues=5))
+    assert decision_label(sure) == "declined/bank"
+
+
+def test_the_decline_summary_counts_by_judgement_and_lists_the_wrong_ones() -> None:
+    rows = [
+        {
+            "id": "a",
+            "period": "annual",
+            "truth": "bank",
+            "decision": "declined/bank",
+            "judgement": "right",
+        },
+        {"id": "b", "period": "annual", "truth": "bank", "decision": "pass", "judgement": "wrong"},
+        {
+            "id": "c",
+            "period": "interim",
+            "truth": "insurer",
+            "decision": "needs_review/weak_verdict",
+            "judgement": "held",
+        },
+        {
+            "id": "d",
+            "period": "interim",
+            "truth": "corporate",
+            "decision": "declined/bank",
+            "judgement": "wrong",
+        },
+        {
+            "id": "e",
+            "period": "interim",
+            "truth": "corporate",
+            "decision": "pass",
+            "judgement": "right",
+        },
+        {"id": "f", "period": "annual", "truth": "bank", "error": "unreadable_pdf"},
+    ]
+    summary = decline_summary(rows)
+    assert summary["negative_controls"] == {"right": 1, "held": 1, "wrong": 1, "errored": 1}
+    assert summary["corporate"] == {"right": 1, "held": 0, "wrong": 1, "errored": 0}
+    assert summary["wrong"] == [
+        {"id": "b", "truth": "bank", "decision": "pass"},
+        {"id": "d", "truth": "corporate", "decision": "declined/bank"},
+    ]
+    assert summary["errored"] == ["f"]
+    annual, interim = summary["by_period_kind"]["annual"], summary["by_period_kind"]["interim"]
+    assert annual["negative_controls"] == {"right": 1, "held": 0, "wrong": 1, "errored": 1}
+    assert annual["corporate"] == {"right": 0, "held": 0, "wrong": 0, "errored": 0}
+    assert interim["negative_controls"] == {"right": 0, "held": 1, "wrong": 0, "errored": 0}
+    assert interim["corporate"] == {"right": 1, "held": 0, "wrong": 1, "errored": 0}
+
+
+def test_the_decline_summary_names_an_empty_period_kind() -> None:
+    rows = [{"id": "a", "period": "annual", "truth": "bank", "judgement": "right"}]
+    interim = decline_summary(rows)["by_period_kind"]["interim"]
+    assert interim["negative_controls"] == {"right": 0, "held": 0, "wrong": 0, "errored": 0}
+
+
+def test_the_train_target_is_split_aware_and_never_reads_the_holdout(tmp_path: Path) -> None:
+    from harness.holdout_records import LOG_HEADER
+
+    from fra_core.split import Part, hashed_part, issuer_key
+
+    def issuer(part: Part) -> str:
+        return next(
+            n for n in (f"Issuer {k}" for k in range(300)) if hashed_part(issuer_key(n)) is part
+        )
+
+    records = [
+        {"id": "f1", "issuer": issuer(Part.FIT), "pool": "train"},
+        {"id": "v1", "issuer": issuer(Part.VALIDATION), "pool": "train"},
+        {"id": "h1", "issuer": issuer(Part.HOLDOUT), "pool": "train"},
+        {"id": "d1", "issuer": "Almarai Company", "pool": "dev"},
+    ]
+    (tmp_path / "c.yaml").write_text(yaml.safe_dump({"documents": records}), encoding="utf-8")
+    (tmp_path / "m.yaml").write_text(yaml.safe_dump({"moves": []}), encoding="utf-8")
+    (tmp_path / "l.tsv").write_text(LOG_HEADER, encoding="utf-8")
+    paths = (tmp_path / "c.yaml", tmp_path / "m.yaml", tmp_path / "l.tsv")
+    assert [e["id"] for e in pool_entries("train", *paths)] == ["f1", "v1"]
+    assert [e["id"] for e in pool_entries("dev", *paths)] == ["d1"]
+
+
+# ---- the wiring of the pool run ---------------------------------------------------------------
+
+
+def _train_records(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
+    """A candidates file with a fit, a validation and a holdout document, each with a PDF in a
+    tmp store, and a tmp moves file and scoring log."""
+    from harness.holdout_records import LOG_HEADER
+
+    from fra_core.split import Part, hashed_part, issuer_key
+
+    def issuer(part: Part) -> str:
+        return next(
+            n for n in (f"Issuer {k}" for k in range(300)) if hashed_part(issuer_key(n)) is part
+        )
+
+    records = [
+        {
+            "id": "f1",
+            "issuer": issuer(Part.FIT),
+            "pool": "train",
+            "role": "corporate",
+            "period": "annual",
+        },
+        {
+            "id": "v1",
+            "issuer": issuer(Part.VALIDATION),
+            "pool": "train",
+            "role": "corporate",
+            "period": "annual",
+        },
+        {
+            "id": "h1",
+            "issuer": issuer(Part.HOLDOUT),
+            "pool": "train",
+            "role": "corporate",
+            "period": "annual",
+        },
+    ]
+    store = tmp_path / "store"
+    (store / "train").mkdir(parents=True)
+    for r in records:
+        (store / "train" / f"{r['id']}.pdf").write_bytes(b"x")
+    (tmp_path / "c.yaml").write_text(yaml.safe_dump({"documents": records}), encoding="utf-8")
+    (tmp_path / "m.yaml").write_text(yaml.safe_dump({"moves": []}), encoding="utf-8")
+    (tmp_path / "l.tsv").write_text(LOG_HEADER, encoding="utf-8")
+    return tmp_path / "c.yaml", tmp_path / "m.yaml", tmp_path / "l.tsv", store
+
+
+def _located_paths(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, limit: int | None = None
+) -> list[str]:
+    import harness.locate as locate_module
+
+    candidates, moves, log, store = _train_records(tmp_path)
+    seen: list[str] = []
+
+    def fake_locate(path: Path, *args: object, **kwargs: object) -> LocateResult:
+        seen.append(path.stem)
+        return result(
+            StatementRange(type=B, first_page=1, last_page=1, score=8, rank=1),
+            StatementRange(type=INC, first_page=2, last_page=2, score=8, rank=1),
+        )
+
+    monkeypatch.setattr(locate_module, "locate_pdf", fake_locate)
+    locate_module.run_pool(
+        "train", True, limit, candidates=candidates, moves=moves, log=log, store=store
+    )
+    return seen
+
+
+def test_the_train_run_locates_the_fit_and_validation_parts_and_never_the_holdout(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    assert _located_paths(monkeypatch, tmp_path) == ["f1", "v1"]
+
+
+def test_the_limit_takes_the_first_documents_in_id_order(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    assert _located_paths(monkeypatch, tmp_path, limit=1) == ["f1"]
+
+
+@pytest.mark.parametrize("limit", ["0", "-1", "x"])
+def test_a_limit_that_is_not_a_positive_number_is_refused(limit: str) -> None:
+    from harness.locate import main
+
+    with pytest.raises(SystemExit) as caught:
+        main(["train", "--limit", limit])
+    assert caught.value.code == 2

@@ -19,6 +19,7 @@ from fra_core.split import (
     check_looks,
     check_moves,
     cik_key,
+    development_documents,
     document_key,
     hashed_part,
     holdout_availability,
@@ -43,6 +44,7 @@ PUBLIC_API = [
     "check_looks",
     "check_moves",
     "cik_key",
+    "development_documents",
     "document_key",
     "hashed_part",
     "holdout_availability",
@@ -336,3 +338,59 @@ def test_availability_counts_the_holdout_documents_that_are_not_ready() -> None:
     assert result == HoldoutAvailability(documents=2, missing=1)
     after_move = holdout_availability(documents, [mv()], set())
     assert after_move == HoldoutAvailability(documents=0, missing=0)
+
+
+# ---- development documents ------------------------------------------------------------------
+
+VALIDATION_ISSUER = next(
+    name
+    for name in (f"Issuer {n}" for n in range(300))
+    if hashed_part(issuer_key(name)) is Part.VALIDATION
+)
+FIT_ISSUER = next(
+    name
+    for name in (f"Issuer {n}" for n in range(300))
+    if hashed_part(issuer_key(name)) is Part.FIT
+)
+
+
+def development_set() -> list[dict[str, Any]]:
+    return [
+        doc(FIT_ISSUER),
+        doc(VALIDATION_ISSUER),
+        doc(AL_DAWAA, n=1),  # in the holdout as hashed, in fit after the override
+    ]
+
+
+def test_development_documents_refuse_the_holdout_and_point_to_the_logged_scoring() -> None:
+    with pytest.raises(SplitError, match="holdout_for_scoring"):
+        development_documents(development_set(), [], {Part.HOLDOUT})
+    with pytest.raises(SplitError, match="holdout_for_scoring"):
+        development_documents(development_set(), [], {Part.FIT, Part.HOLDOUT})
+
+
+def test_development_documents_need_a_part() -> None:
+    with pytest.raises(SplitError, match="no part"):
+        development_documents(development_set(), [], set())
+
+
+@pytest.mark.parametrize("pool", ["model_test", "blind"])
+def test_development_documents_refuse_model_test_and_blind(pool: str) -> None:
+    with pytest.raises(PoolRefused):
+        development_documents([*development_set(), doc("Other", pool=pool)], [], {Part.FIT})
+
+
+def test_development_documents_return_fit_and_validation_with_the_moves_applied() -> None:
+    documents = development_set()
+    fit_only = development_documents(documents, [], {Part.FIT})
+    assert [d["issuer"] for d in fit_only] == [FIT_ISSUER]
+    both = development_documents(documents, [mv()], {Part.FIT, Part.VALIDATION})
+    assert [d["issuer"] for d in both] == [FIT_ISSUER, VALIDATION_ISSUER, AL_DAWAA]
+    validation = development_documents(documents, [mv()], {Part.VALIDATION})
+    assert [d["issuer"] for d in validation] == [VALIDATION_ISSUER]
+
+
+def test_development_documents_never_hold_a_holdout_issuer() -> None:
+    documents = development_set()
+    returned = development_documents(documents, [], {Part.FIT, Part.VALIDATION})
+    assert AL_DAWAA not in {d["issuer"] for d in returned}

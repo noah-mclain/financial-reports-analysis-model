@@ -16,6 +16,8 @@ _Spellings = dict[StatementType, dict[str, dict[str, CanonicalItem]]]
 SUBTOTAL_CUES = ("total", "اجمالي", "مجموع")
 # The row that closes a balance sheet: total equity and liabilities.
 CLOSING_TOTAL_ID = "total_liabilities_and_equity"
+# Squashed characters the shorter side of a prefix match must have: a shorter one is not evidence.
+MIN_PREFIX_CHARS = 4
 
 
 def squash(text: str) -> str:
@@ -69,6 +71,22 @@ class LabelIndex:
     def match(self, label: str, statement: StatementType) -> CanonicalItem | None:
         found = self.match_all(label, statement)
         return found[0] if len(found) == 1 else None
+
+    def prefix_matches(self, label: str, statement: StatementType) -> tuple[CanonicalItem, ...]:
+        """Items with an alias that is an exact prefix of the label or that starts with it: a
+        near miss the lexicon does not map. Nothing for an exact match (``match_all`` has it)
+        or for a label shorter than MIN_PREFIX_CHARS."""
+        key = squash(label)
+        spellings = self._index.get(statement, {})
+        if len(key) < MIN_PREFIX_CHARS or key in spellings:
+            return ()
+        found: dict[str, CanonicalItem] = {}
+        for spelling, items in spellings.items():
+            if len(spelling) >= MIN_PREFIX_CHARS and (
+                key.startswith(spelling) or spelling.startswith(key)
+            ):
+                found.update(items)
+        return tuple(found.values())
 
     def headings(self, label: str, statement: StatementType) -> tuple[CanonicalItem, ...]:
         """The totals whose section heading is exactly this label."""

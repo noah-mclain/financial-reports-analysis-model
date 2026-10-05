@@ -7,7 +7,7 @@ import yaml
 
 from fra_core.schemas.statement import StatementType
 from fra_core.taxonomy import load_taxonomy
-from fra_core.taxonomy.loader import Taxonomy
+from fra_core.taxonomy.loader import PLAN_CRITICAL_IDS, Taxonomy
 
 
 @pytest.fixture(scope="module")
@@ -32,6 +32,11 @@ def test_critical_items_are_present(taxonomy: Taxonomy) -> None:
         "total_liabilities_and_equity",
     }
     assert expected <= set(taxonomy.critical_ids())
+
+
+def test_the_six_items_the_plan_names_are_critical_in_the_taxonomy(taxonomy: Taxonomy) -> None:
+    assert len(PLAN_CRITICAL_IDS) == 6
+    assert set(PLAN_CRITICAL_IDS) <= set(taxonomy.critical_ids())
 
 
 @pytest.mark.parametrize(

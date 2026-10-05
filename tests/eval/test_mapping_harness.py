@@ -188,3 +188,168 @@ def test_the_period_kind_is_read_from_the_statements() -> None:
     assert document_period_kind([base]) == "unknown"
     assert document_period_kind([base.model_copy(update={"periods": [annual]})]) == "annual"
     assert document_period_kind([base.model_copy(update={"periods": [half]})]) == "interim"
+
+
+# ---- the fit mode: unmapped labels by failure class ------------------------------------------
+
+from pathlib import Path  # noqa: E402
+
+import pytest  # noqa: E402
+from harness.mapping import fit_report, main  # noqa: E402
+
+from fra_ingest.errors import IngestError  # noqa: E402
+from fra_ingest.results import StructureResult  # noqa: E402
+
+
+def structured(*items_: LineItem) -> StructureResult:
+    return StructureResult(
+        version="v",
+        sha256="a" * 64,
+        convert_version="c",
+        settings_hash="h",
+        statements=[statement(list(items_))],
+    )
+
+
+def entry(
+    doc_id: str, period: str = "annual", language: str = "en", **extra: str
+) -> dict[str, str]:
+    return {"id": doc_id, "period": period, "language": language, **extra}
+
+
+def test_fit_report_lists_flagged_rows_by_class_per_language_and_period_kind(
+    tmp_path: Path,
+) -> None:
+    for name in ("a", "b"):
+        (tmp_path / f"{name}.pdf").write_bytes(b"x")
+    results = {
+        "a": structured(
+            item(1, "Mystery", "1", flag="unmapped", evidence="no_alias_no_anchor"),
+            item(2, "Total assets", "9", canonical="total_assets", evidence="alias"),
+        ),
+        "b": structured(item(1, "Mystery", "1", flag="unmapped", evidence="no_alias_no_anchor")),
+    }
+    report = fit_report(
+        [entry("a"), entry("b", "interim", "ar")],
+        lambda doc_id: tmp_path / f"{doc_id}.pdf",
+        lambda path: results[path.stem],
+        INDEX,
+        TAXONOMY,
+    )
+    unknown = report["failure_classes"]["classes"]["no_alias_no_anchor"]
+    assert unknown["count"] == 2
+    assert unknown["by_language"] == {"en": 1, "ar": 1}
+    assert unknown["by_period_kind"] == {"annual": 1, "interim": 1}
+    assert unknown["top_labels"] == [["mystery", 2]]
+    assert report["documents_run"] == 2 and report["missing"] == []
+    assert set(report["critical_slots"]) == {"annual", "interim", "total"}
+
+
+def test_a_document_with_no_pdf_is_counted_and_listed_not_fetched(tmp_path: Path) -> None:
+    report = fit_report(
+        [entry("gone")],
+        lambda doc_id: tmp_path / f"{doc_id}.pdf",
+        lambda path: pytest.fail("a missing PDF must not be structured"),
+        INDEX,
+        TAXONOMY,
+    )
+    assert report["missing"] == ["gone"] and report["documents_run"] == 0
+
+
+def test_an_unreadable_document_is_listed_with_its_reason(tmp_path: Path) -> None:
+    (tmp_path / "bad.pdf").write_bytes(b"x")
+
+    def fail(path: Path) -> StructureResult:
+        raise IngestError("unreadable_pdf", "detail")
+
+    report = fit_report([entry("bad")], lambda d: tmp_path / f"{d}.pdf", fail, INDEX, TAXONOMY)
+    assert report["errored"] == [{"id": "bad", "reason": "unreadable_pdf"}]
+
+
+def test_negative_controls_are_not_mapped_and_are_counted(tmp_path: Path) -> None:
+    (tmp_path / "bank.pdf").write_bytes(b"x")
+    report = fit_report(
+        [entry("bank", role="negative_control")],
+        lambda d: tmp_path / f"{d}.pdf",
+        lambda path: pytest.fail("a negative control is not mapped"),
+        INDEX,
+        TAXONOMY,
+    )
+    assert report["negative_controls_skipped"] == 1
+
+
+def test_the_limit_takes_the_first_documents_in_id_order(tmp_path: Path) -> None:
+    seen: list[str] = []
+    for name in ("c", "a", "b"):
+        (tmp_path / f"{name}.pdf").write_bytes(b"x")
+
+    def structure(path: Path) -> StructureResult:
+        seen.append(path.stem)
+        return structured()
+
+    fit_report(
+        [entry("c"), entry("a"), entry("b")],
+        lambda d: tmp_path / f"{d}.pdf",
+        structure,
+        INDEX,
+        TAXONOMY,
+        limit=2,
+    )
+    assert seen == ["a", "b"]
+
+
+def test_an_unknown_target_is_refused() -> None:
+    with pytest.raises(SystemExit):
+        main(["holdout"])
+
+
+def test_the_fit_run_maps_the_fit_part_only_not_validation_or_the_holdout(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import harness.mapping as mapping_module
+    import yaml
+    from harness.holdout_records import LOG_HEADER
+
+    from fra_core.split import Part, hashed_part, issuer_key
+
+    def issuer(part: Part) -> str:
+        return next(
+            n for n in (f"Issuer {k}" for k in range(300)) if hashed_part(issuer_key(n)) is part
+        )
+
+    records = [
+        {**entry(i), "issuer": issuer(part), "pool": "train"}
+        for i, part in (("f1", Part.FIT), ("v1", Part.VALIDATION), ("h1", Part.HOLDOUT))
+    ]
+    store = tmp_path / "store"
+    (store / "train").mkdir(parents=True)
+    for r in records:
+        (store / "train" / f"{r['id']}.pdf").write_bytes(b"x")
+    (tmp_path / "c.yaml").write_text(yaml.safe_dump({"documents": records}), encoding="utf-8")
+    (tmp_path / "m.yaml").write_text(yaml.safe_dump({"moves": []}), encoding="utf-8")
+    (tmp_path / "l.tsv").write_text(LOG_HEADER, encoding="utf-8")
+    seen: list[str] = []
+
+    def fake_structure(pdf: Path, *args: object, **kwargs: object) -> StructureResult:
+        seen.append(pdf.stem)
+        return structured()
+
+    monkeypatch.setattr(mapping_module, "structure_pdf", fake_structure)
+    monkeypatch.setattr(mapping_module, "make_engine", lambda config: None)
+    monkeypatch.setattr(mapping_module, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(mapping_module, "OUT", tmp_path / "out")
+    mapping_module.run_fit(
+        None,
+        candidates=tmp_path / "c.yaml",
+        moves=tmp_path / "m.yaml",
+        log=tmp_path / "l.tsv",
+        store=store,
+    )
+    assert seen == ["f1"]
+
+
+@pytest.mark.parametrize("limit", ["0", "-1", "x"])
+def test_a_limit_that_is_not_a_positive_number_is_refused(limit: str) -> None:
+    with pytest.raises(SystemExit) as caught:
+        main(["fit", "--limit", limit])
+    assert caught.value.code == 2

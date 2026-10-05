@@ -25,8 +25,11 @@ from harness.dry_run import (
     aggregate,
     budget_s,
     candidate,
+    critical_states,
+    earlier_figures,
     exit_code,
     main,
+    parser,
     pool_layers,
     projection,
     real_stages,
@@ -35,12 +38,16 @@ from harness.dry_run import (
 )
 from harness.holdout_records import LOG_HEADER, log_look, read_looks
 
+from fra_analytics.policy import load_policy
 from fra_core.schemas import (
     BBox,
     Cell,
     CheckResult,
     Document,
     LineItem,
+    MetricInput,
+    MetricUnit,
+    MetricValue,
     Period,
     PeriodKind,
     Provenance,
@@ -48,10 +55,13 @@ from fra_core.schemas import (
     StatementType,
 )
 from fra_core.split import Look, Part, PoolRefused, hashed_part, issuer_key
+from fra_core.taxonomy.loader import PLAN_CRITICAL_IDS, load_taxonomy
 from fra_ingest.config import REPO_ROOT, IngestConfig, load_config
 from fra_ingest.errors import IngestError
+from fra_ingest.label_match import LabelIndex
 from fra_ingest.results import (
     ConvertResult,
+    IndustryDecision,
     IndustrySignal,
     LocateResult,
     RangeConversion,
@@ -60,6 +70,8 @@ from fra_ingest.results import (
 )
 from fra_ingest.review import StatementReview
 
+TAXONOMY = load_taxonomy()
+INDEX = LabelIndex(TAXONOMY)
 GOLDEN = REPO_ROOT / "eval" / "golden" / "documents"
 LABEL = "SECRET LABEL"
 VALUE = "98765.43"
@@ -187,6 +199,74 @@ def structured() -> StructureResult:
     )
 
 
+def metric_values() -> list[MetricValue]:
+    """One metric computed (its value is a number that must never reach the report) and one null
+    with a flag whose detail names the label."""
+    return [
+        MetricValue(
+            metric_id="net_margin",
+            period_key=PERIOD.key,
+            value=float(VALUE),
+            unit=MetricUnit.RATIO,
+            formula="net_income / revenue",
+            formula_version="1",
+            inputs={
+                "numerator": [
+                    MetricInput(
+                        statement_id="income",
+                        line_item_id="r0",
+                        canonical_id="net_income",
+                        period_key=PERIOD.key,
+                        reported=Decimal(VALUE),
+                        scale=1000,
+                        currency="SAR",
+                        provenance=Provenance(
+                            page_no=1,
+                            bbox=BBox(left=1, top=1, right=2, bottom=2),
+                            table_ref="#/tables/0",
+                            row=0,
+                            col=1,
+                        ),
+                    )
+                ]
+            },
+        ),
+        MetricValue(
+            metric_id="current_ratio",
+            period_key=PERIOD.key,
+            value=None,
+            unit=MetricUnit.TIMES,
+            formula="a / b",
+            formula_version="1",
+            flags=[f"missing_input:{LABEL}"],
+        ),
+    ]
+
+
+def decision(outcome: str, code: str) -> IndustryDecision:
+    return IndustryDecision(
+        outcome=outcome,  # type: ignore[arg-type]
+        code=code,  # type: ignore[arg-type]
+        signal=IndustrySignal(kind="bank", score=20.0, distinct_cues=5, evidence=[(3, LABEL)]),
+        reason=f"{outcome}:{code}: evidence page 3 '{LABEL}'",
+    )
+
+
+def declined_result(code: str = "bank") -> StructureResult:
+    return StructureResult(
+        version="v",
+        sha256=SHA,
+        convert_version="",
+        settings_hash="",
+        industry=decision("declined", code),
+        flags=[f"declined:{code}"],
+    )
+
+
+def held_result(code: str = "weak_verdict") -> StructureResult:
+    return structured().model_copy(update={"industry": decision("needs_review", code)})
+
+
 def identity_checks() -> dict[str, list[CheckResult]]:
     check = CheckResult(
         id="c",
@@ -211,6 +291,7 @@ def stub_stages(
     *,
     locate: Callable[[Path, IngestConfig], LocateResult] | None = None,
     convert: Callable[[Path, IngestConfig], ConvertResult] | None = None,
+    result: StructureResult | None = None,
 ) -> Stages:
     calls = calls or Calls()
 
@@ -230,13 +311,15 @@ def stub_stages(
     ) -> StructureResult:
         convert_stage(pdf, config)
         calls.events.append(f"structure {pdf.stem}")
-        return structured()
+        return result or structured()
 
     return Stages(
         locate=locate or default_locate,
         convert=convert or default_convert,
         structure=structure,
         checks=lambda config, sha: identity_checks(),
+        critical=lambda result: critical_states(result, TAXONOMY, INDEX),
+        metrics=lambda statements: metric_values() if statements else [],
     )
 
 
@@ -261,6 +344,7 @@ class Setup:
         stages: Stages,
         clock: Callable[[], float] | None = None,
         layers_by_pool: dict[str, dict[str, int]] | None = None,
+        earlier: Path | None = None,
     ) -> dict[str, Any]:
         return run(
             self.documents,
@@ -275,6 +359,7 @@ class Setup:
             config=IngestConfig(artifact_root=self.tmp / "real-artifacts"),
             stages=stages,
             layers_by_pool=layers_by_pool or {},
+            earlier=earlier,
             **({"clock": clock} if clock else {}),
         )
 
@@ -498,10 +583,16 @@ def test_stage_seconds_come_from_the_stages_that_ran(three: Setup) -> None:
         now[0] += 2
         return result
 
-    stages = Stages(base.locate, base.convert, structure, base.checks)
+    stages = replace(base, structure=structure)
     row = three.run(stages, clock=tick)["rows"][0]
-    assert row["stage_seconds"] == {"locate": 5.0, "convert": 20.0, "structure": 3.0}
-    assert row["seconds"] == 28.0
+    assert row["stage_seconds"] == {
+        "locate": 5.0,
+        "convert": 20.0,
+        "structure": 3.0,
+        "critical": 0.0,
+        "metrics": 0.0,
+    }
+    assert row["seconds"] == 28.0 and row["seconds_excl_metrics"] == 28.0
 
 
 def test_every_document_gets_a_fresh_artifact_root_so_no_cache_can_hit(three: Setup) -> None:
@@ -562,16 +653,46 @@ def row(
     found: tuple[str, ...] = ("balance", "income"),
     role: str = "corporate",
     verdict: str = "corporate",
+    industry: str = "pass",
+    judgement: str = "right",
+    critical: dict[str, int] | None = None,
+    metrics: dict[str, dict[str, Any]] | None = None,
+    language: str = "en",
+    plan: dict[str, str] | None = None,
+    reasons: list[str] | None = None,
+    metrics_failure: str | None = None,
+    metrics_seconds: float = 0.0,
 ) -> dict[str, Any]:
+    statements: dict[str, dict[str, Any]] = {
+        t: {"review": "passed", "reason_classes": []} for t in found
+    }
+    if reasons:  # the first statement is held for these reason classes
+        first = next(iter(statements))
+        statements[first] = {"review": "needs_review", "reason_classes": reasons}
     return {
         "period": period,
+        "language": language,
         "seconds": seconds,
+        "seconds_excl_metrics": seconds - metrics_seconds,
         "text_layer": layer,
         "failure": failure,
+        "metrics_failure": metrics_failure,
+        "critical_failure": None,
         "identity": identity,
         "role": role,
         "stages": {"locate": {"industry": verdict}},
-        "statements": {t: {"review": "passed"} for t in found},
+        "statements": statements,
+        "industry": None
+        if failure
+        else {
+            "label": industry,
+            "outcome": industry.partition("/")[0],
+            "code": industry.partition("/")[2] or None,
+            "judgement": judgement,
+        },
+        "critical": critical,
+        "plan_critical": plan,
+        "metrics": metrics or {},
     }
 
 
@@ -790,7 +911,7 @@ def test_convert_seconds_are_summed_when_convert_is_called_twice(three: Setup) -
         convert_stage(pdf, config)
         return structured()
 
-    stages = Stages(base.locate, base.convert, structure, base.checks)
+    stages = replace(base, structure=structure)
     row = three.run(stages, clock=lambda: now[0])["rows"][0]
     assert row["stage_seconds"]["convert"] == 14.0
     assert row["stage_seconds"]["structure"] == 0.0
@@ -892,3 +1013,495 @@ def test_the_command_takes_no_pool_argument() -> None:
     with pytest.raises(SystemExit) as caught:
         main(["--pool", "dev"])
     assert caught.value.code == 2
+
+
+# ---- industry decision, critical items and metrics --------------------------------------------
+
+
+def test_a_row_carries_the_industry_decision_critical_item_counts_and_metric_counts(
+    three: Setup,
+) -> None:
+    row = three.run(stub_stages())["rows"][0]
+    assert row["industry"] == {
+        "outcome": "pass",
+        "code": None,
+        "label": "pass",
+        "judgement": "right",
+    }
+    taxonomy = load_taxonomy()
+    slots = sum(
+        len(taxonomy.critical_ids(t)) for t in (StatementType.BALANCE, StatementType.INCOME)
+    )
+    # the one stub row carries no canonical item and is not flagged: every slot is unmapped
+    assert row["critical"] == {
+        "mapped": 0,
+        "ambiguous": 0,
+        "unmapped": slots,
+        "statement_not_found": 0,
+    }
+    assert row["metrics"] == {
+        "net_margin": {"attempted": 1, "computed": 1, "null": 0, "flag_classes": []},
+        "current_ratio": {
+            "attempted": 1,
+            "computed": 0,
+            "null": 1,
+            "flag_classes": ["missing_input"],
+        },
+    }
+    assert row["metrics_failure"] is None and row["metrics_failure_at"] is None
+    assert row["critical_failure"] is None and row["critical_failure_at"] is None
+    assert list(row["plan_critical"]) == list(PLAN_CRITICAL_IDS)
+    assert set(row["plan_critical"].values()) == {"unmapped"}
+
+
+def test_a_declined_document_is_an_outcome_not_a_failure(three: Setup) -> None:
+    report = three.run(stub_stages(result=declined_result()))
+    first = report["rows"][0]
+    assert first["failure"] is None
+    assert first["industry"]["label"] == "declined/bank"
+    assert first["critical"] is None and first["metrics"] == {}
+    assert first["statements"] == {}
+    a = report["aggregates"]
+    assert a["failures"]["documents_failed"]["total"] == 0
+    assert a["industry"]["declined"]["total"] == 3
+    assert a["industry"]["by_code"]["declined/bank"]["total"] == 3
+    assert "judgement" not in a["industry"]  # judged against the sector label for controls only
+    assert a["critical_items"]["documents"]["total"] == 0
+    assert exit_code(report) == 0
+
+
+def test_a_document_held_for_industry_keeps_its_statements_and_is_counted_held(
+    three: Setup,
+) -> None:
+    report = three.run(stub_stages(result=held_result()))
+    first = report["rows"][0]
+    assert first["industry"]["label"] == "needs_review/weak_verdict"
+    assert first["industry"]["judgement"] == "held"
+    assert sorted(first["statements"]) == ["balance", "income"]
+    assert first["critical"] is not None
+    a = report["aggregates"]
+    assert a["industry"]["needs_review"]["total"] == 3
+    assert a["industry"]["by_code"]["needs_review/weak_verdict"]["total"] == 3
+
+
+def test_negative_controls_are_judged_apart_from_the_corporate_headline() -> None:
+    right = row("annual", 20, role="negative_control", industry="declined/bank", found=())
+    held = row(
+        "interim",
+        20,
+        role="negative_control",
+        industry="needs_review/weak_verdict",
+        judgement="held",
+        found=("balance",),
+        critical=CRIT,
+    )
+    wrong = row("interim", 20, role="negative_control", industry="pass", judgement="wrong")
+    a = aggregate([row("annual", 30), right, held, wrong])
+    assert a["industry"]["pass"]["total"] == 1  # the corporate document only
+    controls = a["negative_controls"]
+    assert controls["industry_outcome"]["declined"] == {"annual": 1, "interim": 0, "total": 1}
+    assert controls["industry_outcome"]["needs_review"]["total"] == 1
+    assert controls["industry_outcome"]["pass"]["total"] == 1
+    assert controls["judgement_against_label"] == {
+        "right": {"annual": 1, "interim": 0, "total": 1},
+        "held": {"annual": 0, "interim": 1, "total": 1},
+        "wrong": {"annual": 0, "interim": 1, "total": 1},
+    }
+
+
+def test_critical_items_are_summed_per_stratum_over_documents_that_reached_statements() -> None:
+    full = {"mapped": 8, "ambiguous": 1, "unmapped": 2, "statement_not_found": 0}
+    none = {"mapped": 0, "ambiguous": 0, "unmapped": 0, "statement_not_found": 11}
+    declined = row("interim", 5, industry="declined/bank", judgement="wrong", found=())
+    a = aggregate(
+        [
+            row("annual", 30, critical=full),
+            row("interim", 30, critical=none),
+            row("interim", 30, critical=full),
+            declined,
+        ]
+    )["critical_items"]
+    assert a["documents"] == {"annual": 1, "interim": 2, "total": 3}
+    assert a["mapped"] == {"annual": 8, "interim": 8, "total": 16}
+    assert a["statement_not_found"] == {"annual": 0, "interim": 11, "total": 11}
+
+
+def test_metrics_computed_and_null_are_counted_by_id_and_stratum_with_flag_classes() -> None:
+    m1 = {"net_margin": {"attempted": 1, "computed": 1, "null": 0, "flag_classes": []}}
+    m2 = {
+        "net_margin": {"attempted": 2, "computed": 0, "null": 2, "flag_classes": ["missing_input"]}
+    }
+    a = aggregate([row("annual", 1, metrics=m1), row("interim", 1, metrics=m2)])["metrics"]
+    assert a["net_margin"]["computed"] == {"annual": 1, "interim": 0, "total": 1}
+    assert a["net_margin"]["null"] == {"annual": 0, "interim": 2, "total": 2}
+    assert a["net_margin"]["flag_classes"]["missing_input"] == {
+        "annual": 0,
+        "interim": 1,
+        "total": 1,
+    }
+
+
+def test_the_new_figures_are_given_annual_interim_and_total(three: Setup) -> None:
+    report = three.run(stub_stages())
+    paths = {p for p, _ in figures(report["aggregates"])}
+    assert {
+        "/industry/pass",
+        "/industry/declined",
+        "/industry/needs_review",
+        "/industry/by_code/pass",
+        "/critical_items/documents",
+        "/critical_items/mapped",
+        "/critical_items/ambiguous",
+        "/critical_items/unmapped",
+        "/critical_items/statement_not_found",
+        "/metrics/net_margin/computed",
+        "/metrics/net_margin/null",
+        "/metrics/current_ratio/flag_classes/missing_input",
+        "/negative_controls/industry_outcome/pass",
+        "/negative_controls/judgement_against_label/wrong",
+    } <= paths
+
+
+@pytest.mark.parametrize("result", [None, declined_result(), held_result()])
+def test_the_report_holds_no_decision_reason_evidence_or_metric_value(
+    three: Setup, result: StructureResult | None
+) -> None:
+    three.run(stub_stages(result=result))
+    text = three.report.read_text(encoding="utf-8") + "".join(
+        three.report.with_name("report.rows.jsonl").read_text(encoding="utf-8")
+    )
+    assert LABEL not in text and VALUE not in text and "98765" not in text
+    assert "page 3" not in text  # the decision's reason and evidence stay out
+
+
+def test_a_bank_control_that_passes_as_corporate_is_judged_wrong_and_a_declined_one_right(
+    tmp_path: Path,
+) -> None:
+    a, b = HOLDOUT_ISSUERS[:2]
+    controls = [
+        {**candidate_record(a), "role": "negative_control", "sector": "bank"},
+        {**candidate_record(b), "role": "negative_control", "sector": "bank"},
+    ]
+    setup = Setup(tmp_path, controls)
+    declined = setup.run(stub_stages(result=declined_result("bank")))
+    assert {r["industry"]["judgement"] for r in declined["rows"]} == {"right"}
+    other = Setup(tmp_path / "again", controls)
+    passed = other.run(stub_stages())
+    assert {r["industry"]["judgement"] for r in passed["rows"]} == {"wrong"}
+
+
+# ---- a failing metrics or critical-item step is not a failed document -------------------------
+
+
+def raising(_: Any) -> Any:
+    raise ValueError(f"{LABEL} {VALUE} detail")
+
+
+def test_a_metrics_failure_is_its_own_field_and_the_document_stays_a_success(three: Setup) -> None:
+    report = three.run(stub_stages_with(metrics=raising))
+    first = report["rows"][0]
+    assert first["failure"] is None and first["failure_at"] is None
+    assert first["identity"] == "ok"  # set before the metrics stage and kept
+    assert first["metrics_failure"] == "crash:ValueError"
+    assert re.fullmatch(r"test_dry_run\.py:\d+", first["metrics_failure_at"])
+    assert first["metrics"] == {} and first["critical"] is not None
+    a = report["aggregates"]
+    assert a["time"]["succeeded"]["documents"]["total"] == 3
+    assert a["failures"]["documents_failed"]["total"] == 0
+    assert a["failures"]["metrics_failed"]["total"] == 3
+    assert a["metrics_stage"]["failed"]["total"] == 3 and a["metrics_stage"]["ran"]["total"] == 0
+    buckets = ("ok", "failed", "skipped", "no_balance", "failed_document")
+    assert sum(a["identity"][b]["total"] for b in buckets) == a["corporate_documents_run"]["total"]
+    assert a["identity"]["ok"]["total"] == 3
+    assert exit_code(report) == 0
+
+
+def test_a_critical_item_failure_is_its_own_field_and_metrics_still_run(three: Setup) -> None:
+    report = three.run(stub_stages_with(critical=raising))
+    first = report["rows"][0]
+    assert first["failure"] is None
+    assert first["critical_failure"] == "crash:ValueError" and first["critical"] is None
+    assert re.fullmatch(r"test_dry_run\.py:\d+", first["critical_failure_at"])
+    assert first["plan_critical"] is None
+    assert first["metrics"]["net_margin"]["computed"] == 1
+    assert report["aggregates"]["failures"]["critical_failed"]["total"] == 3
+
+
+def test_metrics_and_critical_seconds_are_timed_and_left_out_of_the_ingest_seconds(
+    three: Setup,
+) -> None:
+    now = [0.0]
+
+    def critical(result: StructureResult) -> dict[str, str]:
+        now[0] += 3
+        return critical_states(result, TAXONOMY, INDEX)
+
+    def metrics(statements: Any) -> list[MetricValue]:
+        now[0] += 5
+        return metric_values()
+
+    report = three.run(stub_stages_with(critical=critical, metrics=metrics), clock=lambda: now[0])
+    first = report["rows"][0]
+    assert first["stage_seconds"]["critical"] == 3 and first["stage_seconds"]["metrics"] == 5
+    assert first["seconds"] == 8 and first["seconds_excl_metrics"] == 0
+    done = report["aggregates"]["time"]
+    assert done["succeeded"]["total_s"]["total"] == 24
+    assert done["succeeded_excl_metrics"]["total_s"]["total"] == 0
+    assert "include the critical-item and metrics steps" in report["timing"]["seconds"]
+
+
+def test_the_real_stages_load_the_taxonomy_and_policy_before_any_document(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import harness.dry_run as module
+
+    loaded: list[str] = []
+    monkeypatch.setattr(module, "make_engine", lambda config: None)
+    monkeypatch.setattr(
+        module, "load_taxonomy", lambda: loaded.append("taxonomy") or load_taxonomy()
+    )
+    monkeypatch.setattr(
+        module, "load_policy", lambda path: loaded.append("policy") or load_policy(path)
+    )
+    stages = real_stages(IngestConfig())
+    assert sorted(loaded) == ["policy", "taxonomy"]
+    stages.critical(structured())
+    assert sorted(loaded) == ["policy", "taxonomy"]  # no load inside the first document
+
+
+def stub_stages_with(**changes: Any) -> Stages:
+    return replace(stub_stages(), **changes)
+
+
+# ---- metrics: attempted, computed and null ----------------------------------------------------
+
+
+def test_a_metric_never_attempted_is_told_from_one_computed_zero_times() -> None:
+    from fra_analytics.metrics.registry import REGISTRY
+
+    computed_never = {"net_margin": {"attempted": 2, "computed": 0, "null": 2, "flag_classes": []}}
+    a = aggregate([row("annual", 1, critical=CRIT, metrics=computed_never)])
+    figures = a["metrics"]
+    assert set(figures) >= {spec.id for spec in REGISTRY}  # every registry metric is listed
+    assert figures["net_margin"]["attempted"]["total"] == 2
+    assert figures["net_margin"]["computed"]["total"] == 0
+    assert figures["net_margin"]["documents_attempted"]["total"] == 1
+    assert figures["net_margin"]["documents_computed"]["total"] == 0
+    other = next(spec.id for spec in REGISTRY if spec.id != "net_margin")
+    assert figures[other]["attempted"] == {"annual": 0, "interim": 0, "total": 0}
+    assert a["metrics_stage"]["ran"]["total"] == 1
+
+
+def test_metric_availability_is_documents_with_a_value_over_documents_where_metrics_ran() -> None:
+    value = {"net_margin": {"attempted": 1, "computed": 1, "null": 0, "flag_classes": []}}
+    null = {"net_margin": {"attempted": 1, "computed": 0, "null": 1, "flag_classes": []}}
+    rows = [
+        row("annual", 1, critical=CRIT, metrics=value),
+        row("annual", 1, critical=CRIT, metrics=null),
+        row("interim", 1, critical=CRIT, metrics=value, language="ar"),
+        row("interim", 1, industry="declined/bank", found=()),  # metrics never ran
+    ]
+    a = aggregate(rows)
+    assert a["metrics"]["net_margin"]["availability"] == {
+        "annual": 0.5,
+        "interim": 1.0,
+        "total": 2 / 3,
+    }
+    assert a["metrics_stage"]["not_run"]["total"] == 1
+    arabic = a["by_language"]["ar"]["metric_availability"]["net_margin"]
+    assert arabic == {"annual": None, "interim": 1.0, "total": 1.0}
+
+
+# ---- the six plan items, holds, languages, controls -------------------------------------------
+
+CRIT = {"mapped": 12, "ambiguous": 0, "unmapped": 0, "statement_not_found": 0}
+SIX = dict.fromkeys(PLAN_CRITICAL_IDS, "mapped")
+FIVE = {**SIX, "revenue": "ambiguous"}
+
+
+def test_the_share_of_documents_with_all_six_plan_items_mapped_per_stratum_and_language() -> None:
+    rows = [
+        row("annual", 1, critical=CRIT, plan=SIX),
+        row("annual", 1, critical=CRIT, plan=FIVE, language="ar"),
+        row("interim", 1, critical=CRIT, plan=SIX, language="ar"),
+        row("interim", 1, industry="declined/bank", found=()),  # declined: not in the share
+    ]
+    plan = aggregate(rows)["plan_critical_items"]
+    assert plan["items"] == list(PLAN_CRITICAL_IDS)
+    assert plan["documents"] == {"annual": 2, "interim": 1, "total": 3}
+    assert plan["all_mapped"] == {"annual": 1, "interim": 1, "total": 2}
+    assert plan["share_all_mapped"] == {"annual": 0.5, "interim": 1.0, "total": 2 / 3}
+    assert plan["by_item"]["revenue"]["total"] == 2
+    arabic = aggregate(rows)["by_language"]["ar"]["plan_critical_items"]
+    assert arabic["all_mapped"] == {"annual": 0, "interim": 1, "total": 1}
+    assert arabic["share_all_mapped"]["annual"] == 0.0
+
+
+def test_critical_items_say_the_declined_documents_are_not_in_them() -> None:
+    declined = row("annual", 1, industry="declined/bank", found=())
+    a = aggregate([row("annual", 1, critical=CRIT, plan=SIX), declined])
+    block = a["critical_items"]
+    assert block["documents_declined"] == {"annual": 1, "interim": 0, "total": 1}
+    assert block["documents"]["total"] == 1
+    assert "not declined" in block["scope"]
+
+
+def test_held_for_review_is_a_share_by_reason_class_with_the_industry_codes() -> None:
+    rows = [
+        row("annual", 1, critical=CRIT),
+        row("annual", 1, critical=CRIT, reasons=["numbers_missing", "identity_failed"]),
+        row(
+            "interim",
+            1,
+            critical=CRIT,
+            industry="needs_review/weak_verdict",
+            judgement="held",
+            language="ar",
+        ),
+        row("interim", 1, failure="convert_timeout", identity=None, found=()),
+    ]
+    held = aggregate(rows)["held_for_review"]
+    assert held["documents"] == {"annual": 2, "interim": 1, "total": 3}  # the failed one is out
+    assert held["held"] == {"annual": 1, "interim": 1, "total": 2}
+    assert held["share"] == {"annual": 0.5, "interim": 1.0, "total": 2 / 3}
+    assert held["by_reason"]["numbers_missing"]["total"] == 1
+    assert held["by_reason"]["industry:weak_verdict"] == {"annual": 0, "interim": 1, "total": 1}
+    assert aggregate(rows)["by_language"]["ar"]["held_for_review"]["held"]["total"] == 1
+
+
+def test_by_language_counts_documents_and_failures_apart_for_each_language() -> None:
+    rows = [
+        row("annual", 1, language="en"),
+        row("annual", 1, language="ar", failure="convert_timeout", identity=None, found=()),
+        row("interim", 1, language="ar"),
+    ]
+    arabic = aggregate(rows)["by_language"]["ar"]
+    assert arabic["corporate_documents_run"] == {"annual": 1, "interim": 1, "total": 2}
+    assert arabic["documents_failed"] == {"annual": 1, "interim": 0, "total": 1}
+
+
+def test_the_decline_judgement_is_for_controls_only_and_named_as_against_the_label() -> None:
+    a = aggregate(
+        [
+            row("annual", 1, industry="declined/bank", found=(), judgement="wrong"),
+            row("annual", 1, role="negative_control", industry="declined/bank", found=()),
+        ]
+    )
+    assert "judgement" not in a["industry"]
+    controls = a["negative_controls"]
+    assert controls["judgement_against_label"]["right"]["total"] == 1
+    assert "not an accuracy" in controls["judgement_note"]
+
+
+# ---- the comparison with the first run --------------------------------------------------------
+
+
+def earlier_row(period: str, language: str, failure: str | None = None) -> dict[str, Any]:
+    """A row as the first run wrote it: no industry, critical items or metrics."""
+    return {
+        "id": "x",
+        "period": period,
+        "language": language,
+        "text_layer": "digital",
+        "failure": failure,
+        "failure_at": None,
+        "seconds": 100.0 if not failure else 5.0,
+        "stage_seconds": {"locate": 1.0, "convert": 50.0, "structure": 49.0},
+        "stages": {"locate": {"industry": "corporate"}},
+        "statements": {} if failure else {"balance": {"review": "passed", "identity": "ok"}},
+        "identity": None if failure else "ok",
+        "label": LABEL,  # a field this run never copies
+    }
+
+
+def write_earlier(tmp_path: Path) -> Path:
+    path = tmp_path / "earlier.json"
+    report = {
+        "look": {"candidate": "a1b2c3d"},
+        "rows": [
+            earlier_row("annual", "en"),
+            earlier_row("annual", "ar", failure="convert_timeout"),
+            earlier_row("interim", "ar"),
+        ],
+    }
+    path.write_text(json.dumps(report), encoding="utf-8")
+    return path
+
+
+def test_the_comparison_recomputes_the_first_run_under_the_current_definitions(
+    three: Setup, tmp_path: Path
+) -> None:
+    before = write_earlier(tmp_path)
+    text = before.read_text(encoding="utf-8")
+    report = three.run(stub_stages(), earlier=before)
+    assert before.read_text(encoding="utf-8") == text  # read-only
+    comparison = report["comparison"]
+    assert comparison["earlier_candidate"] == "a1b2c3d"
+    assert comparison["this_candidate"] == LOOK.candidate
+    figures = comparison["figures"]
+    assert figures["corporate_documents_run"] == {"annual": 2, "interim": 1, "total": 3}
+    assert figures["documents_failed"] == {"annual": 1, "interim": 0, "total": 1}
+    assert figures["identity"]["failed_document"]["total"] == 1
+    assert figures["identity"]["ok"] == {"annual": 1, "interim": 1, "total": 2}
+    assert figures["time_succeeded"]["median_s"]["total"] == 100.0
+    assert figures["by_language"]["ar"]["documents_failed"]["total"] == 1
+    for name in ("industry", "critical_items", "plan_critical_items", "metrics", "held_for_review"):
+        assert figures[name] == "not available for run 1"
+    said = comparison["differences"]
+    for word in ("structure", "locate", "mapping", "industry hold", "timing"):
+        assert word in said
+    assert LABEL not in three.report.read_text(encoding="utf-8")
+
+
+def test_a_comparison_is_computed_only_from_fields_the_earlier_rows_have() -> None:
+    rows = [{k: v for k, v in earlier_row("annual", "en").items() if k != "statements"}]
+    figures = earlier_figures(rows)
+    assert figures["balance_and_income_found"] == "not available for run 1"
+    assert figures["corporate_documents_run"]["total"] == 1
+
+
+def test_an_earlier_report_that_is_missing_or_unreadable_is_refused_before_the_look(
+    three: Setup, tmp_path: Path
+) -> None:
+    with pytest.raises(PreflightFailed, match=r"gone\.json"):
+        three.run(stub_stages(), earlier=tmp_path / "gone.json")
+    bad = tmp_path / "bad.json"
+    bad.write_text("{}", encoding="utf-8")
+    with pytest.raises(PreflightFailed, match="rows"):
+        three.run(stub_stages(), earlier=bad)
+    assert read_looks(three.log) == []
+
+
+def test_an_earlier_report_that_cannot_be_compared_is_refused_before_the_look(
+    three: Setup, tmp_path: Path
+) -> None:
+    """The comparison is computed before the look, so a report with the right shape and wrong
+    values cannot raise after every document has run."""
+    earlier = tmp_path / "earlier.json"
+    row = {"id": "x", "period": "annual", "text_layer": "digital", "failure": None}
+    earlier.write_text(
+        json.dumps({"look": {"candidate": "abc1234"}, "rows": [{**row, "seconds": None}]}),
+        encoding="utf-8",
+    )
+    with pytest.raises(PreflightFailed, match="cannot be compared"):
+        three.run(stub_stages(), earlier=earlier)
+    assert read_looks(three.log) == []
+    assert not three.report.exists()
+
+
+def test_the_earlier_report_is_an_argument_and_optional() -> None:
+    assert parser().parse_args([]).earlier is None
+    assert parser().parse_args(["--earlier", "some/report.json"]).earlier == Path(
+        "some/report.json"
+    )
+
+
+@pytest.mark.parametrize("failing", ["metrics", "critical"])
+def test_nothing_of_a_failing_step_or_the_earlier_report_reaches_the_report(
+    three: Setup, tmp_path: Path, failing: str
+) -> None:
+    three.run(stub_stages_with(**{failing: raising}), earlier=write_earlier(tmp_path))
+    text = three.report.read_text(encoding="utf-8") + three.report.with_name(
+        "report.rows.jsonl"
+    ).read_text(encoding="utf-8")
+    assert LABEL not in text and VALUE not in text and "98765" not in text

@@ -21,7 +21,7 @@ import yaml
 from fra_core.labels import normalize_label
 from fra_core.schemas.statement import StatementType
 
-__all__ = ["CanonicalItem", "Taxonomy", "load_taxonomy"]
+__all__ = ["PLAN_CRITICAL_IDS", "CanonicalItem", "Taxonomy", "load_taxonomy"]
 
 _RESOURCE = "canonical_items.yaml"
 _SUPPORTED_VERSION = 1
@@ -50,6 +50,20 @@ class CanonicalItem:
 
     def headings_for(self, language: str) -> tuple[str, ...]:
         return self.headings.get(language, ())
+
+
+# The six items the plan names for Gate B (docs/blueprint/08-revised-plan.md, Gates): revenue, net
+# profit, total assets, total equity, total current assets and total current liabilities. The
+# taxonomy's `critical` set is wider (it adds the subtotals the identities need), so a report that
+# speaks of the plan's six counts these and no others.
+PLAN_CRITICAL_IDS = (
+    "revenue",
+    "net_income",
+    "total_assets",
+    "total_equity",
+    "total_current_assets",
+    "total_current_liabilities",
+)
 
 
 @dataclass(frozen=True)

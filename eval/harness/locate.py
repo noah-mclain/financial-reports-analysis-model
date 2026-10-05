@@ -5,8 +5,11 @@
     PYTHONPATH=eval uv run python -m harness.locate model_test --checkpoint
 
 Golden: recall per type against labelled pages, candidate share and time. Corpus pools: whether
-each corporate document has a balance and an income range, candidate share, and industry
-verdicts against the sector labels. The blind pool is refused.
+each corporate document has a balance and an income range, candidate share, industry verdicts
+against the sector labels, and the decline check: the industry decision (declined, held for review
+or pass) against each document's sector label, judged right, held or wrong. `train` is the fit and
+validation parts after the recorded moves (`fra_core.split.development_documents`), never the
+holdout. The blind pool is refused.
 """
 
 from __future__ import annotations
@@ -17,17 +20,29 @@ import statistics
 import sys
 import time
 from collections import Counter
+from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 import yaml
 
 from fra_core.schemas import StatementType
+from fra_core.split import Part
 from fra_ingest.config import REPO_ROOT, load_config
 from fra_ingest.errors import IngestError
+from fra_ingest.industry import industry_decision
 from fra_ingest.ocr import make_engine
-from fra_ingest.results import LocateResult
+from fra_ingest.results import IndustryDecision, LocateResult
 from fra_ingest.stage import locate_pdf
-from harness.paths import CANDIDATES, CORPUS
+from harness.development import development_set, positive_int
+from harness.paths import (
+    CANDIDATES,
+    CORPUS,
+    HOLDOUT_MOVES,
+    NEGATIVE_CONTROL,
+    SCORING_LOG,
+    STRATA,
+)
 
 MANIFEST = REPO_ROOT / "eval" / "golden" / "manifest.yaml"
 OUT = REPO_ROOT / "var" / "eval"
@@ -83,8 +98,8 @@ def check_target(target: str, checkpoint: bool) -> None:
         raise SystemExit(2)
 
 
-def truth_label(entry: dict[str, Any]) -> str:
-    if entry.get("role") != "negative_control":
+def truth_label(entry: Mapping[str, Any]) -> str:
+    if entry.get("role") != NEGATIVE_CONTROL:
         return "corporate"
     if entry.get("sector") == "other_financial":
         return f"other_financial/{entry.get('subsector', 'other')}"
@@ -94,6 +109,66 @@ def truth_label(entry: dict[str, Any]) -> str:
 def verdict_label(result: LocateResult) -> str:
     kind = result.industry.kind
     return f"{kind}/{result.industry.subkind or 'other'}" if kind == "other_financial" else kind
+
+
+def decision_label(decision: IndustryDecision | None) -> str:
+    """`pass` when the document goes on, else `declined/<kind>` or `needs_review/<code>`."""
+    return "pass" if decision is None else f"{decision.outcome}/{decision.code}"
+
+
+def judge_decision(truth: str, decision: str) -> str:
+    """`right` for a pass on a corporate document or a decline naming the sector's kind, `held`
+    for a hold for review (acceptable, 08-revised-plan.md), `wrong` for anything else: a bank,
+    insurer or other financial company that passes, a decline naming the other kind, a
+    corporate document declined."""
+    outcome, _, code = decision.partition("/")
+    if outcome == "needs_review":
+        return "held"
+    if truth == "corporate":
+        return "right" if outcome == "pass" else "wrong"
+    return "right" if outcome == "declined" and code == truth else "wrong"
+
+
+def decline_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Judgements for the negative controls and for the corporate documents, and the wrong ones,
+    for all documents and for each period kind (D18). A document that could not be read is
+    counted as errored, not as right."""
+
+    def count(group: list[dict[str, Any]]) -> dict[str, int]:
+        judged = Counter(r.get("judgement", "errored") for r in group)
+        return {k: judged[k] for k in ("right", "held", "wrong", "errored")}
+
+    def split(group: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
+        return {
+            "negative_controls": count([r for r in group if r["truth"] != "corporate"]),
+            "corporate": count([r for r in group if r["truth"] == "corporate"]),
+        }
+
+    judged = [r for r in rows if "truth" in r]
+    return {
+        **split(judged),
+        "by_period_kind": {s: split([r for r in judged if r["period"] == s]) for s in STRATA},
+        "wrong": [
+            {"id": r["id"], "truth": r["truth"], "decision": r["decision"]}
+            for r in judged
+            if r.get("judgement") == "wrong"
+        ],
+        "errored": [r["id"] for r in judged if "error" in r],
+    }
+
+
+def pool_entries(
+    pool: str,
+    candidates: Path = CANDIDATES,
+    moves: Path = HOLDOUT_MOVES,
+    log: Path = SCORING_LOG,
+) -> list[dict[str, Any]]:
+    """The documents of a pool to run. `train` is the fit and validation parts, so the holdout
+    is never among them."""
+    if pool == "train":
+        return development_set({Part.FIT, Part.VALIDATION}, candidates, moves, log)
+    records = yaml.safe_load(candidates.read_text(encoding="utf-8"))["documents"]
+    return [e for e in records if e.get("pool") == pool]
 
 
 def run_golden(no_ocr: bool, fresh: bool = False) -> dict[str, Any]:
@@ -169,6 +244,7 @@ def pool_summary(rows: list[dict[str, Any]], missing: list[str]) -> dict[str, An
     )
     return {
         "documents": rows,
+        "decline": decline_summary(rows),
         "coverage": (len(corporates) - len(uncovered)) / len(corporates) if corporates else 0.0,
         "uncovered": uncovered,
         "errored": [r["id"] for r in rows if "error" in r],
@@ -177,14 +253,23 @@ def pool_summary(rows: list[dict[str, Any]], missing: list[str]) -> dict[str, An
     }
 
 
-def run_pool(pool: str, no_ocr: bool) -> dict[str, Any]:
+def run_pool(
+    pool: str,
+    no_ocr: bool,
+    limit: int | None = None,
+    candidates: Path = CANDIDATES,
+    moves: Path = HOLDOUT_MOVES,
+    log: Path = SCORING_LOG,
+    store: Path = CORPUS,
+) -> dict[str, Any]:
     config = load_config()
     engine = None if no_ocr else make_engine(config)
-    entries = yaml.safe_load(CANDIDATES.read_text(encoding="utf-8"))["documents"]
     rows: list[dict[str, Any]] = []
     missing: list[str] = []
-    for entry in (e for e in entries if e.get("pool") == pool):
-        path = CORPUS / pool / f"{entry['id']}.pdf"
+    for entry in sorted(pool_entries(pool, candidates, moves, log), key=lambda e: str(e["id"]))[
+        :limit
+    ]:
+        path = store / pool / f"{entry['id']}.pdf"
         if not path.exists():
             missing.append(entry["id"])
             continue
@@ -192,16 +277,22 @@ def run_pool(pool: str, no_ocr: bool) -> dict[str, Any]:
         try:
             result = locate_pdf(path, config, engine)
         except IngestError as exc:
-            rows.append({"id": entry["id"], "truth": truth, "error": exc.reason})
+            rows.append(
+                {"id": entry["id"], "period": entry["period"], "truth": truth, "error": exc.reason}
+            )
             continue
         types = {r.type for r in result.ranges}
+        decision = decision_label(industry_decision(result.industry))
         rows.append(
             {
                 "id": entry["id"],
+                "period": entry["period"],
                 "covered": {StatementType.BALANCE, StatementType.INCOME} <= types,
                 "share": result.candidate_share,
                 "truth": truth,
                 "verdict": verdict_label(result),
+                "decision": decision,
+                "judgement": judge_decision(truth, decision),
                 "flags": result.flags,
             }
         )
@@ -218,6 +309,16 @@ def run_pool(pool: str, no_ocr: bool) -> dict[str, Any]:
     print("industry (truth -> verdict):")
     for truth, verdict, n in summary["confusion"]:
         print(f"  {truth:34} -> {verdict:34} {n}")
+    decline = summary["decline"]
+    print("decline check (decision against the sector label):")
+    print(f"  negative controls {decline['negative_controls']}")
+    print(f"  corporate documents {decline['corporate']}")
+    for kind, parts in decline["by_period_kind"].items():
+        print(f"  {kind}: negative controls {parts['negative_controls']}")
+        print(f"  {kind}: corporate documents {parts['corporate']}")
+    print("  wrong: " + ("none" if not decline["wrong"] else ""))
+    for w in decline["wrong"]:
+        print(f"    {w['id']}: {w['truth']} -> {w['decision']}")
     return summary
 
 
@@ -227,6 +328,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--checkpoint", action="store_true")
     parser.add_argument("--no-ocr", action="store_true")
     parser.add_argument(
+        "--limit", type=positive_int, help="corpus pools: the first n documents in id order"
+    )
+    parser.add_argument(
         "--fresh", action="store_true", help="ignore the page cache, so times include OCR"
     )
     args = parser.parse_args(argv)
@@ -235,7 +339,7 @@ def main(argv: list[str] | None = None) -> int:
     report = (
         run_golden(args.no_ocr, args.fresh)
         if args.target == "golden"
-        else run_pool(args.target, args.no_ocr)
+        else run_pool(args.target, args.no_ocr, args.limit)
     )
     OUT.mkdir(parents=True, exist_ok=True)
     out = OUT / f"locate-{args.target}.json"

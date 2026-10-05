@@ -81,3 +81,19 @@ def test_a_label_that_only_contains_or_starts_with_a_heading_is_not_a_run_in() -
     assert index.run_in_heading("Inventories current assets", BALANCE) == ()
     # No rest at all is an exact heading, not a run-in.
     assert index.run_in_heading("Current assets", BALANCE) == ()
+
+
+def test_a_label_that_starts_an_alias_or_that_an_alias_starts_is_a_prefix_match() -> None:
+    index = LabelIndex(load_taxonomy())
+    longer = index.prefix_matches("Total assets as restated", BALANCE)
+    assert "total_assets" in {i.id for i in longer}
+    shorter = index.prefix_matches("Total asset", BALANCE)
+    assert "total_assets" in {i.id for i in shorter}
+
+
+def test_a_prefix_match_needs_a_few_letters_and_never_repeats_an_exact_match() -> None:
+    index = LabelIndex(load_taxonomy())
+    assert index.prefix_matches("to", BALANCE) == ()
+    assert index.prefix_matches("", BALANCE) == ()
+    assert index.prefix_matches("Total assets", BALANCE) == ()
+    assert index.prefix_matches("Zzzzzz qqqq", BALANCE) == ()

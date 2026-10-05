@@ -12,7 +12,8 @@ holdout. This module knows neither their paths nor their file format (eval/harne
 holdout_records.py reads and writes both); it holds the rules over their parsed values.
 
 Holdout documents leave this module only through `holdout_for_scoring`, which has the look
-recorded first. Everything else public returns keys, parts or counts, never documents.
+recorded first. Everything else public returns keys, parts or counts, or, for
+`development_documents`, the fit and validation documents, never the holdout's.
 
 This module lives in fra-core because the dry-run harness (eval/), the dataset builder
 (training/) and the corpus tools (scripts/) all need the same rule, and fra-core is the one
@@ -42,6 +43,7 @@ __all__ = [
     "check_looks",
     "check_moves",
     "cik_key",
+    "development_documents",
     "document_key",
     "hashed_part",
     "holdout_availability",
@@ -284,6 +286,27 @@ def _place(
         key = document_key(d)
         parts[Part.FIT if key in moved else hashed_part(key)].append(d)
     return parts
+
+
+def development_documents(
+    documents: Iterable[Mapping[str, Any]],
+    moves: Sequence[Move],
+    parts: Collection[Part],
+) -> list[Mapping[str, Any]]:
+    """The documents of the fit and/or validation part after the recorded moves, in the order
+    given. Asking for the holdout raises: it leaves this module only through
+    `holdout_for_scoring`. Reads only the records, so it is not a look and is not logged."""
+    if not parts:
+        raise SplitError("development_documents: no part was asked for")
+    if Part.HOLDOUT in parts:
+        raise SplitError(
+            "development_documents never returns the holdout; its documents leave "
+            "fra_core.split only through holdout_for_scoring, which logs the look"
+        )
+    ordered = list(documents)
+    placed = _place(ordered, moves)
+    wanted = {id(d) for part in parts for d in placed[Part(part)]}
+    return [d for d in ordered if id(d) in wanted]
 
 
 @dataclass(frozen=True)
