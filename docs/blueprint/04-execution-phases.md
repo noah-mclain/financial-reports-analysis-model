@@ -375,6 +375,17 @@ that says what the builder does is what it will do.
   Medical, Aldrees, Catrion Catering, Development Works Food); they are set aside in
   `eval/corpus/deferred.yaml`, in no pool, so the split does not place them, and one that joins
   `train` later falls under this rule.
+- **Validation documents used for ingest development.** The validation part is reserved for
+  model choices, and a document read while an ingest rule was developed is no longer a clean
+  place to make one. On 5 October the word-order repair of Arabic table cells
+  ([11-ingest-structure.md](11-ingest-structure.md), Data flow step 3) was developed and its
+  thresholds chosen on 20 Arabic digital documents, 3 of them validation documents (Northern
+  Region Cement, SABIC, Tabuk Cement). They are listed with the date and the purpose in
+  `eval/corpus/validation_uses.yaml`, read by `eval/harness/holdout_records.py`. From now on
+  ingest is developed on fit documents only (`development_set({Part.FIT})`), and validation
+  documents are used only for an untuned check once the work is done, never to choose a rule,
+  an alias or a threshold; a document used that way for development is added to the file.
+  Model choices that depend on the extraction of those three documents say so.
 - **Files.** Fit is `train.jsonl` and validation is `valid.jsonl`, the layout of
   [01-constraints.md](01-constraints.md) 1.5. The holdout is not written as `test.jsonl`, or
   anywhere in the training data directory: whether `mlx_lm lora` reads `test.jsonl` on its own was

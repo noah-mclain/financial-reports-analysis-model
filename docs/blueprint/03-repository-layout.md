@@ -172,13 +172,13 @@ financial-reports-analysis-model/
 │   └── adapters/                     # weights gitignored; manifest.json per adapter tracked
 │
 ├── eval/
-│   ├── corpus/                       # pools (README.md); holdout_moves.yaml, scoring_log.tsv (04, 2.4)
+│   ├── corpus/                       # pools (README.md); holdout_moves.yaml, validation_uses.yaml, scoring_log.tsv (04, 2.4)
 │   ├── golden/
 │   │   ├── documents/                # PDFs through git-lfs
 │   │   ├── expected/                 # hand-verified Statement JSON per document
 │   │   └── manifest.yaml             # id, source URL, retrieval date, layout traits
 │   ├── harness/{extraction,metrics,end_to_end,report}.py
-│   ├── harness/holdout_records.py    # the one reader and writer of holdout_moves.yaml, scoring_log.tsv
+│   ├── harness/holdout_records.py    # the one reader and writer of holdout_moves.yaml, validation_uses.yaml, scoring_log.tsv
 │   ├── harness/paths.py              # where the corpus records live, for the harness
 │   ├── harness/dry_run.py            # first look at the train holdout: make dry-run
 │   ├── reports/<wp-id>/              # Verification and Test run reports (section 05, 5.1)

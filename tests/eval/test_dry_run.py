@@ -28,6 +28,7 @@ from harness.dry_run import (
     critical_states,
     earlier_figures,
     exit_code,
+    flag_classes,
     main,
     parser,
     pool_layers,
@@ -1505,3 +1506,11 @@ def test_nothing_of_a_failing_step_or_the_earlier_report_reaches_the_report(
         "report.rows.jsonl"
     ).read_text(encoding="utf-8")
     assert LABEL not in text and VALUE not in text and "98765" not in text
+
+
+def test_the_word_order_flags_are_flag_classes_of_their_own() -> None:
+    assert flag_classes(["words_reversed", "word_order_uncertain", "scale_missing:1,2"]) == [
+        "scale_missing",
+        "word_order_uncertain",
+        "words_reversed",
+    ]

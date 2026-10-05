@@ -35,6 +35,9 @@ class Grid(BaseModel):
     num_rows: int
     num_cols: int
     cells: tuple[GridCell, ...]
+    flags: tuple[
+        str, ...
+    ] = ()  # what repair did to the table; the statement built from it carries them
 
     def cell(self, row: int, col: int) -> GridCell | None:
         for c in self.cells:

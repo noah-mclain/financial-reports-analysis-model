@@ -97,3 +97,32 @@ def test_a_prefix_match_needs_a_few_letters_and_never_repeats_an_exact_match() -
     assert index.prefix_matches("", BALANCE) == ()
     assert index.prefix_matches("Total assets", BALANCE) == ()
     assert index.prefix_matches("Zzzzzz qqqq", BALANCE) == ()
+
+
+def test_labels_in_presentation_forms_match_their_alias() -> None:
+    # Some text layers store Arabic as presentation forms, and NFKC turns the joined yeh and
+    # kaf into the Persian letters (U+06CC, U+06A9) instead of the Arabic ones.
+    index = LabelIndex(load_taxonomy())
+    cost = index.match("ﺗﻛﻠﻔﺔ اﻹﯾرادات", StatementType.INCOME)
+    assert cost is not None and cost.id == "cost_of_revenue"
+    assert squash("ﯾ") == squash("ي")
+    assert squash("ک") == squash("ك")
+
+
+def test_section_totals_written_with_the_word_majmoo_over_assets_and_obligations_match() -> None:
+    # A fit document (Leaf Global, balance sheet) prints its totals as مجموع over الأصول,
+    # الالتزامات or حقوق الملكية; the lexicon had that word only before الموجودات and المطلوبات.
+    # The bare totals (مجموع الأصول, مجموع الالتزامات, مجموع حقوق الملكية) are not aliases: with
+    # them a highlights table of Almarai's Arabic annual report outscores its balance sheet.
+    index = LabelIndex(load_taxonomy())
+    expected = {
+        "مجموع الأصول المتداولة": "total_current_assets",
+        "مجموع الأصول غير المتداولة": "total_non_current_assets",
+        "مجموع الالتزامات المتداولة": "total_current_liabilities",
+        "مجموع الالتزامات غير المتداولة": "total_non_current_liabilities",
+        "مجموع حقوق الملكية والالتزامات": "total_liabilities_and_equity",
+    }
+    for label, item_id in expected.items():
+        item = index.match(label, BALANCE)
+        assert item is not None and item.id == item_id, label
+    assert index.match("مجموع الأصول", BALANCE) is None

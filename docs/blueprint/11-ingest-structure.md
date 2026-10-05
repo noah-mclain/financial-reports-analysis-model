@@ -65,7 +65,7 @@ fields it uses; a golden contract test fails if docling's JSON stops matching th
 |------|----------------|
 | `fra_ingest/docling_json.py` | Pydantic models for the docling JSON fields structure reads (tables, cells, boxes, provenance, texts) and a loader |
 | `fra_ingest/table_grid.py` | `build_grid(table, page_height) -> Grid` |
-| `fra_ingest/visual_order.py` | Digit and bracket restoration on `visual_arabic` pages; joining of spaced letters on any page |
+| `fra_ingest/visual_order.py` | Digit and bracket restoration on `visual_arabic` pages; joining of spaced letters on any page; word order of reversed tables |
 | `fra_ingest/classify.py` | `classify(grid, context) -> Classification` |
 | `fra_ingest/header.py` | `parse_header(grid, statement_type, context) -> HeaderLayout` |
 | `fra_ingest/metadata.py` | `detect_metadata(...) -> Metadata`: scale, currency, entity, consolidated, conflicts |
@@ -186,6 +186,36 @@ class StructureResult(BaseModel):   # statements.raw.json
      `letters_spaced`. Comparisons with taxonomy aliases and cue words on such text ignore
      spaces on both sides. Readable Arabic labels for these documents are left to week 2's
      label work.
+   - Word order, per table: on the Arabic digital documents of the fit and validation parts
+     (20 with a PDF on disk: 17 fit, 3 validation; none marked `visual_arabic`) docling returns
+     the cells of a table with the words of each cell in reverse order and the letters of each
+     word in reading order; headings are in reading order. Each label cell of two or more words
+     with no digit is tried both ways against the lexicon, and the table is reversed when at
+     least three cells match only reversed and those outnumber the cells that match as printed
+     two to one (`restore_word_order`). A cell that matches as printed and not reversed keeps
+     its order. Latin runs inside a cell keep theirs. The statement built from the table carries
+     `words_reversed`, and `word_order_uncertain` when cells match only reversed in a table the
+     rule did not reverse, or when a reversed table holds a cell with digits that was left as
+     it came (a Latin or Arabic label with a note number, a date that is not a column heading);
+     both are warnings and hold nothing. Text layers that store presentation forms give the
+     Persian yeh and kaf under NFKC; `normalize_label` folds them to the Arabic letters. A year
+     that comes back as `5 202` in a column heading is joined to `2025`. The lexicon gained the section totals written with مجموع
+     over الأصول and الالتزامات (a fit balance sheet printed them) but not the bare totals, with which
+     a highlights table of Almarai's Arabic annual report outscored its balance sheet.
+     Every threshold here was chosen on those 20 documents, so every figure below is in-sample.
+     Measured by running the stage with the rule off and on over them (the other repairs and
+     the lexicon as they are): 135 tables, 35 reversed; of the label cells that match the
+     lexicon in either order, 251 of 263 (95%) match only reversed. Both a balance sheet and an
+     income statement were found in 8 of the 20 documents before and 17 after (fit 7 and 16 of
+     17, validation 1 and 1 of 3); a balance sheet in 10 and 20, an income statement in 16 and
+     17. Over the 17 fit documents, the critical slots of those two statements were mapped in
+     17 and 62 cases, ambiguous in 1 and 27, unmapped in 98 and 111, and the statement was not
+     found in 88 and 4. The mapping report over the 54 fit documents with a PDF was last run
+     with an earlier version of the rule and no copy from before the rule was kept, so it gives
+     no before and after. The ambiguous slots are almost all totals (`alias_total_unconfirmed`,
+     34 of the 43 ambiguous rows in the balance sheets and income statements of the 20
+     documents) whose label matches but that no check confirms. No document of the same kind remains
+     outside the 20 to check the rule on.
 4. **Classification.** Evidence for each grid:
    - locate's title and cue types for the grid's page (`locate.json`, `PageScore`);
    - row labels found in the taxonomy's aliases for each type (`Taxonomy.lookup`, space-free

@@ -54,9 +54,9 @@ from fra_ingest.stage import load_or_locate, page_ocr_languages
 from fra_ingest.table_checks import run_checks
 from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
-from fra_ingest.visual_order import repair_grid, repair_text
+from fra_ingest.visual_order import repair_grid, repair_text, restore_word_order
 
-STRUCTURE_VERSION = "14"  # bump whenever structure's output can change, reviews included
+STRUCTURE_VERSION = "17"  # bump whenever structure's output can change, reviews included
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -137,7 +137,7 @@ def _statement(
         periods=part.periods,
         line_items=items,
         source_pages=list(range(part.first_page, part.last_page + 1)),
-        flags=[*part.flags, *meta.flags, *caveat_flags],
+        flags=list(dict.fromkeys([*part.flags, *meta.flags, *caveat_flags])),
         caveats=caveats,
     )
 
@@ -188,7 +188,7 @@ def structure_document(
         for table in document.tables:
             raw = build_grid(table, document, path)
             visual = raw.page_no in inputs.visual_pages
-            grid = repair_grid(raw, visual=visual)
+            grid = restore_word_order(repair_grid(raw, visual=visual), index)
             headings = _headings(document, grid, visual)
             hint = _date_hint(headings)
             context = TableContext(

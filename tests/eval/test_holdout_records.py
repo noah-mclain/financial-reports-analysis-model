@@ -6,10 +6,17 @@ import sys
 from pathlib import Path
 
 import pytest
-from harness.holdout_records import LOG_HEADER, log_look, read_looks, read_moves
-from harness.paths import HOLDOUT_MOVES, ROOT, SCORING_LOG
+from harness.development import development_set
+from harness.holdout_records import (
+    LOG_HEADER,
+    log_look,
+    read_looks,
+    read_moves,
+    read_validation_uses,
+)
+from harness.paths import HOLDOUT_MOVES, ROOT, SCORING_LOG, VALIDATION_USES
 
-from fra_core.split import Look, SplitError
+from fra_core.split import Look, Part, SplitError
 
 AL_DAWAA = "Al Dawaa Medical Services"
 
@@ -221,3 +228,63 @@ def test_the_corpus_tools_import_without_the_harness_on_the_path() -> None:
         check=False,
     )
     assert done.returncode == 0, done.stderr
+
+
+# ---- the validation documents used for ingest development ------------------------------------
+
+
+def write_uses(path: Path, body: str) -> Path:
+    path.write_text(f"# test record\n{body}", encoding="utf-8")
+    return path
+
+
+def use(**fields: str) -> str:
+    """A uses record with one entry; a field given as an empty string is left out."""
+    entry = {"date": "'2026-10-05'", "purpose": "a rule", "documents": "[a-1, b-2]", **fields}
+    lines = [f"{key}: {value}" for key, value in entry.items() if value]
+    return "uses:\n  - " + "\n    ".join(lines) + "\n"
+
+
+def test_the_committed_validation_uses_name_validation_documents_only() -> None:
+    uses = read_validation_uses(VALIDATION_USES)
+    assert uses
+    validation = {d["id"] for d in development_set({Part.VALIDATION})}
+    for item in uses:
+        assert set(item.documents) <= validation, item
+
+
+def test_a_validation_use_is_read_with_its_date_purpose_and_documents(tmp_path: Path) -> None:
+    (item,) = read_validation_uses(write_uses(tmp_path / "u.yaml", use()))
+    assert (item.date, item.purpose, item.documents) == ("2026-10-05", "a rule", ("a-1", "b-2"))
+
+
+@pytest.mark.parametrize("missing", ["date", "purpose", "documents"])
+def test_a_use_missing_a_field_names_the_field_and_the_file(tmp_path: Path, missing: str) -> None:
+    path = write_uses(tmp_path / "u.yaml", use(**{missing: ""}))
+    with pytest.raises(SplitError, match=rf"u\.yaml.*'{missing}'"):
+        read_validation_uses(path)
+
+
+@pytest.mark.parametrize(
+    ("fields", "message"),
+    [
+        ({"date": "'5 October'"}, "date"),
+        ({"documents": "[]"}, "documents"),
+        ({"documents": "a-1"}, "documents"),
+        ({"documents": "[a-1, a-1]"}, "twice"),
+    ],
+)
+def test_a_use_with_a_bad_value_names_the_file_and_the_field(
+    tmp_path: Path, fields: dict[str, str], message: str
+) -> None:
+    with pytest.raises(SplitError, match=rf"u\.yaml.*{message}"):
+        read_validation_uses(write_uses(tmp_path / "u.yaml", use(**fields)))
+
+
+def test_a_record_that_is_not_a_uses_list_is_refused(tmp_path: Path) -> None:
+    path = write_uses(tmp_path / "u.yaml", "uses: 3\n")
+    with pytest.raises(SplitError, match=r"u\.yaml.*'uses' list"):
+        read_validation_uses(path)
+    path = write_uses(tmp_path / "u.yaml", "uses:\n  - just text\n")
+    with pytest.raises(SplitError, match=r"u\.yaml.*use 1 is not a mapping"):
+        read_validation_uses(path)

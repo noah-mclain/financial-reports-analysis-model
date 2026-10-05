@@ -166,7 +166,7 @@ def build_part(
         periods=periods,
         header_text=" ".join(layout.header_texts.values()),
         table_refs=[f"{grid.docling_path}{grid.table_ref}"],
-        flags=list(layout.evidence),
+        flags=[*layout.evidence, *grid.flags],
     )
     for col, period in layout.value_cols.items():
         centre = column_centre(grid, col, data_rows)

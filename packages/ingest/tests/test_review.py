@@ -130,6 +130,14 @@ def test_statement_flags_hold_or_warn() -> None:
     assert review_statement(statement(merged), PASSING, primary=True).warnings == ["label_merged:1"]
 
 
+def test_a_word_order_repair_warns_and_holds_nothing() -> None:
+    review = review_statement(
+        statement(ROWS, flags=("words_reversed", "word_order_uncertain")), PASSING, primary=True
+    )
+    assert review.status == "passed"
+    assert review.warnings == ["words_reversed", "word_order_uncertain"]
+
+
 def test_a_second_statement_of_a_type_is_held_as_a_duplicate() -> None:
     assert review_statement(statement(ROWS), PASSING, primary=False).reasons == [
         "duplicate_statement"

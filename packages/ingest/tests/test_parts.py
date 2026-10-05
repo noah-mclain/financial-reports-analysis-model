@@ -59,6 +59,15 @@ def part() -> PartialStatement:
     return build_part(g, layout, classification, source=TextSource.TEXT)
 
 
+def test_what_repair_did_to_the_table_reaches_the_statement_flags() -> None:
+    g = grid(ROWS, pads={2: 10, 3: 10, 4: 10}).model_copy(update={"flags": ("words_reversed",)})
+    layout = parse_header(g, StatementType.BALANCE, None)
+    classification = Classification(type=StatementType.BALANCE, confidence=0.8)
+    built = build_part(g, layout, classification, source=TextSource.TEXT)
+    assert "words_reversed" in built.flags
+    assert "words_reversed" not in part().flags
+
+
 def test_line_items_carry_values_notes_and_provenance() -> None:
     p = part()
     assert [i.raw_label for i in p.line_items] == [

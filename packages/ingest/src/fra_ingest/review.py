@@ -39,6 +39,8 @@ _WARNING_FLAGS = (
     "scale_missing",
     "currency_from_domicile",
     "currency_inferred",
+    "words_reversed",
+    "word_order_uncertain",
 )
 _WARNING_CELL_FLAGS = ("label_merged", "blank_confirmed")
 _FAILED = (

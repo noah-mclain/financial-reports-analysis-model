@@ -255,6 +255,10 @@ These change the ingest design, not just the dataset:
   `docs/blueprint/04-execution-phases.md` 2.4 and the file format is read by
   `eval/harness/holdout_records.py`. `make corpus-split` prints the split; run directly,
   `scripts/corpus.py split` needs `PYTHONPATH=eval`, which no other command does.
+- `validation_uses.yaml`: the validation documents that were read while an ingest rule was
+  developed, with the date and the purpose. Hand-edited; the rule is in
+  `docs/blueprint/04-execution-phases.md` 2.4 and the format is read by
+  `eval/harness/holdout_records.py`.
 - `scoring_log.tsv`: one row per look at the `train` holdout (dry runs and model scorings).
   Append-only, written before each scoring by `eval/harness/holdout_records.py` (`make dry-run` is
   the first writer); the rules are in `docs/blueprint/04-execution-phases.md` 2.4.
