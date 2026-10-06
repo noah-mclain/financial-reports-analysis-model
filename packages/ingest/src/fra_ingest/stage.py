@@ -88,12 +88,16 @@ def load_or_locate(
 
 
 def page_ocr_languages(
-    pdf_path: Path, config: IngestConfig, ocr: OcrEngine | None
+    pdf_path: Path,
+    config: IngestConfig,
+    ocr: OcrEngine | None,
+    *,
+    progress: Progress | None = None,
 ) -> dict[int, str | None]:
     """The OCR language Part 1 kept for each page, read back from the page cache locate
     filled, so no OCR runs here when locate ran with the same engine."""
     out_dir = config.artifact_root / sha256_file(pdf_path)
     return {
         page.page_no: page.ocr_language
-        for page in read_pages(pdf_path, config, ocr, cache_dir=out_dir)
+        for page in read_pages(pdf_path, config, ocr, cache_dir=out_dir, progress=progress)
     }

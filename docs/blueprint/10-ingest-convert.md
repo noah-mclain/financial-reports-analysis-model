@@ -153,7 +153,7 @@ In the parent, `convert_in_child` returns the `ConvertResult` read from disk, or
 ## Progress lines
 
 The child writes one flushed line, `progress: <seconds>s <message>`, to stderr at each stage
-boundary, with the seconds counted from the start of the child's run: `locate start`,
+boundary, with the seconds counted from the start of the convert command: `locate start`,
 `pages <n>/<total>` after every 10 pages of page reading (OCR included) and after the last,
 `locate done in <t>s`, `convert pp. <a>-<b> start` and `done in <t>s` for each range, and
 `write start`. Docling's models load inside the first range, so a stall there is reported as

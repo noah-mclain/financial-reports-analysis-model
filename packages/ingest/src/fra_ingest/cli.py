@@ -127,7 +127,7 @@ def _convert(args: argparse.Namespace, config: IngestConfig, engine: OcrEngine |
     progress("locate start")
     located = load_or_locate(args.pdf, config, engine, progress=progress)
     progress(f"locate done in {time.perf_counter() - started:.1f}s")
-    languages = page_ocr_languages(args.pdf, config, engine)
+    languages = page_ocr_languages(args.pdf, config, engine, progress=progress)
     result = convert_pdf(
         args.pdf,
         located,

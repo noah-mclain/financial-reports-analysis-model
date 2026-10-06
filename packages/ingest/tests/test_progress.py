@@ -21,6 +21,22 @@ def test_a_line_is_written_with_the_seconds_since_the_reporter_started() -> None
     assert stream.getvalue() == "progress: 61.9s convert pp. 58-60 start\n"
 
 
+class _Writes(io.StringIO):
+    def __init__(self) -> None:
+        super().__init__()
+        self.writes: list[str] = []
+
+    def write(self, text: str) -> int:
+        self.writes.append(text)
+        return super().write(text)
+
+
+def test_a_line_is_one_write_so_another_thread_cannot_split_it() -> None:
+    stream = _Writes()
+    StderrProgress(stream, clock=lambda: 0.0)("write start")
+    assert stream.writes == ["progress: 0.0s write start\n"]
+
+
 def test_a_written_line_parses_back() -> None:
     assert parse_progress_line("progress: 53.5s locate done") == ProgressLine(
         seconds=53.5, message="locate done"

@@ -193,7 +193,7 @@ def test_cli_cannot_add_plan_evidence_to_an_old_result(
     stored = tmp_path / SHA / "convert.json"
     before = stored.read_bytes()
     monkeypatch.setattr(cli, "load_or_locate", lambda *_args, **_kwargs: where)
-    monkeypatch.setattr(cli, "page_ocr_languages", lambda *_args: {})
+    monkeypatch.setattr(cli, "page_ocr_languages", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(cli, "convert_pdf", lambda *_args, **_kwargs: old)
     args = argparse.Namespace(
         pdf=Path("synthetic.pdf"), no_cache=False, json=True, transported_config=True

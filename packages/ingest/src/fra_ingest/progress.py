@@ -1,7 +1,7 @@
 """Progress lines: how the convert child tells its parent where it is (ADR 0007, spec 10).
 
 The child writes one ``progress: <seconds>s <message>`` line to stderr at each stage boundary,
-flushed, where ``<seconds>`` counts from the start of the child's run. When the parent kills a
+flushed, where ``<seconds>`` counts from the start of the convert command. When the parent kills a
 child that outlived ``child_timeout_s`` it reads the last such line from the stderr the child
 had written, so the timeout names the stage the child was in. This module is the one place
 that knows the line format; stages report through a ``Progress`` callable and never print.
@@ -40,7 +40,9 @@ class StderrProgress:
 
     def __call__(self, message: str) -> None:
         seconds = self._clock() - self._started
-        print(f"{PROGRESS_PREFIX}{seconds:.1f}s {message}", file=self._stream, flush=True)
+        # One write per line, so another thread's output cannot land between text and newline.
+        self._stream.write(f"{PROGRESS_PREFIX}{seconds:.1f}s {message}\n")
+        self._stream.flush()
 
 
 def parse_progress_line(line: str) -> ProgressLine | None:

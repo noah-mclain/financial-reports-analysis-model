@@ -298,9 +298,11 @@ def test_convert_reports_its_stages_on_stderr(
         for line in capsys.readouterr().err.splitlines()
         if parse_progress_line(line)
     ]
+    # Without an engine the page cache is never reused, so the languages read reports too.
     assert [p.message.split(" in ")[0] for p in stages if p] == [
         "locate start",
         "pages 1/1",
         "locate done",
+        "pages 1/1",
         "write start",
     ]
