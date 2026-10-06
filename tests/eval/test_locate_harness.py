@@ -356,8 +356,10 @@ def test_an_ocr_failure_is_recorded_against_its_document_and_the_run_goes_on(
     summary = locate_module.run_pool(
         "train", True, candidates=candidates, moves=moves, log=log, store=store
     )
-    printed = capsys.readouterr().out
+    captured = capsys.readouterr()
+    printed = captured.out
     assert f"unreadable: f1: ocr_{error} (tesseract did not finish within 120.0 s)" in printed
+    assert captured.err.splitlines() == ["1/2 f1 ...", "2/2 v1 ..."]
     assert summary["errored"] == ["f1"]
     failed = next(r for r in summary["documents"] if r["id"] == "f1")
     assert failed["error"] == f"ocr_{error}"

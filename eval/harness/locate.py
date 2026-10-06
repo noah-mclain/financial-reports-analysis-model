@@ -288,11 +288,13 @@ def run_pool(
     entries = sorted(pool_entries(pool, candidates, moves, log), key=lambda e: str(e["id"]))[:limit]
     guard = EngineGuard(len(entries))
     stopped: EngineFailure | None = None
-    for entry in entries:
+    for number, entry in enumerate(entries, start=1):
         path = store / pool / f"{entry['id']}.pdf"
         if not path.exists():
             missing.append(entry["id"])
             continue
+        # The pool report prints only at the end; this says the run is moving.
+        print(f"{number}/{len(entries)} {entry['id']} ...", file=sys.stderr, flush=True)
         truth = truth_label(entry)
         try:
             result = locate_pdf(path, config, engine)
