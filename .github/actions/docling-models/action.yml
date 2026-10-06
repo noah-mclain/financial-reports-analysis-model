@@ -1,0 +1,33 @@
+name: Docling models
+description: Restore the docling model weights from the cache, download them on a miss and save them, so every later step can run with HF_HUB_OFFLINE=1. Run after the workspace action, which provides uv and the locked packages.
+runs:
+  using: composite
+  steps:
+    - name: Name the model cache after the locked docling versions and the warm script
+      id: models
+      shell: bash
+      run: |
+        key="$(uv run python scripts/ci/docling_models.py key)"
+        echo "key=${key}-${RUNNER_OS}-${{ hashFiles('scripts/ci/docling_models.py') }}" >> "$GITHUB_OUTPUT"
+    - name: Restore the docling models
+      id: model-cache
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ~/.cache/huggingface/hub
+        key: ${{ steps.models.outputs.key }}
+    # The only step that may reach the network. Every other step runs offline, so a model
+    # missing from the cache fails loudly.
+    - name: Download the docling models on a cache miss
+      if: ${{ steps.model-cache.outputs.cache-hit != 'true' }}
+      shell: bash
+      env:
+        HF_HUB_OFFLINE: '0'
+      run: uv run python scripts/ci/docling_models.py warm
+    # Saved here, before the tests, so a failing test does not throw the download away. Not
+    # from pull requests: their caches are scoped to the pull request and main cannot reuse them.
+    - name: Save the docling models
+      if: ${{ steps.model-cache.outputs.cache-hit != 'true' && github.event_name != 'pull_request' }}
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ~/.cache/huggingface/hub
+        key: ${{ steps.models.outputs.key }}
