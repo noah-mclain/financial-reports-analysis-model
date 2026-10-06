@@ -1162,6 +1162,15 @@ documents:
     sha256: 5209c05d7f8c453371987a85d2c60fcbc8374935cf99cc606afceeee386b2b80
     status: new
     text_layer: mixed
+  ferchem-misr-2024-ar-interim:
+    bytes: 2110034
+    pages: 24
+    pages_without_text: 1
+    pool: blind
+    retrieved: '2026-10-07'
+    sha256: b440253250558ac728e4c3eace184ee7b5fb86207847bc0cc1d47b5dd578a245
+    status: new
+    text_layer: mixed
   first-avenue-real-estate-development-2025-ar-interim:
     bytes: 2058156
     pages: 24
@@ -1207,6 +1216,15 @@ documents:
     sha256: 009ca4d9537fc5be23d724dbd94ecebdb8997b2a18a6f38207627acb735bddac
     status: new
     text_layer: digital
+  gadwa-2024-ar-consolidated:
+    bytes: 1795796
+    pages: 34
+    pages_without_text: 4
+    pool: blind
+    retrieved: '2026-10-07'
+    sha256: 166ed9057aa0ff78634aaf5e72d7a958bd34c10b8e191b773af0d9746041643d
+    status: new
+    text_layer: mixed
   gadwa-ar-standalone:
     bytes: 1734150
     pages: 32
@@ -1250,6 +1268,24 @@ documents:
     pool: train
     retrieved: '2026-09-26'
     sha256: 13815ff0cdef3c6a92bd0f1ec30cd231ceb586cb83e148ece6749d5cc6726742
+    status: new
+    text_layer: mixed
+  golden-tex-wool-2024-ar:
+    bytes: 3562350
+    pages: 51
+    pages_without_text: 6
+    pool: blind
+    retrieved: '2026-10-07'
+    sha256: 5fc7c943003d63a5c0ea1def0961b97767ae2bf846bc9bcaf0825e1c283935a5
+    status: new
+    text_layer: mixed
+  golden-tex-wool-2026-ar-interim:
+    bytes: 1066086
+    pages: 44
+    pages_without_text: 6
+    pool: blind
+    retrieved: '2026-10-07'
+    sha256: 55dd77aa9341c9dfbe0bbc107da63ced6eb31e14f897c0bd8e53dfc76bdbc245
     status: new
     text_layer: mixed
   halwani-bros-2026-ar-interim:
@@ -2882,6 +2918,15 @@ documents:
     pool: train
     retrieved: '2026-09-26'
     sha256: 3aaea47a1df1a4883bb22e8183720a2d86e4c566f313bbaed6649fde186c55c4
+    status: new
+    text_layer: mixed
+  talaat-moustafa-2025-ar-interim:
+    bytes: 2070978
+    pages: 32
+    pages_without_text: 5
+    pool: blind
+    retrieved: '2026-10-07'
+    sha256: b7da415b15cfe0e5ca28118eac971937088a11bf95eed1ae536a1976bb148b8a
     status: new
     text_layer: mixed
   tawuniya-2025-en:
