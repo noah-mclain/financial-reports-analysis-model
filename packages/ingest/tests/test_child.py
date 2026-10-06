@@ -119,6 +119,32 @@ def test_a_child_past_its_timeout_is_killed(tmp_path: Path) -> None:
     assert time.perf_counter() - started < 10
 
 
+def test_a_timeout_names_the_last_stage_the_child_reported(tmp_path: Path) -> None:
+    pdf, config = setup(tmp_path)
+    config = config.model_copy(update={"child_timeout_s": 2})
+    script = (
+        "import sys, time\n"
+        "print('progress: 1.5s locate done', file=sys.stderr, flush=True)\n"
+        "print('progress: 1.8s convert pp. 58-60 start', file=sys.stderr, flush=True)\n"
+        "time.sleep(30)\n"
+    )
+    with pytest.raises(IngestError) as caught:
+        convert_in_child(pdf, config, command=fake(script))
+    assert caught.value.reason == "convert_timeout"
+    assert caught.value.detail == (
+        "doc.pdf: still running after 2 s; last progress: convert pp. 58-60 start "
+        "(at 1.8 s)"
+    )
+
+
+def test_a_timeout_without_progress_says_so(tmp_path: Path) -> None:
+    pdf, config = setup(tmp_path)
+    config = config.model_copy(update={"child_timeout_s": 0.5})
+    with pytest.raises(IngestError) as caught:
+        convert_in_child(pdf, config, command=fake("import time; time.sleep(30)"))
+    assert caught.value.detail == "doc.pdf: still running after 0.5 s; no progress reported"
+
+
 def test_a_child_killed_by_a_signal_is_a_crash(tmp_path: Path) -> None:
     pdf, config = setup(tmp_path)
     script = "import os, signal; os.kill(os.getpid(), signal.SIGKILL)"
@@ -234,3 +260,31 @@ def test_stale_child_stage_versions_are_refused(tmp_path: Path, version_field: s
     (config.artifact_root / sha256_file(pdf) / "convert.json").write_text(result.model_dump_json())
     with pytest.raises(IngestError, match="version mismatch"):
         convert_in_child(pdf, config, command=fake("pass"))
+
+
+def test_progress_lines_do_not_hide_the_childs_own_reason(tmp_path: Path) -> None:
+    pdf, config = setup(tmp_path)
+    script = (
+        "import sys; print('progress: 0.1s locate start', file=sys.stderr); "
+        "print(f'{sys.argv[2]}: encrypted_pdf needs a password', file=sys.stderr); "
+        "print('progress: 0.2s locate done', file=sys.stderr); sys.exit(2)"
+    )
+    with pytest.raises(IngestError) as caught:
+        convert_in_child(pdf, config, command=fake(script))
+    assert caught.value.reason == "encrypted_pdf"
+    assert "locate" not in caught.value.detail
+
+
+def test_progress_lines_do_not_fill_the_tail_of_a_crash(tmp_path: Path) -> None:
+    pdf, config = setup(tmp_path)
+    script = (
+        "import sys\n"
+        "for n in range(20):\n"
+        "    print(f'progress: {n}.0s pages {n}/20', file=sys.stderr)\n"
+        "raise ValueError('bad table')"
+    )
+    with pytest.raises(IngestError) as caught:
+        convert_in_child(pdf, config, command=fake(script))
+    assert caught.value.reason == "convert_crashed"
+    assert "ValueError: bad table" in caught.value.detail
+    assert "pages" not in caught.value.detail

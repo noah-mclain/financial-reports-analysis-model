@@ -21,6 +21,7 @@ from fra_ingest.converter import docling_version
 from fra_ingest.errors import IngestError, IngestErrorReason
 from fra_ingest.locate import LOCATE_VERSION
 from fra_ingest.pages import sha256_file
+from fra_ingest.progress import last_progress, without_progress
 from fra_ingest.results import ConvertResult
 
 _REASONS: tuple[str, ...] = get_args(IngestErrorReason)
@@ -77,13 +78,15 @@ def convert_in_child(
             check=False,
         )
     except subprocess.TimeoutExpired as exc:
-        detail = f"{pdf.name}: still running after {config.child_timeout_s:.0f} s"
+        detail = f"{pdf.name}: still running after {config.child_timeout_s:g} s; " + (
+            _last_stage(exc.stderr)
+        )
         raise IngestError("convert_timeout", detail) from exc
     wall = time.perf_counter() - started
 
     if done.returncode < 0:
         raise IngestError("convert_crashed", f"signal {-done.returncode}")
-    if done.returncode == _EXIT_ERROR and (reason := _reason(done.stderr, pdf)) is not None:
+    if done.returncode == _EXIT_ERROR and (reason := _reason(without_progress(done.stderr), pdf)) is not None:
         raise IngestError(reason, _tail(done.stderr))
     stored = config.artifact_root / sha256 / "convert.json"
     if done.returncode not in (0, _EXIT_ALL_FAILED) or not stored.is_file():
@@ -120,6 +123,18 @@ def _reason(stderr: str, pdf: Path) -> IngestErrorReason | None:
     return cast(IngestErrorReason, word) if word in _REASONS else None
 
 
+def _last_stage(partial_stderr: str | bytes | None) -> str:
+    """Where the killed child was, from the stderr it had written. ``TimeoutExpired`` carries
+    that as bytes even when the run decodes its output, and as None when nothing was read."""
+    if isinstance(partial_stderr, bytes):
+        partial_stderr = partial_stderr.decode("utf-8", errors="replace")
+    last = last_progress(partial_stderr or "")
+    if last is None:
+        return "no progress reported"
+    return f"last progress: {last.message} (at {last.seconds:.1f} s)"
+
+
 def _tail(stderr: str) -> str:
+    stderr = without_progress(stderr)
     lines = [line.strip() for line in stderr.splitlines() if line.strip()]
     return " | ".join(lines[-_TAIL_LINES:])[-_TAIL_CHARS:]
