@@ -9,6 +9,13 @@ from fra_core.schemas import StatementType
 from fra_ingest.config import REPO_ROOT, IngestConfig, find_repo_root, load_config
 
 
+@pytest.fixture(autouse=True)
+def clean_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests read the settings file alone; a run under the Docker profile sets these."""
+    for name in ("FRA_PROFILE", "FRA_OCR_ENGINE", "FRA_INGEST_CONFIG"):
+        monkeypatch.delenv(name, raising=False)
+
+
 def write(tmp_path: Path, text: str) -> Path:
     path = tmp_path / "ingest.toml"
     path.write_text(text, encoding="utf-8")

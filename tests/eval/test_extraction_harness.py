@@ -601,6 +601,7 @@ def test_saved_extraction_artifact_identifies_settings_inputs_and_empty_strata(
     config = IngestConfig(
         artifact_root=tmp_path / "artifacts", device="cpu", convert_ocr="none", tesseract_psm=6
     )
+    monkeypatch.delenv(extraction.OCR_ENGINE_ENV, raising=False)  # set, the run is tagged
     monkeypatch.setattr(extraction, "MANIFEST", manifest)
     monkeypatch.setattr(extraction, "EXPECTED_DIR", expected_dir)
     monkeypatch.setattr(extraction, "OUT", tmp_path / "out")
