@@ -7,3 +7,4 @@
 # candidate: the commit or model candidate that was scored.
 date	kind	parts	strata	candidate
 2026-10-04	dry_run	holdout	annual,interim	3abdc22
+2026-10-06	dry_run	holdout	annual,interim	7618503
