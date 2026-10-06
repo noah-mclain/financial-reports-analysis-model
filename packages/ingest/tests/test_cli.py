@@ -9,7 +9,7 @@ from support import make_blank_pdf
 
 from fra_ingest import cli
 from fra_ingest.cli import main
-from fra_ingest.ocr import OcrUnavailableError
+from fra_ingest.ocr import OcrEngineError, OcrTimeoutError, OcrUnavailableError
 from fra_ingest.results import ConvertResult, LocateResult, RangeConversion, StructureResult
 
 
@@ -125,6 +125,29 @@ def test_convert_of_an_unreadable_file_exits_with_its_reason(
     path.write_bytes(b"not a pdf")
     assert main(["convert", str(path), "--no-ocr", "--artifacts", str(tmp_path / "a")]) == 2
     assert capsys.readouterr().err.strip().splitlines()[-1].startswith(f"{path}: unreadable_pdf")
+
+
+@pytest.mark.parametrize(
+    ("raised", "reason"),
+    [(OcrTimeoutError, "ocr_timeout"), (OcrEngineError, "ocr_engine")],
+)
+def test_convert_prints_the_ocr_reason_and_exits_2(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    raised: type[Exception],
+    reason: str,
+) -> None:
+    pdf = make_blank_pdf(tmp_path / "doc.pdf")
+
+    def broken(*_args: object, **_kwargs: object) -> ConvertResult:
+        raise raised("tesseract did not finish within 120.0 s")
+
+    monkeypatch.setattr(cli, "convert_pdf", broken)
+    argv = ["convert", str(pdf), "--no-ocr", "--artifacts", str(tmp_path / "a")]
+    assert main(argv) == 2
+    last = capsys.readouterr().err.strip().splitlines()[-1]
+    assert last == f"{pdf}: {reason} tesseract did not finish within 120.0 s"
 
 
 def test_structure_writes_a_result(

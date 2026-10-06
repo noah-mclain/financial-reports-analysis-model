@@ -5,7 +5,8 @@ fra-ingest convert <pdf> [--json] [--no-ocr] [--no-cache] [--config PATH] [--art
 fra-ingest structure <pdf> [--json] [--no-ocr] [--no-cache] [--config PATH] [--artifacts DIR]
 fra-ingest review-report <sha256> [--config PATH] [--artifacts DIR]
 
-convert exits 0 when it wrote a result, 2 on an ingest error and 3 when every range it
+convert exits 0 when it wrote a result, 2 on an ingest error (an OCR timeout or engine failure
+included: ocr_timeout, ocr_engine) and 3 when every range it
 attempted failed. It is the child process of convert_in_child (spec 10). structure exits 0
 when it wrote a result, 2 on an ingest error and 4 when the document was declined (a bank or
 an insurer: the reason is printed on stderr, no convert ran, no statements were written).
@@ -24,7 +25,13 @@ from pathlib import Path
 from fra_ingest.config import IngestConfig, load_config, transported_config
 from fra_ingest.convert import convert_pdf
 from fra_ingest.errors import IngestError
-from fra_ingest.ocr import OcrEngine, OcrUnavailableError, make_engine
+from fra_ingest.ocr import (
+    PER_DOCUMENT_OCR_ERRORS,
+    OcrEngine,
+    OcrUnavailableError,
+    make_engine,
+    ocr_failure,
+)
 from fra_ingest.results import ConvertResult, LocateResult, StructureResult
 from fra_ingest.review_report import write_review_report
 from fra_ingest.stage import load_or_locate, locate_pdf, page_ocr_languages
@@ -94,6 +101,11 @@ def main(argv: list[str] | None = None) -> int:
         result = locate_pdf(args.pdf, config, engine, use_cache=not args.no_cache)
     except IngestError as exc:
         print(f"{args.pdf}: {exc.reason} {exc.detail}".rstrip(), file=sys.stderr)
+        return EXIT_ERROR
+    except PER_DOCUMENT_OCR_ERRORS as exc:
+        failure = ocr_failure(exc)
+        # One line, so the parent of a convert child reads the reason from the last line.
+        print(f"{args.pdf}: {failure.reason} {' '.join(failure.detail.split())}", file=sys.stderr)
         return EXIT_ERROR
     except OcrUnavailableError as exc:
         print(

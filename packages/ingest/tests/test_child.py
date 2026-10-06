@@ -157,6 +157,19 @@ def test_the_childs_own_reason_is_kept(tmp_path: Path, name: str) -> None:
     assert caught.value.reason == "encrypted_pdf"
 
 
+def test_child_ocr_timeout_becomes_ocr_timeout_not_convert_crashed(tmp_path: Path) -> None:
+    pdf, config = setup(tmp_path)
+    script = (
+        "import sys; "
+        "print(f'{sys.argv[2]}: ocr_timeout tesseract did not finish within 120.0 s', "
+        "file=sys.stderr); sys.exit(2)"
+    )
+    with pytest.raises(IngestError) as caught:
+        convert_in_child(pdf, config, command=fake(script))
+    assert caught.value.reason == "ocr_timeout"
+    assert "did not finish within 120.0 s" in caught.value.detail
+
+
 def test_a_missing_pdf_is_refused_before_starting_a_child(tmp_path: Path) -> None:
     _, config = setup(tmp_path)
     with pytest.raises(IngestError) as caught:
