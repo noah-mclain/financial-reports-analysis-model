@@ -246,7 +246,8 @@ ARABIC_WORDS = ("دور", "ورد", "دار", "زور", "وزر")
 def _font(size: int) -> ImageFont.FreeTypeFont:
     for path in FONTS:
         if Path(path).is_file():
-            return ImageFont.truetype(path, size)
+            # BASIC: raqm, where Pillow has it, reorders the already reversed words back.
+            return ImageFont.truetype(path, size, layout_engine=ImageFont.Layout.BASIC)
     pytest.skip("no font with Arabic letters found")
 
 
