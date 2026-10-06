@@ -457,6 +457,43 @@ def test_new_corporate_issuer_gets_a_pair_in_the_hashed_pool() -> None:
     assert {e["issuer"] for e in plan.entries} == {"Gulf Cement"}
 
 
+def test_existing_keyless_issuer_with_known_sec_cik_requires_metadata_review() -> None:
+    from fra_core.pools import Identity, PoolError, PoolRegistry
+
+    registry = PoolRegistry()
+    registry.register(Identity("Acme Widgets Inc", 1111), "train")
+    docs = [existing_doc("Acme Widgets", "ar")]
+    original = [dict(d) for d in docs]
+    listing = row("acme")
+    with pytest.raises(PoolError, match=r"coordinated.*CIK.*review"):
+        build_plan([listing], {listing.path: "Acme Widgets"}, docs, set(), {}, MAIN, registry)
+    assert docs == original
+
+
+@pytest.mark.parametrize("ciks", [("0000001111", 1111), (None, None)])
+def test_existing_editions_preserve_uniform_identity_metadata(
+    ciks: tuple[str | int | None, str | int | None],
+) -> None:
+    docs = [existing_doc("Acme Widgets", lang) for lang in ("ar", "en")]
+    for doc, cik in zip(docs, ciks, strict=True):
+        if cik is not None:
+            doc["cik"] = cik
+    listing = row("acme")
+    plan = build_plan([listing], {listing.path: "Acme Widgets"}, docs, set(), {}, MAIN)
+    assert len(plan.entries) == 2
+    assert {entry.get("cik") for entry in plan.entries} == {1111 if ciks[0] else None}
+
+
+def test_existing_mixed_cik_metadata_refuses_new_editions() -> None:
+    from fra_core.pools import PoolError
+
+    docs = [existing_doc("Acme Widgets", lang) for lang in ("ar", "en")]
+    docs[0]["cik"] = 1111
+    listing = row("acme")
+    with pytest.raises(PoolError, match=r"coordinated.*CIK.*review"):
+        build_plan([listing], {listing.path: "Acme Widgets"}, docs, set(), {}, MAIN)
+
+
 def test_an_arabic_only_company_gets_its_arabic_edition_and_an_english_only_one_nothing() -> None:
     plan = plan_for([row("onlyar", q1=("ar",)), row("new1", q1=("en",))], [])
     assert [e["id"] for e in plan.entries] == ["only-arabic-2026-ar-interim"]
