@@ -384,3 +384,25 @@ def test_a_run_where_every_document_fails_on_the_engine_stops_loudly(
         locate_module.run_pool(
             "train", True, candidates=candidates, moves=moves, log=log, store=store
         )
+
+
+def test_a_missing_file_is_named_as_the_pool_run_reaches_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import harness.locate as locate_module
+
+    candidates, moves, log, store = _train_records(tmp_path)
+    (store / "train" / "f1.pdf").unlink()
+
+    def fake_locate(path: Path, *args: object, **kwargs: object) -> LocateResult:
+        return result(
+            StatementRange(type=B, first_page=1, last_page=1, score=8, rank=1),
+            StatementRange(type=INC, first_page=2, last_page=2, score=8, rank=1),
+        )
+
+    monkeypatch.setattr(locate_module, "locate_pdf", fake_locate)
+    summary = locate_module.run_pool(
+        "train", True, candidates=candidates, moves=moves, log=log, store=store
+    )
+    assert capsys.readouterr().err.splitlines() == ["1/2 f1 missing", "2/2 v1 ..."]
+    assert summary["missing"] == ["f1"]

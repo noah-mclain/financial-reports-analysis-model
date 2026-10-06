@@ -290,10 +290,11 @@ def run_pool(
     stopped: EngineFailure | None = None
     for number, entry in enumerate(entries, start=1):
         path = store / pool / f"{entry['id']}.pdf"
+        # The pool report prints only at the end; this says the run is moving.
         if not path.exists():
             missing.append(entry["id"])
+            print(f"{number}/{len(entries)} {entry['id']} missing", file=sys.stderr, flush=True)
             continue
-        # The pool report prints only at the end; this says the run is moving.
         print(f"{number}/{len(entries)} {entry['id']} ...", file=sys.stderr, flush=True)
         truth = truth_label(entry)
         try:
