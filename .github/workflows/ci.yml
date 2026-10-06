@@ -98,7 +98,7 @@ jobs:
     name: Publish validated container
     if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish }}
     runs-on: ubuntu-24.04
-    needs: [quality, container-smoke]
+    needs: [quality, tests-docker-profile, container-smoke]
     timeout-minutes: 35
     permissions:
       contents: read

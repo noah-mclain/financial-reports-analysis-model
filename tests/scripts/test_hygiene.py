@@ -35,6 +35,7 @@ OTHER_NAMES = checker.ASSISTANT_NAMES[1:]
 PREFIXES = checker.FORBIDDEN_BRANCH_PREFIXES
 EXCLUDED_PATHS = checker.DIFF_SCAN_EXCLUDED_PATHS
 GENERATED = checker.GENERATED_MARKER.capitalize()
+FOOTER_LINK = "[a tool](https://example.org/tool)"
 ALLOWED_SUFFIXES = checker.NAME_ALLOWED_SUFFIXES
 SESSION_LINK = f"https://{checker.SESSION_LINK_HOST}/code/session_01AbCdEfGhIjKlMn"
 
@@ -250,7 +251,7 @@ def test_an_allowed_suffix_does_not_hide_a_longer_word(repository: Path, commit:
 
 def test_generated_with_line_fails(repository: Path, commit: Commit) -> None:
     base = git(repository, "rev-parse", "HEAD")
-    commit(f"Add a thing\n\n{GENERATED} a tool")
+    commit(f"Add a thing\n\n{GENERATED} {FOOTER_LINK}")
 
     result = run_check(repository, base)
 
@@ -320,7 +321,9 @@ def test_added_line_naming_an_assistant_fails_and_names_the_file(
     assert "docs/notes.md" in result.stderr
 
 
-@pytest.mark.parametrize("text", [GENERATED + " a tool", SESSION_LINK])
+@pytest.mark.parametrize(
+    "text", [f"{GENERATED} {FOOTER_LINK}", f"\U0001f916 {GENERATED} {FOOTER_LINK}", SESSION_LINK]
+)
 def test_added_generated_line_or_session_link_fails(
     repository: Path, commit: Commit, text: str
 ) -> None:
@@ -372,6 +375,90 @@ def test_the_generic_word_ai_is_not_flagged(repository: Path, commit: Commit) ->
     result = run_check(repository, base)
 
     assert result.returncode == 0, result.stderr
+
+
+def test_generated_with_inside_a_sentence_is_not_a_footer(repository: Path, commit: Commit) -> None:
+    base = git(repository, "rev-parse", "HEAD")
+    text = f"the fixture was {checker.GENERATED_MARKER} pdflatex, see https://example.org"
+    commit(text, {"docs/notes.md": text + "\n"})
+
+    result = run_check(repository, base)
+
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        f"[{checker.GENERATED_MARKER} a tool](https://example.org)",
+        f"**{GENERATED}** {FOOTER_LINK}",
+    ],
+)
+def test_footer_forms_with_a_bracket_or_markdown_prefix_fail(
+    repository: Path, commit: Commit, text: str
+) -> None:
+    base = git(repository, "rev-parse", "HEAD")
+    commit(f"Add a thing\n\n{text}")
+
+    result = run_check(repository, base)
+
+    assert result.returncode == 1
+
+
+@pytest.mark.parametrize("joined", ["{upper}_API_KEY", "{lower}_code", "{title}Code", "x-{lower}"])
+def test_names_joined_by_underscore_or_camel_case_fail(
+    repository: Path, commit: Commit, joined: str
+) -> None:
+    base = git(repository, "rev-parse", "HEAD")
+    token = joined.format(upper=NAME.upper(), lower=NAME, title=NAME.capitalize())
+    commit("Add a thing", {"docs/notes.md": f"setting = {token}\n"})
+
+    result = run_check(repository, base)
+
+    assert result.returncode == 1, token
+
+
+def test_a_back_dated_orphan_root_in_the_range_does_not_become_the_owner(
+    repository: Path, commit: Commit
+) -> None:
+    base = git(repository, "rev-parse", "HEAD")
+    git(repository, "checkout", "-q", "-b", "feature")
+    commit("Feature work")
+    git(repository, "checkout", "-q", "--orphan", "planted")
+    git(repository, "rm", "-rqf", ".")
+    long_ago = {
+        "GIT_AUTHOR_DATE": "2000-01-01T00:00:00",
+        "GIT_COMMITTER_DATE": "2000-01-01T00:00:00",
+    }
+    for key, value in long_ago.items():
+        os.environ[key] = value
+    try:
+        commit_in(repository, STRANGER, STRANGER, "Planted root", {"planted.txt": "x\n"})
+    finally:
+        for key in long_ago:
+            del os.environ[key]
+    git(repository, "checkout", "-q", "feature")
+    git(
+        repository,
+        "merge",
+        "-q",
+        "--allow-unrelated-histories",
+        "--no-ff",
+        "-m",
+        "Merge planted",
+        "planted",
+        env={
+            "GIT_AUTHOR_NAME": STRANGER[0],
+            "GIT_AUTHOR_EMAIL": STRANGER[1],
+            "GIT_COMMITTER_NAME": STRANGER[0],
+            "GIT_COMMITTER_EMAIL": STRANGER[1],
+        },
+    )
+
+    result = run_check(repository, base)
+
+    assert result.returncode == 1, result.stdout
+    assert STRANGER[1] in result.stderr
 
 
 def test_all_findings_are_reported_together(repository: Path, commit: Commit) -> None:

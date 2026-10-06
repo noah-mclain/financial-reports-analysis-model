@@ -1,7 +1,8 @@
 .DEFAULT_GOAL := help
 UV ?= uv
-# The GitHub login of the repository owner, whose noreply address is a valid commit identity.
-OWNER_LOGIN ?= noah-mclain
+# The GitHub login of the repository owner, whose noreply address is a valid commit identity:
+# the owner segment of the origin remote, as the Hygiene workflow's github.repository_owner is.
+OWNER_LOGIN ?= $(shell git remote get-url origin 2>/dev/null | sed -nE 's,^(https://github\.com/|git@github\.com:)([^/]+)/.*,\2,p')
 
 # Ports shared with compose.yaml. .env is the single source and is read here, not included: it
 # holds blank lines, `#` comment lines and NAME=value lines (see its header), and anything else
@@ -141,6 +142,7 @@ ci-workflows-check: ## Validate GitHub Actions workflows with actionlint
 	bash scripts/ci/check-workflows.sh
 
 hygiene-check: ## Check the commits not on origin/main, and the branch name, against the attribution rules
+	@test -n "$(OWNER_LOGIN)" || { echo "hygiene-check: cannot read the owner login from the origin remote URL; pass OWNER_LOGIN=<login>"; exit 1; }
 	python3 scripts/ci/hygiene.py --range origin/main..HEAD --branch "$$(git branch --show-current)" --owner-login $(OWNER_LOGIN)
 
 container-smoke: ## Build and smoke-test the Docker API and placeholder worker

@@ -19,7 +19,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 
-# Assistant names, matched as whole words and ignoring case. The one place they are listed.
+# Assistant names, matched ignoring case and not inside a longer run of letters. The one place they are listed.
 ASSISTANT_NAMES = ("claude", "anthropic", "chatgpt", "openai", "copilot", "gemini", "codex")
 # A name followed by one of these is a reference, not attribution: the project's own CLAUDE.md,
 # an "OpenAI-compatible" endpoint.
@@ -42,12 +42,20 @@ GITHUB_WEB_COMMITTER = "noreply@github.com"
 
 # A session id carries a digit: `session_01AbCdEfGhIj`, not `session_management`.
 SESSION_ID = r"session_(?=[A-Za-z]*\d)[0-9A-Za-z]{10,}"
+# Letter boundaries, not \b: an underscore is a word character, so OPENAI_API_KEY and
+# claude_code must still match. CamelCase is split first (see split_camel_case).
 NAME_PATTERN = re.compile(
-    r"\b(?:" + "|".join(ASSISTANT_NAMES) + r")\b"
+    r"(?<![A-Za-z])(?:" + "|".join(ASSISTANT_NAMES) + r")(?![A-Za-z])"
     r"(?!(?:" + "|".join(map(re.escape, NAME_ALLOWED_SUFFIXES)) + r")\b)",
     re.IGNORECASE,
 )
-GENERATED_PATTERN = re.compile(r"\b" + re.escape(GENERATED_MARKER) + r"\b", re.IGNORECASE)
+CAMEL_CASE_JOINT = re.compile(r"(?<=[a-z])(?=[A-Z])")
+# The tool footer, not the phrase in prose: at the start of a line, after at most a few
+# non-word characters (an emoji, "[", "**"), and followed on that line by a link.
+GENERATED_PATTERN = re.compile(
+    r"^[^\w\n]{0,6}" + re.escape(GENERATED_MARKER) + r"\b[^\n]*(?:\]\(|https?://)",
+    re.IGNORECASE | re.MULTILINE,
+)
 SESSION_LINK_PATTERN = re.compile(
     r"https?://\S*" + re.escape(SESSION_LINK_HOST) + r"\S*|" + SESSION_ID, re.IGNORECASE
 )
@@ -105,8 +113,13 @@ def resolve_range(range_text: str) -> tuple[str, str]:
     return base_sha, head_sha
 
 
-def owner_email(head: str) -> str:
-    roots = git("log", "--max-parents=0", "--format=%at %ae", head).splitlines()
+def owner_email(base: str) -> str:
+    """The author of the oldest root commit reachable from the base.
+
+    The base side only: a range can bring in its own root commit (an orphan branch, back-dated),
+    and that must not be able to name the owner.
+    """
+    roots = git("log", "--max-parents=0", "--format=%at %ae", base).splitlines()
     if not roots:
         raise CannotCheck("no root commit found")
     return min(roots, key=lambda row: int(row.split(" ", 1)[0])).split(" ", 1)[1]
@@ -139,7 +152,7 @@ def check_identity(commit: Commit, owner: str, login: str) -> list[str]:
 def forbidden_text(text: str) -> list[str]:
     """Which rules the text breaks, by description."""
     broken = []
-    if NAME_PATTERN.search(text):
+    if NAME_PATTERN.search(CAMEL_CASE_JOINT.sub(" ", text)):
         broken.append("names an assistant")
     if GENERATED_PATTERN.search(text):
         broken.append(f"says {GENERATED_MARKER!r}")
@@ -209,7 +222,7 @@ def main(argv: list[str]) -> int:
             raise CannotCheck("--branch is empty: pass the branch name or leave the option out")
         require_full_history()
         base, head = resolve_range(arguments.range_text)
-        owner = owner_email(head)
+        owner = owner_email(base)
         commits = read_commits(base, head)
         findings: list[str] = []
         for commit in commits:

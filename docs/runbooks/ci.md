@@ -5,7 +5,7 @@ and every Monday at 04:23 UTC. The Monday run exists to catch a change in the ru
 apt that no commit caused. It uses GitHub hosted `ubuntu-24.04` runners with read-only repository
 access.
 
-All jobs that run Python set up the workspace through one composite action,
+The `quality` and `tests-docker-profile` jobs set up the workspace through one composite action,
 `.github/actions/workspace`. It reads the uv version from `docker/Dockerfile` and the Python
 version from `.python-version`, installs uv with the SHA-pinned `setup-uv`, checks the lock and
 runs `uv sync --locked --all-packages`. With `tesseract: 'true'` it also installs the apt
@@ -42,11 +42,13 @@ The `Hygiene` workflow runs `scripts/ci/hygiene.py` on pull requests to `main` a
 out with `fetch-depth: 0`. A shallow history, a range base that is all zeros, or a base that is
 not an ancestor of the head (a force push) is an error, never a pass.
 
-- **Identity.** The owner's email is the author of the oldest root commit. An author must be that
+- **Identity.** The owner's email is the author of the oldest root commit reachable from the
+  range base, so a pull request cannot bring in its own root and become the owner. An author must be that
   email or `<digits>+<login>@users.noreply.github.com`. A committer may also be
   `noreply@github.com`, which is how GitHub records a merge made in the web interface.
-- **Messages.** No `Co-Authored-By` trailer, no tool footer line, no session link, and no
-  assistant name as a whole word. A name followed by `.md` or `-compatible` (the project file,
+- **Messages.** No `Co-Authored-By` trailer, no tool footer line (a line that starts with the
+  phrase and carries a link; the phrase inside a sentence is fine), no session link, and no
+  assistant name outside a longer run of letters, so `_` and CamelCase joins are caught. A name followed by `.md` or `-compatible` (the project file,
   an "OpenAI-compatible" endpoint) is a reference, not a match.
 - **Branch.** For a pull request, the head branch must not start with a forbidden prefix or hold
   a session id. Pushes to `main` have no branch to check.
@@ -61,7 +63,10 @@ the shell only as environment variables.
 
 `make hygiene-check` runs the same check on `origin/main..HEAD` and the current branch name, which
 is `CLAUDE.md` rule 6 as a command. It needs a full clone. The owner login comes from
-`OWNER_LOGIN` in the Makefile.
+the owner segment of the `origin` remote URL, the same value the workflow takes from
+`github.repository_owner`. The target fails if the URL has none; `OWNER_LOGIN=<login>` overrides
+it. The `Hygiene` job needs only the standard library, so it runs plain `python3` and does not
+use the workspace action.
 
 The check does not look at branches that already exist on the remote.
 
