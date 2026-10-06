@@ -378,3 +378,67 @@ def test_every_anchor_names_items_of_the_balance_sheet() -> None:
         for item_id in (total, *parts):
             item = TAXONOMY.by_id(item_id)
             assert item is not None and item.statement is StatementType.BALANCE, item_id
+
+
+def test_missing_critical_items_are_named_after_mapping_without_changing_observations() -> None:
+    original = statement([row(1, "Inventories", "0"), row(2, "Unknown", "9")])
+    result = map_statement(original, INDEX, [])
+    assert [f.item_id for f in result.mapping_findings] == sorted(
+        TAXONOMY.critical_ids(original.type)
+    )
+    assert all(f.reason == "critical_item_unmapped" for f in result.mapping_findings)
+    assert all(f.observed_period_keys == (P.key, P2.key) for f in result.mapping_findings)
+    before = original.model_dump(exclude={"line_items", "mapping_findings"})
+    assert result.model_dump(exclude={"line_items", "mapping_findings"}) == before
+    mapping_fields = {
+        "canonical_id",
+        "mapping_source",
+        "mapping_confidence",
+        "mapping_flag",
+        "mapping_evidence",
+    }
+    assert [r.model_dump(exclude=mapping_fields) for r in result.line_items] == [
+        r.model_dump(exclude=mapping_fields) for r in original.line_items
+    ]
+    assert map_statement(result, INDEX, []) == result
+
+
+def test_remapping_removes_a_resolved_finding() -> None:
+    unresolved = map_statement(statement([row(1, "Unknown", "0")], StatementType.INCOME), INDEX, [])
+    assert "revenue" in {f.item_id for f in unresolved.mapping_findings}
+    edited = unresolved.model_copy(update={"line_items": [row(1, "Revenue", "0")]})
+    resolved = map_statement(edited, INDEX, [])
+    assert resolved.find("revenue") is not None
+    assert "revenue" not in {f.item_id for f in resolved.mapping_findings}
+    assert map_statement(resolved, INDEX, []) == resolved
+
+
+def test_duplicate_claims_get_findings_only_after_settlement() -> None:
+    result = map_statement(
+        statement([row(1, "Revenue", "10"), row(2, "Revenue", "11")], StatementType.INCOME),
+        INDEX,
+        [],
+    )
+    assert result.find("revenue") is None
+    assert all(r.mapping_flag == "ambiguous" for r in result.line_items)
+    assert "revenue" in {f.item_id for f in result.mapping_findings}
+    repeat = map_statement(
+        statement([row(1, "Revenue", "0"), row(2, "Revenue", "0")], StatementType.INCOME), INDEX, []
+    )
+    assert repeat.find("revenue") is not None
+    assert "revenue" not in {f.item_id for f in repeat.mapping_findings}
+
+
+def test_noncritical_and_unvalued_labels_do_not_create_extra_findings() -> None:
+    original = statement([row(1, "Revenue", None)], StatementType.INCOME)
+    result = map_statement(original, INDEX, [])
+    assert result.line_items == original.line_items
+    assert "revenue" in {f.item_id for f in result.mapping_findings}
+    missing_value = row(1, "Revenue", "0")
+    missing_value.cells[0].reported = None
+    mapped_none = map_statement(statement([missing_value], StatementType.INCOME), INDEX, [])
+    assert mapped_none.find("revenue") is not None
+    assert "revenue" not in {f.item_id for f in mapped_none.mapping_findings}
+    skipped = statement([], StatementType.CASH_FLOW)
+    assert map_statement(skipped, INDEX, []) == skipped
+    assert map_statement(skipped, INDEX, []).mapping_findings == ()

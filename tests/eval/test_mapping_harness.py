@@ -90,10 +90,10 @@ def test_a_slot_is_mapped_flagged_or_missing() -> None:
             item(2, "x", "5", flag="ambiguous", evidence="alias_total_unconfirmed:total_equity"),
         ]
     )
-    assert slot_state(s, "total_assets") == "mapped"
-    assert slot_state(s, "total_equity") == "ambiguous"
-    assert slot_state(s, "total_liabilities") == "unmapped"
-    assert slot_state(None, "total_assets") == "statement_not_found"
+    assert slot_state(s, "total_assets", TAXONOMY) == "mapped"
+    assert slot_state(s, "total_equity", TAXONOMY) == "ambiguous"
+    assert slot_state(s, "total_liabilities", TAXONOMY) == "unmapped"
+    assert slot_state(None, "total_assets", TAXONOMY) == "statement_not_found"
 
 
 def test_a_flag_names_an_item_by_its_exact_id_not_by_a_substring() -> None:
@@ -105,8 +105,8 @@ def test_a_flag_names_an_item_by_its_exact_id_not_by_a_substring() -> None:
         evidence="alias_multiple:net_income_attributable_parent|revenue",
     )
     s = statement([flagged])
-    assert slot_state(s, "net_income") == "unmapped"
-    assert slot_state(s, "net_income_attributable_parent") == "ambiguous"
+    assert slot_state(s, "net_income", TAXONOMY) == "unmapped"
+    assert slot_state(s, "net_income_attributable_parent", TAXONOMY) == "ambiguous"
 
 
 def test_a_mapped_row_the_expected_label_confirms_through_the_lexicon_is_only_consistent() -> None:
@@ -396,3 +396,79 @@ def test_a_limit_that_is_not_a_positive_number_is_refused(limit: str) -> None:
     with pytest.raises(SystemExit) as caught:
         main(["fit", "--limit", limit])
     assert caught.value.code == 2
+
+
+def test_genuine_item_finding_is_explicitly_flagged_without_becoming_mapped() -> None:
+    from fra_ingest.label_mapping import map_statement
+
+    result = map_statement(statement([]), INDEX, [])
+    assert slot_state(result, "total_assets", TAXONOMY) == "explicitly_flagged"
+    assert slot_state(result, "inventories", TAXONOMY) == "unmapped"
+    assert slot_state(None, "total_assets", TAXONOMY) == "statement_not_found"
+
+
+def test_mapped_and_named_ambiguous_slots_win_over_item_findings() -> None:
+    from fra_ingest.label_mapping import map_statement
+
+    ambiguous = map_statement(statement([item(1, "Total assets", "0")]), INDEX, [])
+    assert "total_assets" in {f.item_id for f in ambiguous.mapping_findings}
+    assert slot_state(ambiguous, "total_assets", TAXONOMY) == "ambiguous"
+    stale = ambiguous.model_copy(
+        update={"line_items": [item(1, "Total assets", "0", "total_assets")]}
+    )
+    assert slot_state(stale, "total_assets", TAXONOMY) == "mapped"
+
+
+def test_invalid_findings_cannot_make_a_slot_explicitly_flagged() -> None:
+    from fra_core.schemas import MappingFinding
+
+    valid = MappingFinding(item_id="total_assets", observed_period_keys=(P.key,))
+    bad = [
+        {
+            "item_id": "total_assets",
+            "reason": "critical_item_unmapped",
+            "observed_period_keys": [P.key],
+        },
+        "needs_review",
+        valid.model_copy(update={"item_id": "total_equity"}),
+        valid.model_copy(update={"observed_period_keys": ()}),
+        valid.model_copy(update={"observed_period_keys": ("wrong",)}),
+        valid.model_copy(update={"observed_period_keys": (P.key, P.key)}),
+        valid.model_copy(update={"reason": "needs_review"}),
+    ]
+    for finding in bad:
+        forged = statement([]).model_copy(update={"mapping_findings": (finding,)})
+        assert slot_state(forged, "total_assets", TAXONOMY) == "unmapped"
+    duplicates = statement([]).model_copy(update={"mapping_findings": (valid, valid)})
+    assert slot_state(duplicates, "total_assets", TAXONOMY) == "unmapped"
+    wrong_type = statement([], StatementType.INCOME).model_copy(
+        update={"mapping_findings": (valid,)}
+    )
+    assert slot_state(wrong_type, "total_assets", TAXONOMY) == "unmapped"
+    noncritical = valid.model_copy(update={"item_id": "inventories"})
+    forged = statement([]).model_copy(update={"mapping_findings": (noncritical,)})
+    assert slot_state(forged, "inventories", TAXONOMY) == "unmapped"
+    generic = statement([]).model_copy(
+        update={"flags": ["needs_review", "critical_item_unmapped:total_assets"]}
+    )
+    assert slot_state(generic, "total_assets", TAXONOMY) == "unmapped"
+
+
+def test_a_finding_must_cover_all_observed_periods_but_counts_as_one_slot() -> None:
+    from harness.mapping import critical_slots
+
+    from fra_ingest.label_mapping import map_statement
+
+    second = P.model_copy(update={"key": "2024-12-31", "end_date": date(2024, 12, 31)})
+    two = statement([]).model_copy(update={"periods": [P, second]})
+    result = map_statement(two, INDEX, [])
+    counts, slots, disagreements = critical_slots({result.type: result}, None, INDEX, TAXONOMY)
+    assert counts["explicitly_flagged"] == len(TAXONOMY.critical_ids(result.type))
+    assert len(slots) == sum(
+        len(TAXONOMY.critical_ids(k)) for k in (StatementType.BALANCE, StatementType.INCOME)
+    )
+    assert counts["mapped"] == counts["verified"] == counts["no_verdict"] == 0
+    assert not disagreements
+    partial = result.mapping_findings[0].model_copy(update={"observed_period_keys": (P.key,)})
+    stale = result.model_copy(update={"mapping_findings": (partial,)})
+    assert slot_state(stale, partial.item_id, TAXONOMY) == "unmapped"

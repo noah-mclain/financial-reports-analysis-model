@@ -205,3 +205,31 @@ def test_a_figure_printed_three_times_is_not_a_check() -> None:
     ]
     checked, checks = run_checks(statement(rows), LabelIndex(load_taxonomy()))
     assert review_statement(checked, checks, primary=True).reasons == ["unchecked"]
+
+
+def test_named_mapping_findings_hold_a_clean_statement_in_the_review_artifact() -> None:
+    from fra_core.taxonomy.loader import load_taxonomy
+    from fra_ingest.label_mapping import map_statement
+    from fra_ingest.label_match import LabelIndex
+    from fra_ingest.results import StructureResult
+
+    mapped = map_statement(statement(ROWS), LabelIndex(load_taxonomy()), PASSING)
+    result = review_statement(mapped, PASSING, primary=True)
+    assert result.status == "needs_review"
+    assert result.reasons == [
+        f"critical_item_unmapped:{f.item_id}" for f in mapped.mapping_findings
+    ]
+    assert (result.numeric_cells, result.checked_cells, result.flagged_cells) == (4, 3, 0)
+    artifact = StructureResult(
+        version="v",
+        sha256="a" * 64,
+        convert_version="2",
+        settings_hash="h",
+        statements=[mapped],
+        reviews=[result],
+    )
+    assert StructureResult.model_validate_json(artifact.model_dump_json()) == artifact
+    # a duplicate keeps the existing single reason; its findings stay on the statement
+    duplicate = review_statement(mapped, PASSING, primary=False)
+    assert duplicate.reasons == ["duplicate_statement"]
+    assert mapped.mapping_findings

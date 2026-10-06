@@ -97,6 +97,7 @@ def review_statement(
     counts = Counter(f for _, c in cells for f in c.flags)
     reasons += [f"{flag}:{counts[flag]}" for flag in CRITICAL_CELL_FLAGS if counts[flag]]
     reasons += [f for f in statement.flags if f.split(":")[0] in _HOLD_FLAGS]
+    reasons += [f"{finding.reason}:{finding.item_id}" for finding in statement.mapping_findings]
     if not primary:
         reasons = ["duplicate_statement"]
     warnings = [f for f in statement.flags if f in _WARNING_FLAGS]

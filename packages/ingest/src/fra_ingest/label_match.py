@@ -52,6 +52,7 @@ class LabelIndex:
     """
 
     def __init__(self, taxonomy: Taxonomy) -> None:
+        self._taxonomy = taxonomy
         self._index: _Spellings = {}
         self._headings: _Spellings = {}
         for item in taxonomy.items:
@@ -62,6 +63,10 @@ class LabelIndex:
                 for heading in item.headings_for(language):
                     by_key = self._headings.setdefault(item.statement, {})
                     by_key.setdefault(squash(heading), {})[item.id] = item
+
+    def critical_ids(self, statement: StatementType) -> tuple[str, ...]:
+        """Critical items from the taxonomy used by this index."""
+        return self._taxonomy.critical_ids(statement)
 
     def match_all(self, label: str, statement: StatementType) -> tuple[CanonicalItem, ...]:
         key = squash(label)

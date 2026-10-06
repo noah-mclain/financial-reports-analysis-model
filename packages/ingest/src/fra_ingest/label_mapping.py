@@ -18,7 +18,14 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 
-from fra_core.schemas import CheckResult, LineItem, MappingSource, Statement, StatementType
+from fra_core.schemas import (
+    CheckResult,
+    LineItem,
+    MappingFinding,
+    MappingSource,
+    Statement,
+    StatementType,
+)
 from fra_core.taxonomy.loader import CanonicalItem
 from fra_ingest.label_match import CLOSING_TOTAL_ID, LabelIndex
 
@@ -239,4 +246,12 @@ def map_statement(
                 }
             )
         )
-    return statement.model_copy(update={"line_items": _settle_duplicates(rows)})
+    settled = _settle_duplicates(rows)
+    mapped_ids = {row.canonical_id for row in settled if row.canonical_id is not None}
+    period_keys = tuple(period.key for period in statement.periods)
+    findings = tuple(
+        MappingFinding(item_id=item_id, observed_period_keys=period_keys)
+        for item_id in sorted(index.critical_ids(statement.type))
+        if item_id not in mapped_ids
+    )
+    return statement.model_copy(update={"line_items": settled, "mapping_findings": findings})

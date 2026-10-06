@@ -25,10 +25,10 @@ Gate A, extraction.
                   part not met.
 Gate B, mapping. The gate text: every critical item is "mapped ... or explicitly flagged as
   unmapped. No silent wrong mapping." Each critical slot of each document is one of: mapped;
-  ambiguous (a flagged row names the item); ABSENT (no row carries the item, and no flag names
-  it: the mapper flags rows, not missing items, so this is silent and makes the gate not met);
-  or statement not found (not met). An item-level "critical item absent" flag does not exist
-  yet; until it does, no unmapped slot counts as explicitly flagged. Of the mapped slots,
+  ambiguous (a flagged row names the item); explicitly flagged (a valid named item finding
+  covers all observed statement periods); ABSENT (no canonical row or matching flag: silent,
+  not met); or statement not found (not met). Findings account for unmapped items, without
+  improving mapping accuracy or providing a verdict. Of the mapped slots,
   `mapping.verdict` says which an expected file confirms (verified, consistent with the lexicon,
   or no verdict); "0 disagree" applies only to slots with a verdict.
 
@@ -225,7 +225,11 @@ def _gate_b(documents: Sequence[Mapping[str, Any]], unreadable: Sequence[str]) -
     for d in documents:
         total.update(d["mapping"])
     slots = sum(total[k] for k in SLOT_STATES)
-    not_accounted = total["absent"] + total["statement_not_found"]
+    # "absent" is the reporting alias of unmapped, not an additional slot state.
+    not_accounted = (
+        sum(max(d["mapping"].get("absent", 0), d["mapping"].get("unmapped", 0)) for d in documents)
+        + total["statement_not_found"]
+    )
     return {
         "slots": slots,
         **{
@@ -351,7 +355,7 @@ def lines(report: Mapping[str, Any]) -> list[str]:
         verdicts = b["verified"] + b["consistent"] + b["disagrees"]
         out.append(
             f"  B critical slots: {b['slots']}: mapped {b['mapped']}, ambiguous (flagged) "
-            f"{b['ambiguous']}, "
+            f"{b['ambiguous']}, explicitly flagged {b['explicitly_flagged']}, "
             f"ABSENT (silent) {b['absent']}, statement not found {b['statement_not_found']} "
             f"{_met(b['met'])}"
         )
