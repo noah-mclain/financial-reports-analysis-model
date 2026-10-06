@@ -1,6 +1,6 @@
 """Expected files for the extraction eval, and drafts of them (spec 12, Data model).
 
-    uv run python eval/harness/expected.py [--only ID] [--force]
+    PYTHONPATH=eval uv run python -m harness.expected [--only ID] [--force]
 
 An expected file holds what a document's statements print: periods, scale, currency and every
 row's figures. A draft is written from the extraction with every figure listed as unconfirmed.
@@ -138,7 +138,7 @@ def write_draft(path: Path, draft: ExpectedFile, *, force: bool = False) -> bool
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="eval/harness/expected.py")
+    parser = argparse.ArgumentParser(prog="python -m harness.expected")
     parser.add_argument("--only", default=None, help="one document id from the manifest")
     parser.add_argument("--force", action="store_true", help="replace checked or confirmed files")
     args = parser.parse_args(argv)

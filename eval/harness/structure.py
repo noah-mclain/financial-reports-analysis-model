@@ -1,6 +1,6 @@
 """Score the structure stage over the golden set (spec 11, Scoring).
 
-    uv run python eval/harness/structure.py
+    PYTHONPATH=eval uv run python -m harness.structure
 
 Per document: statements per enabled type, scale and currency against the manifest, identity
 status (from the balance identity checks in table_checks.json), review status and flags. A
@@ -147,7 +147,7 @@ def load_checks(path: Path) -> dict[str, list[CheckResult]]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    argparse.ArgumentParser(prog="eval/harness/structure.py").parse_args(argv)
+    argparse.ArgumentParser(prog="python -m harness.structure").parse_args(argv)
     config = load_config()
     ocr = make_engine(config)
     documents = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))["documents"]

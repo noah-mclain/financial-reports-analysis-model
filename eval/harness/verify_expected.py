@@ -219,7 +219,7 @@ def box_reader(pdf: Path, engine: OcrEngine | None, language: str) -> Callable[[
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="eval/harness/verify_expected.py")
+    parser = argparse.ArgumentParser(prog="python -m harness.verify_expected")
     parser.add_argument(
         "--no-ocr", action="store_true", help="skip the second read of scanned cells"
     )

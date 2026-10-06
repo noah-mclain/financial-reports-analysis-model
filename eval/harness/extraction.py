@@ -579,7 +579,7 @@ def _document_timing(out_dir: Path, before: tuple[int | None, int | None]) -> Oc
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="eval/harness/extraction.py")
+    parser = argparse.ArgumentParser(prog="python -m harness.extraction")
     parser.add_argument(
         "--ocr",
         choices=get_args(OcrEngineName),

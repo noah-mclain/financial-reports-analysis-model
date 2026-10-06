@@ -17,7 +17,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 MAKEFILE = ROOT / "Makefile"
-RUNS_A_HARNESS = re.compile(r"run python (?:-m harness\.|eval/harness/)")
+RUNS_A_HARNESS = re.compile(r"eval/harness/|-m harness\.")
 AS_MODULE = re.compile(r"^\tPYTHONPATH=eval \$\(UV\) run python -m harness\.(\w+)(?: |$)")
 
 

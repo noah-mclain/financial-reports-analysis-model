@@ -1,6 +1,6 @@
 """Measure the convert stage over the golden set (spec 10, Scoring).
 
-    uv run python eval/harness/convert.py [--only ID ...] [--no-cache]
+    PYTHONPATH=eval uv run python -m harness.convert [--only ID ...] [--no-cache]
 
 Each document converts in its own child process. The report goes to stdout and to
 var/eval/convert-golden.json. Exit 0 when every range of every document is ok and every
@@ -69,7 +69,7 @@ def verdict(rows: Sequence[Mapping[str, Any]], budget_gb: float) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="eval/harness/convert.py")
+    parser = argparse.ArgumentParser(prog="python -m harness.convert")
     parser.add_argument("--only", action="append", default=[], help="document id; repeatable")
     parser.add_argument("--no-cache", action="store_true", help="convert again")
     args = parser.parse_args(argv)
