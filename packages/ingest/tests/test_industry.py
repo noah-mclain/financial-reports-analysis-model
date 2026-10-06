@@ -205,3 +205,41 @@ def test_the_signal_counts_distinct_cues_before_the_evidence_is_cut() -> None:
         "Balances with the central bank\nDeposits from customers"
     )
     assert detect_industry(pages, ranges, BOOK).distinct_cues == 3
+
+
+def test_a_consumer_finance_company_named_by_its_income_lines() -> None:
+    # Contact Financial (fit): securitized portfolios and financing income, no bank vocabulary.
+    pages, ranges = on_statement_pages(
+        "Revenue from portfolio transfer\nOff balance sheet portfolio management fee\n"
+        "Securitization surplus\nIncome from financing activities"
+    )
+    signal = detect_industry(pages, ranges, BOOK)
+    assert (signal.kind, signal.subkind) == ("other_financial", "consumer_finance")
+
+
+def test_an_arabic_consumer_finance_company_named_by_its_income_lines() -> None:
+    pages, ranges = on_statement_pages(
+        "ناتج إحالة محافظ حقوق مالية\nأتعاب المحافظ المدارة\nإيرادات عوائد الأنشطة التمويلية"
+    )
+    signal = detect_industry(pages, ranges, BOOK)
+    assert (signal.kind, signal.subkind) == ("other_financial", "consumer_finance")
+
+
+def test_a_licensed_asset_manager_is_read_from_its_notes() -> None:
+    # Musharaka Capital (fit): ordinary-looking statements; the notes name the licensed
+    # securities business, asset management services and custody fees.
+    pages, ranges = on_statement_pages("Revenue from service contracts with customers")
+    pages += [
+        text_page("Notes", body, page_no=n)
+        for n, body in enumerate(
+            [
+                "تقوم الشركة بأعمال الأوراق المالية بموجب الترخيص",
+                "يتم إثبات أتعاب خدمات إدارة الموجودات عند تقديم الخدمة",
+                "يتم إثبات رسوم الحفظ مقدما",
+                "الأصول تحت الإدارة",
+            ],
+            start=2,
+        )
+    ]
+    signal = detect_industry(pages, ranges, BOOK)
+    assert (signal.kind, signal.subkind) == ("other_financial", "asset_manager")

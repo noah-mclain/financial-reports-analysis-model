@@ -101,6 +101,14 @@ cues:
     التمويل الاستهلاكي: 3
     مدينو التمويل: 2
     مدينو عقود التأجير التمويلي: 2
+    income from financing activities: 3
+    revenue from portfolio transfer: 3
+    portfolio management fee: 2
+    securitization: 2
+    عوائد الأنشطة التمويلية: 3
+    ناتج إحالة محافظ حقوق مالية: 3
+    أتعاب المحافظ المدارة: 2
+    التوريق: 2
   other_financial/asset_manager:
     assets under management: 3
     fund management fees: 3
@@ -111,3 +119,11 @@ cues:
     أتعاب إدارة الصناديق: 3
     أتعاب إدارة الأصول: 3
     رسوم الاشتراك: 2
+    securities business: 2
+    asset management services: 3
+    custody fees: 2
+    subscription fees in investment funds: 2
+    أعمال الأوراق المالية: 2
+    خدمات إدارة الموجودات: 3
+    رسوم الحفظ: 2
+    أتعاب الاشتراك: 2
