@@ -102,7 +102,7 @@ not an ancestor of the head (a force push) is an error, never a pass.
   a session id. Pushes to `main` have no branch to check.
 - **Added lines.** Only lines added in the range are scanned, for assistant names, tool footer
   lines and session links. `CLAUDE.md`, the checker and its test are excluded because they have
-  to spell the rules out. A file already in the repository that names an assistant is flagged
+  to spell the rules out, and `AGENTS.md` by the owner's decision. A file already in the repository that names an assistant is flagged
   only when someone edits it.
 
 The word lists and the excluded paths are constants at the top of `scripts/ci/hygiene.py`; the

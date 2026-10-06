@@ -37,8 +37,14 @@ FORBIDDEN_BRANCH_PREFIXES = (
     "devin/",
     "dependabot/",
 )
-# Files that must name assistants to state or enforce the rules.
-DIFF_SCAN_EXCLUDED_PATHS = ("CLAUDE.md", "scripts/ci/hygiene.py", "tests/scripts/test_hygiene.py")
+# Files that must name assistants to state or enforce the rules, and the owner's AGENTS.md, which
+# the owner keeps outside the check.
+DIFF_SCAN_EXCLUDED_PATHS = (
+    "CLAUDE.md",
+    "AGENTS.md",
+    "scripts/ci/hygiene.py",
+    "tests/scripts/test_hygiene.py",
+)
 GITHUB_WEB_COMMITTER = "noreply@github.com"
 
 # A session id carries a digit: `session_01AbCdEfGhIj`, not `session_management`.
