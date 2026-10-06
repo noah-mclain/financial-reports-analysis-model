@@ -161,6 +161,17 @@ has no field for the market, so a Nomu document differs from a main-market Q1 on
 period it shows and, where an id repeated, by the four-character suffix. The ones set aside
 are in `deferred.yaml`. In all, the Arabic and English counts are now 170 and 178.
 
+Investment holdings for fit, 6 October 2026: the industry decline rule has only 17 negative
+controls in `train` to learn from, and the two at its boundary (Coast Investment and Development,
+B Investments Holding) are in validation. Five investment companies were added by hand to
+`candidates.yaml` as `negative_control`, `other_financial`, `investment_holding`, `verified:
+false` (6 documents, English): Al Safat Investment Company, Al Waha Capital, Arzan Financial Group
+for Financing and Investment, Esterad Investment Company, Gulf Investment Corporation. They were
+chosen from companies whose name hashes into `train` and its fit part (`assign_pool` and
+`fra_core.split.hashed_part` computed before adding), and each name is the one on the filing;
+companies that hash elsewhere were looked at and not added. The pool and part depend on the
+issuer name, so a changed spelling changes them (rule 1).
+
 Limits: the new documents in `model_test` and `blind` were chosen for clean text layers, so those
 pools lean cleaner than documents found at random, and a pool score on them will read better than
 on the noisier filings the tool will meet. The documents are selected with the project's own

@@ -408,7 +408,12 @@ that says what the builder does is what it will do.
   companies with half-year 2026 statements (Basma Adeem Medical, National Environmental Recycling,
   Natural Gas Distribution, Professional Medical Expertise; 6 documents), and none of the issuers
   added that day was opened by eye, so no new override is applied; the rule above requires nothing
-  else. The holdout that will be used has 21 corporate issuers and 1 negative control (Pioneers
+  else. On 6 October five investment-holding issuers (Al Safat Investment, Al Waha Capital, Arzan
+  Financial Group, Esterad Investment, Gulf Investment Corporation; 6 documents, all negative
+  controls, `verified: false` until fetched) were added to `train`, and by the hash all five are in
+  fit: `train` is then 123 issuers and 214 documents, fit 82 issuers and 139 documents as hashed
+  (86 and 150 after the overrides, 51 annual and 99 interim), validation and holdout unchanged.
+  The holdout that will be used has 21 corporate issuers and 1 negative control (Pioneers
   Holding, a financial company that structure holds for review when the locator reads it as
   `other_financial`, and passes as corporate otherwise; the structural test to decline it is not built), 16 issuers with Arabic documents (18
   documents) and 15 with English ones (17), 9 with both editions, and 3 Egyptian. No holdout
