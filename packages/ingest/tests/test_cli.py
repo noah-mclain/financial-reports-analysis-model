@@ -253,3 +253,27 @@ def test_incomplete_effective_config_cannot_silently_fill_defaults(
     monkeypatch.setenv("FRA_INGEST_EFFECTIVE_CONFIG", "{}")
     assert main(["convert", str(tmp_path / "missing.pdf"), "--no-ocr"]) == 2
     assert "effective config" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("message", "printed"),
+    [("tesseract failed\non page 3", " tesseract failed on page 3"), ("", "")],
+)
+def test_an_ocr_failure_is_printed_on_one_line(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    message: str,
+    printed: str,
+) -> None:
+    # The parent of a convert child reads the reason from the last line of stderr.
+    pdf = make_blank_pdf(tmp_path / "doc.pdf")
+
+    def broken(*_args: object, **_kwargs: object) -> ConvertResult:
+        raise OcrEngineError(message)
+
+    monkeypatch.setattr(cli, "convert_pdf", broken)
+    argv = ["convert", str(pdf), "--no-ocr", "--artifacts", str(tmp_path / "a")]
+    assert main(argv) == 2
+    last = capsys.readouterr().err.splitlines()[-1]
+    assert last == f"{pdf}: ocr_engine{printed}"

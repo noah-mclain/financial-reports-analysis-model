@@ -105,7 +105,8 @@ def main(argv: list[str] | None = None) -> int:
     except PER_DOCUMENT_OCR_ERRORS as exc:
         failure = ocr_failure(exc)
         # One line, so the parent of a convert child reads the reason from the last line.
-        print(f"{args.pdf}: {failure.reason} {' '.join(failure.detail.split())}", file=sys.stderr)
+        detail = " ".join(failure.detail.split())
+        print(f"{args.pdf}: {failure.reason} {detail}".rstrip(), file=sys.stderr)
         return EXIT_ERROR
     except OcrUnavailableError as exc:
         print(
