@@ -32,6 +32,7 @@ from fra_ingest.docling_json import DlDocument, load_docling_json
 from fra_ingest.errors import IngestError
 from fra_ingest.figure_checks import check_net_profit_tie
 from fra_ingest.header import parse_header
+from fra_ingest.header_recovery import recover_header
 from fra_ingest.hierarchy import RowInput, infer_hierarchy
 from fra_ingest.industry import industry_decision
 from fra_ingest.label_mapping import map_statement
@@ -39,7 +40,7 @@ from fra_ingest.label_match import LabelIndex
 from fra_ingest.metadata import Metadata, detect_metadata
 from fra_ingest.ocr import OcrEngine
 from fra_ingest.ocr_policy import plan_ranges
-from fra_ingest.pages import read_pages
+from fra_ingest.pages import ocr_key, read_pages
 from fra_ingest.parts import PartialStatement, build_part
 from fra_ingest.results import (
     ConvertResult,
@@ -56,7 +57,7 @@ from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
 from fra_ingest.visual_order import repair_grid, repair_text, restore_word_order
 
-STRUCTURE_VERSION = "17"  # bump whenever structure's output can change, reviews included
+STRUCTURE_VERSION = "18"  # selective observed-header recovery; conversion/pages unchanged
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -178,7 +179,10 @@ def _continued_part(
 
 
 def structure_document(
-    inputs: StructureInputs, config: IngestConfig
+    inputs: StructureInputs,
+    config: IngestConfig,
+    *,
+    header_recover: Callable[[Grid, DlDocument], Grid] | None = None,
 ) -> tuple[StructureResult, list[CheckResult]]:
     index = LabelIndex(load_taxonomy())
     decisions: list[TableDecision] = []
@@ -189,6 +193,8 @@ def structure_document(
             raw = build_grid(table, document, path)
             visual = raw.page_no in inputs.visual_pages
             grid = restore_word_order(repair_grid(raw, visual=visual), index)
+            if header_recover is not None and inputs.page_modes.get(grid.page_no) is PageMode.IMAGE:
+                grid = header_recover(grid, document)
             headings = _headings(document, grid, visual)
             hint = _date_hint(headings)
             context = TableContext(
@@ -210,7 +216,16 @@ def structure_document(
                 page_no=grid.page_no,
                 type=result.type,
                 confidence=min(result.confidence, 1.0),
-                evidence=result.evidence,
+                evidence=[
+                    *result.evidence,
+                    *(
+                        f
+                        for f in grid.flags
+                        if f.startswith(("header_recovery_", "header_recovered"))
+                    ),
+                ],
+                recovered_headers=grid.recovered_headers,
+                recovery_context=grid.recovered_context,
             )
             decisions.append(decision)
             if result.type is not None or _only_below_confidence(result):
@@ -241,7 +256,7 @@ def structure_document(
                 continue
             if is_closed(continued, index):
                 candidate.decision.evidence = [
-                    *result.evidence,
+                    *candidate.decision.evidence,
                     f"after_closed:{continued.type.value}",
                 ]
                 continue
@@ -250,7 +265,7 @@ def structure_document(
                 update={"type": continued.type, "evidence": [*result.evidence, evidence]}
             )
             candidate.decision.type = continued.type
-            candidate.decision.evidence = result.evidence
+            candidate.decision.evidence = [*candidate.decision.evidence, evidence]
         assert result.type is not None
         layout = parse_header(grid, result.type, hint)
         previous = next(
@@ -364,13 +379,17 @@ def structure_document(
     return structured, checks
 
 
-def _settings_hash(config: IngestConfig, convert: ConvertResult) -> str:
+def _settings_hash(
+    config: IngestConfig, convert: ConvertResult, ocr: OcrEngine | None = None
+) -> str:
     payload = {
         "structure": STRUCTURE_VERSION,
         "convert": convert.settings_hash,
         "min_confidence": config.min_confidence,
         "enabled_types": sorted(t.value for t in config.enabled_types),
         "taxonomy": load_taxonomy().version,
+        "header_ocr_scale": config.header_ocr_scale,
+        "ocr": ocr_key(config, ocr),
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
@@ -455,7 +474,7 @@ def structure_pdf(
         return declined
     converted = current_convert(pdf, config, ocr, located, convert)
 
-    digest = _settings_hash(config, converted)
+    digest = _settings_hash(config, converted, ocr)
     target = out_dir / "statements.raw.json"
     if use_cache and target.is_file():
         try:
@@ -467,6 +486,11 @@ def structure_pdf(
             and cached.version == STRUCTURE_VERSION
             and cached.settings_hash == digest
             and (out_dir / "table_checks.json").is_file()
+            and not any(
+                e.startswith(("header_recovery_failed:", "header_recovery_unavailable"))
+                for table in cached.tables
+                for e in table.evidence
+            )
         ):
             return cached
 
@@ -490,7 +514,11 @@ def structure_pdf(
         convert=converted,
         domicile_texts={p.page_no: reading_variants(p.text, p.visual_arabic) for p in pages},
     )
-    result, checks = structure_document(inputs, config)
+    result, checks = structure_document(
+        inputs,
+        config,
+        header_recover=lambda grid, document: recover_header(grid, document, pdf, config, ocr),
+    )
     result = result.model_copy(
         update={
             "settings_hash": digest,

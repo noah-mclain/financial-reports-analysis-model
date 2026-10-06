@@ -250,3 +250,133 @@ def test_injected_conversion_failure_removes_derived_artifacts_before_running(
         structure.current_convert(PDF, config, None, _located(), failing)
     assert not statements.exists()
     assert not checks.exists()
+
+
+def _recorded_structure_setup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[IngestConfig, ConvertResult]:
+    from test_header_recovery import OBSERVED, inject_render
+
+    observation = OBSERVED[1]
+    config = IngestConfig(artifact_root=tmp_path)
+    result = _result("recorded-conversion").model_copy(
+        update={
+            "ranges": [
+                RangeConversion(
+                    first_page=6,
+                    last_page=6,
+                    ocr="full_page",
+                    ocr_language="ar-SA",
+                    docling_path="docling/p6-6.json",
+                    status="ok",
+                )
+            ]
+        }
+    )
+    out = tmp_path / SHA
+    (out / "docling").mkdir(parents=True)
+    (out / "docling/p6-6.json").write_text(observation.document().model_dump_json(by_alias=True))
+    where = located([PageMode.IMAGE] * 6, [(6, 6)], sha256=SHA)
+    where.pages = [PageScore(page_no=6, type_scores={}, title_types=[StatementType.INCOME])]
+    page = text_page("قائمة الأرباح أو الخسائر المجمعة", page_no=6).model_copy(
+        update={"mode": PageMode.IMAGE}
+    )
+    monkeypatch.setattr(structure, "load_or_locate", lambda *_args: where)
+    monkeypatch.setattr(structure, "current_convert", lambda *_args: result)
+    monkeypatch.setattr(structure, "read_pages", lambda *_args, **_kw: [page])
+    inject_render(monkeypatch, observation)
+    return config, result
+
+
+def test_recorded_scanned_headers_reach_statements_and_persist_boxes_on_cache_hits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from test_header_recovery import OBSERVED, RecordedEngine
+
+    config, _converted = _recorded_structure_setup(tmp_path, monkeypatch)
+    engine = RecordedEngine(OBSERVED[1])
+    result = structure.structure_pdf(PDF, config, engine)
+    assert engine.calls == [("ar-SA", "en-US")]
+    assert len(result.statements) == 1
+    statement = result.statements[0]
+    assert [p.key for p in statement.periods] == ["FY2023", "FY2024"]
+    assert "header_recovered" in statement.flags
+    assert [(c.text, c.col) for c in result.tables[0].recovered_headers] == [
+        ("٢٠٢٣", 0),
+        ("٢٠٢٤", 1),
+    ]
+    assert result.tables[0].recovery_context
+    for item in statement.line_items:
+        for cell in item.cells:
+            original = OBSERVED[1].grid.cell(cell.provenance.row, cell.provenance.col)
+            if original is None:
+                assert cell.raw_text == ""
+                assert "numbers_missing" in cell.flags and "bbox_synthesized" in cell.flags
+                continue
+            assert original is not None
+            assert (cell.raw_text, cell.provenance.bbox) == (original.text, original.bbox)
+            assert cell.provenance.page_no == 6
+    stored = (tmp_path / SHA / "statements.raw.json").read_bytes()
+    cached = structure.structure_pdf(PDF, config, engine)
+    assert cached == result
+    assert len(engine.calls) == 1
+    assert (tmp_path / SHA / "statements.raw.json").read_bytes() == stored
+
+    # An engine identity change invalidates structure even when injected conversion stays
+    # byte-identical. A header-only resolution change never requires conversion again.
+    engine.name = "another-configured-engine"
+    structure.structure_pdf(PDF, config, engine)
+    assert len(engine.calls) == 2
+    config = config.model_copy(update={"header_ocr_scale": 5.0})
+    structure.structure_pdf(PDF, config, engine)
+    assert len(engine.calls) == 3
+    config = config.model_copy(update={"ocr_languages": ("en-US", "ar-SA")})
+    structure.structure_pdf(PDF, config, engine)
+    assert engine.calls[-1] == ("en-US", "ar-SA")
+
+
+def test_failed_header_read_is_persisted_but_not_reused_as_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from test_header_recovery import OBSERVED, RecordedEngine
+
+    from fra_ingest.ocr import OcrEngineError
+
+    config, _converted = _recorded_structure_setup(tmp_path, monkeypatch)
+    engine = RecordedEngine(OBSERVED[1])
+    real = engine.recognize
+
+    def failure(*_args: object) -> list[object]:
+        raise OcrEngineError("partial native read failed")
+
+    monkeypatch.setattr(engine, "recognize", failure)
+    first = structure.structure_pdf(PDF, config, engine)
+    assert not first.statements
+    assert any(
+        e.startswith("header_recovery_failed:OcrEngineError") for e in first.tables[0].evidence
+    )
+    monkeypatch.setattr(engine, "recognize", real)
+    fresh = structure.structure_pdf(PDF, config, engine)
+    assert len(fresh.statements) == 1
+    assert fresh.settings_hash == first.settings_hash
+    assert len(engine.calls) == 1
+
+
+def test_old_structure_version_and_header_resolution_do_not_reuse_old_headers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from test_header_recovery import OBSERVED, RecordedEngine
+
+    config, converted = _recorded_structure_setup(tmp_path, monkeypatch)
+    engine = RecordedEngine(OBSERVED[1])
+    first = structure.structure_pdf(PDF, config, engine)
+    path = tmp_path / SHA / "statements.raw.json"
+    path.write_text(first.model_copy(update={"version": "17"}).model_dump_json())
+    structure.structure_pdf(PDF, config, engine)
+    assert len(engine.calls) == 2
+    assert structure.STRUCTURE_VERSION != "17"
+    changed = config.model_copy(update={"header_ocr_scale": 4.0})
+    assert _current_hash(changed, _located()) == _current_hash(config, _located())
+    assert structure._settings_hash(changed, converted, engine) != structure._settings_hash(
+        config, converted, engine
+    )

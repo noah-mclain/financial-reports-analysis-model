@@ -35,6 +35,8 @@ class Grid(BaseModel):
     num_rows: int
     num_cols: int
     cells: tuple[GridCell, ...]
+    recovered_headers: tuple[GridCell, ...] = ()
+    recovered_context: tuple[GridCell, ...] = ()
     flags: tuple[
         str, ...
     ] = ()  # what repair did to the table; the statement built from it carries them

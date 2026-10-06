@@ -192,6 +192,9 @@ def _run_main(
     monkeypatch: pytest.MonkeyPatch,
     found: dict[str, tuple[list[Statement], list[CheckResult]]],
     declined: frozenset[str] = frozenset(),
+    engine: object | None = None,
+    factory_configs: list[IngestConfig] | None = None,
+    engines_passed: list[object | None] | None = None,
 ) -> tuple[int, dict[str, object]]:
     manifest = tmp_path / "golden" / "manifest.yaml"
     manifest.parent.mkdir()
@@ -208,7 +211,16 @@ def _run_main(
     )
     config = IngestConfig(artifact_root=tmp_path / "artifacts", enabled_types=(P_TYPE,))
 
-    def fake_structure(pdf: Path, *_args: object, **_kw: object) -> StructureResult:
+    def fake_make_engine(actual_config: IngestConfig) -> object | None:
+        if factory_configs is not None:
+            factory_configs.append(actual_config)
+        return engine
+
+    def fake_structure(
+        pdf: Path, _actual_config: IngestConfig, actual_engine: object | None, **_kw: object
+    ) -> StructureResult:
+        if engines_passed is not None:
+            engines_passed.append(actual_engine)
         statements, checks = found[pdf.stem]
         sha = format(abs(hash(pdf.stem)), "x").rjust(64, "0")[:64]
         out = config.artifact_root / sha
@@ -235,6 +247,7 @@ def _run_main(
     monkeypatch.setattr(harness, "MANIFEST", manifest)
     monkeypatch.setattr(harness, "OUT", tmp_path / "eval")
     monkeypatch.setattr(harness, "load_config", lambda: config)
+    monkeypatch.setattr(harness, "make_engine", fake_make_engine, raising=False)
     monkeypatch.setattr(harness, "structure_pdf", fake_structure)
     monkeypatch.setattr(harness, "PAIRS", (("en", "ar", True),))
     code = harness.main([])
@@ -279,6 +292,25 @@ def test_a_clean_run_passes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
         {"en": ([statement(["10"])], [passed]), "ar": ([statement(["10"])], [passed])},
     )
     assert code == 0 and written["reasons"] == []
+
+
+def test_structure_run_builds_one_configured_engine_and_reuses_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    engine = object()
+    factory_configs: list[IngestConfig] = []
+    engines_passed: list[object | None] = []
+    _run_main(
+        tmp_path,
+        monkeypatch,
+        {"en": ([statement(["10"])], []), "ar": ([statement(["10"])], [])},
+        engine=engine,
+        factory_configs=factory_configs,
+        engines_passed=engines_passed,
+    )
+    assert len(factory_configs) == 1
+    assert factory_configs[0].artifact_root == tmp_path / "artifacts"
+    assert engines_passed == [engine, engine]
 
 
 def test_a_declined_document_is_reported_with_its_reason_and_fails_the_run(

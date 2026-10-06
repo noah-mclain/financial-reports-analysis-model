@@ -55,6 +55,7 @@ from fra_core.taxonomy.loader import Taxonomy, load_taxonomy
 from fra_ingest.config import REPO_ROOT, load_config
 from fra_ingest.errors import IngestError
 from fra_ingest.label_match import LabelIndex
+from fra_ingest.ocr import make_engine
 from fra_ingest.results import StructureResult
 from fra_ingest.review import StatementReview
 from fra_ingest.structure import structure_pdf
@@ -367,6 +368,7 @@ def lines(report: Mapping[str, Any]) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     argparse.ArgumentParser(prog="python -m harness.gates", description=__doc__).parse_args(argv)
     config = load_config()
+    ocr = make_engine(config)
     taxonomy = load_taxonomy()
     index = LabelIndex(taxonomy)
     entries = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))["documents"]
@@ -376,7 +378,7 @@ def main(argv: list[str] | None = None) -> int:
     for entry in entries:
         print(f"{entry['id']} ...", file=sys.stderr, flush=True)
         try:
-            result = structure_pdf(MANIFEST.parent / entry["file"], config, None)
+            result = structure_pdf(MANIFEST.parent / entry["file"], config, ocr)
         except IngestError as exc:
             errors.append(f"{entry['id']}: {exc.reason}")
             continue

@@ -189,3 +189,23 @@ def test_unknown_profile_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FRA_PROFILE", "typo")
     with pytest.raises(ValueError, match="FRA_PROFILE"):
         load_config()
+
+
+def test_header_resolution_has_one_config_boundary_and_survives_transport(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fra_ingest.config import EFFECTIVE_CONFIG_ENV, transported_config
+
+    config = load_config(write(tmp_path, "[structure]\nheader_ocr_scale = 5.0\n"))
+    assert config.header_ocr_scale == 5.0
+    monkeypatch.setenv(EFFECTIVE_CONFIG_ENV, config.model_dump_json())
+    assert transported_config() == config
+    payload = config.model_dump(mode="json")
+    del payload["header_ocr_scale"]
+    import json
+
+    monkeypatch.setenv(EFFECTIVE_CONFIG_ENV, json.dumps(payload))
+    with pytest.raises(ValueError, match="header_ocr_scale"):
+        transported_config()
+    with pytest.raises(ValidationError, match="header_ocr_scale"):
+        IngestConfig(header_ocr_scale=7)

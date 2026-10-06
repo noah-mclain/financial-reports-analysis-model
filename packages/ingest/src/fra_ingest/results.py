@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from fra_core.schemas import Document, PageMode, Statement, StatementType, TextSource
 from fra_ingest.review import StatementReview
+from fra_ingest.table_grid import GridCell
 
 # A page is a candidate for a type when it names the type and scores at least this much.
 CANDIDATE_THRESHOLD = 4.5
@@ -253,6 +254,8 @@ class TableDecision(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     statement_id: str | None = None
     evidence: list[str] = Field(default_factory=list)
+    recovered_headers: tuple[GridCell, ...] = ()
+    recovery_context: tuple[GridCell, ...] = ()
 
 
 class StructureResult(BaseModel):

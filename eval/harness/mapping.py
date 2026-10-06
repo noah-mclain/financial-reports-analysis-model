@@ -290,6 +290,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def run_golden() -> int:
     config = load_config()
+    ocr = make_engine(config)
     taxonomy = load_taxonomy()
     documents = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))["documents"]
     index = LabelIndex(taxonomy)
@@ -299,7 +300,7 @@ def run_golden() -> int:
     for entry in documents:
         doc_id = entry["id"]
         try:
-            result = structure_pdf(MANIFEST.parent / entry["file"], config, None, use_cache=False)
+            result = structure_pdf(MANIFEST.parent / entry["file"], config, ocr, use_cache=False)
         except IngestError as exc:
             print(f"{doc_id}: error {exc.reason}")
             failures.append(f"{doc_id}: {exc.reason}")

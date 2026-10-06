@@ -46,6 +46,7 @@ _TOML_FIELDS: dict[tuple[str, str], str] = {
     ("locate", "pad_pages"): "pad_pages",
     ("locate", "low_selectivity_share"): "low_selectivity_share",
     ("structure", "min_confidence"): "min_confidence",
+    ("structure", "header_ocr_scale"): "header_ocr_scale",
     ("convert", "device"): "device",
     ("convert", "ocr_engine"): "convert_ocr",
     ("convert", "images_scale"): "images_scale",
@@ -74,6 +75,7 @@ class IngestConfig(BaseModel):
     optional_types: tuple[StatementType, ...] = (StatementType.CASH_FLOW, StatementType.EQUITY)
     min_text_chars: int = Field(default=50, ge=0)
     min_confidence: float = Field(default=0.5, gt=0.0, le=1.0)
+    header_ocr_scale: float = Field(default=6.0, gt=0.0, le=6.0)
     header_fraction: float = Field(default=0.35, gt=0.0, lt=1.0)
     ocr_dpi: int = Field(default=100, ge=36, le=300)
     ocr_languages: tuple[str, ...] = Field(default=("ar-SA", "en-US"), min_length=1)

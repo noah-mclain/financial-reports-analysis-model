@@ -3,8 +3,11 @@ on a synthetic report."""
 
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
+import pytest
+from harness import gates as gates_module
 from harness.expected import ExpectedFile, ExpectedRow, ExpectedStatement
 from harness.gates import (
     NOT_MEASURED,
@@ -18,6 +21,8 @@ from harness.gates import (
 from test_mapping_harness import INDEX, TAXONOMY, P, item, statement
 
 from fra_core.schemas import CheckResult, Period, PeriodKind, StatementType
+from fra_ingest.config import IngestConfig
+from fra_ingest.errors import IngestError
 from fra_ingest.results import StructureResult
 from fra_ingest.review import StatementReview
 
@@ -361,3 +366,39 @@ def test_pairs_are_gated_over_the_two_statement_types_the_gate_names() -> None:
 def test_the_unknown_stratum_line_is_always_printed() -> None:
     printed = "\n".join(lines(gate_report([doc("a", "annual")], [])))
     assert "[unknown] 0 documents" in printed
+
+
+@pytest.mark.parametrize("engine", [object(), None])
+def test_golden_gate_run_builds_one_configured_engine_and_reuses_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, engine: object | None
+) -> None:
+    config = IngestConfig(artifact_root=tmp_path / "artifacts")
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        "documents:\n  - {id: first, file: first.pdf}\n  - {id: second, file: second.pdf}\n",
+        encoding="utf-8",
+    )
+    factory_configs: list[IngestConfig] = []
+    calls: list[tuple[Path, object | None]] = []
+
+    def make_engine(actual_config: IngestConfig) -> object | None:
+        factory_configs.append(actual_config)
+        return engine
+
+    def structure_pdf(
+        pdf: Path, _actual_config: IngestConfig, actual_engine: object | None
+    ) -> StructureResult:
+        calls.append((pdf, actual_engine))
+        raise IngestError("unreadable_pdf", "test")
+
+    monkeypatch.setattr(gates_module, "load_config", lambda: config)
+    monkeypatch.setattr(gates_module, "make_engine", make_engine, raising=False)
+    monkeypatch.setattr(gates_module, "MANIFEST", manifest)
+    monkeypatch.setattr(gates_module, "OUT", tmp_path / "out")
+    monkeypatch.setattr(gates_module, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(gates_module, "structure_pdf", structure_pdf)
+
+    assert gates_module.main([]) == 0
+    assert factory_configs == [config]
+    assert [call[0].name for call in calls] == ["first.pdf", "second.pdf"]
+    assert all(call[1] is engine for call in calls)

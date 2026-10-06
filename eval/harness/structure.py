@@ -26,6 +26,7 @@ import yaml
 from fra_core.schemas import CheckResult, Statement, StatementType
 from fra_ingest.config import REPO_ROOT, load_config
 from fra_ingest.errors import IngestError
+from fra_ingest.ocr import make_engine
 from fra_ingest.results import StructureResult
 from fra_ingest.review import StatementReview
 from fra_ingest.structure import structure_pdf
@@ -148,6 +149,7 @@ def load_checks(path: Path) -> dict[str, list[CheckResult]]:
 def main(argv: list[str] | None = None) -> int:
     argparse.ArgumentParser(prog="eval/harness/structure.py").parse_args(argv)
     config = load_config()
+    ocr = make_engine(config)
     documents = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))["documents"]
     rows: list[dict[str, Any]] = []
     by_id: dict[str, dict[StatementType, Statement]] = {}
@@ -156,7 +158,7 @@ def main(argv: list[str] | None = None) -> int:
         pdf = MANIFEST.parent / entry["file"]
         print(f"{entry['id']} ...", file=sys.stderr, flush=True)
         try:
-            result = structure_pdf(pdf, config, None, use_cache=False)
+            result = structure_pdf(pdf, config, ocr, use_cache=False)
         except IngestError as exc:
             rows.append({"id": entry["id"], "error": f"{exc.reason} {exc.detail}".strip()})
             reasons.append(f"{entry['id']}: {exc.reason}")

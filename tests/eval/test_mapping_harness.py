@@ -348,6 +348,49 @@ def test_the_fit_run_maps_the_fit_part_only_not_validation_or_the_holdout(
     assert seen == ["f1"]
 
 
+def test_golden_mapping_run_builds_one_configured_engine_and_reuses_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import harness.mapping as mapping_module
+
+    from fra_ingest.config import IngestConfig
+
+    config = IngestConfig(artifact_root=tmp_path / "artifacts")
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        "documents:\n  - {id: a, file: a.pdf, language: en}\n  - {id: b, file: b.pdf, language: ar}\n",
+        encoding="utf-8",
+    )
+    engine = object()
+    factory_configs: list[IngestConfig] = []
+    calls: list[tuple[Path, tuple[object, ...], dict[str, object]]] = []
+
+    def make_engine(actual_config: IngestConfig) -> object:
+        factory_configs.append(actual_config)
+        return engine
+
+    def structure_pdf(pdf: Path, *args: object, **kwargs: object) -> StructureResult:
+        calls.append((pdf, args, kwargs))
+        from fra_ingest.errors import IngestError
+
+        raise IngestError("unreadable_pdf", "test")
+
+    expected_dir = tmp_path / "expected"
+    expected_dir.mkdir()
+    monkeypatch.setattr(mapping_module, "load_config", lambda: config)
+    monkeypatch.setattr(mapping_module, "make_engine", make_engine)
+    monkeypatch.setattr(mapping_module, "structure_pdf", structure_pdf)
+    monkeypatch.setattr(mapping_module, "MANIFEST", manifest)
+    monkeypatch.setattr(mapping_module, "EXPECTED_DIR", expected_dir)
+    monkeypatch.setattr(mapping_module, "OUT", tmp_path / "out")
+    monkeypatch.setattr(mapping_module, "REPO_ROOT", tmp_path)
+
+    assert mapping_module.run_golden() == 1
+    assert factory_configs == [config]
+    assert [call[1][1] for call in calls] == [engine, engine]
+    assert all(call[1][0] is config and call[2] == {"use_cache": False} for call in calls)
+
+
 @pytest.mark.parametrize("limit", ["0", "-1", "x"])
 def test_a_limit_that_is_not_a_positive_number_is_refused(limit: str) -> None:
     with pytest.raises(SystemExit) as caught:
