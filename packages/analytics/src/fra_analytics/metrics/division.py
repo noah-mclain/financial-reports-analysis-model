@@ -9,6 +9,8 @@ that a float cannot hold, or that underflows to zero from a nonzero numerator, i
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from decimal import (
     ROUND_HALF_EVEN,
     Context,
@@ -18,6 +20,7 @@ from decimal import (
     InvalidOperation,
     Overflow,
     Underflow,
+    localcontext,
 )
 from math import isfinite
 from typing import Literal
@@ -34,6 +37,13 @@ _CONTEXT = Context(
     clamp=0,
     traps=[InvalidOperation, DivisionByZero, Overflow, Underflow],
 )
+
+
+@contextmanager
+def arithmetic_context() -> Iterator[Context]:
+    """A fresh copy of the ratio policy for scaling and formula arithmetic."""
+    with localcontext(_CONTEXT) as context:
+        yield context
 
 
 def divide(

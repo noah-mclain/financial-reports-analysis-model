@@ -578,3 +578,181 @@ def test_the_traineddata_files_are_hashed_from_the_directory_tesseract_lists(
     digests = tessdata_digests(str(script), ("ara", "eng"))
     assert digests["ara"] == hashlib.sha256(b"arabic").hexdigest()
     assert digests["eng"] == hashlib.sha256(b"english").hexdigest()
+
+
+def test_saved_extraction_artifact_identifies_settings_inputs_and_empty_strata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+
+    import harness.extraction as extraction
+
+    from fra_ingest.config import IngestConfig
+    from fra_ingest.results import StructureResult
+
+    pdf = tmp_path / "synthetic.pdf"
+    pdf.write_bytes(b"synthetic document")
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text("documents:\n  - id: doc\n    file: synthetic.pdf\n", encoding="utf-8")
+    expected_dir = tmp_path / "expected"
+    expected_dir.mkdir()
+    expected_path = expected_dir / "doc.json"
+    expected_path.write_text(file_of(statement_of([row("Cash", "5")]), "draft").model_dump_json())
+    config = IngestConfig(
+        artifact_root=tmp_path / "artifacts", device="cpu", convert_ocr="none", tesseract_psm=6
+    )
+    monkeypatch.setattr(extraction, "MANIFEST", manifest)
+    monkeypatch.setattr(extraction, "EXPECTED_DIR", expected_dir)
+    monkeypatch.setattr(extraction, "OUT", tmp_path / "out")
+    monkeypatch.setattr(extraction, "load_config", lambda **kwargs: config)
+    monkeypatch.setattr(
+        extraction,
+        "structure_pdf",
+        lambda *args: StructureResult(
+            version="17", sha256=SHA, convert_version="1", settings_hash="synthetic"
+        ),
+    )
+    assert extraction.main([]) == 0
+    saved = json.loads((tmp_path / "out/extraction-golden.json").read_text())
+    metadata = saved["reproducibility"]
+    assert metadata["ingest_config"] == config.model_dump(mode="json")
+    assert metadata["documents"]["doc"] == hashlib.sha256(pdf.read_bytes()).hexdigest()
+    assert metadata["expected"]["doc"] == hashlib.sha256(expected_path.read_bytes()).hexdigest()
+    assert metadata["source_revision"]
+    assert metadata["versions"]["formula"]
+    assert saved["strata"]["annual"]["documents"] == 0
+    assert saved["strata"]["interim"]["documents"] == 0
+
+
+def test_report_identity_changes_with_effective_settings_and_input_hashes() -> None:
+    from harness.reproducibility import report_evidence
+
+    from fra_ingest.config import IngestConfig
+
+    config = IngestConfig(convert_ocr="none", device="cpu")
+    first = report_evidence(
+        config, documents={"synthetic": "a" * 64}, expected={"synthetic": "b" * 64}, inputs={}
+    )
+    settings = report_evidence(
+        config.model_copy(update={"tesseract_psm": 6}),
+        documents=first["documents"],
+        expected=first["expected"],
+        inputs={},
+    )
+    inputs = report_evidence(
+        config, documents={"synthetic": "c" * 64}, expected={"synthetic": "d" * 64}, inputs={}
+    )
+    assert first["source_revision"] == settings["source_revision"] == inputs["source_revision"]
+    assert first["ingest_config"] != settings["ingest_config"]
+    assert first["documents"] != inputs["documents"]
+    assert first["expected"] != inputs["expected"]
+
+
+def test_report_source_identity_includes_core_code_and_canonical_taxonomy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import harness.reproducibility as reproducibility
+
+    import fra_core.taxonomy.loader as taxonomy_loader
+    from fra_ingest.config import IngestConfig
+
+    root = tmp_path / "repo"
+    package_dir = root / "packages/core/src/fra_core/taxonomy"
+    package_dir.mkdir(parents=True)
+    source_files = (
+        "packages/ingest/src/fra_ingest/source.py",
+        "packages/analytics/src/fra_analytics/source.py",
+        "eval/harness/source.py",
+        "packages/core/src/fra_core/schemas/statement.py",
+        "packages/core/src/fra_core/taxonomy/loader.py",
+    )
+    for relative in source_files:
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("initial source\n", encoding="utf-8")
+    taxonomy_path = package_dir / taxonomy_loader._RESOURCE
+    taxonomy_path.write_text("version: 1\nitems: []\n", encoding="utf-8")
+
+    monkeypatch.setattr(reproducibility, "REPO_ROOT", root)
+    monkeypatch.setattr(
+        taxonomy_loader.resources,
+        "files",
+        lambda package: package_dir,
+    )
+    monkeypatch.setattr(
+        reproducibility,
+        "load_taxonomy",
+        lambda: type("Taxonomy", (), {"version": 1})(),
+    )
+
+    def evidence() -> dict[str, Any]:
+        return reproducibility.report_evidence(
+            IngestConfig(convert_ocr="none", device="cpu"),
+            documents={"synthetic": "a" * 64},
+            expected={"synthetic": "b" * 64},
+            inputs={"manifest": "c" * 64},
+        )
+
+    def same_revision_git(*args: str, **kwargs: object) -> Any:
+        from subprocess import CompletedProcess
+
+        output = b"fixed-revision\n" if args[0][3:] == ["rev-parse", "HEAD"] else b""
+        return CompletedProcess(args[0], 0, stdout=output, stderr=b"")
+
+    monkeypatch.setattr(reproducibility.subprocess, "run", same_revision_git)
+    first = evidence()
+    assert first["source_revision"] == "fixed-revision"
+    assert evidence()["source_sha256"] == first["source_sha256"]
+
+    core_file = root / "packages/core/src/fra_core/schemas/statement.py"
+    core_file.write_text("changed shared schema\n", encoding="utf-8")
+    core_changed = evidence()
+    assert core_changed["source_revision"] == first["source_revision"]
+    assert core_changed["source_sha256"] != first["source_sha256"]
+
+    taxonomy_path.write_text("version: 1\nitems: [changed]\n", encoding="utf-8")
+    taxonomy_changed = evidence()
+    assert taxonomy_changed["source_revision"] == first["source_revision"]
+    assert taxonomy_changed["source_sha256"] != core_changed["source_sha256"]
+    assert taxonomy_changed["ingest_config"] == first["ingest_config"]
+    assert taxonomy_changed["documents"] == first["documents"]
+    assert taxonomy_changed["expected"] == first["expected"]
+    assert taxonomy_changed["inputs"] == first["inputs"]
+    assert taxonomy_changed["analytics_policy"] == first["analytics_policy"]
+    assert taxonomy_changed["versions"] == first["versions"]
+    assert taxonomy_changed["expected_note"] == first["expected_note"]
+
+    for relative in (
+        "packages/ingest/src/fra_ingest/source.py",
+        "packages/analytics/src/fra_analytics/source.py",
+        "eval/harness/source.py",
+    ):
+        path = root / relative
+        path.write_text(f"changed: {relative}\n", encoding="utf-8")
+        changed = evidence()
+        assert changed["source_sha256"] != taxonomy_changed["source_sha256"]
+        taxonomy_changed = changed
+
+
+def test_source_inventory_fails_when_canonical_taxonomy_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import harness.reproducibility as reproducibility
+
+    import fra_core.taxonomy.loader as taxonomy_loader
+
+    root = tmp_path / "repo"
+    package_dir = root / "packages/core/src/fra_core/taxonomy"
+    for directory in (
+        root / "packages/ingest/src/fra_ingest",
+        root / "packages/analytics/src/fra_analytics",
+        root / "eval/harness",
+        root / "packages/core/src/fra_core/schemas",
+    ):
+        directory.mkdir(parents=True)
+        (directory / "source.py").write_text("source\n", encoding="utf-8")
+    package_dir.mkdir(parents=True)
+    monkeypatch.setattr(taxonomy_loader.resources, "files", lambda package: package_dir)
+
+    with pytest.raises(FileNotFoundError, match="canonical taxonomy source is missing"):
+        reproducibility._source_inventory(root)

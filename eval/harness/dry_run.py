@@ -46,7 +46,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -72,6 +72,7 @@ from fra_ingest.errors import IngestError
 from fra_ingest.label_mapping import MAPPED_TYPES
 from fra_ingest.label_match import LabelIndex
 from fra_ingest.ocr import make_engine
+from fra_ingest.pages import sha256_file
 from fra_ingest.results import ConvertResult, IndustryDecision, LocateResult, StructureResult
 from fra_ingest.stage import load_or_locate
 from fra_ingest.structure import structure_pdf
@@ -88,6 +89,7 @@ from harness.paths import (
     SCORING_LOG,
     STRATA,
 )
+from harness.reproducibility import record_hash, report_evidence
 from harness.structure import first_statements, identity_status, load_checks
 
 OUT = REPO_ROOT / "var" / "eval" / "dry_run"
@@ -290,6 +292,7 @@ def run_document(
     only a stop of the whole run (an interrupt) escapes."""
     row: dict[str, Any] = {
         "id": entry["id"],
+        "ingest_config": config.model_dump(mode="json"),
         "period": entry["period"],
         "language": entry["language"],
         **{k: entry[k] for k in ("role", "sector") if k in entry},
@@ -971,6 +974,18 @@ def run(
     for output in (report_path, rows_file, artifacts_root):
         if output.exists():
             raise PreflightFailed(f"{output} exists; a run never reuses an earlier one's output")
+    # This uses only the inputs already admitted by the scoring guard. It neither selects
+    # another holdout nor reads labels/values. Hash once before each document's existing run.
+    evidence = report_evidence(
+        config,
+        documents={},
+        expected={},
+        inputs={
+            "candidates": record_hash(documents),
+            "fetched": record_hash(fetched),
+            "moves": record_hash([asdict(m) for m in moves]),
+        },
+    )
     holdout = sorted(
         holdout_for_scoring(documents, moves, looks, look, record), key=lambda d: d["id"]
     )
@@ -980,6 +995,7 @@ def run(
     try:
         for entry in holdout:
             print(f"{entry['id']} ...", file=sys.stderr, flush=True)
+            evidence["documents"][entry["id"]] = sha256_file(pdf_of(entry))
             root = artifacts_root / entry["id"]
             try:
                 rows.append(
@@ -1001,6 +1017,7 @@ def run(
                     shutil.rmtree(root)
     finally:
         report = {
+            "reproducibility": evidence,
             "look": {
                 "date": look.date,
                 "kind": look.kind,

@@ -21,7 +21,7 @@ import sys
 import time
 from pathlib import Path
 
-from fra_ingest.config import IngestConfig, load_config
+from fra_ingest.config import IngestConfig, load_config, transported_config
 from fra_ingest.convert import convert_pdf
 from fra_ingest.errors import IngestError
 from fra_ingest.ocr import OcrEngine, OcrUnavailableError, make_engine
@@ -63,7 +63,13 @@ def main(argv: list[str] | None = None) -> int:
     report.add_argument("--artifacts", type=Path, default=None, help="artifact root override")
     args = parser.parse_args(argv)
 
-    config = load_config(args.config)
+    try:
+        effective = transported_config() if args.command == "convert" else None
+    except ValueError as exc:
+        print(f"{args.pdf}: convert_crashed invalid effective config: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    args.transported_config = effective is not None
+    config = effective if effective is not None else load_config(args.config)
     if args.artifacts is not None:
         config = config.model_copy(update={"artifact_root": args.artifacts})
     if args.command == "review-report":

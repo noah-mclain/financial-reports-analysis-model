@@ -15,8 +15,11 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import cast, get_args
 
-from fra_ingest.config import OCR_ENGINE_ENV, IngestConfig
+from fra_ingest.config import EFFECTIVE_CONFIG_ENV, OCR_ENGINE_ENV, IngestConfig
+from fra_ingest.convert import CONVERT_VERSION, settings_hash
+from fra_ingest.converter import docling_version
 from fra_ingest.errors import IngestError, IngestErrorReason
+from fra_ingest.locate import LOCATE_VERSION
 from fra_ingest.pages import sha256_file
 from fra_ingest.results import ConvertResult
 
@@ -35,10 +38,12 @@ def convert_in_child(
     extra_args: Sequence[str] = (),
     command: Sequence[str] | None = None,
 ) -> ConvertResult:
-    """Only ``artifact_root``, ``child_timeout_s`` and the OCR engine from ``config`` reach the
-    child; every other setting comes from the TOML file the child loads (``config_path``, else
-    ``FRA_INGEST_CONFIG``, else the repository default). The engine travels in
-    ``FRA_OCR_ENGINE``, so the child converts with the engine its parent reads pages with."""
+    """Transport the full validated effective config; the child does not reload settings.
+
+    ``config_path`` is kept in the command for ordinary command fixtures, but the transported
+    effective config is authoritative. The returned digest must match this parent's settings.
+    """
+    config = IngestConfig.model_validate(config.model_dump())
     if not pdf.is_file():
         raise IngestError("unreadable_pdf", f"{pdf}: not a file")
     sha256 = sha256_file(pdf)
@@ -58,6 +63,7 @@ def convert_in_child(
         **os.environ,
         "PYTHONPATH": os.pathsep.join(p for p in sys.path if p),
         OCR_ENGINE_ENV: config.convert_ocr,
+        EFFECTIVE_CONFIG_ENV: config.model_dump_json(),
     }
 
     started = time.perf_counter()
@@ -84,6 +90,21 @@ def convert_in_child(
         raise IngestError("convert_crashed", _tail(done.stderr) or f"exit {done.returncode}")
 
     result = ConvertResult.model_validate_json(stored.read_text(encoding="utf-8"))
+    release = docling_version()
+    if (
+        result.sha256 != sha256
+        or result.version != CONVERT_VERSION
+        or result.docling_version != release
+        or result.locate_version != LOCATE_VERSION
+    ):
+        raise IngestError("convert_crashed", "child result document/version mismatch")
+    if result.settings_plans is None:
+        raise IngestError(
+            "convert_crashed", "child result has no settings plans for digest verification"
+        )
+    digest = settings_hash(config, result.settings_plans, release, LOCATE_VERSION)
+    if result.settings_hash != digest or result.device != config.device:
+        raise IngestError("convert_crashed", "child settings digest mismatch")
     if done.returncode == _EXIT_ALL_FAILED:
         failed = ", ".join(f"{r.first_page}-{r.last_page}" for r in result.ranges)
         raise IngestError("convert_failed", f"every range failed: {failed}")

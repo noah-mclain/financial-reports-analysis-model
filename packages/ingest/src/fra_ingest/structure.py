@@ -26,7 +26,7 @@ from fra_ingest.child import convert_in_child
 from fra_ingest.classify import Classification, TableContext, classify
 from fra_ingest.config import IngestConfig
 from fra_ingest.continuation import continues_part, inherit_periods, is_closed, merge_continuations
-from fra_ingest.convert import CONVERT_VERSION, settings_hash
+from fra_ingest.convert import cached_convert, invalidate_convert, settings_hash
 from fra_ingest.converter import docling_version
 from fra_ingest.docling_json import DlDocument, load_docling_json
 from fra_ingest.errors import IngestError
@@ -395,16 +395,7 @@ def _missing_docling(out_dir: Path, result: ConvertResult) -> list[str]:
 
 def _stored_convert(out_dir: Path, digest: str) -> ConvertResult | None:
     """``convert.json`` when convert would write the same today and its docling files exist."""
-    path = out_dir / "convert.json"
-    if not path.is_file():
-        return None
-    try:
-        stored = ConvertResult.model_validate_json(path.read_text(encoding="utf-8"))
-    except ValidationError:
-        return None
-    if stored.version != CONVERT_VERSION or stored.settings_hash != digest:
-        return None
-    return None if _missing_docling(out_dir, stored) else stored
+    return cached_convert(out_dir, digest)
 
 
 def current_convert(
@@ -421,6 +412,7 @@ def current_convert(
     stored = _stored_convert(out_dir, digest)
     if stored is not None:
         return stored
+    invalidate_convert(out_dir)
     converted = convert(pdf, config)
     missing = _missing_docling(out_dir, converted)
     if missing:

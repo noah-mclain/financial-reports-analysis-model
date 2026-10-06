@@ -187,3 +187,46 @@ def test_an_engine_that_cannot_run_exits_naming_the_setting(
     assert "no language data for ara" in err
     assert "convert.ocr_engine" in err
     assert "FRA_OCR_ENGINE" in err
+
+
+def test_invalid_effective_config_transport_is_a_loud_cli_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("FRA_INGEST_EFFECTIVE_CONFIG", '{"device":"typo"}')
+    assert main(["convert", str(tmp_path / "doc.pdf"), "--no-ocr"]) == 2
+    assert "effective config" in capsys.readouterr().err
+
+
+def test_effective_config_transport_does_not_reload_toml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fra_ingest.config import IngestConfig
+
+    config = IngestConfig(
+        artifact_root=tmp_path,
+        device="cpu",
+        ocr_scale=4.5,
+        tesseract_psm=6,
+        tesseract_arabic_language="ara",
+        convert_ocr="none",
+    )
+    monkeypatch.setenv("FRA_INGEST_EFFECTIVE_CONFIG", config.model_dump_json())
+    monkeypatch.setenv("FRA_INGEST_CONFIG", str(tmp_path / "missing.toml"))
+    monkeypatch.setenv("FRA_OCR_ENGINE", "typo")
+    seen: list[IngestConfig] = []
+
+    def converted(args: object, effective: IngestConfig, engine: object) -> int:
+        seen.append(effective)
+        return 0
+
+    monkeypatch.setattr(cli, "_convert", converted)
+    assert main(["convert", str(tmp_path / "doc.pdf")]) == 0
+    assert seen == [config]
+
+
+def test_incomplete_effective_config_cannot_silently_fill_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("FRA_INGEST_EFFECTIVE_CONFIG", "{}")
+    assert main(["convert", str(tmp_path / "missing.pdf"), "--no-ocr"]) == 2
+    assert "effective config" in capsys.readouterr().err

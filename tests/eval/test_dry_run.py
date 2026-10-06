@@ -1514,3 +1514,24 @@ def test_the_word_order_flags_are_flag_classes_of_their_own() -> None:
         "word_order_uncertain",
         "words_reversed",
     ]
+
+
+def test_dry_run_report_records_effective_config_and_synthetic_document_hashes(
+    three: Setup,
+) -> None:
+    import hashlib
+
+    report = three.run(stub_stages())
+    evidence = report["reproducibility"]
+    assert evidence["ingest_config"] == IngestConfig(
+        artifact_root=three.tmp / "real-artifacts"
+    ).model_dump(mode="json")
+    assert evidence["source_revision"]
+    assert evidence["versions"]["formula"]
+    assert evidence["expected"] == {}  # no independent gold is used by a dry run
+    for entry in three.documents:
+        path = three.store / "train" / f"{entry['id']}.pdf"
+        if entry["id"] in evidence["documents"]:
+            assert (
+                evidence["documents"][entry["id"]] == hashlib.sha256(path.read_bytes()).hexdigest()
+            )

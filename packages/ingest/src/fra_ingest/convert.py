@@ -17,9 +17,10 @@ from fra_ingest.config import IngestConfig
 from fra_ingest.converter import DoclingRunner, RangeRunner, docling_version
 from fra_ingest.footprint import peak_footprint_reading
 from fra_ingest.ocr_policy import plan_ranges
+from fra_ingest.pages import PAGES_STAGE_VERSION
 from fra_ingest.results import ConvertResult, LocateResult, RangeConversion, RangePlan
 
-CONVERT_VERSION = "1"
+CONVERT_VERSION = "2"  # OCR region failures must not survive as successful conversions
 
 # Errors that mean our code is wrong, not that docling could not read the pages. IndexError and
 # KeyError are left out, unlike in the pages stage: docling internals can raise them on unusual
@@ -34,6 +35,8 @@ def settings_hash(
     """Everything that changes what convert writes. The timeouts on the child and the memory
     budget change how a run is judged, not its output, so they are left out."""
     payload = {
+        "convert": CONVERT_VERSION,
+        "pages": PAGES_STAGE_VERSION,
         "device": config.device,
         "ocr_engine": config.convert_ocr,
         "images_scale": config.images_scale,
@@ -48,6 +51,16 @@ def settings_hash(
         "plans": [plan.model_dump(mode="json") for plan in plans],
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+
+
+def invalidate_convert(out_dir: Path) -> None:
+    """Remove the conversion and its derived outputs before regenerating source files.
+
+    A retry can change the extraction without changing its settings hash. Removing these
+    first also prevents interrupted conversion from leaving apparently current artifacts.
+    """
+    for name in ("statements.raw.json", "table_checks.json", "convert.json"):
+        (out_dir / name).unlink(missing_ok=True)
 
 
 def convert_pdf(
@@ -65,13 +78,10 @@ def convert_pdf(
     plans = plan_ranges(located, ocr_languages, config)
     release = docling or docling_version()
     digest = settings_hash(config, plans, release, located.version)
-    if use_cache and (cached := _cached(out_dir, digest)) is not None:
+    if use_cache and (cached := cached_convert(out_dir, digest)) is not None:
         return _with_current_budget_flag(cached, config)
 
-    # Removed before the wipe below: if this run is killed mid-conversion (child_timeout_s,
-    # OOM), a stale convert.json must not survive next to files a later run half-wrote, or
-    # a later run with the same settings would trust it (ADR 0005).
-    (out_dir / "convert.json").unlink(missing_ok=True)
+    invalidate_convert(out_dir)
     for name in ("docling", "pages"):
         shutil.rmtree(out_dir / name, ignore_errors=True)
         (out_dir / name).mkdir(parents=True)
@@ -99,6 +109,7 @@ def convert_pdf(
         docling_version=release,
         device=config.device,
         settings_hash=digest,
+        settings_plans=plans,
         ranges=ranges,
         page_images=page_images,
         flags=flags,
@@ -232,7 +243,7 @@ def _error(text: str) -> str:
     return f"error:{' '.join(text.split())[:_ERROR_CHARS]}"
 
 
-def _cached(out_dir: Path, digest: str) -> ConvertResult | None:
+def cached_convert(out_dir: Path, digest: str) -> ConvertResult | None:
     """A previous result, when it was made with the same settings, converted every range
     without failure, and every file it names is still there. A failed or partial range is
     retried, as a failed OCR read is in the pages stage."""

@@ -170,3 +170,22 @@ def test_tesseract_defaults_are_the_bake_off_choice(tmp_path: Path) -> None:
 def test_an_arabic_language_string_tesseract_does_not_know_is_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValidationError, match="tesseract_arabic_language"):
         load_config(write(tmp_path, '[tesseract]\narabic_language = "fra"\n'))
+
+
+def test_shipped_docker_profile_resolves_cpu_and_tesseract(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FRA_PROFILE", "docker")
+    monkeypatch.delenv("FRA_OCR_ENGINE", raising=False)
+    config = load_config()
+    assert (config.device, config.convert_ocr) == ("cpu", "tesseract")
+    assert load_config(ocr_engine="none").convert_ocr == "none"
+
+
+def test_native_tesseract_keeps_native_device(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FRA_PROFILE", "native")
+    assert load_config(ocr_engine="tesseract").device == "mps"
+
+
+def test_unknown_profile_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FRA_PROFILE", "typo")
+    with pytest.raises(ValueError, match="FRA_PROFILE"):
+        load_config()

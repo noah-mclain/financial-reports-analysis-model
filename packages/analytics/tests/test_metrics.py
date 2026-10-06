@@ -620,3 +620,40 @@ def test_the_primary_statement_of_each_type_is_the_first_in_document_order() -> 
         "later-balance",
         "acme-income",
     ]
+
+
+@pytest.mark.parametrize("precision,trap", [(2, False), (3, True)])
+def test_all_metrics_ignore_hostile_decimal_context(precision: int, trap: bool) -> None:
+    from decimal import ROUND_DOWN, Inexact, localcontext
+
+    statements = [s.model_copy(update={"scale": 1000}) for s in acme()]
+    expected = compute(statements, POLICY)
+    with localcontext() as context:
+        context.prec = precision
+        context.rounding = ROUND_DOWN
+        context.traps[Inexact] = trap
+        actual = compute(statements, POLICY)
+    assert actual == expected
+    assert metrics(statements)[("cash_conversion_cycle", "FY2025")].value == 127.75
+
+
+def test_consumed_current_prior_and_opening_warnings_are_deduplicated() -> None:
+    statements = acme()
+    income, balance = statements
+    income.flags.extend(["needs_review", "needs_review", "scale_missing"])
+    for item in income.line_items:
+        if item.canonical_id == "revenue":
+            item.cells[0].flags.append("digit_suspect")
+            item.cells[1].flags.append("prior_warning")
+        if item.canonical_id == "depreciation_amortization":
+            item.cells[0].flags.append("unrelated_warning")
+    for item in balance.line_items:
+        if item.canonical_id == "trade_receivables":
+            item.cells[1].flags.append("opening_warning")
+    found = metrics(statements)
+    growth = found[("revenue_growth", "FY2025")]
+    assert set(growth.flags) == {"needs_review", "digit_suspect", "prior_warning"}
+    assert growth.flags.count("needs_review") == 1
+    dso = found[("dso", "FY2025")]
+    assert set(dso.flags) == {"needs_review", "digit_suspect", "opening_warning"}
+    assert "unrelated_warning" not in dso.flags

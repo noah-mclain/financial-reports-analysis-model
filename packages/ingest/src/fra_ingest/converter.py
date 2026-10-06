@@ -16,6 +16,7 @@ from typing import Any, Literal, Protocol
 from PIL import Image
 
 from fra_ingest.config import IngestConfig
+from fra_ingest.docling_ocr import tesseract_pipeline
 from fra_ingest.ocr import TESSERACT_COMMAND, engine_language
 from fra_ingest.results import RangePlan
 
@@ -117,8 +118,11 @@ class DoclingRunner:
             from docling.document_converter import DocumentConverter, PdfFormatOption
 
             options = pipeline_options(self.config, plan)
+            format_args: dict[str, Any] = {"pipeline_options": options}
+            if self.config.convert_ocr == "tesseract":
+                format_args["pipeline_cls"] = tesseract_pipeline()
             converter = DocumentConverter(
-                format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)}
+                format_options={InputFormat.PDF: PdfFormatOption(**format_args)}
             )
             converter.initialize_pipeline(InputFormat.PDF)
             self._converters[key] = converter

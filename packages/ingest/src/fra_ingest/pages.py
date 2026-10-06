@@ -35,7 +35,7 @@ from fra_ingest.ocr import (
 from fra_ingest.results import PageText
 from fra_ingest.text_match import is_visual_arabic
 
-PAGES_STAGE_VERSION = "4"
+PAGES_STAGE_VERSION = "5"  # strict Tesseract output validation; v4 empty successes are unsafe
 
 _FPDF_ERR_PASSWORD = 4
 # Errors that mean the code calling the engine is wrong, not that recognition failed. They are
@@ -348,7 +348,8 @@ def _settings(config: IngestConfig, ocr: OcrEngine | None) -> dict[str, Any]:
 def ocr_key(config: IngestConfig, ocr: OcrEngine | None) -> str:
     """A digest of everything that decides what the pages read as, for stages that keep
     results derived from them."""
-    return hashlib.sha256(json.dumps(_settings(config, ocr), sort_keys=True).encode()).hexdigest()
+    payload = {"pages": PAGES_STAGE_VERSION, **_settings(config, ocr)}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
 
 def _usable(payload: Any, settings: dict[str, Any]) -> bool:

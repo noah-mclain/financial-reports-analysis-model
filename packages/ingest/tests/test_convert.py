@@ -79,9 +79,61 @@ def test_no_ranges_writes_a_result_without_loading_docling(tmp_path: Path) -> No
 
 def test_a_second_run_with_the_same_settings_is_served_from_convert_json(tmp_path: Path) -> None:
     first = run(tmp_path, FakeRunner(), doc([(2, 3)]))
+    out = tmp_path / SHA
+    statements = out / "statements.raw.json"
+    checks = out / "table_checks.json"
+    statements.write_text("current statements")
+    checks.write_text("current checks")
     again = FakeRunner()
     assert run(tmp_path, again, doc([(2, 3)])) == first
     assert again.calls == []
+    assert statements.read_text() == "current statements"
+    assert checks.read_text() == "current checks"
+
+
+@pytest.mark.parametrize("reason", ["failed", "partial", "forced", "changed", "missing_file"])
+@pytest.mark.parametrize("outcome", ["ok", "failed", "interrupt"])
+def test_regeneration_invalidates_derived_artifacts_before_loading_runner(
+    tmp_path: Path, reason: str, outcome: str
+) -> None:
+    where = doc([(2, 3)])
+    first_status = reason if reason in ("failed", "partial") else "ok"
+    run(tmp_path, FakeRunner({"2-3": first_status}), where)
+    out = tmp_path / SHA
+    statements = out / "statements.raw.json"
+    checks = out / "table_checks.json"
+    statements.write_text("stale statements")
+    checks.write_text("stale checks")
+    if reason == "missing_file":
+        (out / "pages/3.png").unlink()
+    runner = FakeRunner({"2-3": outcome})
+
+    def checked_factory(_config: IngestConfig) -> RangeRunner:
+        assert not statements.exists()
+        assert not checks.exists()
+        assert not (out / "convert.json").exists()
+        return runner
+
+    def regenerate() -> ConvertResult:
+        return convert_pdf(
+            PDF,
+            where,
+            {},
+            config(tmp_path, images_scale=1.0) if reason == "changed" else config(tmp_path),
+            runner_factory=checked_factory,
+            docling="2.126.0",
+            use_cache=reason != "forced",
+        )
+
+    if outcome == "interrupt":
+        with pytest.raises(KeyboardInterrupt):
+            regenerate()
+        assert not (out / "convert.json").exists()
+    else:
+        assert regenerate().ranges[0].status == outcome
+    assert len(runner.calls) == 1
+    assert not statements.exists()
+    assert not checks.exists()
 
 
 def test_a_changed_setting_converts_again(tmp_path: Path) -> None:

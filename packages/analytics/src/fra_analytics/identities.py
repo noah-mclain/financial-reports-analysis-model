@@ -23,6 +23,7 @@ from decimal import Decimal
 from typing import Literal
 
 from fra_analytics.frame import Frame, FrameRow, FrameStatement
+from fra_analytics.metrics.division import arithmetic_context
 from fra_core.schemas import CheckResult, StatementType
 from fra_core.taxonomy.loader import CanonicalItem, load_taxonomy
 from fra_core.tolerance import rounding_tolerance, within_rounding
@@ -175,6 +176,7 @@ def _check(
     )
 
 
+@arithmetic_context()
 def check_identities(frame: Frame) -> list[CheckResult]:
     """Assets against liabilities plus equity on every balance sheet, and every subtotal tie
     whose total is printed, for every period."""

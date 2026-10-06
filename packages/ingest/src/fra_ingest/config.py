@@ -18,6 +18,7 @@ _SOURCE_ROOT = Path(__file__).resolve().parents[4]
 OcrEngineName = Literal["ocrmac", "tesseract", "none"]
 # Set to one of those names to override ``convert.ocr_engine`` for one run (the bake-off).
 OCR_ENGINE_ENV = "FRA_OCR_ENGINE"
+EFFECTIVE_CONFIG_ENV = "FRA_INGEST_EFFECTIVE_CONFIG"
 
 
 def find_repo_root(environ: Mapping[str, str], source_root: Path, cwd: Path) -> Path:
@@ -103,6 +104,18 @@ class IngestConfig(BaseModel):
         return self
 
 
+def transported_config() -> IngestConfig | None:
+    """Read a CLI child's authoritative config at the same configuration boundary."""
+    payload = os.environ.get(EFFECTIVE_CONFIG_ENV)
+    if payload is None:
+        return None
+    config = IngestConfig.model_validate_json(payload)
+    missing = IngestConfig.model_fields.keys() - config.model_fields_set
+    if missing:
+        raise ValueError(f"effective config is incomplete; missing fields: {sorted(missing)}")
+    return config
+
+
 def load_config(path: Path | None = None, *, ocr_engine: str | None = None) -> IngestConfig:
     """Read settings, rejecting any key the model does not know.
 
@@ -126,6 +139,11 @@ def load_config(path: Path | None = None, *, ocr_engine: str | None = None) -> I
                 raise ValueError(msg)
             values[field_name] = value
 
+    profile = os.environ.get("FRA_PROFILE", "native")
+    if profile not in ("native", "docker"):
+        raise ValueError(f"unknown FRA_PROFILE {profile!r}; expected native or docker")
+    if profile == "docker":
+        values.update(device="cpu", convert_ocr="tesseract")
     chosen = ocr_engine or os.environ.get(OCR_ENGINE_ENV)
     if chosen:
         values["convert_ocr"] = chosen

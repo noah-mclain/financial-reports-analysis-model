@@ -227,6 +227,8 @@ class ConvertResult(BaseModel):
     docling_version: str
     device: str
     settings_hash: str
+    settings_plans: list[RangePlan] | None = None
+    """Plans used by the CLI child, for verification through the existing settings digest."""
     ranges: list[RangeConversion]
     page_images: dict[int, str] = Field(default_factory=dict)
     peak_footprint_gb: float | None = None

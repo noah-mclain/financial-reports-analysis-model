@@ -34,6 +34,7 @@ from decimal import Decimal
 from typing import Literal
 
 from fra_analytics.frame import Frame, FrameRow, to_frame
+from fra_analytics.metrics.division import arithmetic_context
 from fra_analytics.metrics.inputs import Inputs
 from fra_analytics.metrics.profitability import MARGIN_IDS, compute_margins
 from fra_analytics.policy import Policy
@@ -388,6 +389,7 @@ def _compute_one(spec: MetricSpec, frame: Frame, policy: Policy, period: Period)
     return result(value, flags, used, notes.caveats)
 
 
+@arithmetic_context()
 def compute(statements: Sequence[Statement], policy: Policy) -> list[MetricValue]:
     """Every metric for every period of the statements it is anchored on: the margins first,
     from ``compute_margins``, then the registry in order, each in period order. Pass the primary

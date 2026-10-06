@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
-from support import located
+from support import FakeRunner, located, text_page
+from test_structure import document
 
-from fra_core.schemas import PageMode
+from fra_core.schemas import PageMode, StatementType
 from fra_ingest import structure
 from fra_ingest.config import IngestConfig
-from fra_ingest.convert import CONVERT_VERSION, settings_hash
+from fra_ingest.convert import CONVERT_VERSION, convert_pdf, settings_hash
 from fra_ingest.errors import IngestError
 from fra_ingest.ocr_policy import plan_ranges
-from fra_ingest.results import ConvertResult, LocateResult, RangeConversion
+from fra_ingest.results import ConvertResult, LocateResult, PageScore, RangeConversion
 
 SHA = "d" * 64
 PDF = Path("doc.pdf")
@@ -143,3 +145,108 @@ def test_cached_statements_without_their_checks_are_structured_again(
     checks.unlink()
     structure.structure_pdf(PDF, config, None)
     assert checks.is_file()
+
+
+@pytest.mark.parametrize("status", ["failed", "partial"])
+def test_structure_rebuilds_statements_and_checks_after_same_digest_recovery(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, status: str
+) -> None:
+    config = IngestConfig(artifact_root=tmp_path)
+    where = located([PageMode.TEXT] * 2, [(1, 2)], sha256=SHA)
+    where.pages = [
+        PageScore(page_no=n, type_scores={}, title_types=[StatementType.BALANCE]) for n in (1, 2)
+    ]
+    monkeypatch.setattr(structure, "load_or_locate", lambda *_args: where)
+    monkeypatch.setattr(
+        structure,
+        "read_pages",
+        lambda *_args, **_kw: [text_page("Statement of financial position")],
+    )
+    conversions: list[ConvertResult] = []
+
+    def unsuccessful(pdf: Path, config: IngestConfig) -> ConvertResult:
+        result = convert_pdf(
+            pdf,
+            where,
+            {},
+            config,
+            runner_factory=lambda _config: FakeRunner({"1-2": status}),
+            docling=RELEASE,
+        )
+        conversions.append(result)
+        return result
+
+    first = structure.structure_pdf(PDF, config, None, convert=unsuccessful)
+    assert conversions[0].ranges[0].status == status
+    assert first.statements == []
+    out = tmp_path / SHA
+    checks = out / "table_checks.json"
+    statements = out / "statements.raw.json"
+    assert json.loads(checks.read_text()) == []
+    old_statements = statements.read_bytes()
+    recovered_calls: list[Path] = []
+
+    def recovered(pdf: Path, _config: IngestConfig) -> ConvertResult:
+        # An injected converter has no dependency on convert_pdf's invalidation.
+        recovered_calls.append(pdf)
+        assert not statements.exists()
+        assert not checks.exists()
+        previous = conversions[0]
+        fresh = previous.model_copy(
+            update={
+                "ranges": [
+                    previous.ranges[0].model_copy(
+                        update={"status": "ok", "docling_path": "docling/p1-2.json", "flags": []}
+                    )
+                ],
+                "flags": [],
+            }
+        )
+        (out / "docling/p1-2.json").write_text(document().model_dump_json(by_alias=True))
+        (out / "convert.json").write_text(fresh.model_dump_json())
+        return fresh
+
+    result = structure.structure_pdf(PDF, config, None, convert=recovered)
+    assert recovered_calls == [PDF]
+    assert result.settings_hash == first.settings_hash
+    assert len(result.statements) == 1
+    assert statements.read_bytes() != old_statements
+    assert json.loads(statements.read_text())["statements"]
+    rebuilt_checks = json.loads(checks.read_text())
+    assert rebuilt_checks
+    assert {c["status"] for c in rebuilt_checks if c["kind"] == "balance_identity"} == {"pass"}
+
+    before = (statements.read_bytes(), checks.read_bytes())
+    assert structure.structure_pdf(PDF, config, None, convert=recovered) == result
+    assert recovered_calls == [PDF]
+    assert (statements.read_bytes(), checks.read_bytes()) == before
+
+
+@pytest.mark.parametrize("failure", ["interrupt", "missing_docling"])
+def test_injected_conversion_failure_removes_derived_artifacts_before_running(
+    tmp_path: Path, failure: str
+) -> None:
+    config = IngestConfig(artifact_root=tmp_path)
+    current = _result(_current_hash(config, _located()))
+    unsuccessful = current.model_copy(
+        update={"ranges": [r.model_copy(update={"status": "failed"}) for r in current.ranges]}
+    )
+    _store(config, unsuccessful, docling=False)
+    out = tmp_path / SHA
+    statements = out / "statements.raw.json"
+    checks = out / "table_checks.json"
+    statements.write_text("stale statements")
+    checks.write_text("stale checks")
+
+    def failing(_pdf: Path, _config: IngestConfig) -> ConvertResult:
+        assert not statements.exists()
+        assert not checks.exists()
+        if failure == "interrupt":
+            raise KeyboardInterrupt
+        return _result(_current_hash(config, _located()))
+
+    error = KeyboardInterrupt if failure == "interrupt" else IngestError
+    with pytest.raises(error):
+        structure.current_convert(PDF, config, None, _located(), failing)
+    assert not statements.exists()
+    assert not checks.exists()

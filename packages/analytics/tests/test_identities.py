@@ -189,3 +189,20 @@ def test_every_tie_item_is_a_canonical_item() -> None:
     for tie in identities.TIES:
         for item in (tie.total, *tie.parts, *tie.subtractions):
             assert load_taxonomy().by_id(item) is not None, f"{tie.text}: {item}"
+
+
+def test_identity_is_independent_of_ambient_precision_and_traps() -> None:
+    from decimal import Inexact, localcontext
+
+    with localcontext() as context:
+        context.prec = 3
+        context.traps[Inexact] = True
+        result = only(
+            balance(
+                ("total_assets", "2002"), ("total_liabilities", "1001"), ("total_equity", "1001")
+            ),
+            "balance_identity",
+        )
+    assert result.status == "pass"
+    assert result.expected == Decimal("2002")
+    assert result.difference == 0

@@ -60,6 +60,8 @@ from harness.expected import (
     ExpectedStatement,
     load_expected,
 )
+from harness.paths import STRATA
+from harness.reproducibility import report_evidence
 
 OUT = REPO_ROOT / "var" / "eval"
 # Gate G1 (04-execution-phases.md).
@@ -617,10 +619,23 @@ def main(argv: list[str] | None = None) -> int:
     files: list[tuple[ExpectedFile, dict[StatementType, Statement]]] = []
     timings: dict[str, OcrTiming] = {}
     rows = []
+    document_hashes: dict[str, str] = {}
+    expected_hashes: dict[str, str] = {}
+    period_kinds: dict[str, str] = {}
     for path in sorted(EXPECTED_DIR.glob("*.json")):
         expected = load_expected(path)
         pdf = MANIFEST.parent / entries[expected.id]["file"]
-        out_dir = config.artifact_root / sha256_file(pdf)
+        document_hashes[expected.id] = sha256_file(pdf)
+        expected_hashes[expected.id] = sha256_file(path)
+        periods = [p for s in expected.statements for p in s.periods]
+        period_kinds[expected.id] = (
+            "annual"
+            if any(p.is_annual for p in periods)
+            else "interim"
+            if any(p.months is not None and p.months < 12 for p in periods)
+            else "unknown"
+        )
+        out_dir = config.artifact_root / document_hashes[expected.id]
         before = _stamps(out_dir)
         result = structure_pdf(pdf, config, engine)
         found: dict[StatementType, Statement] = {}
@@ -637,6 +652,7 @@ def main(argv: list[str] | None = None) -> int:
                     "status": expected.status,
                     "type": s.type.value,
                     "page_mode": s.page_mode,
+                    "period_kind": period_kinds[expected.id],
                     **asdict(score),
                 }
             )
@@ -645,7 +661,31 @@ def main(argv: list[str] | None = None) -> int:
                 f"cells {score.cells:3}  right {score.right:3}  unconfirmed {score.unconfirmed:3}"
             )
     lines, code = report(files)
-    payload: dict[str, Any] = {"statements": rows}
+    strata = {}
+    for kind in (*STRATA, "unknown", "total"):
+        subset = [(f, found) for f, found in files if kind == "total" or period_kinds[f.id] == kind]
+        stratum_lines, stratum_code = report(subset)
+        strata[kind] = {
+            "documents": len(subset),
+            "report": stratum_lines,
+            "exit_code": stratum_code,
+        }
+    payload: dict[str, Any] = {
+        "statements": rows,
+        "run_options": {
+            "label": label,
+            "tagged": tagged,
+            "fresh": args.fresh,
+            "page_ocr_enabled": engine is not None,
+        },
+        "strata": strata,
+        "reproducibility": report_evidence(
+            config,
+            documents=document_hashes,
+            expected=expected_hashes,
+            inputs={"manifest": sha256_file(MANIFEST)},
+        ),
+    }
     destination = OUT / "extraction-golden.json"
     if tagged:
         cold, timings = split_cold_start([f.id for f, _ in files], timings)

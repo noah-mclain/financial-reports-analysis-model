@@ -69,6 +69,9 @@ def load_or_locate(pdf_path: Path, config: IngestConfig, ocr: OcrEngine | None) 
             result is not None
             and result.version == LOCATE_VERSION
             and result.ocr_key == ocr_key(config, ocr)
+            and not (
+                ocr is not None and any(f.startswith("ocr_failed_pages:") for f in result.flags)
+            )
         ):
             return result
     return locate_pdf(pdf_path, config, ocr)

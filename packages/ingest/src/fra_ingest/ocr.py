@@ -12,6 +12,7 @@ import shutil
 import subprocess
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from math import isfinite
 from typing import Any, Protocol
 
 from PIL import Image
@@ -108,16 +109,57 @@ def lines_from_tesseract_tsv(tsv: str, size: tuple[int, int]) -> list[OcrLine]:
     image's (width, height) in pixels. Confidence is the mean word confidence as a fraction."""
     rows = tsv.splitlines()
     columns = rows[0].split("\t") if rows else []
-    if columns[:1] != ["level"] or columns[-1:] != ["text"]:
+    required = {
+        "level",
+        "page_num",
+        "block_num",
+        "par_num",
+        "line_num",
+        "word_num",
+        "left",
+        "top",
+        "width",
+        "height",
+        "conf",
+        "text",
+    }
+    missing = sorted(required - set(columns))
+    duplicates = sorted({c for c in columns if columns.count(c) > 1})
+    if missing or duplicates or columns[-1:] != ["text"]:
+        raise OcrEngineError(
+            f"tesseract TSV columns: missing {missing}, duplicate {duplicates}; text must be last"
+        )
+    if columns[:1] != ["level"]:
         msg = f"tesseract output is not TSV: {tsv[:80]!r}"
         raise OcrEngineError(msg)
     width, height = size
+    if width <= 0 or height <= 0:
+        raise OcrEngineError(f"tesseract image size must be positive, got {size}")
     words: dict[tuple[str, str, str], list[tuple[str, float, int, int, int, int]]] = {}
-    for row in rows[1:]:
-        cells = row.split("\t", len(columns) - 1)
+    for row_no, row in enumerate(rows[1:], start=2):
+        cells = row.split("\t")
         if len(cells) != len(columns):
-            continue
+            raise OcrEngineError(
+                f"tesseract TSV row {row_no}: expected {len(columns)} columns, got {len(cells)}"
+            )
         record = dict(zip(columns, cells, strict=True))
+        level = _number(record, "level", int)
+        confidence = _number(record, "conf", float)
+        if level not in range(1, 6) or not isfinite(confidence) or not -1 <= confidence <= 100:
+            raise OcrEngineError(f"tesseract TSV row {row_no}: invalid level or confidence")
+        for column in (
+            "page_num",
+            "block_num",
+            "par_num",
+            "line_num",
+            "word_num",
+            "left",
+            "top",
+            "width",
+            "height",
+        ):
+            if _number(record, column, int) < 0:
+                raise OcrEngineError(f"tesseract TSV row {row_no}: negative {column}")
         text = record["text"].strip(f" {_DIRECTION_MARKS}")
         if record["level"] != "5" or not text or _number(record, "conf", float) < 0:
             continue

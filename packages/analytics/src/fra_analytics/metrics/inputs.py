@@ -21,9 +21,10 @@ from datetime import date
 from decimal import Decimal
 
 from fra_analytics.frame import Frame, FrameRow
-from fra_analytics.metrics.division import divide
+from fra_analytics.metrics.division import arithmetic_context, divide
 from fra_analytics.period_math import months_before
 from fra_analytics.policy import Policy
+from fra_analytics.unit_caveats import UNIT_FLAGS
 from fra_core.schemas import Period
 from fra_core.taxonomy.loader import load_taxonomy
 
@@ -46,9 +47,22 @@ class Inputs:
         """Record the cells a role rests on, each once however many formulas read it."""
         cited = self.cells.setdefault(role, [])
         cited.extend(r for r in rows if r not in cited)
+        for row in rows:
+            for flag in self._frame.statement(row.statement_id).flags:
+                # Unit assumptions and contradictions are handled by unit_notes, once.
+                if flag not in (
+                    *UNIT_FLAGS,
+                    "scale_missing",
+                    "currency_from_domicile",
+                    "currency_inferred",
+                ):
+                    self.flag(flag)
+            for flag in row.flags:
+                self.flag(flag)
 
     # Reading -------------------------------------------------------------------------------
 
+    @arithmetic_context()
     def _read(
         self, item: str, *, end_date: date, months: int | None, role: str | None = None
     ) -> Decimal | None:
@@ -82,6 +96,7 @@ class Inputs:
         """The balance at the end of this period."""
         return self._read(item, end_date=self.period.end_date, months=None)
 
+    @arithmetic_context()
     def average(self, item: str) -> Decimal | None:
         """D2: the mean of the opening and closing balance. With no opening balance, the closing
         balance and the flag ``average_fallback_to_closing``. With no closing balance, nothing."""
@@ -99,11 +114,14 @@ class Inputs:
         )
         if len(opening_rows) > 1:
             self.flag(f"duplicate_input:{item}@opening")
+            self._cite(item, opening_rows)
             return None
         if not opening_rows:
             self.flag("average_fallback_to_closing")
             return closing
         [opening] = opening_rows
+        self._cite(item, [opening])
+        self.cells[item].remove(opening)
         self.cells[item].insert(0, opening)
         return (opening.value + closing) / 2
 
@@ -126,6 +144,7 @@ class Inputs:
     # Arithmetic ----------------------------------------------------------------------------
 
     @staticmethod
+    @arithmetic_context()
     def total(*values: Decimal | None) -> Decimal | None:
         """The sum, or None when any part is missing: a missing part is never a zero."""
         if any(v is None for v in values):
@@ -141,6 +160,7 @@ class Inputs:
             self.flag(name)
         return value
 
+    @arithmetic_context()
     def growth(self, current: Decimal | None, prior: Decimal | None) -> Decimal | None:
         """The change from ``prior`` to ``current`` as a fraction. A growth rate from a zero or a
         negative base is undefined: null with the flag ``divide`` gives, whatever the current

@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+from fra_analytics.metrics.division import arithmetic_context
 from fra_core.schemas import Period, Provenance, Statement, StatementType
 from fra_core.schemas.caveat import CaveatId
 
@@ -54,6 +55,7 @@ class FrameRow:
     value: Decimal
     currency: str
     provenance: Provenance
+    flags: tuple[str, ...] = ()
 
 
 def _period_order(period: Period) -> tuple[date, str, int]:
@@ -115,6 +117,7 @@ def primary_statements(statements: Sequence[Statement]) -> list[Statement]:
     return list(found.values())
 
 
+@arithmetic_context()
 def to_frame(statements: Sequence[Statement]) -> Frame:
     ids = [s.id for s in statements]
     repeated = sorted({i for i in ids if ids.count(i) > 1})
@@ -152,6 +155,7 @@ def to_frame(statements: Sequence[Statement]) -> Frame:
                     value=cell.reported * statement.scale,
                     currency=statement.currency,
                     provenance=cell.provenance,
+                    flags=tuple(cell.flags),
                 )
                 for cell in item.cells
                 if cell.reported is not None
