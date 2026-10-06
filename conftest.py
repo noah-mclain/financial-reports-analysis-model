@@ -43,18 +43,30 @@ def pytest_runtest_logreport(report: pytest.TestReport) -> None:
         _SKIPPED.append(report.nodeid)
 
 
+def pytest_collectreport(report: pytest.CollectReport) -> None:
+    # A whole module skipped while it is collected (importorskip, allow_module_level) never
+    # reaches pytest_runtest_logreport.
+    if report.skipped:
+        _SKIPPED.append(report.nodeid)
+
+
 def _fail_on_skip(session: pytest.Session, exitstatus: int) -> None:
     if os.environ.get(FAIL_ON_SKIP_ENV) != "1" or not _SKIPPED:
         return
     writer = session.config.get_terminal_writer()
     writer.line(
         f"\nFAILED: {len(_SKIPPED)} test(s) skipped while {FAIL_ON_SKIP_ENV}=1 "
-        "(exit status set to 1, whatever the summary above says):",
+        "(exit status set to 1, whatever the summary line says):",
         red=True,
     )
     for nodeid in _SKIPPED:
         writer.line(f"  {nodeid}", red=True)
-    if exitstatus in (pytest.ExitCode.OK, pytest.ExitCode.TESTS_FAILED):
+    # No tests collected is what a run whose every module was skipped reports.
+    if exitstatus in (
+        pytest.ExitCode.OK,
+        pytest.ExitCode.TESTS_FAILED,
+        pytest.ExitCode.NO_TESTS_COLLECTED,
+    ):
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
 
 
@@ -66,7 +78,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     writer = session.config.get_terminal_writer()
     writer.line(
         f"\nFAILED: the test run changed the real cache {REAL_ARTIFACTS} "
-        "(exit status set to 1, whatever the summary above says):",
+        "(exit status set to 1, whatever the summary line says):",
         red=True,
     )
     for line in changes:

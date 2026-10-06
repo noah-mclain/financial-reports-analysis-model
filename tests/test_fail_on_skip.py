@@ -80,3 +80,15 @@ def test_a_skip_passes_the_run_unless_the_variable_is_one(
 def test_a_run_without_skips_passes_with_the_variable_set(tmp_path: Path) -> None:
     code, output = run_probe(tmp_path, "1", "def test_passes():\n    pass\n")
     assert code == 0, output
+
+
+def test_a_module_skipped_while_collected_fails_the_run(tmp_path: Path) -> None:
+    body = (
+        "import pytest\n"
+        'pytest.importorskip("a_module_nobody_installed")\n'
+        "def test_never_collected():\n    pass\n"
+    )
+    code, output = run_probe(tmp_path, "1", body)
+    assert code == 1, output
+    assert "1 test(s) skipped while FRA_FAIL_ON_SKIP=1" in output
+    assert "test_probe.py" in output.split("FAILED:")[-1]
