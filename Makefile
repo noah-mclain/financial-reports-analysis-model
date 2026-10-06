@@ -52,7 +52,7 @@ lint: ## Lint without fixing
 
 typecheck: ## Type check the packages, apps, the analytics golden test, eval harness and release validation
 	@$(MAKE) --no-print-directory unhide-pth
-	$(UV) run mypy packages $(wildcard apps) tests/analytics
+	$(UV) run mypy packages $(wildcard apps) tests/analytics tests/test_cache_guard.py cache_isolation.py
 	$(UV) run mypy eval/harness
 	$(UV) run mypy scripts/ci/release.py
 

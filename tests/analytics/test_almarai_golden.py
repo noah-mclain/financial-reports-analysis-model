@@ -8,21 +8,19 @@ null here names an item mapping did not place, not a calculation error.
 
 from __future__ import annotations
 
-import hashlib
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from cache_isolation import GoldenStructure
 
 from fra_analytics.frame import primary_statements, to_frame
 from fra_analytics.identities import check_identities
 from fra_analytics.metrics.registry import compute
 from fra_analytics.policy import load_policy
 from fra_core.schemas import CheckResult, MetricValue, Statement
-from fra_ingest.config import load_config
-from fra_ingest.structure import structure_pdf
 
 pytestmark = pytest.mark.golden
 
@@ -45,32 +43,28 @@ COMPUTED_IN_BOTH = [
 Metrics = Mapping[tuple[str, str], MetricValue]
 
 
-def load_edition(name: str) -> tuple[list[Statement], list[CheckResult]]:
+Edition = tuple[list[Statement], list[CheckResult]]
+
+
+def load_edition(golden_structure: Callable[[str], GoldenStructure], name: str) -> Edition:
     """The primary statement of each type (the package's rule) and the checks the structure
     stage wrote for the document."""
-    pdf = REPO_ROOT / "eval" / "golden" / "documents" / name
-    if not pdf.exists():
-        pytest.skip(f"golden document {name} is not present")
-    config = load_config()
-    out_dir = config.artifact_root / hashlib.sha256(pdf.read_bytes()).hexdigest()
-    if not (out_dir / "convert.json").exists():
-        pytest.skip("run make eval-convert first")
-    result = structure_pdf(pdf, config, None, use_cache=False)
+    structured = golden_structure(name)
     checks = [
         CheckResult.model_validate(c)
-        for c in json.loads((out_dir / "table_checks.json").read_text("utf-8"))
+        for c in json.loads((structured.out_dir / "table_checks.json").read_text("utf-8"))
     ]
-    return primary_statements(result.statements), checks
+    return primary_statements(structured.result.statements), checks
 
 
 @pytest.fixture(scope="module")
-def english() -> tuple[list[Statement], list[CheckResult]]:
-    return load_edition(ENGLISH)
+def english(golden_structure: Callable[[str], GoldenStructure]) -> Edition:
+    return load_edition(golden_structure, ENGLISH)
 
 
 @pytest.fixture(scope="module")
-def arabic() -> tuple[list[Statement], list[CheckResult]]:
-    return load_edition(ARABIC)
+def arabic(golden_structure: Callable[[str], GoldenStructure]) -> Edition:
+    return load_edition(golden_structure, ARABIC)
 
 
 def metrics_of(statements: list[Statement]) -> Metrics:

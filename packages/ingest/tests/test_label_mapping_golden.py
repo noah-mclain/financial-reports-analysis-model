@@ -4,16 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from decimal import Decimal
-from pathlib import Path
 
 import pytest
-from support import artifact_dir
+from cache_isolation import GoldenStructure
 
 from fra_core.schemas import Statement, StatementType
 from fra_core.taxonomy.loader import load_taxonomy
-from fra_ingest.config import load_config
 from fra_ingest.label_mapping import MAPPED_TYPES
-from fra_ingest.structure import structure_pdf
 
 pytestmark = pytest.mark.golden
 
@@ -28,13 +25,11 @@ MAPPED_IN_BOTH = {
 }
 
 
-def mapped_statements(golden: Callable[[str], Path], name: str) -> dict[StatementType, Statement]:
-    pdf = golden(name)
-    if not (artifact_dir(pdf) / "convert.json").exists():
-        pytest.skip("run make eval-convert first")
-    result = structure_pdf(pdf, load_config(), None, use_cache=False)
+def mapped_statements(
+    golden_structure: Callable[[str], GoldenStructure], name: str
+) -> dict[StatementType, Statement]:
     found: dict[StatementType, Statement] = {}
-    for s in result.statements:
+    for s in golden_structure(name).result.statements:
         found.setdefault(s.type, s)
     return found
 
@@ -54,10 +49,10 @@ def by_figures(statement: Statement) -> dict[tuple[tuple[str, Decimal], ...], se
 
 @pytest.mark.parametrize("statement_type", MAPPED_TYPES)
 def test_almarai_critical_items_map_once_or_not_at_all(
-    golden: Callable[[str], Path], statement_type: StatementType
+    golden_structure: Callable[[str], GoldenStructure], statement_type: StatementType
 ) -> None:
     for name in (ENGLISH, ARABIC):
-        statement = mapped_statements(golden, name)[statement_type]
+        statement = mapped_statements(golden_structure, name)[statement_type]
         for item_id in CRITICAL[statement_type]:
             rows = [i for i in statement.line_items if i.canonical_id == item_id]
             assert len(rows) <= 1, f"{name} {item_id}: {len(rows)} rows mapped"
@@ -67,10 +62,10 @@ def test_almarai_critical_items_map_once_or_not_at_all(
 
 @pytest.mark.parametrize("statement_type", MAPPED_TYPES)
 def test_almarai_english_and_arabic_rows_map_to_the_same_items(
-    golden: Callable[[str], Path], statement_type: StatementType
+    golden_structure: Callable[[str], GoldenStructure], statement_type: StatementType
 ) -> None:
-    english = by_figures(mapped_statements(golden, ENGLISH)[statement_type])
-    arabic = by_figures(mapped_statements(golden, ARABIC)[statement_type])
+    english = by_figures(mapped_statements(golden_structure, ENGLISH)[statement_type])
+    arabic = by_figures(mapped_statements(golden_structure, ARABIC)[statement_type])
     shared = english.keys() & arabic.keys()
     assert shared, "no row mapped in both languages"
     for key in shared:
