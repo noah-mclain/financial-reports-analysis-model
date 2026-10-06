@@ -40,25 +40,45 @@ inference APIs; only the `Slow tests` workflow downloads models.
 
 The `Slow tests` workflow runs the tests marked `slow` that do not need a Mac, as
 `pytest -m "slow and not mac"` with `FRA_PROFILE=docker` and `FRA_OCR_ENGINE=tesseract`. It runs
-every Monday at 04:41 UTC, on manual dispatch, and on a pull request that edits the workflow or
-`scripts/ci/docling_models.py`. It is not a pull request gate: the tests load docling's layout and
-table models and convert real pages. Measured on a 4-core box with the models already cached, the
-12 tests take about 1.5 minutes; the job has a 30-minute timeout.
+every Monday at 04:41 UTC, on manual dispatch, and on a pull request that touches what those
+tests depend on: the workflow, the workspace action and the Dockerfile it reads, the lock,
+`pyproject.toml`, the Python version, the CI scripts, `configs/`, the packages, the tests, the
+eval harness and the golden documents. It is not a pull request gate: the tests load docling's
+layout and table models and convert real pages. Measured on a 4-core box with the models already
+cached, the 15 tests take about 6.5 minutes, 4.5 of them in the real-child Almarai conversion; the
+job has a 30-minute timeout.
 
 The `mac` marker, declared in `pyproject.toml`, is for a test that needs Apple Vision (`ocrmac`) or
 the Metal device. Such a test fails or skips on Linux, so it carries the marker and the Linux job
 deselects it. Nothing else is marked: a slow test that fails on Linux for another reason is a bug
-to fix, not a test to mark. No check enforces the marker beyond the job itself, because a test
-that needs Vision fails there with `OcrMac is only supported on Mac`, which is the signal to mark it.
+to fix, not a test to mark. A test that builds its settings with `load_config()` runs under the
+active profile, so the Linux job covers it with CPU and Tesseract; only a test that hard-codes
+Vision, or that the Docker profile cannot pass by design, is marked `mac`. No check enforces the
+marker beyond the job itself: a test that needs Vision fails there with `OcrMac is only supported
+on Mac`, which is the signal to mark it.
+
+A skipped test fails the job. The job sets `FRA_FAIL_ON_SKIP=1`, and `conftest.py` then ends the
+session with exit status 1 and lists every skipped test, so a runner that lacks something a test
+needs cannot pass by skipping it. Unset or any other value, a skip stays a skip, which is what
+`make test` wants on a machine without the golden documents or Tesseract. Two things the job
+installs for that reason: the Tesseract packages, through the workspace action, and
+`fonts-dejavu-core` in its own step, because the OCR tests draw the images they read with
+`/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf` and skip without a font that has Arabic
+letters. Only the tests need that font, so it is not in the Dockerfile.
 
 The job restores `~/.cache/huggingface/hub` under a key built from the installed `docling` and
-`docling-ibm-models` versions and the runner OS (`scripts/ci/docling_models.py key`), so a lock
-change that moves either version builds a new cache. Only on a miss, one step sets
-`HF_HUB_OFFLINE=0` and runs `scripts/ci/docling_models.py warm`, which downloads the layout
-detector and the table structure model, the two repositories the conversion pipeline reads, through
-docling's own download helpers (about 506 MB). Every other step, including the tests, runs with
-`HF_HUB_OFFLINE=1`, so a model missing from the cache is an error. To change what is downloaded,
-edit that script; the key follows the lock without any edit.
+`docling-ibm-models` versions (`scripts/ci/docling_models.py key`), the runner OS and a hash of
+`scripts/ci/docling_models.py`, so a lock change that moves either version, or an edit to what the
+script downloads, builds a new cache. Only on a miss, one step sets `HF_HUB_OFFLINE=0` and runs
+`scripts/ci/docling_models.py warm`, which downloads the layout detector and the table structure
+model, the two repositories the conversion pipeline reads, through docling's own download helpers
+(about 506 MB, 16 s measured on a 4-core box). The layout model is the one the project's
+`pipeline_options` selects, at the revision docling names (`main`), not one this repository
+pins. The next step saves the cache right after the download, so a failing test does not discard
+it. Every other step, including the tests, runs with `HF_HUB_OFFLINE=1`, so a model missing from
+the cache is an error. GitHub evicts a cache that has not been used for 7 days, so the weekly run
+may often download; the cache pays off for the runs between. To change what is
+downloaded, edit that script: the hash in the key makes the next run download afresh.
 
 ## Commit and branch hygiene
 
