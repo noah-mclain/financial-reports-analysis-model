@@ -1,9 +1,11 @@
 [project]
 name = "fra-analytics"
 version = "0.1.0"
-description = "Deterministic financial metrics over mapped statements."
+description = "Analytics: accounting identity checks and deterministic metrics over extracted statements."
 requires-python = ">=3.12,<3.13"
-dependencies = ["fra-core"]
+dependencies = [
+  "fra-core",
+]
 
 [tool.uv.sources]
 fra-core = { workspace = true }

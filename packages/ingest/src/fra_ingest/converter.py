@@ -16,6 +16,8 @@ from typing import Any, Literal, Protocol
 from PIL import Image
 
 from fra_ingest.config import IngestConfig
+from fra_ingest.docling_ocr import tesseract_pipeline
+from fra_ingest.ocr import TESSERACT_COMMAND, engine_language
 from fra_ingest.results import RangePlan
 
 RunStatus = Literal["ok", "partial", "failed"]
@@ -44,7 +46,8 @@ def docling_version() -> str:
 
 
 def pipeline_options(config: IngestConfig, plan: RangePlan) -> Any:
-    """The options of 04, 1.2, with the OCR mode and one language taken from the plan."""
+    """The options of 04, 1.2, with the OCR mode and one language taken from the plan, and the
+    OCR engine from ``config.convert_ocr``: the one that also reads our own pages."""
     from docling.datamodel.accelerator_options import AcceleratorDevice, AcceleratorOptions
     from docling.datamodel.pipeline_options import (
         OcrMacOptions,
@@ -52,6 +55,7 @@ def pipeline_options(config: IngestConfig, plan: RangePlan) -> Any:
         PdfPipelineOptions,
         TableFormerMode,
         TableStructureOptions,
+        TesseractCliOcrOptions,
     )
 
     if plan.ocr == "skipped":
@@ -79,9 +83,21 @@ def pipeline_options(config: IngestConfig, plan: RangePlan) -> Any:
     )
     if plan.ocr_language is not None:
         mode = OcrMode.FULL_PAGE if plan.ocr == "full_page" else OcrMode.PDF_AWARE_LAYOUT_REGIONS
-        options.ocr_options = OcrMacOptions(
-            lang=[plan.ocr_language], mode=mode, scale=config.ocr_scale
-        )
+        engine = config.convert_ocr
+        if engine == "none":
+            msg = f"range {plan.label} names OCR language {plan.ocr_language} but no engine is set"
+            raise ValueError(msg)
+        common: dict[str, Any] = {
+            "lang": [engine_language(config, plan.ocr_language)],
+            "mode": mode,
+            "scale": config.ocr_scale,
+        }
+        if engine == "ocrmac":
+            options.ocr_options = OcrMacOptions(**common)
+        else:
+            options.ocr_options = TesseractCliOcrOptions(
+                tesseract_cmd=TESSERACT_COMMAND, psm=config.tesseract_psm, **common
+            )
     return options
 
 
@@ -102,8 +118,11 @@ class DoclingRunner:
             from docling.document_converter import DocumentConverter, PdfFormatOption
 
             options = pipeline_options(self.config, plan)
+            format_args: dict[str, Any] = {"pipeline_options": options}
+            if self.config.convert_ocr == "tesseract":
+                format_args["pipeline_cls"] = tesseract_pipeline()
             converter = DocumentConverter(
-                format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=options)}
+                format_options={InputFormat.PDF: PdfFormatOption(**format_args)}
             )
             converter.initialize_pipeline(InputFormat.PDF)
             self._converters[key] = converter

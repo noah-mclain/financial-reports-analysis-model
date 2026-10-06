@@ -11,9 +11,11 @@ import pytest
 
 from fra_ingest.child import convert_in_child
 from fra_ingest.config import IngestConfig
+from fra_ingest.convert import CONVERT_VERSION, settings_hash
 from fra_ingest.errors import IngestError
+from fra_ingest.locate import LOCATE_VERSION
 from fra_ingest.pages import sha256_file
-from fra_ingest.results import ConvertResult, RangeConversion, RangeStatus
+from fra_ingest.results import ConvertResult, RangeConversion, RangePlan, RangeStatus
 
 
 def fake(script: str) -> list[str]:
@@ -28,13 +30,15 @@ def setup(tmp_path: Path, name: str = "doc.pdf") -> tuple[Path, IngestConfig]:
 
 def write_result(config: IngestConfig, pdf: Path, status: RangeStatus) -> ConvertResult:
     sha = sha256_file(pdf)
+    plans = [RangePlan(first_page=4, last_page=6, ocr="pdf_aware", ocr_language="en-US")]
     result = ConvertResult(
-        version="1",
+        version=CONVERT_VERSION,
         sha256=sha,
-        locate_version="2",
+        locate_version=LOCATE_VERSION,
         docling_version="2.126.0",
-        device="mps",
-        settings_hash="h",
+        device=config.device,
+        settings_hash=settings_hash(config, plans, "2.126.0", LOCATE_VERSION),
+        settings_plans=plans,
         ranges=[
             RangeConversion(
                 first_page=4, last_page=6, ocr="pdf_aware", ocr_language="en-US", status=status
@@ -43,7 +47,7 @@ def write_result(config: IngestConfig, pdf: Path, status: RangeStatus) -> Conver
         timings={"convert": 1.0},
     )
     out = config.artifact_root / sha
-    out.mkdir(parents=True)
+    out.mkdir(parents=True, exist_ok=True)
     (out / "convert.json").write_text(result.model_dump_json(), encoding="utf-8")
     return result
 
@@ -78,6 +82,22 @@ def test_the_child_gets_the_pdf_artifacts_config_and_extra_args(tmp_path: Path) 
         str(tmp_path / "ingest.toml"),
         "--no-cache",
     ]
+
+
+def test_the_child_is_told_the_engine_the_parent_runs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pdf, config = setup(tmp_path)
+    write_result(config, pdf, "ok")
+    record = tmp_path / "engine.txt"
+    script = f"import os; open({str(record)!r}, 'w').write(os.environ['FRA_OCR_ENGINE'])"
+    monkeypatch.setenv("FRA_OCR_ENGINE", "ocrmac")
+    config = config.model_copy(update={"convert_ocr": "tesseract"})
+    (config.artifact_root / sha256_file(pdf) / "convert.json").unlink()
+    # Reuse the directory created for the first config.
+    write_result(config, pdf, "ok")
+    convert_in_child(pdf, config, command=fake(script))
+    assert record.read_text() == "tesseract"
 
 
 def test_every_range_failing_raises_convert_failed(tmp_path: Path) -> None:
@@ -137,6 +157,19 @@ def test_the_childs_own_reason_is_kept(tmp_path: Path, name: str) -> None:
     assert caught.value.reason == "encrypted_pdf"
 
 
+def test_child_ocr_timeout_becomes_ocr_timeout_not_convert_crashed(tmp_path: Path) -> None:
+    pdf, config = setup(tmp_path)
+    script = (
+        "import sys; "
+        "print(f'{sys.argv[2]}: ocr_timeout tesseract did not finish within 120.0 s', "
+        "file=sys.stderr); sys.exit(2)"
+    )
+    with pytest.raises(IngestError) as caught:
+        convert_in_child(pdf, config, command=fake(script))
+    assert caught.value.reason == "ocr_timeout"
+    assert "did not finish within 120.0 s" in caught.value.detail
+
+
 def test_a_missing_pdf_is_refused_before_starting_a_child(tmp_path: Path) -> None:
     _, config = setup(tmp_path)
     with pytest.raises(IngestError) as caught:
@@ -153,3 +186,51 @@ def test_almarai_converts_in_a_real_child(golden: Callable[[str], Path], tmp_pat
     assert all(r.status == "ok" for r in result.ranges)
     assert result.peak_footprint_gb is not None and result.peak_footprint_gb > 0.3
     assert all((tmp_path / result.sha256 / p).is_file() for p in result.page_images.values())
+
+
+def test_nondefault_effective_configuration_reaches_child(tmp_path: Path) -> None:
+    import json
+
+    pdf, config = setup(tmp_path)
+    config = config.model_copy(
+        update={
+            "device": "cpu",
+            "ocr_scale": 4.5,
+            "tesseract_psm": 6,
+            "tesseract_arabic_language": "ara",
+            "convert_ocr": "tesseract",
+        }
+    )
+    write_result(config, pdf, "ok")
+    record = tmp_path / "effective.json"
+    script = (
+        f"import os; open({str(record)!r}, 'w').write(os.environ['FRA_INGEST_EFFECTIVE_CONFIG'])"
+    )
+    convert_in_child(pdf, config, command=fake(script))
+    assert IngestConfig.model_validate(json.loads(record.read_text())) == config
+
+
+def test_child_settings_digest_mismatch_is_refused(tmp_path: Path) -> None:
+    pdf, config = setup(tmp_path)
+    write_result(config, pdf, "ok")
+    config = config.model_copy(update={"ocr_scale": 4.5})
+    with pytest.raises(IngestError, match=r"settings.*mismatch"):
+        convert_in_child(pdf, config, command=fake("pass"))
+
+
+@pytest.mark.parametrize("version_field", ["docling_version", "locate_version"])
+def test_stale_child_stage_versions_are_refused(tmp_path: Path, version_field: str) -> None:
+    pdf, config = setup(tmp_path)
+    result = write_result(config, pdf, "ok")
+    result = result.model_copy(update={version_field: "obsolete"})
+    assert result.settings_plans is not None
+    result = result.model_copy(
+        update={
+            "settings_hash": settings_hash(
+                config, result.settings_plans, result.docling_version, result.locate_version
+            )
+        }
+    )
+    (config.artifact_root / sha256_file(pdf) / "convert.json").write_text(result.model_dump_json())
+    with pytest.raises(IngestError, match="version mismatch"):
+        convert_in_child(pdf, config, command=fake("pass"))

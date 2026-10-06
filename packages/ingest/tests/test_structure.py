@@ -402,3 +402,20 @@ def test_a_total_whose_values_were_all_lost_is_missing_values_not_a_heading() ->
     identity = [c for c in checks if c.kind == "balance_identity"]
     assert identity and all((c.status, c.detail) == ("skipped", "missing_values") for c in identity)
     assert "identity_totals_not_found" not in balance.flags
+
+
+def test_an_uncertain_industry_verdict_holds_every_statement_with_its_reason() -> None:
+    held = inputs([("docling/p1-2.json", document())]).model_copy(
+        update={"industry_hold": "near_threshold"}
+    )
+    result, _ = structure_document(held, IngestConfig())
+    assert result.statements
+    assert all(s.flags.count("needs_review") == 1 for s in result.statements)  # held once
+    assert "industry_uncertain:near_threshold" in result.flags
+    assert all(
+        r.status == "needs_review" and "industry_uncertain:near_threshold" in r.reasons
+        for r in result.reviews
+    )
+    plain, _ = structure_document(inputs([("docling/p1-2.json", document())]), IngestConfig())
+    assert not any("industry_uncertain:near_threshold" in r.reasons for r in plain.reviews)
+    assert not any(f.startswith("industry_uncertain") for f in plain.flags)

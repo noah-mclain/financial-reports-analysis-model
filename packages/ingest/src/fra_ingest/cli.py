@@ -5,11 +5,14 @@ fra-ingest convert <pdf> [--json] [--no-ocr] [--no-cache] [--config PATH] [--art
 fra-ingest structure <pdf> [--json] [--no-ocr] [--no-cache] [--config PATH] [--artifacts DIR]
 fra-ingest review-report <sha256> [--config PATH] [--artifacts DIR]
 
-convert exits 0 when it wrote a result, 2 on an ingest error and 3 when every range it
+convert exits 0 when it wrote a result, 2 on an ingest error (an OCR timeout or engine failure
+included: ocr_timeout, ocr_engine) and 3 when every range it
 attempted failed. It is the child process of convert_in_child (spec 10). structure exits 0
-when it wrote a result and 2 on an ingest error. review-report takes a document's sha256 under
-the artifact root, or a unique prefix of it, writes review.html beside the stored results and
-prints its path; it runs no stage and exits 2 when the document or an artifact is missing.
+when it wrote a result, 2 on an ingest error and 4 when the document was declined (a bank or
+an insurer: the reason is printed on stderr, no convert ran, no statements were written).
+review-report takes a document's sha256 under the artifact root, or a unique prefix of it,
+writes review.html beside the stored results and prints its path; it runs no stage, exits 2
+when the document or an artifact is missing and 4 for a declined document, with the reason.
 """
 
 from __future__ import annotations
@@ -19,10 +22,16 @@ import sys
 import time
 from pathlib import Path
 
-from fra_ingest.config import IngestConfig, load_config
+from fra_ingest.config import IngestConfig, load_config, transported_config
 from fra_ingest.convert import convert_pdf
 from fra_ingest.errors import IngestError
-from fra_ingest.ocr import OcrEngine, default_engine
+from fra_ingest.ocr import (
+    PER_DOCUMENT_OCR_ERRORS,
+    OcrEngine,
+    OcrUnavailableError,
+    make_engine,
+    ocr_failure,
+)
 from fra_ingest.results import ConvertResult, LocateResult, StructureResult
 from fra_ingest.review_report import write_review_report
 from fra_ingest.stage import load_or_locate, locate_pdf, page_ocr_languages
@@ -30,6 +39,7 @@ from fra_ingest.structure import structure_pdf
 
 EXIT_ERROR = 2
 EXIT_ALL_FAILED = 3
+EXIT_DECLINED = 4
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -60,7 +70,13 @@ def main(argv: list[str] | None = None) -> int:
     report.add_argument("--artifacts", type=Path, default=None, help="artifact root override")
     args = parser.parse_args(argv)
 
-    config = load_config(args.config)
+    try:
+        effective = transported_config() if args.command == "convert" else None
+    except ValueError as exc:
+        print(f"{args.pdf}: convert_crashed invalid effective config: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    args.transported_config = effective is not None
+    config = effective if effective is not None else load_config(args.config)
     if args.artifacts is not None:
         config = config.model_copy(update={"artifact_root": args.artifacts})
     if args.command == "review-report":
@@ -68,20 +84,36 @@ def main(argv: list[str] | None = None) -> int:
             print(write_review_report(args.sha256, config))
         except IngestError as exc:
             print(f"{args.sha256}: {exc.reason} {exc.detail}".rstrip(), file=sys.stderr)
-            return EXIT_ERROR
+            return EXIT_DECLINED if exc.reason == "declined" else EXIT_ERROR
         return 0
-    engine = None if args.no_ocr else default_engine()
 
     try:
+        engine = None if args.no_ocr else make_engine(config)
         if args.command == "convert":
             return _convert(args, config, engine)
         if args.command == "structure":
             result_s = structure_pdf(args.pdf, config, engine, use_cache=not args.no_cache)
             print(result_s.model_dump_json(indent=2) if args.json else _structure_summary(result_s))
+            if result_s.industry is not None and result_s.industry.outcome == "declined":
+                print(f"{args.pdf}: {result_s.industry.reason}", file=sys.stderr)
+                return EXIT_DECLINED
             return 0
         result = locate_pdf(args.pdf, config, engine, use_cache=not args.no_cache)
     except IngestError as exc:
         print(f"{args.pdf}: {exc.reason} {exc.detail}".rstrip(), file=sys.stderr)
+        return EXIT_ERROR
+    except PER_DOCUMENT_OCR_ERRORS as exc:
+        failure = ocr_failure(exc)
+        # One line, so the parent of a convert child reads the reason from the last line.
+        detail = " ".join(failure.detail.split())
+        print(f"{args.pdf}: {failure.reason} {detail}".rstrip(), file=sys.stderr)
+        return EXIT_ERROR
+    except OcrUnavailableError as exc:
+        print(
+            f"{exc}; choose another engine with convert.ocr_engine in the settings or "
+            "FRA_OCR_ENGINE, or pass --no-ocr",
+            file=sys.stderr,
+        )
         return EXIT_ERROR
 
     print(result.model_dump_json(indent=2) if args.json else _summary(result))
@@ -143,6 +175,8 @@ def _convert_summary(result: ConvertResult) -> str:
 
 def _structure_summary(result: StructureResult) -> str:
     lines = [f"{result.sha256[:12]}  structure {result.version}"]
+    if result.industry is not None:
+        lines.append(f"  {result.industry.outcome}  {result.industry.reason}")
     reviews = {r.statement_id: r for r in result.reviews}
     for s in result.statements:
         periods = ", ".join(p.key for p in s.periods)

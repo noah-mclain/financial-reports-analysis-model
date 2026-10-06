@@ -16,6 +16,7 @@ import argparse
 import json
 import sys
 from collections import Counter
+from collections.abc import Iterable
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -24,9 +25,11 @@ import yaml
 
 from fra_core.schemas import CheckResult, Statement, StatementType
 from fra_ingest.config import REPO_ROOT, load_config
-from fra_ingest.errors import IngestError
+from fra_ingest.ocr import make_engine
+from fra_ingest.results import StructureResult
 from fra_ingest.review import StatementReview
 from fra_ingest.structure import structure_pdf
+from harness.failures import DOCUMENT_ERRORS, EngineFailure, EngineGuard, aborted, document_failure
 
 MANIFEST = REPO_ROOT / "eval" / "golden" / "manifest.yaml"
 OUT = REPO_ROOT / "var" / "eval"
@@ -123,7 +126,19 @@ def _statement_summary(row: dict[str, Any]) -> str:
     return f"{row['lines']} lines {row['identity']} {held}"
 
 
-def _load_checks(path: Path) -> dict[str, list[CheckResult]]:
+def first_statements(
+    result: StructureResult, types: Iterable[StatementType]
+) -> dict[StatementType, Statement]:
+    """The first statement the stage found of each wanted type."""
+    wanted = set(types)
+    found: dict[StatementType, Statement] = {}
+    for statement in result.statements:
+        if statement.type in wanted:
+            found.setdefault(statement.type, statement)
+    return found
+
+
+def load_checks(path: Path) -> dict[str, list[CheckResult]]:
     by_statement: dict[str, list[CheckResult]] = {}
     for raw in json.loads(path.read_text(encoding="utf-8")):
         check = CheckResult.model_validate(raw)
@@ -134,24 +149,44 @@ def _load_checks(path: Path) -> dict[str, list[CheckResult]]:
 def main(argv: list[str] | None = None) -> int:
     argparse.ArgumentParser(prog="eval/harness/structure.py").parse_args(argv)
     config = load_config()
+    ocr = make_engine(config)
     documents = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))["documents"]
     rows: list[dict[str, Any]] = []
     by_id: dict[str, dict[StatementType, Statement]] = {}
     reasons: list[str] = []
+    guard = EngineGuard(len(documents))
+    stopped: EngineFailure | None = None
     for entry in documents:
         pdf = MANIFEST.parent / entry["file"]
         print(f"{entry['id']} ...", file=sys.stderr, flush=True)
         try:
-            result = structure_pdf(pdf, config, None, use_cache=False)
-        except IngestError as exc:
-            rows.append({"id": entry["id"], "error": f"{exc.reason} {exc.detail}".strip()})
-            reasons.append(f"{entry['id']}: {exc.reason}")
+            result = structure_pdf(pdf, config, ocr, use_cache=False)
+        except DOCUMENT_ERRORS as exc:
+            failure = document_failure(exc)
+            reason, detail = failure["error"], failure["detail"]
+            rows.append(
+                {
+                    "id": entry["id"],
+                    "error": f"{reason} {detail}".strip(),
+                    "reason": reason,
+                    "detail": detail,
+                }
+            )
+            reasons.append(f"{entry['id']}: {reason}")
+            try:
+                guard.record(reason, detail)
+            except EngineFailure as exc_stop:
+                stopped = exc_stop
+                break
             continue
-        checks = _load_checks(config.artifact_root / result.sha256 / "table_checks.json")
+        guard.record(None)
+        if result.industry is not None and result.industry.outcome == "declined":
+            rows.append({"id": entry["id"], "error": result.industry.reason})
+            reasons.append(f"{entry['id']}: declined:{result.industry.code}")
+            continue
+        checks = load_checks(config.artifact_root / result.sha256 / "table_checks.json")
         reviews = {r.statement_id: r for r in result.reviews}
-        found: dict[StatementType, Statement] = {}
-        for extracted in result.statements:
-            found.setdefault(extracted.type, extracted)
+        found = first_statements(result, config.enabled_types)
         by_id[entry["id"]] = found
         row: dict[str, Any] = {"id": entry["id"], "flags": result.flags, "statements": {}}
         for statement_type in config.enabled_types:
@@ -202,7 +237,9 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     pairs = []
-    for left, right, gated in PAIRS:
+    if stopped is not None:
+        reasons.append(f"aborted: {stopped}")
+    for left, right, gated in () if stopped is not None else PAIRS:
         for statement_type in config.enabled_types:
             a, b = by_id.get(left, {}).get(statement_type), by_id.get(right, {}).get(statement_type)
             misses = pair_misses(a, b) if a and b else None
@@ -222,16 +259,19 @@ def main(argv: list[str] | None = None) -> int:
                 found_text = "missing statement" if misses is None else str(misses)
                 reasons.append(f"{left}/{right} {statement_type.value}: {found_text}")
     print("PASS" if not reasons else "FAIL\n  " + "\n  ".join(reasons))
+    report: dict[str, Any] = {"documents": rows, "pairs": pairs, "reasons": reasons}
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "structure-golden.json").write_text(
         json.dumps(
-            {"documents": rows, "pairs": pairs, "reasons": reasons},
+            report if stopped is None else aborted(report, stopped),
             indent=2,
             ensure_ascii=False,
             default=str,
         ),
         encoding="utf-8",
     )
+    if stopped is not None:
+        raise stopped
     return 0 if not reasons else 1
 
 

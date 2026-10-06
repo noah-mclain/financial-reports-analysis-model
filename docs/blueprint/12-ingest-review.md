@@ -40,7 +40,7 @@ documents.
 
 | In | Out |
 |----|-----|
-| Sum-based subtotal scope, parents from sums | Label normalization to canonical ids (week 2) |
+| Sum-based subtotal scope, parents from sums | Label normalization to canonical ids (`label_mapping.py` reads these checks; 11) |
 | Row-alignment detection and repair by geometry | Splitting two figures OCR merged into one cell (week 2 bake-off) |
 | Single-digit diagnosis, period outliers, the net profit tie | Changing a read figure to the one arithmetic suggests (open decision 1) |
 | `passed` or `needs_review` per statement, with reasons | V1's independent re-read of every cell's region |

@@ -39,6 +39,8 @@ _WARNING_FLAGS = (
     "scale_missing",
     "currency_from_domicile",
     "currency_inferred",
+    "words_reversed",
+    "word_order_uncertain",
 )
 _WARNING_CELL_FLAGS = ("label_merged", "blank_confirmed")
 _FAILED = (
@@ -95,6 +97,7 @@ def review_statement(
     counts = Counter(f for _, c in cells for f in c.flags)
     reasons += [f"{flag}:{counts[flag]}" for flag in CRITICAL_CELL_FLAGS if counts[flag]]
     reasons += [f for f in statement.flags if f.split(":")[0] in _HOLD_FLAGS]
+    reasons += [f"{finding.reason}:{finding.item_id}" for finding in statement.mapping_findings]
     if not primary:
         reasons = ["duplicate_statement"]
     warnings = [f for f in statement.flags if f in _WARNING_FLAGS]
@@ -110,3 +113,19 @@ def review_statement(
         checked_cells=sum(1 for i, c in numeric if (i, c.period_key) in vouched),
         flagged_cells=sum(1 for _, c in cells if is_critical(c)),
     )
+
+
+def hold_for_industry(
+    statement: Statement, review: StatementReview, code: str
+) -> tuple[Statement, StatementReview]:
+    """A statement of a document whose industry verdict is uncertain, held with its reason."""
+    flags = (
+        statement.flags if "needs_review" in statement.flags else [*statement.flags, "needs_review"]
+    )
+    held = review.model_copy(
+        update={
+            "status": "needs_review",
+            "reasons": [*review.reasons, f"industry_uncertain:{code}"],
+        }
+    )
+    return statement.model_copy(update={"flags": flags}), held

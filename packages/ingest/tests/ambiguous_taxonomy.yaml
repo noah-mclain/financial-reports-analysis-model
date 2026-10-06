@@ -1,0 +1,12 @@
+version: 1
+items:
+  - id: item_a
+    statement: income
+    aliases:
+      en: [net sales]
+      ar: [مبيعات أ]
+  - id: item_b
+    statement: income
+    aliases:
+      en: [netsales]
+      ar: [مبيعات ب]

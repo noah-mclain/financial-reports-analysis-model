@@ -1,11 +1,29 @@
 """The extraction eval's arithmetic (spec 12, Scoring)."""
 
+import hashlib
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
+from typing import Any
 
 import pytest
 from harness.expected import ExpectedFile, ExpectedRow, ExpectedStatement
-from harness.extraction import align_rows, report, score_statement
+from harness.extraction import (
+    OUT,
+    OcrTiming,
+    align_rows,
+    breakdown_lines,
+    convert_timing,
+    engine_report,
+    engine_root,
+    remove_artifacts,
+    report,
+    scanned_breakdown,
+    score_statement,
+    split_cold_start,
+    tessdata_digests,
+    wilson_interval,
+)
 
 from fra_core.schemas import (
     BBox,
@@ -17,6 +35,8 @@ from fra_core.schemas import (
     Statement,
     StatementType,
 )
+from fra_ingest.config import REPO_ROOT
+from fra_ingest.results import ConvertResult, RangeConversion
 
 P = Period(key="2025-12-31", end_date=date(2025, 12, 31), kind=PeriodKind.INSTANT)
 OTHER = Period(key="2024-12-31", end_date=date(2024, 12, 31), kind=PeriodKind.INSTANT)
@@ -331,3 +351,409 @@ def test_a_figure_under_a_section_heading_alone_is_wrong() -> None:
     )
     score = score_statement(expected, extracted)
     assert (score.right, score.mislabelled) == (1, 1)
+
+
+def scanned_file(document_id: str, status: str, mode: str) -> ExpectedFile:
+    statement = statement_of([row("Cash", "5"), row("Total", "15")]).model_copy(
+        update={"page_mode": mode}
+    )
+    return file_of(statement, status).model_copy(update={"id": document_id})
+
+
+def entry(language: str, issuer: str, text_layer: str = "scanned") -> dict[str, str]:
+    return {"language": language, "issuer": issuer, "text_layer": text_layer}
+
+
+RIGHT = extracted_of([item(1, "Cash", "5"), item(2, "Total", "15")])
+HALF = extracted_of([item(1, "Cash", "5"), item(2, "Total", "16")])
+DOCUMENTS = {
+    "ar-doc": entry("ar", "Edita"),
+    "ar-doc-2": entry("ar", "Naba"),
+    "en-doc": entry("en", "Almarai"),
+    "en-text": entry("en", "Almarai", "digital"),
+    "ar-draft": entry("ar", "Edita"),
+}
+
+
+def breakdown(
+    files: list[tuple[ExpectedFile, dict[StatementType, Statement]]],
+    timings: dict[str, OcrTiming] | None = None,
+) -> dict[tuple[str, str], dict[str, Any]]:
+    rows = scanned_breakdown(files, DOCUMENTS, timings or {})
+    return {(r["status"], r["language"]): r for r in rows}
+
+
+def test_scanned_cells_are_counted_per_language_and_status_without_digital_ones() -> None:
+    found = breakdown(
+        [
+            (scanned_file("ar-doc", "checked", "scanned"), {StatementType.BALANCE: HALF}),
+            (scanned_file("en-doc", "checked", "scanned"), {StatementType.BALANCE: RIGHT}),
+            (scanned_file("en-text", "checked", "digital"), {StatementType.BALANCE: RIGHT}),
+            (scanned_file("ar-draft", "draft", "scanned"), {StatementType.BALANCE: RIGHT}),
+        ]
+    )
+    assert {k: (r["cells"], r["right"]) for k, r in found.items()} == {
+        ("checked", "ar"): (2, 1),
+        ("checked", "en"): (2, 2),
+        ("draft", "ar"): (2, 2),
+    }
+
+
+def test_two_documents_of_one_language_are_one_row_with_both_counted() -> None:
+    found = breakdown(
+        [
+            (scanned_file("ar-doc", "checked", "scanned"), {StatementType.BALANCE: HALF}),
+            (scanned_file("ar-doc-2", "checked", "scanned"), {StatementType.BALANCE: RIGHT}),
+        ]
+    )
+    assert list(found) == [("checked", "ar")]
+    row_ = found[("checked", "ar")]
+    assert (row_["cells"], row_["right"], row_["documents"], row_["issuers"]) == (4, 3, 2, 2)
+    assert row_["cells_by_type"] == {"balance": 4}
+
+
+def test_a_language_with_no_scanned_statement_has_no_row() -> None:
+    found = breakdown([(scanned_file("en-text", "checked", "digital"), {})])
+    assert found == {}
+
+
+def test_a_document_missing_from_the_manifest_is_named() -> None:
+    with pytest.raises(ValueError, match="ghost"):
+        scanned_breakdown([(scanned_file("ghost", "checked", "scanned"), {})], DOCUMENTS, {})
+
+
+def test_a_missing_statement_is_told_apart_from_a_misread_one() -> None:
+    found = breakdown(
+        [
+            (scanned_file("ar-doc", "checked", "scanned"), {}),
+            (scanned_file("ar-doc-2", "checked", "scanned"), {StatementType.BALANCE: HALF}),
+        ]
+    )
+    row_ = found[("checked", "ar")]
+    assert (row_["statements"], row_["statements_found"]) == (2, 1)
+    assert row_["cells"] == 4
+    assert (row_["cells_wrong_statement_missing"], row_["cells_wrong_other"]) == (2, 1)
+
+
+def test_the_value_only_accuracy_forgives_a_figure_under_the_wrong_label() -> None:
+    under_other_label = extracted_of([item(1, "Receivables", "5"), item(2, "Total", "15")])
+    [files] = [
+        [(scanned_file("ar-doc", "checked", "scanned"), {StatementType.BALANCE: under_other_label})]
+    ]
+    row_ = breakdown(files)[("checked", "ar")]
+    assert row_["accuracy"] < row_["value_only_accuracy"] == 1.0
+
+
+def test_unconfirmed_cells_are_counted_apart_and_not_scored() -> None:
+    expected = scanned_file("ar-doc", "draft", "scanned")
+    statement = expected.statements[0]
+    rows = [statement.rows[0].model_copy(update={"unconfirmed": [P.key]}), statement.rows[1]]
+    expected = expected.model_copy(
+        update={"statements": [statement.model_copy(update={"rows": rows})]}
+    )
+    row_ = breakdown([(expected, {StatementType.BALANCE: RIGHT})])[("draft", "ar")]
+    assert (row_["cells"], row_["unconfirmed"]) == (1, 1)
+
+
+def test_the_interval_brackets_the_share_and_narrows_with_more_cells() -> None:
+    low, high = wilson_interval(95, 100)
+    assert low < 0.95 < high
+    assert (low, high) == pytest.approx((0.8882, 0.9785), abs=1e-3)
+    assert wilson_interval(950, 1000)[0] > low
+    assert wilson_interval(0, 0) == (0.0, 1.0)
+
+
+def test_a_document_that_is_not_fully_scanned_is_named() -> None:
+    documents = {**DOCUMENTS, "ar-doc": entry("ar", "Edita", "mixed")}
+    [row_] = scanned_breakdown([(scanned_file("ar-doc", "checked", "scanned"), {})], documents, {})
+    assert row_["not_fully_scanned"] == ["ar-doc"]
+
+
+def test_a_draft_file_does_not_count_towards_g1() -> None:
+    lines, code = report([(scanned_file("ar-draft", "draft", "scanned"), {})])
+    assert code == 0
+    assert "checked files: 0" in lines
+    assert "G1 not measured: no expected file is checked yet" in lines
+
+
+def test_the_first_ocr_call_is_set_apart_and_the_rest_averaged_per_call() -> None:
+    timings = {
+        "ar-doc": OcrTiming((9.0, 1.0, 1.0), 10.0, 5),
+        "ar-doc-2": OcrTiming((2.0,), 20.0, 5),
+    }
+    cold, rest = split_cold_start(["ar-doc", "ar-doc-2"], timings)
+    assert cold == 9.0
+    files = [
+        (scanned_file("ar-doc", "checked", "scanned"), {}),
+        (scanned_file("ar-doc-2", "checked", "scanned"), {}),
+    ]
+    [row_] = scanned_breakdown(files, DOCUMENTS, rest)
+    assert row_["ocr_calls"] == 3
+    assert row_["read_seconds_per_call"] == pytest.approx(4 / 3)
+    assert row_["convert_seconds_per_page"] == pytest.approx(3.0)
+
+
+def test_a_run_without_measured_calls_has_no_cold_start() -> None:
+    cold, rest = split_cold_start(["ar-doc"], {"ar-doc": OcrTiming(None, None, 0)})
+    assert cold is None
+    assert rest == {"ar-doc": OcrTiming(None, None, 0)}
+
+
+def test_a_timing_that_came_from_a_cache_is_not_applicable_never_zero() -> None:
+    files = [
+        (scanned_file("ar-doc", "checked", "scanned"), {}),
+        (scanned_file("ar-doc-2", "checked", "scanned"), {}),
+    ]
+    cached = {"ar-doc": OcrTiming((1.0,), 10.0, 5), "ar-doc-2": OcrTiming(None, None, 0)}
+    [row_] = scanned_breakdown(files, DOCUMENTS, cached)
+    assert row_["ocr_calls"] is None
+    assert row_["read_seconds_per_call"] is None
+    assert row_["convert_seconds_per_page"] is None
+    text = "\n".join(breakdown_lines([row_], None))
+    assert "0.00 s" not in text
+    assert "n/a" in text
+    assert "convert, including layout and tables" in text
+
+
+def test_convert_time_leaves_out_the_model_load_and_skipped_ranges() -> None:
+    ranges = [
+        RangeConversion(
+            first_page=5, last_page=7, ocr="full_page", ocr_language="ar-SA", status="ok"
+        ),
+        RangeConversion(
+            first_page=9, last_page=9, ocr="skipped", ocr_language=None, status="skipped"
+        ),
+    ]
+    converted = ConvertResult(
+        version="1",
+        sha256=SHA,
+        locate_version="3",
+        docling_version="2",
+        device="cpu",
+        settings_hash="x",
+        ranges=ranges,
+        timings={"models": 40.0, "convert": 30.0},
+    )
+    assert convert_timing(converted) == (30.0, 3)
+
+
+def test_each_run_has_its_own_artifact_root_and_report(tmp_path: Path) -> None:
+    assert engine_root(tmp_path / "artifacts", "tesseract-psm6") == (
+        tmp_path / "artifacts-tesseract-psm6"
+    )
+    assert engine_report("tesseract-psm6") == OUT / "extraction-golden-tesseract-psm6.json"
+
+
+def test_only_a_runs_own_artifact_root_may_be_deleted(tmp_path: Path) -> None:
+    for root in (REPO_ROOT / "var" / "artifacts", tmp_path / "artifacts-x", REPO_ROOT / "var"):
+        with pytest.raises(ValueError, match="refusing"):
+            remove_artifacts(root)
+
+
+def test_a_delete_that_fails_is_not_silent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(path: object) -> None:
+        raise PermissionError(str(path))
+
+    root = tmp_path / "var" / "artifacts-test-label"
+    root.mkdir(parents=True)
+    monkeypatch.setattr("harness.extraction.REPO_ROOT", tmp_path)
+    monkeypatch.setattr("harness.extraction.shutil.rmtree", refuse)
+    with pytest.raises(PermissionError):
+        remove_artifacts(root)
+
+
+def test_the_traineddata_files_are_hashed_from_the_directory_tesseract_lists(
+    tmp_path: Path,
+) -> None:
+    data = tmp_path / "tessdata"
+    data.mkdir()
+    (data / "ara.traineddata").write_bytes(b"arabic")
+    (data / "eng.traineddata").write_bytes(b"english")
+    script = tmp_path / "tesseract"
+    script.write_text(
+        f"#!/bin/sh\nprintf 'List of available languages in \"{data}/\" (2):\\nara\\neng\\n'\n",
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    digests = tessdata_digests(str(script), ("ara", "eng"))
+    assert digests["ara"] == hashlib.sha256(b"arabic").hexdigest()
+    assert digests["eng"] == hashlib.sha256(b"english").hexdigest()
+
+
+def test_saved_extraction_artifact_identifies_settings_inputs_and_empty_strata(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+
+    import harness.extraction as extraction
+
+    from fra_ingest.config import IngestConfig
+    from fra_ingest.results import StructureResult
+
+    pdf = tmp_path / "synthetic.pdf"
+    pdf.write_bytes(b"synthetic document")
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text("documents:\n  - id: doc\n    file: synthetic.pdf\n", encoding="utf-8")
+    expected_dir = tmp_path / "expected"
+    expected_dir.mkdir()
+    expected_path = expected_dir / "doc.json"
+    expected_path.write_text(file_of(statement_of([row("Cash", "5")]), "draft").model_dump_json())
+    config = IngestConfig(
+        artifact_root=tmp_path / "artifacts", device="cpu", convert_ocr="none", tesseract_psm=6
+    )
+    monkeypatch.delenv(extraction.OCR_ENGINE_ENV, raising=False)  # set, the run is tagged
+    monkeypatch.setattr(extraction, "MANIFEST", manifest)
+    monkeypatch.setattr(extraction, "EXPECTED_DIR", expected_dir)
+    monkeypatch.setattr(extraction, "OUT", tmp_path / "out")
+    monkeypatch.setattr(extraction, "load_config", lambda **kwargs: config)
+    monkeypatch.setattr(
+        extraction,
+        "structure_pdf",
+        lambda *args: StructureResult(
+            version="17", sha256=SHA, convert_version="1", settings_hash="synthetic"
+        ),
+    )
+    assert extraction.main([]) == 0
+    saved = json.loads((tmp_path / "out/extraction-golden.json").read_text())
+    metadata = saved["reproducibility"]
+    assert metadata["ingest_config"] == config.model_dump(mode="json")
+    assert metadata["documents"]["doc"] == hashlib.sha256(pdf.read_bytes()).hexdigest()
+    assert metadata["expected"]["doc"] == hashlib.sha256(expected_path.read_bytes()).hexdigest()
+    assert metadata["source_revision"]
+    assert metadata["versions"]["formula"]
+    assert saved["strata"]["annual"]["documents"] == 0
+    assert saved["strata"]["interim"]["documents"] == 0
+
+
+def test_report_identity_changes_with_effective_settings_and_input_hashes() -> None:
+    from harness.reproducibility import report_evidence
+
+    from fra_ingest.config import IngestConfig
+
+    config = IngestConfig(convert_ocr="none", device="cpu")
+    first = report_evidence(
+        config, documents={"synthetic": "a" * 64}, expected={"synthetic": "b" * 64}, inputs={}
+    )
+    settings = report_evidence(
+        config.model_copy(update={"tesseract_psm": 6}),
+        documents=first["documents"],
+        expected=first["expected"],
+        inputs={},
+    )
+    inputs = report_evidence(
+        config, documents={"synthetic": "c" * 64}, expected={"synthetic": "d" * 64}, inputs={}
+    )
+    assert first["source_revision"] == settings["source_revision"] == inputs["source_revision"]
+    assert first["ingest_config"] != settings["ingest_config"]
+    assert first["documents"] != inputs["documents"]
+    assert first["expected"] != inputs["expected"]
+
+
+def test_report_source_identity_includes_core_code_and_canonical_taxonomy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import harness.reproducibility as reproducibility
+
+    import fra_core.taxonomy.loader as taxonomy_loader
+    from fra_ingest.config import IngestConfig
+
+    root = tmp_path / "repo"
+    package_dir = root / "packages/core/src/fra_core/taxonomy"
+    package_dir.mkdir(parents=True)
+    source_files = (
+        "packages/ingest/src/fra_ingest/source.py",
+        "packages/analytics/src/fra_analytics/source.py",
+        "eval/harness/source.py",
+        "packages/core/src/fra_core/schemas/statement.py",
+        "packages/core/src/fra_core/taxonomy/loader.py",
+    )
+    for relative in source_files:
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("initial source\n", encoding="utf-8")
+    taxonomy_path = package_dir / taxonomy_loader._RESOURCE
+    taxonomy_path.write_text("version: 1\nitems: []\n", encoding="utf-8")
+
+    monkeypatch.setattr(reproducibility, "REPO_ROOT", root)
+    monkeypatch.setattr(
+        taxonomy_loader.resources,
+        "files",
+        lambda package: package_dir,
+    )
+    monkeypatch.setattr(
+        reproducibility,
+        "load_taxonomy",
+        lambda: type("Taxonomy", (), {"version": 1})(),
+    )
+
+    def evidence() -> dict[str, Any]:
+        return reproducibility.report_evidence(
+            IngestConfig(convert_ocr="none", device="cpu"),
+            documents={"synthetic": "a" * 64},
+            expected={"synthetic": "b" * 64},
+            inputs={"manifest": "c" * 64},
+        )
+
+    def same_revision_git(*args: str, **kwargs: object) -> Any:
+        from subprocess import CompletedProcess
+
+        output = b"fixed-revision\n" if args[0][3:] == ["rev-parse", "HEAD"] else b""
+        return CompletedProcess(args[0], 0, stdout=output, stderr=b"")
+
+    monkeypatch.setattr(reproducibility.subprocess, "run", same_revision_git)
+    first = evidence()
+    assert first["source_revision"] == "fixed-revision"
+    assert evidence()["source_sha256"] == first["source_sha256"]
+
+    core_file = root / "packages/core/src/fra_core/schemas/statement.py"
+    core_file.write_text("changed shared schema\n", encoding="utf-8")
+    core_changed = evidence()
+    assert core_changed["source_revision"] == first["source_revision"]
+    assert core_changed["source_sha256"] != first["source_sha256"]
+
+    taxonomy_path.write_text("version: 1\nitems: [changed]\n", encoding="utf-8")
+    taxonomy_changed = evidence()
+    assert taxonomy_changed["source_revision"] == first["source_revision"]
+    assert taxonomy_changed["source_sha256"] != core_changed["source_sha256"]
+    assert taxonomy_changed["ingest_config"] == first["ingest_config"]
+    assert taxonomy_changed["documents"] == first["documents"]
+    assert taxonomy_changed["expected"] == first["expected"]
+    assert taxonomy_changed["inputs"] == first["inputs"]
+    assert taxonomy_changed["analytics_policy"] == first["analytics_policy"]
+    assert taxonomy_changed["versions"] == first["versions"]
+    assert taxonomy_changed["expected_note"] == first["expected_note"]
+
+    for relative in (
+        "packages/ingest/src/fra_ingest/source.py",
+        "packages/analytics/src/fra_analytics/source.py",
+        "eval/harness/source.py",
+    ):
+        path = root / relative
+        path.write_text(f"changed: {relative}\n", encoding="utf-8")
+        changed = evidence()
+        assert changed["source_sha256"] != taxonomy_changed["source_sha256"]
+        taxonomy_changed = changed
+
+
+def test_source_inventory_fails_when_canonical_taxonomy_is_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import harness.reproducibility as reproducibility
+
+    import fra_core.taxonomy.loader as taxonomy_loader
+
+    root = tmp_path / "repo"
+    package_dir = root / "packages/core/src/fra_core/taxonomy"
+    for directory in (
+        root / "packages/ingest/src/fra_ingest",
+        root / "packages/analytics/src/fra_analytics",
+        root / "eval/harness",
+        root / "packages/core/src/fra_core/schemas",
+    ):
+        directory.mkdir(parents=True)
+        (directory / "source.py").write_text("source\n", encoding="utf-8")
+    package_dir.mkdir(parents=True)
+    monkeypatch.setattr(taxonomy_loader.resources, "files", lambda package: package_dir)
+
+    with pytest.raises(FileNotFoundError, match="canonical taxonomy source is missing"):
+        reproducibility._source_inventory(root)

@@ -26,29 +26,38 @@ from fra_ingest.child import convert_in_child
 from fra_ingest.classify import Classification, TableContext, classify
 from fra_ingest.config import IngestConfig
 from fra_ingest.continuation import continues_part, inherit_periods, is_closed, merge_continuations
-from fra_ingest.convert import CONVERT_VERSION, settings_hash
+from fra_ingest.convert import cached_convert, invalidate_convert, settings_hash
 from fra_ingest.converter import docling_version
 from fra_ingest.docling_json import DlDocument, load_docling_json
 from fra_ingest.errors import IngestError
 from fra_ingest.figure_checks import check_net_profit_tie
 from fra_ingest.header import parse_header
+from fra_ingest.header_recovery import recover_header
 from fra_ingest.hierarchy import RowInput, infer_hierarchy
+from fra_ingest.industry import industry_decision
+from fra_ingest.label_mapping import map_statement
 from fra_ingest.label_match import LabelIndex
 from fra_ingest.metadata import Metadata, detect_metadata
 from fra_ingest.ocr import OcrEngine
 from fra_ingest.ocr_policy import plan_ranges
-from fra_ingest.pages import read_pages
+from fra_ingest.pages import ocr_key, read_pages
 from fra_ingest.parts import PartialStatement, build_part
-from fra_ingest.results import ConvertResult, LocateResult, StructureResult, TableDecision
-from fra_ingest.review import StatementReview, review_statement
+from fra_ingest.results import (
+    ConvertResult,
+    IndustryDecision,
+    LocateResult,
+    StructureResult,
+    TableDecision,
+)
+from fra_ingest.review import StatementReview, hold_for_industry, review_statement
 from fra_ingest.row_alignment import realign_rows
 from fra_ingest.stage import load_or_locate, page_ocr_languages
 from fra_ingest.table_checks import run_checks
 from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
-from fra_ingest.visual_order import repair_grid, repair_text
+from fra_ingest.visual_order import repair_grid, repair_text, restore_word_order
 
-STRUCTURE_VERSION = "10"  # bump whenever structure's output can change, reviews included
+STRUCTURE_VERSION = "19"  # critical-item mapping findings; conversion/pages unchanged
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -68,6 +77,9 @@ class StructureInputs(BaseModel):
     cue_types: dict[int, tuple[StatementType, ...]]
     documents: list[tuple[str, DlDocument]]
     convert: ConvertResult
+    industry_hold: str | None = Field(
+        default=None, description="Why the industry verdict is uncertain: holds every statement"
+    )
     domicile_texts: dict[int, list[str]] = Field(
         default_factory=dict, description="Part 1's page texts and their reading variants, by page"
     )
@@ -126,7 +138,7 @@ def _statement(
         periods=part.periods,
         line_items=items,
         source_pages=list(range(part.first_page, part.last_page + 1)),
-        flags=[*part.flags, *meta.flags, *caveat_flags],
+        flags=list(dict.fromkeys([*part.flags, *meta.flags, *caveat_flags])),
         caveats=caveats,
     )
 
@@ -167,7 +179,10 @@ def _continued_part(
 
 
 def structure_document(
-    inputs: StructureInputs, config: IngestConfig
+    inputs: StructureInputs,
+    config: IngestConfig,
+    *,
+    header_recover: Callable[[Grid, DlDocument], Grid] | None = None,
 ) -> tuple[StructureResult, list[CheckResult]]:
     index = LabelIndex(load_taxonomy())
     decisions: list[TableDecision] = []
@@ -177,7 +192,9 @@ def structure_document(
         for table in document.tables:
             raw = build_grid(table, document, path)
             visual = raw.page_no in inputs.visual_pages
-            grid = repair_grid(raw, visual=visual)
+            grid = restore_word_order(repair_grid(raw, visual=visual), index)
+            if header_recover is not None and inputs.page_modes.get(grid.page_no) is PageMode.IMAGE:
+                grid = header_recover(grid, document)
             headings = _headings(document, grid, visual)
             hint = _date_hint(headings)
             context = TableContext(
@@ -199,7 +216,16 @@ def structure_document(
                 page_no=grid.page_no,
                 type=result.type,
                 confidence=min(result.confidence, 1.0),
-                evidence=result.evidence,
+                evidence=[
+                    *result.evidence,
+                    *(
+                        f
+                        for f in grid.flags
+                        if f.startswith(("header_recovery_", "header_recovered"))
+                    ),
+                ],
+                recovered_headers=grid.recovered_headers,
+                recovery_context=grid.recovered_context,
             )
             decisions.append(decision)
             if result.type is not None or _only_below_confidence(result):
@@ -230,7 +256,7 @@ def structure_document(
                 continue
             if is_closed(continued, index):
                 candidate.decision.evidence = [
-                    *result.evidence,
+                    *candidate.decision.evidence,
                     f"after_closed:{continued.type.value}",
                 ]
                 continue
@@ -239,7 +265,7 @@ def structure_document(
                 update={"type": continued.type, "evidence": [*result.evidence, evidence]}
             )
             candidate.decision.type = continued.type
-            candidate.decision.evidence = result.evidence
+            candidate.decision.evidence = [*candidate.decision.evidence, evidence]
         assert result.type is not None
         layout = parse_header(grid, result.type, hint)
         previous = next(
@@ -296,6 +322,7 @@ def structure_document(
         statement, results = run_checks(
             _statement(part, metas[part.table_refs[0]], inputs, index, number), index
         )
+        statement = map_statement(statement, index, results)
         statements.append(statement)
         checks.extend(results)
         for ref in part.table_refs:
@@ -323,12 +350,17 @@ def structure_document(
             own += ties  # recorded on comprehensive income; they vouch for this statement too
         review = review_statement(s, own, primary=s.type not in seen)
         seen.add(s.type)
+        if inputs.industry_hold is not None:
+            s, review = hold_for_industry(s, review, inputs.industry_hold)
+            statements[position] = s
         reviews.append(review)
-        if review.status == "needs_review":
+        if review.status == "needs_review" and "needs_review" not in s.flags:
             statements[position] = s.model_copy(update={"flags": [*s.flags, "needs_review"]})
 
     found = {s.type for s in statements}
     flags = [f"statement_not_extracted:{t.value}" for t in config.enabled_types if t not in found]
+    if inputs.industry_hold is not None:
+        flags.append(f"industry_uncertain:{inputs.industry_hold}")
     flags += [
         f"range_not_converted:{r.first_page}-{r.last_page}"
         for r in inputs.convert.ranges
@@ -347,13 +379,17 @@ def structure_document(
     return structured, checks
 
 
-def _settings_hash(config: IngestConfig, convert: ConvertResult) -> str:
+def _settings_hash(
+    config: IngestConfig, convert: ConvertResult, ocr: OcrEngine | None = None
+) -> str:
     payload = {
         "structure": STRUCTURE_VERSION,
         "convert": convert.settings_hash,
         "min_confidence": config.min_confidence,
         "enabled_types": sorted(t.value for t in config.enabled_types),
         "taxonomy": load_taxonomy().version,
+        "header_ocr_scale": config.header_ocr_scale,
+        "ocr": ocr_key(config, ocr),
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
@@ -378,16 +414,7 @@ def _missing_docling(out_dir: Path, result: ConvertResult) -> list[str]:
 
 def _stored_convert(out_dir: Path, digest: str) -> ConvertResult | None:
     """``convert.json`` when convert would write the same today and its docling files exist."""
-    path = out_dir / "convert.json"
-    if not path.is_file():
-        return None
-    try:
-        stored = ConvertResult.model_validate_json(path.read_text(encoding="utf-8"))
-    except ValidationError:
-        return None
-    if stored.version != CONVERT_VERSION or stored.settings_hash != digest:
-        return None
-    return None if _missing_docling(out_dir, stored) else stored
+    return cached_convert(out_dir, digest)
 
 
 def current_convert(
@@ -404,11 +431,24 @@ def current_convert(
     stored = _stored_convert(out_dir, digest)
     if stored is not None:
         return stored
+    invalidate_convert(out_dir)
     converted = convert(pdf, config)
     missing = _missing_docling(out_dir, converted)
     if missing:
         raise IngestError("convert_failed", f"docling output missing: {', '.join(missing)}")
     return converted
+
+
+def _declined(located: LocateResult, decision: IndustryDecision) -> StructureResult:
+    """The end state of a bank or an insurer: the reason, and no statements."""
+    return StructureResult(
+        version=STRUCTURE_VERSION,
+        sha256=located.document.sha256,
+        convert_version="",  # convert never ran
+        settings_hash="",
+        industry=decision,
+        flags=[f"declined:{decision.code}"],
+    )
 
 
 def structure_pdf(
@@ -422,9 +462,19 @@ def structure_pdf(
     started = time.perf_counter()
     located = load_or_locate(pdf, config, ocr)
     out_dir = config.artifact_root / located.document.sha256
+    decision = industry_decision(located.industry)
+    if decision is not None and decision.outcome == "declined":
+        # Decided here, before convert, the expensive stage.
+        declined = _declined(located, decision).model_copy(
+            update={"timings": {"structure": time.perf_counter() - started}}
+        )
+        out_dir.mkdir(parents=True, exist_ok=True)
+        _write(out_dir / "table_checks.json", "[]")  # statements.raw.json promises these
+        _write(out_dir / "statements.raw.json", declined.model_dump_json(indent=2))
+        return declined
     converted = current_convert(pdf, config, ocr, located, convert)
 
-    digest = _settings_hash(config, converted)
+    digest = _settings_hash(config, converted, ocr)
     target = out_dir / "statements.raw.json"
     if use_cache and target.is_file():
         try:
@@ -436,6 +486,11 @@ def structure_pdf(
             and cached.version == STRUCTURE_VERSION
             and cached.settings_hash == digest
             and (out_dir / "table_checks.json").is_file()
+            and not any(
+                e.startswith(("header_recovery_failed:", "header_recovery_unavailable"))
+                for table in cached.tables
+                for e in table.evidence
+            )
         ):
             return cached
 
@@ -445,6 +500,7 @@ def structure_pdf(
         sha256=located.document.sha256,
         language=located.document.language,
         industry_flags=(f"likely_{kind}",) if kind in _FINANCIAL else (),
+        industry_hold=decision.code if decision is not None else None,
         page_modes={p.page_no: p.mode for p in pages},
         visual_pages={p.page_no for p in pages if p.visual_arabic},
         page_texts={p.page_no: repair_text(p.text, visual=False) for p in pages},
@@ -458,9 +514,17 @@ def structure_pdf(
         convert=converted,
         domicile_texts={p.page_no: reading_variants(p.text, p.visual_arabic) for p in pages},
     )
-    result, checks = structure_document(inputs, config)
+    result, checks = structure_document(
+        inputs,
+        config,
+        header_recover=lambda grid, document: recover_header(grid, document, pdf, config, ocr),
+    )
     result = result.model_copy(
-        update={"settings_hash": digest, "timings": {"structure": time.perf_counter() - started}}
+        update={
+            "settings_hash": digest,
+            "industry": decision,
+            "timings": {"structure": time.perf_counter() - started},
+        }
     )
     out_dir.mkdir(parents=True, exist_ok=True)
     # Checks first: a present statements.raw.json promises the checks beside it are current.

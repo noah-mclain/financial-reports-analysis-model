@@ -1,8 +1,11 @@
 """Subtotal checks and the balance sheet identity (spec 11, Data flow step 10)."""
 
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, getcontext, localcontext
 
+import pytest
+
+import fra_core.tolerance
 from fra_core.schemas import (
     BBox,
     Cell,
@@ -425,3 +428,165 @@ def test_a_total_found_by_sums_says_so() -> None:
         ("pass", "sum_based"),
     ]
     assert results[-1].line_item_ids == ["r4", "r8", "r9"]
+
+
+def test_subtotal_acceptance_and_metadata_use_the_shared_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(fra_core.tolerance, "HALF_UNIT", Decimal("0.25"))
+    s = statement([item(1, "Cash", "10"), item(2, "Stock", "5"), item(3, "Total", "15.75", True)])
+    result = check_subtotals(s)[0]
+    assert result.status == "fail"
+    assert result.difference == Decimal("0.75")
+    assert result.tolerance == Decimal("0.50")
+
+
+def test_identity_acceptance_and_metadata_use_the_shared_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(fra_core.tolerance, "HALF_UNIT", Decimal("0.25"))
+    s = statement(
+        [
+            item(1, "Total assets", "100.375", True),
+            item(2, "Total liabilities and equity", "100", True),
+        ]
+    )
+    result = check_identity(s, INDEX)[0]
+    assert result.status == "fail"
+    assert result.difference == Decimal("0.375")
+    assert result.tolerance == Decimal("0.25")
+
+
+@pytest.mark.parametrize("sign", [-1, 1])
+@pytest.mark.parametrize("outside", [False, True])
+@pytest.mark.parametrize("scale", [1, 1000])
+def test_run_fallback_counts_present_zero(sign: int, outside: bool, scale: int) -> None:
+    difference = sign * Decimal("1.000001" if outside else "1")
+    s = statement(
+        [
+            item(1, "Cash", "100"),
+            item(2, "Other", "0"),
+            item(3, "Total", str(Decimal(100) + difference), True),
+        ]
+    ).model_copy(update={"scale": scale})
+    result = check_subtotals(s)[0]
+    assert result.status == ("fail" if outside else "pass")
+    assert result.expected == Decimal("100")
+    assert result.difference == difference and result.tolerance == Decimal("1.0")
+    assert result.line_item_ids == ["r1", "r2", "r3"] and result.detail == ""
+
+
+@pytest.mark.parametrize("sign", [-1, 1])
+@pytest.mark.parametrize("outside", [False, True])
+@pytest.mark.parametrize("combined", [False, True])
+@pytest.mark.parametrize("scale", [1, 1000])
+def test_identity_boundary_and_reported_units(
+    sign: int, outside: bool, combined: bool, scale: int
+) -> None:
+    tolerance = Decimal("0.5" if combined else "1.0")
+    difference = sign * (tolerance + (Decimal("0.000001") if outside else Decimal(0)))
+    rows = [item(1, "Total assets", str(Decimal(100) + difference), True)]
+    if combined:
+        rows.append(item(2, "Total liabilities and equity", "100", True))
+    else:
+        rows.extend([item(2, "Total liabilities", "60", True), item(3, "Total equity", "40", True)])
+    s = statement(rows).model_copy(update={"scale": scale})
+    result = check_identity(s, INDEX)[0]
+    assert result.status == ("fail" if outside else "pass")
+    assert result.expected == Decimal("100") and result.actual == Decimal(100) + difference
+    assert result.difference == difference and result.tolerance == tolerance
+    assert result.line_item_ids == [r.id for r in rows]
+    assert result.id == "s:balance_identity:balance:2025-12-31"
+    assert result.detail == "total assets against total liabilities and equity"
+
+
+@pytest.mark.parametrize("combined", [False, True])
+def test_missing_identity_values_preserve_skip_metadata(combined: bool) -> None:
+    rows = [item(1, "Total assets", "100", True)]
+    if combined:
+        rows.append(item(2, "Total liabilities and equity", "?", True))
+    else:
+        rows.extend([item(2, "Total liabilities", "60", True), item(3, "Total equity", "?", True)])
+    result = check_identity(statement(rows), INDEX)[0]
+    assert result.status == "skipped" and result.detail == "missing_values"
+    assert result.expected is result.actual is result.difference is result.tolerance is None
+    assert result.line_item_ids == [r.id for r in rows]
+
+
+@pytest.mark.parametrize("difference", ["0", "0.000001", "-0.000001"])
+def test_single_addend_equality_is_exact_with_reported_tolerance(difference: str) -> None:
+    s = statement(
+        [item(1, "Cash", "10"), item(2, "Total", str(Decimal(10) + Decimal(difference)), True)]
+    )
+    result = check_subtotals(s)[0]
+    if Decimal(difference) == 0:
+        assert result.status == "pass" and result.detail == "single_addend"
+        assert result.expected == result.actual == Decimal("10")
+        assert result.difference == Decimal(0) and result.tolerance == Decimal("0.5")
+        assert result.line_item_ids == ["r1", "r2"]
+    else:
+        assert result.status == "skipped" and result.detail == "subtotal_scope_unknown"
+        assert result.expected is result.actual is result.difference is result.tolerance is None
+        assert result.line_item_ids == ["r2"]
+
+
+@pytest.mark.parametrize("difference", ["1", "-1", "1.000001", "-1.000001"])
+def test_previous_total_plus_one_zero_row_keeps_two_addend_tolerance(difference: str) -> None:
+    rows = [
+        item(1, "Revenue", "100"),
+        item(2, "Cost", "-60"),
+        item(3, "Gross profit", "40", True),
+        item(4, "Other", "0"),
+        item(5, "Operating profit", str(Decimal(40) + Decimal(difference)), True),
+    ]
+    result = check_subtotals(statement(rows, StatementType.INCOME))[-1]
+    if abs(Decimal(difference)) <= 1:
+        assert result.status == "pass" and result.detail == "single_addend"
+        assert result.expected == Decimal("40") and result.difference == Decimal(difference)
+        assert result.tolerance == Decimal("1.0")
+        assert result.line_item_ids == ["r3", "r4", "r5"]
+    else:
+        assert result.status == "skipped" and result.detail == "subtotal_scope_unknown"
+        assert result.expected is result.actual is result.difference is result.tolerance is None
+
+
+def test_high_precision_cancellation_preserves_values_and_serialized_metadata() -> None:
+    before = getcontext().copy()
+    with localcontext() as context:
+        context.prec = 50
+        rows = [
+            item(1, "Revenue", "123456789012345678901234567890.123456789"),
+            item(2, "Cost", "-123456789012345678901234567880.123456788"),
+            item(3, "Total", "11.000000001", True),
+        ]
+        result = check_subtotals(statement(rows))[0]
+        assert result.status == "pass"
+        assert result.expected == Decimal("10.000000001")
+        assert result.actual == Decimal("11.000000001")
+        assert result.difference == Decimal("1.000000000")
+        assert result.tolerance == Decimal("1.0")
+        data = result.model_dump(mode="json")
+        assert data["expected"] == "10.000000001"
+        assert data["difference"] == "1.000000000" and data["tolerance"] == "1.0"
+        assert context.prec == 50
+    assert getcontext().prec == before.prec and getcontext().flags == before.flags
+
+
+def test_low_precision_running_total_retains_left_associated_acceptance() -> None:
+    before = getcontext().copy()
+    with localcontext() as context:
+        context.prec = 3
+        rows = [
+            item(1, "Prior total", "1000", True),
+            item(2, "Adjustment", "-998"),
+            item(3, "New total", "3.01", True),
+        ]
+        result = check_subtotals(statement(rows))[-1]
+        # The acceptance path uses (actual - prior) - only, which rounds to 1;
+        # the published difference uses actual - expected, which remains 1.01.
+        assert result.status == "pass" and result.detail == ""
+        assert result.expected == Decimal("2") and result.actual == Decimal("3.01")
+        assert result.difference == Decimal("1.01") and result.tolerance == Decimal("1.0")
+        assert result.line_item_ids == ["r1", "r2", "r3"]
+        assert context.prec == 3
+    assert getcontext().prec == before.prec and getcontext().flags == before.flags

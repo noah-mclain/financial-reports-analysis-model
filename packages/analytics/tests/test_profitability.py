@@ -1,13 +1,14 @@
 """Hand-computed margins, ambiguity and numerical boundaries."""
 
 import json
+from dataclasses import replace
 from datetime import date
 from decimal import ROUND_UP, Clamped, Decimal, Inexact, Rounded, Underflow, localcontext
 
 import pytest
+from statement_builders import POLICY
 
 from fra_analytics.metrics.profitability import compute_margins
-from fra_analytics.policy import Policy
 from fra_core.schemas.caveat import Caveat
 from fra_core.schemas.metric import MetricUnit, MetricValue
 from fra_core.schemas.statement import (
@@ -67,7 +68,9 @@ def income() -> Statement:
     )
 
 
-POLICY = Policy(negative_margin_denominator="compute_and_flag")
+def rows_of(result: MetricValue) -> dict[str, list[str]]:
+    """The line item ids behind each role of a result."""
+    return {role: [cell.line_item_id for cell in cells] for role, cells in result.inputs.items()}
 
 
 def test_hand_computed_and_provenance(income: Statement) -> None:
@@ -80,11 +83,20 @@ def test_hand_computed_and_provenance(income: Statement) -> None:
         r.period_key == "FY2025" and r.unit == MetricUnit.RATIO and r.formula_version == "1"
         for r in results
     )
-    assert [r.inputs for r in results] == [
+    assert [rows_of(r) for r in results] == [
         {"numerator": ["source_1"], "denominator": ["source_0"]},
         {"numerator": ["source_2"], "denominator": ["source_0"]},
         {"numerator": ["source_3"], "denominator": ["source_0"]},
     ]
+    # Every input is the printed cell, with its provenance, not only the id of its row.
+    first = results[0].inputs["numerator"][0]
+    assert (first.statement_id, first.canonical_id, first.period_key) == (
+        "income_1",
+        "gross_profit",
+        "FY2025",
+    )
+    assert (first.reported, first.scale, first.currency) == (Decimal("60"), 1, "EGP")
+    assert (first.provenance.page_no, first.provenance.row) == (2, 1)
     assert income.model_dump_json() == before
     for result in results:
         assert MetricValue.model_validate_json(result.model_dump_json()) == result
@@ -122,10 +134,8 @@ def test_missing_profit_with_zero_revenue(
     result = compute_margins(income, policy=POLICY)[index - 1]
     assert result.value is None
     assert result.flags == [f"missing_input:{canonical}", "undefined_zero_denominator"]
-    assert result.inputs == {
-        "numerator": [] if missing in ("row", "unmapped") else [row.id],
-        "denominator": ["source_0"],
-    }
+    # A row with no printed figure gives no input cell, however it came to have none.
+    assert rows_of(result) == {"numerator": [], "denominator": ["source_0"]}
     assert income.model_dump_json() == before
 
 
@@ -157,7 +167,7 @@ def test_negative_revenue(
     income: Statement, option: str, expected: float | None, flag: str
 ) -> None:
     income.line_items[0].cells[0].reported = Decimal("-200")
-    policy = Policy(negative_margin_denominator=option)  # type: ignore[arg-type]
+    policy = replace(POLICY, negative_margin_denominator=option)  # type: ignore[arg-type]
     result = compute_margins(income, policy=policy)[0]
     assert result.value == expected
     assert result.flags == ["sign_unexpected", flag]
@@ -206,9 +216,7 @@ def test_missing_input(income: Statement, index: int, canonical: str, missing: s
     assert all(r.value is None and f"missing_input:{canonical}" in r.flags for r in affected)
     assert all("undefined_zero_denominator" not in r.flags for r in affected)
     role = "denominator" if index == 0 else "numerator"
-    assert all(
-        r.inputs[role] == ([] if missing in ("row", "unmapped") else [row.id]) for r in affected
-    )
+    assert all(rows_of(r)[role] == [] for r in affected)
 
 
 @pytest.mark.parametrize("index", [0, 1])
@@ -226,7 +234,7 @@ def test_duplicate_mapping(income: Statement, index: int) -> None:
         and "uncertain_candidate" in r.flags
         for r in affected
     )
-    assert all(r.inputs[role] == [income.line_items[index].id, "candidate"] for r in affected)
+    assert all(rows_of(r)[role] == [income.line_items[index].id, "candidate"] for r in affected)
     if index == 1:
         assert results[1].value == 0.15
 

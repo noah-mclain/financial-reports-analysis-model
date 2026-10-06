@@ -341,3 +341,34 @@ def test_a_year_only_header_under_an_interim_date_line_keeps_the_interim_length(
     )
     assert [p.key for p in layout.value_cols.values()] == ["6M-2025-06-30", "6M-2024-06-30"]
     assert [p.months for p in layout.value_cols.values()] == [6, 6]
+
+
+def test_ordinary_complete_headers_keep_core_parser_date_hint_formats() -> None:
+    for header, caption, expected in (
+        (
+            "June 30, 2025",
+            "For the six months ended June 30, 2025",
+            "FY2025",
+        ),
+        (
+            "٣٠ يونيو ٢٠٢٥",
+            "عن ستة أشهر المنتهية في ٣٠ يونيو ٢٠٢٥",
+            "FY2025",
+        ),
+    ):
+        layout = parse_header(
+            grid([["", header], ["Revenue", "100"]], header_rows=1), INCOME, caption
+        )
+        assert layout.value_cols[1].key == expected, header
+
+
+def test_ordinary_year_headers_keep_bare_year_date_hint_formats() -> None:
+    layout = parse_header(
+        grid([["", "2025", "2024"], ["Revenue", "100", "90"]], header_rows=1),
+        INCOME,
+        "Six months ended June 30, 2025",
+    )
+    assert [period.key for period in layout.value_cols.values()] == [
+        "6M-2025-06-30",
+        "6M-2024-06-30",
+    ]

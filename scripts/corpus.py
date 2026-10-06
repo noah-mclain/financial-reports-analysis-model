@@ -2,12 +2,15 @@
 
     uv run python scripts/corpus.py check
     uv run python scripts/corpus.py fetch [--pool train] [--force] [--new] [--id ID ...]
+    PYTHONPATH=eval uv run python scripts/corpus.py split
 
 `check` enforces the split rules in eval/corpus/README.md and needs no network.
 `fetch` downloads into var/corpus/<pool>/<id>.pdf (gitignored), measures page count and
 text layer per page, compares every file against the golden set and against the rest of the
 corpus, and records the results in eval/corpus/fetched.yaml. `--new` leaves out every document
 already measured there, so a few added documents need no re-download of the rest.
+`split` prints the split of the train pool; it reads the records through eval/harness, so it
+alone needs PYTHONPATH=eval (`make corpus-split` sets it).
 """
 
 from __future__ import annotations
@@ -30,18 +33,31 @@ from typing import Any
 import yaml
 
 from fra_core import split
+from fra_core.pools import (
+    REGISTRY_RELATIVE_PATH,
+    SEC_OUTPUT_RELATIVE_PATH,
+    Identity,
+    Pool,
+    PoolError,
+    PoolRegistry,
+    Source,
+    load_registry,
+    locked_registry,
+    record_pdf_metadata,
+    save_registry,
+)
 from fra_core.split import issuer_key
 
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATES = ROOT / "eval/corpus/candidates.yaml"
 FETCHED = ROOT / "eval/corpus/fetched.yaml"
-HOLDOUT_MOVES = ROOT / "eval/corpus/holdout_moves.yaml"
-SCORING_LOG = ROOT / "eval/corpus/scoring_log.tsv"
 GOLDEN_MANIFEST = ROOT / "eval/golden/manifest.yaml"
 GOLDEN_DIR = ROOT / "eval/golden"
 STORE = ROOT / "var/corpus"
 
-POOLS = ("dev", "train", "model_test", "blind")
+POOL_METADATA = ROOT / REGISTRY_RELATIVE_PATH
+SEC_OUT = ROOT / SEC_OUTPUT_RELATIVE_PATH
+POOLS = tuple(Pool)
 ROLES = ("corporate", "negative_control")
 SECTORS = ("bank", "insurer", "other_financial")
 SUBSECTORS = (
@@ -63,12 +79,18 @@ class CheckReport:
     existing: list[str] = field(default_factory=list)  # candidate ids whose issuer is golden
 
 
-def check(documents: list[dict[str, Any]], golden_issuers: set[str]) -> CheckReport:
+def check(
+    documents: list[dict[str, Any]],
+    golden_issuers: set[str],
+    registry: PoolRegistry | None = None,
+) -> CheckReport:
     """Apply the split rules. Every error means a leak between pools."""
     report = CheckReport()
     seen_ids: set[str] = set()
     seen_urls: dict[str, str] = {}
-    issuer_pools: dict[str, set[str]] = defaultdict(set)
+    registry = registry if registry is not None else PoolRegistry()
+    for name in golden_issuers:
+        registry.register(Identity(name), "dev")
 
     for doc in documents:
         doc_id, pool, role = doc["id"], doc.get("pool"), doc.get("role")
@@ -86,8 +108,19 @@ def check(documents: list[dict[str, Any]], golden_issuers: set[str]) -> CheckRep
         elif url:
             seen_urls[url] = doc_id
 
-        key = issuer_key(doc["issuer"])
-        issuer_pools[key].add(str(pool))
+        try:
+            registry.record_documents([doc])
+            identity = Identity.from_document(doc)
+        except PoolError as exc:
+            report.errors.append(f"{doc_id}: {exc}")
+            # Still report a golden issuer outside dev with the established diagnostic.
+            if isinstance(doc.get("issuer"), str):
+                key = issuer_key(doc["issuer"])
+            else:
+                continue
+        else:
+            key = identity.name
+
         if key in golden_issuers:
             report.existing.append(doc_id)
             if pool != "dev":
@@ -95,9 +128,6 @@ def check(documents: list[dict[str, Any]], golden_issuers: set[str]) -> CheckRep
                     f"{doc_id}: issuer {doc['issuer']!r} is in the golden set, so it belongs in dev"
                 )
 
-    for key, pools in sorted(issuer_pools.items()):
-        if len(pools) > 1:
-            report.errors.append(f"issuer {key!r} spans pools {sorted(pools)}")
     return report
 
 
@@ -152,15 +182,18 @@ def measure(path: Path) -> dict[str, Any]:
     }
 
 
-def assign_pool(issuer: str) -> str:
-    """Default pool for a new issuer: a stable hash of its key, 65% train, 20% model_test,
-    15% blind. Golden issuers are always dev. Explicit pools in candidates.yaml win."""
-    bucket = int(hashlib.sha256(issuer_key(issuer).encode()).hexdigest(), 16) % 100
-    if bucket < 65:
-        return "train"
-    if bucket < 85:
-        return "model_test"
-    return "blind"
+def assign_pool(
+    issuer: str, registry: PoolRegistry | None = None, *, cik: int | str | None = None
+) -> str:
+    """Preserve recorded pools; use the legacy PDF hash only for a new identity."""
+    registry = registry if registry is not None else PoolRegistry()
+    return str(registry.assign(Identity(issuer, cik), Source.PDF))
+
+
+def recorded_registry() -> PoolRegistry:
+    registry = load_registry(POOL_METADATA, SEC_OUT.glob("labels-*.jsonl.gz"))
+    record_pdf_metadata(registry, CANDIDATES.parent, GOLDEN_MANIFEST)
+    return registry
 
 
 class Politeness:
@@ -298,6 +331,10 @@ def cmd_check(_: argparse.Namespace) -> int:
     documents = load_yaml(CANDIDATES)["documents"]
     golden_issuers, _hashes = golden_index()
     report = check(documents, golden_issuers)
+    try:
+        recorded_registry()
+    except (PoolError, OSError, ValueError) as exc:
+        report.errors.append(str(exc))
 
     counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for doc in documents:
@@ -354,6 +391,13 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     golden_issuers, golden_hashes = golden_index()
     if check(documents, golden_issuers).errors:
         print("split rules fail; run `check` first", file=sys.stderr)
+        return 1
+    try:
+        with locked_registry(POOL_METADATA, SEC_OUT.glob("labels-*.jsonl.gz")) as registry:
+            record_pdf_metadata(registry, CANDIDATES.parent, GOLDEN_MANIFEST)
+            save_registry(registry, POOL_METADATA)
+    except (PoolError, OSError, ValueError) as exc:
+        print(f"pool assignments fail: {exc}", file=sys.stderr)
         return 1
 
     fetched: dict[str, dict[str, Any]] = (
@@ -441,9 +485,14 @@ def cmd_fetch(args: argparse.Namespace) -> int:
 def split_report() -> str:
     """Fit, validation and holdout of the train pool, as hashed and after the recorded moves.
     Reads candidates.yaml only; no document is opened."""
+    # The records are read by the harness, which is on the path only for this command
+    # (PYTHONPATH=eval); the other commands, and scripts importing this module, need no harness.
+    from harness.holdout_records import read_looks, read_moves
+    from harness.paths import HOLDOUT_MOVES, SCORING_LOG
+
     documents = [d for d in load_yaml(CANDIDATES)["documents"] if d["pool"] == split.TRAIN]
-    looks = split.read_looks(SCORING_LOG)
-    moves = split.read_moves(HOLDOUT_MOVES, looks)
+    looks = read_looks(SCORING_LOG)
+    moves = read_moves(HOLDOUT_MOVES, looks)
     kinds = Counter(m.kind for m in moves)
     lines = [
         f"train pool: {len({split.document_key(d) for d in documents})} issuers, "

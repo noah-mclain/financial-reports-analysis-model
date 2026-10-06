@@ -11,9 +11,12 @@ IngestErrorReason = Literal[
     "convert_failed",
     "convert_timeout",
     "convert_crashed",
+    "ocr_timeout",
+    "ocr_engine",
     "unknown_document",
     "ambiguous_document",
     "artifact_missing",
+    "declined",
 ]
 
 

@@ -22,8 +22,9 @@ services:
       retries: 12
       start_period: 5s
 
-  # Placeholder until apps/worker lands (week 4): proves the image carries fra_ingest and the
-  # profile, and stays up. `init` makes docker's stop signal reach it so it exits at once.
+  # Placeholder until apps/worker lands (week 4): proves the image carries fra_ingest, cv2, the
+  # profile and a working OCR engine (the one FRA_OCR_ENGINE names, with its language data), and
+  # stays up. `init` makes docker's stop signal reach it so it exits at once.
   # The image is built by `docker compose build api` or `make docker-up`; `build worker` builds
   # nothing, so a lone `up --build worker` would run a stale image.
   worker:
@@ -33,7 +34,7 @@ services:
     command:
       - sh
       - -c
-      - python -c "import fra_ingest" && python -m fra_core.profile && exec sleep infinity
+      - python -c "import cv2; from fra_ingest.config import load_config; from fra_ingest.ocr import make_engine; make_engine(load_config())" && python -m fra_core.profile && exec sleep infinity
 
   # The Docker profile's model server (docs/blueprint/14-run-profiles.md): the fused adapter as
   # a GGUF file, served by llama.cpp on the CPU. Off by default; put the file at

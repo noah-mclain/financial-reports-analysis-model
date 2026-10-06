@@ -9,6 +9,13 @@ from fra_core.schemas import StatementType
 from fra_ingest.config import REPO_ROOT, IngestConfig, find_repo_root, load_config
 
 
+@pytest.fixture(autouse=True)
+def clean_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests read the settings file alone; a run under the Docker profile sets these."""
+    for name in ("FRA_PROFILE", "FRA_OCR_ENGINE", "FRA_INGEST_CONFIG"):
+        monkeypatch.delenv(name, raising=False)
+
+
 def write(tmp_path: Path, text: str) -> Path:
     path = tmp_path / "ingest.toml"
     path.write_text(text, encoding="utf-8")
@@ -124,3 +131,88 @@ def test_ocr_scale_defaults_to_doclings_own(tmp_path: Path) -> None:
 def test_structure_confidence_setting(tmp_path: Path) -> None:
     assert IngestConfig().min_confidence == 0.5
     assert load_config(write(tmp_path, "[structure]\nmin_confidence = 0.7\n")).min_confidence == 0.7
+
+
+@pytest.mark.parametrize("engine", ["ocrmac", "tesseract", "none"])
+def test_every_ocr_engine_name_is_accepted(tmp_path: Path, engine: str) -> None:
+    config = load_config(write(tmp_path, f'[convert]\nocr_engine = "{engine}"\n'))
+    assert config.convert_ocr == engine
+
+
+def test_an_unknown_ocr_engine_is_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError, match="convert_ocr"):
+        load_config(write(tmp_path, '[convert]\nocr_engine = "paddle"\n'))
+
+
+def test_an_ocr_engine_argument_overrides_the_file(tmp_path: Path) -> None:
+    path = write(tmp_path, '[convert]\nocr_engine = "ocrmac"\n')
+    assert load_config(path, ocr_engine="tesseract").convert_ocr == "tesseract"
+
+
+def test_the_ocr_engine_can_be_named_in_the_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = write(tmp_path, '[convert]\nocr_engine = "ocrmac"\n')
+    monkeypatch.setenv("FRA_OCR_ENGINE", "tesseract")
+    assert load_config(path).convert_ocr == "tesseract"
+    assert load_config(path, ocr_engine="none").convert_ocr == "none"
+
+
+def test_an_unknown_ocr_engine_in_the_environment_is_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FRA_OCR_ENGINE", "paddle")
+    with pytest.raises(ValidationError, match="convert_ocr"):
+        load_config(write(tmp_path, ""))
+
+
+def test_tesseract_defaults_are_the_bake_off_choice(tmp_path: Path) -> None:
+    config = IngestConfig()
+    assert (config.tesseract_psm, config.tesseract_arabic_language) == (3, "ara+eng")
+    path = write(tmp_path, '[tesseract]\npsm = 6\narabic_language = "ara"\n')
+    config = load_config(path)
+    assert (config.tesseract_psm, config.tesseract_arabic_language) == (6, "ara")
+
+
+def test_an_arabic_language_string_tesseract_does_not_know_is_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ValidationError, match="tesseract_arabic_language"):
+        load_config(write(tmp_path, '[tesseract]\narabic_language = "fra"\n'))
+
+
+def test_shipped_docker_profile_resolves_cpu_and_tesseract(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FRA_PROFILE", "docker")
+    monkeypatch.delenv("FRA_OCR_ENGINE", raising=False)
+    config = load_config()
+    assert (config.device, config.convert_ocr) == ("cpu", "tesseract")
+    assert load_config(ocr_engine="none").convert_ocr == "none"
+
+
+def test_native_tesseract_keeps_native_device(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FRA_PROFILE", "native")
+    assert load_config(ocr_engine="tesseract").device == "mps"
+
+
+def test_unknown_profile_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FRA_PROFILE", "typo")
+    with pytest.raises(ValueError, match="FRA_PROFILE"):
+        load_config()
+
+
+def test_header_resolution_has_one_config_boundary_and_survives_transport(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fra_ingest.config import EFFECTIVE_CONFIG_ENV, transported_config
+
+    config = load_config(write(tmp_path, "[structure]\nheader_ocr_scale = 5.0\n"))
+    assert config.header_ocr_scale == 5.0
+    monkeypatch.setenv(EFFECTIVE_CONFIG_ENV, config.model_dump_json())
+    assert transported_config() == config
+    payload = config.model_dump(mode="json")
+    del payload["header_ocr_scale"]
+    import json
+
+    monkeypatch.setenv(EFFECTIVE_CONFIG_ENV, json.dumps(payload))
+    with pytest.raises(ValueError, match="header_ocr_scale"):
+        transported_config()
+    with pytest.raises(ValidationError, match="header_ocr_scale"):
+        IngestConfig(header_ocr_scale=7)

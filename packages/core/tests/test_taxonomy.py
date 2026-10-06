@@ -7,7 +7,7 @@ import yaml
 
 from fra_core.schemas.statement import StatementType
 from fra_core.taxonomy import load_taxonomy
-from fra_core.taxonomy.loader import Taxonomy
+from fra_core.taxonomy.loader import PLAN_CRITICAL_IDS, Taxonomy
 
 
 @pytest.fixture(scope="module")
@@ -32,6 +32,11 @@ def test_critical_items_are_present(taxonomy: Taxonomy) -> None:
         "total_liabilities_and_equity",
     }
     assert expected <= set(taxonomy.critical_ids())
+
+
+def test_the_six_items_the_plan_names_are_critical_in_the_taxonomy(taxonomy: Taxonomy) -> None:
+    assert len(PLAN_CRITICAL_IDS) == 6
+    assert set(PLAN_CRITICAL_IDS) <= set(taxonomy.critical_ids())
 
 
 @pytest.mark.parametrize(
@@ -131,3 +136,56 @@ def test_unsupported_version_is_rejected(tmp_path: Path) -> None:
     path.write_text(yaml.safe_dump({"version": 2, "items": []}), encoding="utf-8")
     with pytest.raises(ValueError, match="not supported"):
         load_taxonomy(path)
+
+
+def _write(tmp_path: Path, items: list[dict[str, object]]) -> Path:
+    path = tmp_path / "taxonomy.yaml"
+    path.write_text(yaml.safe_dump({"version": 1, "items": items}, allow_unicode=True))
+    return path
+
+
+def _total(**extra: object) -> dict[str, object]:
+    return {
+        "id": "total_a",
+        "statement": "balance",
+        "subtotal": True,
+        "aliases": {"en": ["total a"], "ar": ["إجمالي أ"]},
+        **extra,
+    }
+
+
+def test_section_headings_are_read_per_language_and_are_not_aliases(tmp_path: Path) -> None:
+    path = _write(tmp_path, [_total(headings={"en": ["a section"], "ar": ["قسم أ"]})])
+    taxonomy = load_taxonomy(path)
+    item = taxonomy.by_id("total_a")
+    assert item is not None
+    assert item.headings_for("en") == ("a section",)
+    assert item.headings_for("ar") == ("قسم أ",)
+    assert taxonomy.lookup("a section", StatementType.BALANCE) is None
+
+
+def test_the_bare_arabic_section_names_are_headings_and_not_aliases(taxonomy: Taxonomy) -> None:
+    assert taxonomy.lookup("الموجودات المتداولة", StatementType.BALANCE) is None
+    item = taxonomy.by_id("total_current_assets")
+    assert item is not None
+    assert "الموجودات المتداولة" in item.headings_for("ar")
+    assert "current assets" in item.headings_for("en")
+
+
+def test_headings_on_an_item_that_is_not_a_total_are_rejected(tmp_path: Path) -> None:
+    item = _total(headings={"en": ["a section"], "ar": ["قسم أ"]})
+    item["subtotal"] = False
+    with pytest.raises(ValueError, match=r"total_a.*headings.*subtotal"):
+        load_taxonomy(_write(tmp_path, [item]))
+
+
+def test_a_heading_that_is_an_alias_of_another_item_is_rejected(tmp_path: Path) -> None:
+    other = {
+        "id": "total_b",
+        "statement": "balance",
+        "subtotal": True,
+        "aliases": {"en": ["Some Section"], "ar": ["إجمالي ب"]},
+    }
+    item = _total(headings={"en": ["some section"], "ar": ["قسم أ"]})
+    with pytest.raises(ValueError, match=r"heading 'some section'.*total_a.*total_b"):
+        load_taxonomy(_write(tmp_path, [item, other]))

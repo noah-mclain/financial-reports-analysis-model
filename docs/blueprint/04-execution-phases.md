@@ -201,15 +201,17 @@ version with a smoke test.
 
 ### 1B.1 Frame, policy, identities (parallel track, needs only G0)
 
-- `to_frame(statements: list[Statement]) -> pd.DataFrame` with columns
-  `statement, canonical_id, period_key, reported, scale, value`.
+- `to_frame(statements: Sequence[Statement]) -> Frame`, a tuple of typed rows with the columns
+  `statement, canonical_id, period, reported, scale, value, provenance` (D19).
 - `load_policy(path: Path) -> Policy`.
-- `check_identities(frame: pd.DataFrame, statements: list[Statement], policy: Policy) -> list[CheckResult]`.
+- `check_identities(frame: Frame) -> list[CheckResult]`; the frame carries the statements, and
+  the identity tolerance is D6, so no policy is passed.
 
 ### 1B.2 Metric registry
 
-`compute(frame: pd.DataFrame, policy: Policy) -> list[MetricValue]` covers every metric in
-section 02, 2.6, with the flags defined by D1 to D5.
+`compute(frame: Frame, policy: Policy) -> list[MetricValue]` covers the metrics of section 02,
+2.6 that the converted statements support, with the flags defined by D1 to D5; the others are
+listed there.
 
 ### 1B.3 Reference implementation
 
@@ -323,8 +325,9 @@ issuers. That is the only valid kind; it does not have to be the `model_test` po
 `model_test` pool is the checkpoint (D13, D17), which comes last, and a holdout (issuers kept
 out of training and tuning, scored only to judge a candidate) taken from inside `train` measures
 the same property earlier. Until the checkpoint, Gate C is measured on that holdout and marked
-provisional. The split is `fra_core.split` in `packages/core`, its override record is
-`eval/corpus/holdout_moves.yaml` and the scoring log is `eval/corpus/scoring_log.tsv`;
+provisional. The split rules are `fra_core.split` in `packages/core`, which does no file I/O;
+its override record is `eval/corpus/holdout_moves.yaml` and the scoring log is
+`eval/corpus/scoring_log.tsv`, both read and written only by `eval/harness/holdout_records.py`;
 `make corpus-split` prints the counts below. The dataset builder is week 3 work. Everything below
 that says what the builder does is what it will do.
 
@@ -335,8 +338,9 @@ that says what the builder does is what it will do.
   Every scoring is entered in one log: date, what ran, what was looked at. A dry run (below) is
   a scoring and is entered like a model scoring, because each look spends some of the holdout's
   independence. The same parts apply to narration payloads.
-- **How an issuer is placed.** A stable hash, in the manner of `pool_for` in
-  `training/sources/sec_fsds.py` and `assign_pool` in `scripts/corpus.py`: SHA-256 of
+- **How an issuer is placed.** Top-level pools first follow the recorded cross-source
+  assignments in `fra_core.pools` ([operational rules](../../eval/corpus/README.md#model-data)).
+  The separate train subdivision in `fra_core.split` uses SHA-256 of
   `holdout:` plus the issuer's key, modulo 100. The key is `cik:<number>` for an issuer that has
   a CIK and `corpus.issuer_key` of its name otherwise, so the SEC data and the PDF corpus agree
   on one issuer only if its corpus documents carry the `cik` field; a US issuer added to `train`
@@ -372,6 +376,17 @@ that says what the builder does is what it will do.
   Medical, Aldrees, Catrion Catering, Development Works Food); they are set aside in
   `eval/corpus/deferred.yaml`, in no pool, so the split does not place them, and one that joins
   `train` later falls under this rule.
+- **Validation documents used for ingest development.** The validation part is reserved for
+  model choices, and a document read while an ingest rule was developed is no longer a clean
+  place to make one. On 5 October the word-order repair of Arabic table cells
+  ([11-ingest-structure.md](11-ingest-structure.md), Data flow step 3) was developed and its
+  thresholds chosen on 20 Arabic digital documents, 3 of them validation documents (Northern
+  Region Cement, SABIC, Tabuk Cement). They are listed with the date and the purpose in
+  `eval/corpus/validation_uses.yaml`, read by `eval/harness/holdout_records.py`. From now on
+  ingest is developed on fit documents only (`development_set({Part.FIT})`), and validation
+  documents are used only for an untuned check once the work is done, never to choose a rule,
+  an alias or a threshold; a document used that way for development is added to the file.
+  Model choices that depend on the extraction of those three documents say so.
 - **Files.** Fit is `train.jsonl` and validation is `valid.jsonl`, the layout of
   [01-constraints.md](01-constraints.md) 1.5. The holdout is not written as `test.jsonl`, or
   anywhere in the training data directory: whether `mlx_lm lora` reads `test.jsonl` on its own was
@@ -394,7 +409,8 @@ that says what the builder does is what it will do.
   Natural Gas Distribution, Professional Medical Expertise; 6 documents), and none of the issuers
   added that day was opened by eye, so no new override is applied; the rule above requires nothing
   else. The holdout that will be used has 21 corporate issuers and 1 negative control (Pioneers
-  Holding, a financial company that must be declined), 16 issuers with Arabic documents (18
+  Holding, a financial company that structure holds for review when the locator reads it as
+  `other_financial`, and passes as corporate otherwise; the structural test to decline it is not built), 16 issuers with Arabic documents (18
   documents) and 15 with English ones (17), 9 with both editions, and 3 Egyptian. No holdout
   document is a fully scanned file: 13 have a mixed text layer (some pages have text and some do
   not) and 22 a digital one, and 1 of them has a text layer that is unreadable

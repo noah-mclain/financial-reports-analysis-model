@@ -27,6 +27,8 @@ _LETTER_FOLDING = {
     "ى": "ي",  # alef maqsura
     "ئ": "ي",
     "ؤ": "و",
+    "ی": "ي",  # Persian yeh: NFKC maps the joined presentation forms of yeh to it
+    "ک": "ك",  # Persian kaf: likewise for kaf
 }
 
 _PUNCTUATION = re.compile(r"[^\w\s]", re.UNICODE)

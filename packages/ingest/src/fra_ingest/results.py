@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from fra_core.schemas import Document, PageMode, Statement, StatementType, TextSource
 from fra_ingest.review import StatementReview
+from fra_ingest.table_grid import GridCell
 
 # A page is a candidate for a type when it names the type and scores at least this much.
 CANDIDATE_THRESHOLD = 4.5
@@ -38,7 +39,12 @@ class PageText(BaseModel):
     ocr_language: str | None = Field(
         default=None, description="The OCR language whose read was kept, for image pages"
     )
-    ocr_seconds: float = Field(default=0.0, ge=0.0)
+    ocr_seconds: float = Field(default=0.0, ge=0.0, description="Sum of ocr_call_seconds")
+    ocr_call_seconds: list[float] = Field(
+        default_factory=list,
+        description="Seconds of each OCR call that read this page: two when the first language "
+        "found none of its script and the page was read again",
+    )
     flags: list[str] = Field(default_factory=list)
 
     @property
@@ -97,7 +103,7 @@ IndustrySubkind = Literal[
 
 
 class IndustrySignal(BaseModel):
-    """What kind of company issued the document. Stored now; the decline rule is week 2."""
+    """What kind of company issued the document; ``industry.industry_decision`` acts on it."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -106,7 +112,32 @@ class IndustrySignal(BaseModel):
         default=None, description="Set only when kind is other_financial"
     )
     score: float = 0.0
+    distinct_cues: int = Field(
+        default=0,
+        description="Different cue phrases behind the verdict, counted before the evidence "
+        "is cut to its limit",
+    )
     evidence: list[tuple[int, str]] = Field(default_factory=list)
+
+
+IndustryHoldCode = Literal[
+    "no_verdict", "other_financial", "too_narrow", "near_threshold", "weak_verdict"
+]
+
+
+class IndustryDecision(BaseModel):
+    """What the industry verdict does to a document: it ends in a decline, or its statements
+    are held for review. ``signal`` is the verdict acted on, with its score and evidence;
+    ``reason`` is the message a person reads."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    outcome: Literal["declined", "needs_review"]
+    code: Literal["bank", "insurer"] | IndustryHoldCode = Field(
+        description="Short, stable: the kind when declined, else why unsure"
+    )
+    signal: IndustrySignal
+    reason: str
 
 
 class LocateResult(BaseModel):
@@ -124,6 +155,13 @@ class LocateResult(BaseModel):
     industry: IndustrySignal
     flags: list[str] = Field(default_factory=list)
     timings: dict[str, float] = Field(default_factory=dict)
+    ocr_engine: str | None = Field(
+        default=None, description="The engine that read the image pages; None when none ran"
+    )
+    ocr_key: str = Field(
+        default="",
+        description="Digest of every setting the page reads depend on, filled by locate_pdf",
+    )
 
     @property
     def candidate_share(self) -> float:
@@ -190,6 +228,8 @@ class ConvertResult(BaseModel):
     docling_version: str
     device: str
     settings_hash: str
+    settings_plans: list[RangePlan] | None = None
+    """Plans used by the CLI child, for verification through the existing settings digest."""
     ranges: list[RangeConversion]
     page_images: dict[int, str] = Field(default_factory=dict)
     peak_footprint_gb: float | None = None
@@ -214,6 +254,8 @@ class TableDecision(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     statement_id: str | None = None
     evidence: list[str] = Field(default_factory=list)
+    recovered_headers: tuple[GridCell, ...] = ()
+    recovery_context: tuple[GridCell, ...] = ()
 
 
 class StructureResult(BaseModel):
@@ -231,5 +273,10 @@ class StructureResult(BaseModel):
     statements: list[Statement] = Field(default_factory=list)
     tables: list[TableDecision] = Field(default_factory=list)
     reviews: list[StatementReview] = Field(default_factory=list)
+    industry: IndustryDecision | None = Field(
+        default=None,
+        description="Set when the industry verdict declined the document (no statements) "
+        "or holds its statements for review",
+    )
     flags: list[str] = Field(default_factory=list)
     timings: dict[str, float] = Field(default_factory=dict)

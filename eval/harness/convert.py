@@ -19,8 +19,8 @@ import yaml
 
 from fra_ingest.child import convert_in_child
 from fra_ingest.config import REPO_ROOT, load_config
-from fra_ingest.errors import IngestError
 from fra_ingest.results import ConvertResult
+from harness.failures import DOCUMENT_ERRORS, EngineFailure, EngineGuard, aborted, document_failure
 
 MANIFEST = REPO_ROOT / "eval" / "golden" / "manifest.yaml"
 OUT = REPO_ROOT / "var" / "eval"
@@ -46,8 +46,10 @@ def summarize(doc_id: str, result: ConvertResult) -> dict[str, Any]:
     }
 
 
-def failure_row(doc_id: str, error: IngestError) -> dict[str, Any]:
-    return {"id": doc_id, "error": f"{error.reason} {error.detail}".strip()}
+def failure_row(doc_id: str, error: Exception) -> dict[str, Any]:
+    failure = document_failure(error)
+    reason, detail = failure["error"], failure["detail"]
+    return {"id": doc_id, "error": f"{reason} {detail}".strip(), "reason": reason, "detail": detail}
 
 
 def verdict(rows: Sequence[Mapping[str, Any]], budget_gb: float) -> list[str]:
@@ -75,18 +77,25 @@ def main(argv: list[str] | None = None) -> int:
     config = load_config()
     documents = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))["documents"]
     rows: list[dict[str, Any]] = []
-    for entry in documents:
-        if args.only and entry["id"] not in args.only:
-            continue
+    chosen = [e for e in documents if not args.only or e["id"] in args.only]
+    guard = EngineGuard(len(chosen))
+    stopped: EngineFailure | None = None
+    for entry in chosen:
         pdf = MANIFEST.parent / entry["file"]
         print(f"{entry['id']} ...", file=sys.stderr, flush=True)
         try:
             result = convert_in_child(
                 pdf, config, extra_args=["--no-cache"] if args.no_cache else ()
             )
-        except IngestError as exc:
+        except DOCUMENT_ERRORS as exc:
             rows.append(failure_row(entry["id"], exc))
+            try:
+                guard.record(rows[-1]["reason"], rows[-1]["detail"])
+            except EngineFailure as exc_stop:
+                stopped = exc_stop
+                break
             continue
+        guard.record(None)
         rows.append(summarize(entry["id"], result))
 
     for row in rows:
@@ -101,13 +110,24 @@ def main(argv: list[str] | None = None) -> int:
             f"wall {row['wall_s']}s  peak {peak} GB"
         )
     reasons = verdict(rows, config.memory_budget_gb)
+    if stopped is not None:
+        reasons.append(f"aborted: {stopped}")
     print("PASS" if not reasons else "FAIL\n  " + "\n  ".join(reasons))
 
     OUT.mkdir(parents=True, exist_ok=True)
-    report = {"rows": rows, "reasons": reasons, "budget_gb": config.memory_budget_gb}
+    report: dict[str, Any] = {
+        "rows": rows,
+        "reasons": reasons,
+        "budget_gb": config.memory_budget_gb,
+    }
     (OUT / "convert-golden.json").write_text(
-        json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
+        json.dumps(
+            report if stopped is None else aborted(report, stopped), indent=2, ensure_ascii=False
+        ),
+        encoding="utf-8",
     )
+    if stopped is not None:
+        raise stopped
     return 0 if not reasons else 1
 
 

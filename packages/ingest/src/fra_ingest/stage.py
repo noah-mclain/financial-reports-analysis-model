@@ -12,7 +12,7 @@ from fra_ingest.config import IngestConfig
 from fra_ingest.errors import IngestError
 from fra_ingest.locate import LOCATE_VERSION, locate
 from fra_ingest.ocr import OcrEngine
-from fra_ingest.pages import read_pages, sha256_file
+from fra_ingest.pages import ocr_key, read_pages, sha256_file
 from fra_ingest.results import LocateResult
 
 
@@ -39,6 +39,11 @@ def locate_pdf(
         sha256=sha256,
         filename=pdf_path.name,
         timings={"read": read_seconds, "text": read_seconds - ocr_seconds, "ocr": ocr_seconds},
+    ).model_copy(
+        update={
+            "ocr_engine": ocr.name if ocr is not None else None,
+            "ocr_key": ocr_key(config, ocr),
+        }
     )
     out_dir.mkdir(parents=True, exist_ok=True)
     temporary = out_dir / "locate.json.tmp"
@@ -48,8 +53,9 @@ def locate_pdf(
 
 
 def load_or_locate(pdf_path: Path, config: IngestConfig, ocr: OcrEngine | None) -> LocateResult:
-    """The stored locate result when it is current, else a fresh one. A corrupt or older
-    ``locate.json`` is recomputed, never trusted."""
+    """The stored locate result when it is current and was made by the same engine and OCR
+    settings, else a fresh one. A corrupt or older ``locate.json`` is recomputed, never
+    trusted."""
     if not pdf_path.is_file():
         raise IngestError("unreadable_pdf", f"{pdf_path}: not a file")
     stored = config.artifact_root / sha256_file(pdf_path) / "locate.json"
@@ -58,7 +64,15 @@ def load_or_locate(pdf_path: Path, config: IngestConfig, ocr: OcrEngine | None) 
             result = LocateResult.model_validate_json(stored.read_text(encoding="utf-8"))
         except (OSError, ValidationError):
             result = None
-        if result is not None and result.version == LOCATE_VERSION:
+        # Pages read by another engine, or with other OCR settings, would locate differently.
+        if (
+            result is not None
+            and result.version == LOCATE_VERSION
+            and result.ocr_key == ocr_key(config, ocr)
+            and not (
+                ocr is not None and any(f.startswith("ocr_failed_pages:") for f in result.flags)
+            )
+        ):
             return result
     return locate_pdf(pdf_path, config, ocr)
 

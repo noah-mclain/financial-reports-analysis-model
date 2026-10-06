@@ -26,7 +26,7 @@ $(error FRA_LLM_PORT is empty: set it in $(ENV_FILE))
 endif
 export FRA_API_PORT FRA_LLM_PORT
 
-.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure expected-drafts eval-extraction verify-expected dev docker-up docker-health ci-workflows-check container-smoke
+.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping eval-gates dry-run expected-drafts eval-extraction verify-expected dev docker-up docker-health ci-workflows-check container-smoke
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -50,9 +50,10 @@ lint: ## Lint without fixing
 	$(UV) run ruff format --check .
 	$(UV) run ruff check .
 
-typecheck: ## Type check the packages, apps, eval harness and release validation
+typecheck: ## Type check the packages, apps, the analytics golden test, eval harness and release validation
 	@$(MAKE) --no-print-directory unhide-pth
-	$(UV) run mypy packages $(wildcard apps)
+	$(UV) run mypy packages $(wildcard apps) tests/analytics tests/test_cache_guard.py cache_isolation.py
+	$(UV) run mypy conftest.py
 	$(UV) run mypy eval/harness
 	$(UV) run mypy scripts/ci/release.py
 
@@ -71,9 +72,9 @@ label-pages: ## Blind labelling sheets for the scanned golden documents (Mac, Vi
 	@$(MAKE) --no-print-directory unhide-pth
 	$(UV) run python scripts/label_statement_pages.py serve
 
-eval-locate: ## Score the locator (TARGET=golden, or TARGET=train / dev; model_test needs CHECKPOINT=1)
+eval-locate: ## Score the locator (TARGET=golden, dev, or train = the fit and validation parts, never the holdout; model_test needs CHECKPOINT=1)
 	@$(MAKE) --no-print-directory unhide-pth
-	$(UV) run python eval/harness/locate.py $(or $(TARGET),golden) $(if $(filter 1,$(CHECKPOINT)),--checkpoint)
+	PYTHONPATH=eval $(UV) run python -m harness.locate $(or $(TARGET),golden) $(if $(filter 1,$(CHECKPOINT)),--checkpoint) $(if $(LIMIT),--limit $(LIMIT))
 
 eval-convert: ## Convert the golden set, a child process per document; records time and peak memory
 	@$(MAKE) --no-print-directory unhide-pth
@@ -83,17 +84,29 @@ eval-structure: ## Structure the golden set: statements, scale and currency, ide
 	@$(MAKE) --no-print-directory unhide-pth
 	$(UV) run python eval/harness/structure.py
 
+dry-run: ## One look at the train holdout through the whole pipeline; logged, spent once per candidate, no pool argument; EARLIER=path compares with an earlier run's report
+	@$(MAKE) --no-print-directory unhide-pth
+	PYTHONPATH=eval $(UV) run python -m harness.dry_run $(if $(EARLIER),--earlier $(EARLIER))
+
 expected-drafts: ## Draft expected files from the extraction (ONLY=id; keeps checked or confirmed files)
 	@$(MAKE) --no-print-directory unhide-pth
 	$(UV) run python eval/harness/expected.py $(if $(ONLY),--only $(ONLY))
+
+eval-mapping: ## Label mapping: TARGET=golden (default) the critical items and the expected files; TARGET=fit [LIMIT=n] unmapped labels by failure class
+	@$(MAKE) --no-print-directory unhide-pth
+	PYTHONPATH=eval $(UV) run python -m harness.mapping $(or $(TARGET),golden) $(if $(LIMIT),--limit $(LIMIT))
+
+eval-gates: ## Gate A and Gate B over the golden set (dev), per period kind; marked not yet measured on model_test
+	@$(MAKE) --no-print-directory unhide-pth
+	PYTHONPATH=eval $(UV) run python -m harness.gates
 
 verify-expected: ## Independent evidence for every figure of the expected files (Mac, Vision OCR)
 	@$(MAKE) --no-print-directory unhide-pth
 	PYTHONPATH=eval $(UV) run python -m harness.verify_expected
 
-eval-extraction: ## Score the extraction against eval/golden/expected (G1 counts checked files only)
+eval-extraction: ## Score the extraction against eval/golden/expected (OCR=ocrmac|tesseract|none, LABEL=name, FRESH=1 try one engine)
 	@$(MAKE) --no-print-directory unhide-pth
-	PYTHONPATH=eval $(UV) run python -m harness.extraction
+	PYTHONPATH=eval $(UV) run python -m harness.extraction $(if $(OCR),--ocr $(OCR)) $(if $(LABEL),--label $(LABEL)) $(if $(FRESH),--fresh)
 
 corpus-check: ## Validate the corpus pool split (no network)
 	@$(MAKE) --no-print-directory unhide-pth
@@ -101,7 +114,7 @@ corpus-check: ## Validate the corpus pool split (no network)
 
 corpus-split: ## Fit, validation and holdout of the train pool, as hashed and after the recorded moves
 	@$(MAKE) --no-print-directory unhide-pth
-	$(UV) run python scripts/corpus.py split
+	PYTHONPATH=eval $(UV) run python scripts/corpus.py split
 
 corpus-fetch: ## Download, measure and dedupe the corpus into var/corpus (NEW=1: only documents not yet measured)
 	@$(MAKE) --no-print-directory unhide-pth

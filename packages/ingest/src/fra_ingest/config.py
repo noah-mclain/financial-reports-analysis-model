@@ -14,6 +14,12 @@ from fra_core.schemas import StatementType
 
 _SOURCE_ROOT = Path(__file__).resolve().parents[4]
 
+# Names an OCR engine goes by in the settings; ``none`` leaves image pages unread.
+OcrEngineName = Literal["ocrmac", "tesseract", "none"]
+# Set to one of those names to override ``convert.ocr_engine`` for one run (the bake-off).
+OCR_ENGINE_ENV = "FRA_OCR_ENGINE"
+EFFECTIVE_CONFIG_ENV = "FRA_INGEST_EFFECTIVE_CONFIG"
+
 
 def find_repo_root(environ: Mapping[str, str], source_root: Path, cwd: Path) -> Path:
     """Where configs/ and var/ live: ``FRA_ROOT`` when set (an installed copy, as in the
@@ -40,6 +46,7 @@ _TOML_FIELDS: dict[tuple[str, str], str] = {
     ("locate", "pad_pages"): "pad_pages",
     ("locate", "low_selectivity_share"): "low_selectivity_share",
     ("structure", "min_confidence"): "min_confidence",
+    ("structure", "header_ocr_scale"): "header_ocr_scale",
     ("convert", "device"): "device",
     ("convert", "ocr_engine"): "convert_ocr",
     ("convert", "images_scale"): "images_scale",
@@ -49,6 +56,8 @@ _TOML_FIELDS: dict[tuple[str, str], str] = {
     ("convert", "document_timeout_s"): "document_timeout_s",
     ("convert", "child_timeout_s"): "child_timeout_s",
     ("convert", "memory_budget_gb"): "memory_budget_gb",
+    ("tesseract", "psm"): "tesseract_psm",
+    ("tesseract", "arabic_language"): "tesseract_arabic_language",
     ("artifacts", "root"): "artifact_root",
 }
 
@@ -66,15 +75,21 @@ class IngestConfig(BaseModel):
     optional_types: tuple[StatementType, ...] = (StatementType.CASH_FLOW, StatementType.EQUITY)
     min_text_chars: int = Field(default=50, ge=0)
     min_confidence: float = Field(default=0.5, gt=0.0, le=1.0)
+    header_ocr_scale: float = Field(default=6.0, gt=0.0, le=6.0)
     header_fraction: float = Field(default=0.35, gt=0.0, lt=1.0)
     ocr_dpi: int = Field(default=100, ge=36, le=300)
     ocr_languages: tuple[str, ...] = Field(default=("ar-SA", "en-US"), min_length=1)
     pad_pages: int = Field(default=1, ge=0)
     low_selectivity_share: float = Field(default=0.25, gt=0.0, le=1.0)
     device: Literal["mps", "cpu", "auto"] = "mps"
-    convert_ocr: Literal["ocrmac", "none"] = "ocrmac"
+    convert_ocr: OcrEngineName = "ocrmac"
     images_scale: float = Field(default=2.0, gt=0.0, le=4.0)
     ocr_scale: float = Field(default=3.0, gt=0.0, le=6.0)
+    # Tesseract only. Page segmentation mode (3 is Tesseract's own default) and the language
+    # string for an Arabic page: Arabic alone, or Arabic with English for the Latin in it. The
+    # default is "ara+eng": Arabic alone read no English page at all (docs/blueprint/14).
+    tesseract_psm: int = Field(default=3, ge=0, le=13)
+    tesseract_arabic_language: Literal["ara", "ara+eng"] = "ara+eng"
     batch_size: int = Field(default=2, ge=1)
     do_cell_matching: bool = True
     document_timeout_s: float = Field(default=600.0, gt=0.0)
@@ -91,8 +106,24 @@ class IngestConfig(BaseModel):
         return self
 
 
-def load_config(path: Path | None = None) -> IngestConfig:
-    """Read settings, rejecting any key the model does not know."""
+def transported_config() -> IngestConfig | None:
+    """Read a CLI child's authoritative config at the same configuration boundary."""
+    payload = os.environ.get(EFFECTIVE_CONFIG_ENV)
+    if payload is None:
+        return None
+    config = IngestConfig.model_validate_json(payload)
+    missing = IngestConfig.model_fields.keys() - config.model_fields_set
+    if missing:
+        raise ValueError(f"effective config is incomplete; missing fields: {sorted(missing)}")
+    return config
+
+
+def load_config(path: Path | None = None, *, ocr_engine: str | None = None) -> IngestConfig:
+    """Read settings, rejecting any key the model does not know.
+
+    ``ocr_engine``, else ``FRA_OCR_ENGINE``, replaces ``convert.ocr_engine``, so one engine can
+    be tried without editing the file.
+    """
     named = os.environ.get("FRA_INGEST_CONFIG")
     source = path or (Path(named) if named else DEFAULT_CONFIG_PATH)
     with source.open("rb") as handle:
@@ -110,6 +141,14 @@ def load_config(path: Path | None = None) -> IngestConfig:
                 raise ValueError(msg)
             values[field_name] = value
 
+    profile = os.environ.get("FRA_PROFILE", "native")
+    if profile not in ("native", "docker"):
+        raise ValueError(f"unknown FRA_PROFILE {profile!r}; expected native or docker")
+    if profile == "docker":
+        values.update(device="cpu", convert_ocr="tesseract")
+    chosen = ocr_engine or os.environ.get(OCR_ENGINE_ENV)
+    if chosen:
+        values["convert_ocr"] = chosen
     if "artifact_root" in values:
         root = Path(values["artifact_root"])
         values["artifact_root"] = root if root.is_absolute() else REPO_ROOT / root

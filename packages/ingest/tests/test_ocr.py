@@ -1,6 +1,5 @@
 """OCR engine interface. Vision itself is exercised only in the slow tests."""
 
-import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -11,7 +10,8 @@ from support import FakeOcr
 
 from fra_ingest.ocr import (
     OcrLine,
-    default_engine,
+    OcrUnavailableError,
+    VisionOcr,
     line_from_vision,
     read_with_fallback,
     sort_lines,
@@ -67,11 +67,6 @@ def test_the_last_language_is_kept_even_when_it_finds_little() -> None:
     assert (lines, language) == ([], "en-US")
 
 
-def test_no_engine_without_ocrmac(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setitem(sys.modules, "ocrmac", None)
-    assert default_engine() is None
-
-
 @pytest.mark.slow
 @pytest.mark.golden
 @pytest.mark.parametrize(
@@ -84,8 +79,9 @@ def test_no_engine_without_ocrmac(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_vision_reads_a_scanned_page(
     golden: Callable[[str], Path], name: str, expected: str
 ) -> None:
-    engine = default_engine()
-    if engine is None:
+    try:
+        engine = VisionOcr()
+    except OcrUnavailableError:
         pytest.skip("Apple Vision OCR needs macOS with ocrmac installed")
     pdf = pdfium.PdfDocument(golden(name))
     image = pdf[3].render(scale=1.0).to_pil()

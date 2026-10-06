@@ -5,10 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from support import make_blank_pdf
+from support import FakeOcr, make_blank_pdf
 
 from fra_ingest import stage
 from fra_ingest.config import IngestConfig
+from fra_ingest.ocr import OcrLine
 from fra_ingest.pages import sha256_file
 from fra_ingest.results import LocateResult
 
@@ -43,3 +44,26 @@ def test_page_languages_come_from_the_page_cache(tmp_path: Path) -> None:
     pdf = make_blank_pdf(tmp_path / "doc.pdf", pages=2)
     stage.load_or_locate(pdf, config(tmp_path), None)
     assert stage.page_ocr_languages(pdf, config(tmp_path), None) == {1: None, 2: None}
+
+
+def test_a_locate_json_made_by_another_engine_is_recomputed(tmp_path: Path) -> None:
+    pdf = make_blank_pdf(tmp_path / "doc.pdf", pages=1)
+    line = OcrLine("Statement of financial position", 0.9, 0.2, 0.05, 0.6, 0.03)
+    mine = FakeOcr([line])
+    other = FakeOcr([line])
+    other.name = "other"
+    first = stage.load_or_locate(pdf, config(tmp_path), mine)
+    assert first.ocr_engine == "fake"
+    assert stage.load_or_locate(pdf, config(tmp_path), mine) == first
+    second = stage.load_or_locate(pdf, config(tmp_path), other)
+    assert second.ocr_engine == "other"
+
+
+def test_a_locate_json_made_with_other_tesseract_settings_is_recomputed(tmp_path: Path) -> None:
+    pdf = make_blank_pdf(tmp_path / "doc.pdf", pages=1)
+    engine = FakeOcr([OcrLine("Total", 0.9, 0.2, 0.05, 0.6, 0.03)])
+    engine.name = "tesseract"
+    base = config(tmp_path).model_copy(update={"convert_ocr": "tesseract"})
+    first = stage.load_or_locate(pdf, base, engine)
+    variant = base.model_copy(update={"tesseract_psm": 6})
+    assert stage.load_or_locate(pdf, variant, engine).ocr_key != first.ocr_key

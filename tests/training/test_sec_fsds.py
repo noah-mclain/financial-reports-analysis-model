@@ -89,3 +89,60 @@ def test_role_by_sic(sic: str, role: str) -> None:
 def test_quarters_back_skips_the_current_quarter() -> None:
     assert quarters_back(3, dt.date(2026, 9, 26)) == ["2025q4", "2026q1", "2026q2"]
     assert quarters_back(1, dt.date(2026, 1, 5)) == ["2025q4"]
+
+
+def test_conflicting_cik_pins_are_not_last_write_wins() -> None:
+    from sec_fsds import pinned_ciks
+
+    with pytest.raises(ValueError, match="spans pools"):
+        pinned_ciks(
+            [
+                {"issuer": "Acme", "cik": 1111, "pool": "train"},
+                {"issuer": "Renamed Acme", "cik": "0000001111", "pool": "blind"},
+            ]
+        )
+
+
+def test_pdf_name_pin_without_cik_is_used_during_extraction(quarter: Path) -> None:
+    from fra_core.pools import PoolRegistry
+
+    registry = PoolRegistry()
+    registry.record_documents([{"issuer": "Acme Widgets Co.", "pool": "blind"}])
+    rows, stats = extract(quarter, registry)
+    assert 1111 not in {r["cik"] for r in rows}
+    assert stats["filings_blind_dropped"] == 1
+
+
+@pytest.mark.parametrize("name", ["", "&", "THE CO"])
+def test_valid_cik_with_unusable_name_remains_cik_authoritative(tmp_path: Path, name: str) -> None:
+    archive = make_zip(
+        tmp_path / "quarter.zip",
+        [["a", "1111", name, "2040", "10-K", "20241231", "2024", "FY"]],
+        [pre("a", "BS", "Assets", "Total assets")],
+    )
+    rows, _ = extract(archive, {1111: "dev"})
+    assert [(r["cik"], r["pool"]) for r in rows] == [(1111, "dev")]
+
+
+def test_sec_colliding_names_need_review_then_late_pdf_needs_cik(tmp_path: Path) -> None:
+    from fra_core.pools import Identity, PoolError, PoolRegistry, Source
+
+    archive = make_zip(
+        tmp_path / "quarter.zip",
+        [
+            ["a", "1111", "ACME CORP", "2040", "10-K", "20241231", "2024", "FY"],
+            ["b", "2222", "ACME INC", "2040", "10-K", "20241231", "2024", "FY"],
+        ],
+        [pre("a", "BS", "Assets", "Total assets"), pre("b", "BS", "Assets", "Total assets")],
+    )
+    with pytest.raises(PoolError, match=r"1111.*2222.*ambiguous_names"):
+        extract(archive, PoolRegistry())
+    registry = PoolRegistry(ambiguous_names=["acme"])
+    registry.register(Identity(cik=1111), "dev")
+    registry.register(Identity(cik=2222), "train")
+    rows, _ = extract(archive, registry)
+    assert {r["cik"]: r["pool"] for r in rows} == {1111: "dev", 2222: "train"}
+    with pytest.raises(PoolError, match="ambiguous"):
+        registry.assign(Identity("Acme"), Source.PDF)
+    assert registry.assign(Identity("Acme", 1111), Source.PDF) == "dev"
+    assert registry.assign(Identity("Acme", 2222), Source.PDF) == "train"

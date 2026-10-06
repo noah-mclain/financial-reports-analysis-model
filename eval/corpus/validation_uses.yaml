@@ -1,0 +1,32 @@
+# Validation documents used for ingest development (docs/blueprint/04-execution-phases.md 2.4).
+# Read by eval/harness/holdout_records.py. The validation part is reserved for model choices;
+# a document listed here was also read while an ingest rule was developed, so a model choice
+# made on it is no longer a clean one for ingest-dependent decisions.
+#
+# date:      when the documents were used (YYYY-MM-DD).
+# purpose:   what they were used for.
+# documents: ids as written in candidates.yaml.
+#
+# From the date of the last entry, ingest is developed on fit documents only and validation
+# documents are used for an untuned check at the end.
+
+uses:
+  - date: '2026-10-05'
+    purpose: >-
+      Developing the word-order repair of Arabic table cells (docs/blueprint/11-ingest-structure.md,
+      Data flow step 3): the three Arabic digital validation documents were among the 20
+      documents the rule and its thresholds were chosen on and measured on.
+    documents:
+      - northern-region-cement-2026-ar-interim
+      - sabic-2026-ar-interim
+      - tabuk-cement-2026-ar-interim
+  - date: '2026-10-06'
+    purpose: >-
+      Developing the industry cues for investment holdings (fra_ingest/data/industry_cues.yaml,
+      "net investment income"): the owner chose to tune on validation for this rule. The page
+      text of the three investment-holding negative controls was read to choose the cue, and
+      every validation document with a cached locate result was rescored with it.
+    documents:
+      - b-investments-holding-2020-en-interim
+      - b-investments-holding-2023-en-interim
+      - coast-investment-and-development-2025-en-interim

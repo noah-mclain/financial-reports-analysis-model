@@ -1,27 +1,19 @@
 """Signed margins from exact source values, with explicit undefined results.
 
-Input IDs are scoped to the source Statement. Keep that Statement alongside these results
-to resolve each role and period back to its source cells and page regions. Supplied canonical
-mappings are authoritative here; these primitives neither map labels nor approve documents.
+Each result carries the printed cells it was computed from, with their provenance, so a value
+traces to its page regions without the Statement. Supplied canonical mappings are authoritative
+here; these primitives neither map labels nor approve documents. This is the only place the
+margin formulas are written: the registry takes its margins from ``compute_margins``.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import (
-    ROUND_HALF_EVEN,
-    Context,
-    Decimal,
-    DecimalException,
-    DivisionByZero,
-    InvalidOperation,
-    Overflow,
-    Underflow,
-)
-from math import isfinite
+from decimal import Decimal
 
+from fra_analytics.metrics.division import divide
 from fra_analytics.policy import Policy
-from fra_core.schemas.metric import MetricUnit, MetricValue
+from fra_core.schemas.metric import MetricInput, MetricUnit, MetricValue
 from fra_core.schemas.statement import Cell, LineItem, PeriodKind, Statement, StatementType
 from fra_core.taxonomy import load_taxonomy
 
@@ -30,13 +22,14 @@ _MARGINS = (
     ("operating_margin", "operating_income"),
     ("net_margin", "net_income"),
 )
+MARGIN_IDS = tuple(metric_id for metric_id, _ in _MARGINS)
 _REVENUE = "revenue"
 
 
 @dataclass(frozen=True)
 class _Input:
     value: Decimal | None
-    ids: list[str]
+    cells: list[MetricInput]
     flags: list[str]
 
 
@@ -51,18 +44,24 @@ def compute_margins(statement: Statement, *, policy: Policy) -> list[MetricValue
     rows, cells = _index(statement)
     results = []
     for period in statement.periods:
-        denominator = _resolve(_REVENUE, period.key, rows, cells)
+        denominator = _resolve(statement, _REVENUE, period.key, rows, cells)
         for metric_id, canonical_id in _MARGINS:
-            numerator = _resolve(canonical_id, period.key, rows, cells)
+            numerator = _resolve(statement, canonical_id, period.key, rows, cells)
             flags = [*statement.flags, *numerator.flags, *denominator.flags]
-            value = _divide(numerator.value, denominator.value, policy, flags)
+            ratio = divide(
+                numerator.value,
+                denominator.value,
+                negative=policy.negative_margin_denominator,
+                flags=flags,
+            )
             results.append(
                 MetricValue(
                     metric_id=metric_id,
                     period_key=period.key,
-                    value=value,
+                    value=None if ratio is None else float(ratio),
                     unit=MetricUnit.RATIO,
-                    inputs={"numerator": numerator.ids, "denominator": denominator.ids},
+                    formula=f"{canonical_id} / {_REVENUE}",
+                    inputs={"numerator": numerator.cells, "denominator": denominator.cells},
                     formula_version="1",
                     flags=list(dict.fromkeys(flags)),
                 )
@@ -105,6 +104,7 @@ def _index(
 
 
 def _resolve(
+    statement: Statement,
     canonical_id: str,
     period_key: str,
     rows: dict[str, list[LineItem]],
@@ -120,10 +120,24 @@ def _resolve(
     if item is None:
         raise ValueError(f"margin input {canonical_id!r} is absent from the taxonomy")
     value = None
+    used: list[MetricInput] = []
     for row in candidates:
         selected = cells.get((row.id, period_key), [])
         for cell in selected:
             flags.extend(cell.flags)
+            if cell.reported is not None:
+                used.append(
+                    MetricInput(
+                        statement_id=statement.id,
+                        line_item_id=row.id,
+                        canonical_id=canonical_id,
+                        period_key=period_key,
+                        reported=cell.reported,
+                        scale=statement.scale,
+                        currency=statement.currency,
+                        provenance=cell.provenance,
+                    )
+                )
             amount = cell.reported
             if (
                 amount is not None
@@ -137,42 +151,4 @@ def _resolve(
             flags.append(f"missing_input:{canonical_id}")
         elif len(candidates) == 1:
             value = selected[0].reported
-    return _Input(value, [row.id for row in candidates], flags)
-
-
-def _divide(
-    numerator: Decimal | None,
-    denominator: Decimal | None,
-    policy: Policy,
-    flags: list[str],
-) -> float | None:
-    if denominator is not None and denominator.is_zero():
-        flags.append("undefined_zero_denominator")
-        return None
-    if numerator is None or denominator is None:
-        return None
-    if denominator.is_signed():
-        if policy.negative_margin_denominator == "null":
-            flags.append("undefined_negative_denominator")
-            return None
-        flags.append("negative_base")
-    # Specify all context settings and traps, rather than copying the caller's context.
-    context = Context(
-        prec=34,
-        rounding=ROUND_HALF_EVEN,
-        Emin=-999999,
-        Emax=999999,
-        capitals=1,
-        clamp=0,
-        traps=[InvalidOperation, DivisionByZero, Overflow, Underflow],
-    )
-    try:
-        ratio = context.divide(numerator, denominator)
-    except DecimalException:
-        flags.append("arithmetic_result")
-        return None
-    value = float(ratio)
-    if not isfinite(value) or (value == 0.0 and not numerator.is_zero()):
-        flags.append("unrepresentable_result")
-        return None
-    return value
+    return _Input(value, used, flags)

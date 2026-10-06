@@ -24,7 +24,7 @@ financial-reports-analysis-model/
 ├── configs/
 │   ├── runtime.toml                  # memory thresholds, lease timings, model and adapter ids, paths
 │   ├── ingest.toml                   # OCR engine and languages, table model, batch sizes, images_scale
-│   ├── analytics.toml                # margin D1 setting built; D2 to D6 deferred
+│   ├── analytics.toml                # owner decisions that are settings: D1 margin, D3, D4; D2, D5, D6 are rules in code
 │   ├── profiles/
 │   │   ├── dev.toml                  # per-document ingest child, model unloads when idle
 │   │   ├── demo.toml                 # persistent ingest process, model kept loaded, preflight thresholds
@@ -53,7 +53,8 @@ financial-reports-analysis-model/
 │   │   │   ├── numbers.py            # printed number -> Decimal: parentheses, dashes, U+2212, thin spaces, locale digits
 │   │   │   ├── units.py              # scale phrases, ISO currency detection
 │   │   │   ├── periods.py            # header text -> Period
-│   │   │   ├── split.py              # issuer split of train: fit, validation, holdout (04, 2.4)
+│   │   │   ├── split.py              # issuer split of train: fit, validation, holdout, pure rules (04, 2.4)
+│   │   │   ├── tolerance.py          # the D6 identity tolerance, n x 0.5 reported units, used by ingest and analytics
 │   │   │   └── artifacts.py          # content-addressed paths, stage version registry
 │   │   └── tests/
 │   │
@@ -76,14 +77,17 @@ financial-reports-analysis-model/
 │   │   │   └── review_report.py      # HTML report with extracted cells drawn on page images
 │   │   └── tests/
 │   │
-│   ├── analytics/                    # fra-analytics: pure margins built; broader engine planned
+│   ├── analytics/                    # fra-analytics: 21 metrics, identities and unit caveats built; charts, formatting planned
 │   │   ├── pyproject.toml
 │   │   ├── src/fra_analytics/
-│   │   │   ├── frame.py              # statements -> tidy frame (statement, canonical_id, period_key, value)
-│   │   │   ├── policy.py             # frozen margin Policy loaded from configs/analytics.toml (built)
-│   │   │   ├── identities.py         # accounting identities, cross-statement ties
-│   │   │   ├── metrics/profitability.py  # compute_margins(Statement, policy): gross, operating, net (built)
-│   │   │   ├── metrics/{registry,liquidity,leverage,efficiency,cash_flow,growth}.py  # planned
+│   │   │   ├── frame.py              # statements -> tidy frame of typed rows (statement, canonical_id, period, reported, scale, value, provenance); no pandas yet
+│   │   │   ├── policy.py             # Policy (D1 margins, D3, D4) loaded from the flat configs/analytics.toml; no defaults
+│   │   │   ├── identities.py         # balance identity and subtotal ties, D6 tolerance from fra_core.tolerance
+│   │   │   ├── unit_caveats.py       # which caveat ids (CaveatId) and unit flags a metric takes from its statements
+│   │   │   ├── period_math.py        # opening balance, prior-year period, actual days
+│   │   │   ├── metrics/profitability.py  # compute_margins(Statement, policy): gross, operating, net, the one margin formula
+│   │   │   ├── metrics/division.py   # the one ratio division and its D1 flags
+│   │   │   ├── metrics/{registry,inputs}.py   # compute(statements, policy), the one entry point for all 21 metrics; the other 18 formulas and the reader that applies D1, D2, D4 and records provenance (cash-flow metrics not built: structure converts no cash-flow statement)
 │   │   │   ├── formatting.py         # display precision, shared with grounding and UI payloads
 │   │   │   ├── charts/{style,trend,margins,composition,waterfall}.py
 │   │   │   └── reference/naive.py    # independent Decimal implementation, imported only by tests
@@ -170,16 +174,20 @@ financial-reports-analysis-model/
 │   └── adapters/                     # weights gitignored; manifest.json per adapter tracked
 │
 ├── eval/
-│   ├── corpus/                       # pools (README.md); holdout_moves.yaml, scoring_log.tsv (04, 2.4)
+│   ├── corpus/                       # pools (README.md); holdout_moves.yaml, validation_uses.yaml, scoring_log.tsv (04, 2.4)
 │   ├── golden/
 │   │   ├── documents/                # PDFs through git-lfs
 │   │   ├── expected/                 # hand-verified Statement JSON per document
 │   │   └── manifest.yaml             # id, source URL, retrieval date, layout traits
 │   ├── harness/{extraction,metrics,end_to_end,report}.py
+│   ├── harness/holdout_records.py    # the one reader and writer of holdout_moves.yaml, validation_uses.yaml, scoring_log.tsv
+│   ├── harness/paths.py              # where the corpus records live, for the harness
+│   ├── harness/dry_run.py            # first look at the train holdout: make dry-run
 │   ├── reports/<wp-id>/              # Verification and Test run reports (section 05, 5.1)
 │   └── thresholds.toml               # gate values read by CI and by adapter promotion
 │
 ├── tests/
+│   ├── analytics/                    # analytics on extracted golden statements (the one place it meets ingest)
 │   ├── integration/                  # API, workers, SQLite, stub model runtime
 │   └── contract/                     # OpenAPI snapshot vs generated client; import boundaries
 │
@@ -199,7 +207,7 @@ financial-reports-analysis-model/
 
 ```text
 fra-core  <-  fra-ingest     (docling, pypdfium2, ocrmac)
-fra-core  <-  fra-analytics  (pandas, pyarrow, matplotlib)
+fra-core  <-  fra-analytics  (matplotlib, when the charts land; no pandas, D19)
 fra-core  <-  fra-model      (mlx, mlx-lm, jinja2)  <- fra-analytics (formatting only)
 fra-core  <-  fra-api        (fastapi, uvicorn, sqlalchemy, alembic)
 fra-core, fra-ingest, fra-analytics, fra-model  <-  fra-worker

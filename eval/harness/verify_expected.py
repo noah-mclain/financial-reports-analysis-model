@@ -41,7 +41,7 @@ from fra_core.taxonomy.loader import load_taxonomy
 from fra_ingest.config import REPO_ROOT, load_config
 from fra_ingest.figure_checks import check_net_profit_tie
 from fra_ingest.label_match import LabelIndex, has_subtotal_cue
-from fra_ingest.ocr import OcrEngine, default_engine
+from fra_ingest.ocr import OcrEngine, VisionOcr
 from fra_ingest.parts import is_per_share
 from fra_ingest.structure import structure_pdf
 from fra_ingest.table_checks import run_checks
@@ -226,7 +226,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     config = load_config()
     index = LabelIndex(load_taxonomy())
-    engine = None if args.no_ocr else default_engine()
+    # Always Vision, whatever convert.ocr_engine says: the evidence is independent of the engine
+    # that produced the extraction.
+    engine = None if args.no_ocr else VisionOcr()
     entries = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))["documents"]
     by_id = {d["id"]: d for d in entries}
     report: list[dict[str, Any]] = []
