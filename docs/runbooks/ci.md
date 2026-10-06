@@ -1,10 +1,25 @@
 # Continuous integration and container delivery
 
-The `CI` workflow runs for pull requests targeting `main`, pushes to `main`, and manual
-dispatches. It uses GitHub hosted `ubuntu-24.04` runners with read-only repository access. The
-quality job checks the lock, installs every locked workspace package, and runs the Makefile
-test, lint, typecheck, docs, corpus and workflow checks. The container smoke job runs only after
-quality passes. It validates both Compose configurations without starting the optional `llm`
+The `CI` workflow runs for pull requests targeting `main`, pushes to `main`, manual dispatches,
+and every Monday at 04:23 UTC. The Monday run exists to catch a change in the runner image or in
+apt that no commit caused. It uses GitHub hosted `ubuntu-24.04` runners with read-only repository
+access.
+
+All jobs that run Python set up the workspace through one composite action,
+`.github/actions/workspace`. It reads the uv version from `docker/Dockerfile` and the Python
+version from `.python-version`, installs uv with the SHA-pinned `setup-uv`, checks the lock and
+runs `uv sync --locked --all-packages`. With `tesseract: 'true'` it also installs the apt
+packages named on the Dockerfile's `apt-get install` line, read by
+`scripts/ci/tesseract-packages.sh`. The package list therefore lives only in the Dockerfile, and
+the script fails if it cannot find the line. actionlint does not lint an `action.yml` on its
+own, but `make ci-workflows-check` checks every use of the action against its declared inputs.
+
+The `quality` job records the reviewed source SHA, sets up the workspace and runs the Makefile
+test, lint, typecheck, docs, corpus and workflow checks. The `tests-docker-profile` job runs in
+parallel with it: the same workspace plus Tesseract, then
+`FRA_PROFILE=docker FRA_OCR_ENGINE=tesseract make test`. The fast tests that need Tesseract skip
+when it is missing, so `quality` alone never runs them. The container smoke job runs only after
+`quality` passes. It validates both Compose configurations without starting the optional `llm`
 service, builds the Docker image, and checks its runtime imports, non-root identity, CPU-only
 PyTorch, API health and placeholder worker startup and shutdown.
 
@@ -19,6 +34,36 @@ healthy, the helper requests a bounded SIGTERM stop. Both services may exit with
 The smoke is a build and runtime contract for the current API skeleton. It does not establish
 OCR accuracy, worker functionality, extraction quality, the blueprint's Gate D, or application
 deployment. CI does not download model weights or corpora, train, score, or call inference APIs.
+
+## Commit and branch hygiene
+
+The `Hygiene` workflow runs `scripts/ci/hygiene.py` on pull requests to `main` and on pushes to
+`main`. It enforces the attribution rules in `CLAUDE.md`, and it needs full history, so it checks
+out with `fetch-depth: 0`. A shallow history, a range base that is all zeros, or a base that is
+not an ancestor of the head (a force push) is an error, never a pass.
+
+- **Identity.** The owner's email is the author of the oldest root commit. An author must be that
+  email or `<digits>+<login>@users.noreply.github.com`. A committer may also be
+  `noreply@github.com`, which is how GitHub records a merge made in the web interface.
+- **Messages.** No `Co-Authored-By` trailer, no tool footer line, no session link, and no
+  assistant name as a whole word. A name followed by `.md` or `-compatible` (the project file,
+  an "OpenAI-compatible" endpoint) is a reference, not a match.
+- **Branch.** For a pull request, the head branch must not start with a forbidden prefix or hold
+  a session id. Pushes to `main` have no branch to check.
+- **Added lines.** Only lines added in the range are scanned, for assistant names, tool footer
+  lines and session links. `CLAUDE.md`, the checker and its test are excluded because they have
+  to spell the rules out. A file already in the repository that names an assistant is flagged
+  only when someone edits it.
+
+The word lists and the excluded paths are constants at the top of `scripts/ci/hygiene.py`; the
+tests build their bad input from those constants. Pull request values (`head_ref`, the SHAs) reach
+the shell only as environment variables.
+
+`make hygiene-check` runs the same check on `origin/main..HEAD` and the current branch name, which
+is `CLAUDE.md` rule 6 as a command. It needs a full clone. The owner login comes from
+`OWNER_LOGIN` in the Makefile.
+
+The check does not look at branches that already exist on the remote.
 
 ## Manual GHCR delivery
 
