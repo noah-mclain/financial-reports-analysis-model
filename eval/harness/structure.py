@@ -25,11 +25,11 @@ import yaml
 
 from fra_core.schemas import CheckResult, Statement, StatementType
 from fra_ingest.config import REPO_ROOT, load_config
-from fra_ingest.errors import IngestError
 from fra_ingest.ocr import make_engine
 from fra_ingest.results import StructureResult
 from fra_ingest.review import StatementReview
 from fra_ingest.structure import structure_pdf
+from harness.failures import DOCUMENT_ERRORS, EngineFailure, EngineGuard, aborted, document_failure
 
 MANIFEST = REPO_ROOT / "eval" / "golden" / "manifest.yaml"
 OUT = REPO_ROOT / "var" / "eval"
@@ -154,15 +154,32 @@ def main(argv: list[str] | None = None) -> int:
     rows: list[dict[str, Any]] = []
     by_id: dict[str, dict[StatementType, Statement]] = {}
     reasons: list[str] = []
+    guard = EngineGuard(len(documents))
+    stopped: EngineFailure | None = None
     for entry in documents:
         pdf = MANIFEST.parent / entry["file"]
         print(f"{entry['id']} ...", file=sys.stderr, flush=True)
         try:
             result = structure_pdf(pdf, config, ocr, use_cache=False)
-        except IngestError as exc:
-            rows.append({"id": entry["id"], "error": f"{exc.reason} {exc.detail}".strip()})
-            reasons.append(f"{entry['id']}: {exc.reason}")
+        except DOCUMENT_ERRORS as exc:
+            failure = document_failure(exc)
+            reason, detail = failure["error"], failure["detail"]
+            rows.append(
+                {
+                    "id": entry["id"],
+                    "error": f"{reason} {detail}".strip(),
+                    "reason": reason,
+                    "detail": detail,
+                }
+            )
+            reasons.append(f"{entry['id']}: {reason}")
+            try:
+                guard.record(reason, detail)
+            except EngineFailure as exc_stop:
+                stopped = exc_stop
+                break
             continue
+        guard.record(None)
         if result.industry is not None and result.industry.outcome == "declined":
             rows.append({"id": entry["id"], "error": result.industry.reason})
             reasons.append(f"{entry['id']}: declined:{result.industry.code}")
@@ -220,7 +237,9 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     pairs = []
-    for left, right, gated in PAIRS:
+    if stopped is not None:
+        reasons.append(f"aborted: {stopped}")
+    for left, right, gated in () if stopped is not None else PAIRS:
         for statement_type in config.enabled_types:
             a, b = by_id.get(left, {}).get(statement_type), by_id.get(right, {}).get(statement_type)
             misses = pair_misses(a, b) if a and b else None
@@ -240,16 +259,19 @@ def main(argv: list[str] | None = None) -> int:
                 found_text = "missing statement" if misses is None else str(misses)
                 reasons.append(f"{left}/{right} {statement_type.value}: {found_text}")
     print("PASS" if not reasons else "FAIL\n  " + "\n  ".join(reasons))
+    report: dict[str, Any] = {"documents": rows, "pairs": pairs, "reasons": reasons}
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "structure-golden.json").write_text(
         json.dumps(
-            {"documents": rows, "pairs": pairs, "reasons": reasons},
+            report if stopped is None else aborted(report, stopped),
             indent=2,
             ensure_ascii=False,
             default=str,
         ),
         encoding="utf-8",
     )
+    if stopped is not None:
+        raise stopped
     return 0 if not reasons else 1
 
 

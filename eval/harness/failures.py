@@ -9,6 +9,8 @@ that cannot run at all (`OcrUnavailableError`) is never a document failure.
 
 from __future__ import annotations
 
+from typing import Any
+
 from fra_ingest.errors import IngestError
 from fra_ingest.ocr import PER_DOCUMENT_OCR_ERRORS, ocr_failure
 
@@ -19,7 +21,16 @@ _ENGINE_REASONS = ("ocr_timeout", "ocr_engine")
 
 
 class EngineFailure(RuntimeError):
-    """The first documents of a run all failed the same way on the OCR engine."""
+    """The first documents of a run all failed the same way on the OCR engine. A function that
+    holds the rows of a run but not its output file sets `partial` to the report of the rows so
+    far, for its caller to write."""
+
+    partial: dict[str, Any] | None = None
+
+
+def aborted(report: dict[str, Any], exc: EngineFailure) -> dict[str, Any]:
+    """The report of the rows a stopped run has, marked with why it stopped."""
+    return {**report, "aborted": str(exc)}
 
 
 def document_failure(exc: Exception) -> dict[str, str]:

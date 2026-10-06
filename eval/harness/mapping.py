@@ -52,7 +52,6 @@ from fra_core.schemas import MappingFinding, MappingSource, Period, Statement, S
 from fra_core.split import Part
 from fra_core.taxonomy.loader import Taxonomy, load_taxonomy
 from fra_ingest.config import REPO_ROOT, load_config
-from fra_ingest.errors import IngestError
 from fra_ingest.label_mapping import MAPPED_TYPES
 from fra_ingest.label_match import LabelIndex
 from fra_ingest.ocr import make_engine
@@ -60,6 +59,7 @@ from fra_ingest.results import StructureResult
 from fra_ingest.structure import structure_pdf
 from harness.development import development_set, positive_int
 from harness.expected import EXPECTED_DIR, ExpectedFile, ExpectedRow, load_expected
+from harness.failures import DOCUMENT_ERRORS, EngineFailure, EngineGuard, aborted, document_failure
 from harness.paths import (
     CANDIDATES,
     CORPUS,
@@ -216,7 +216,9 @@ def fit_report(
     limit: int | None = None,
 ) -> dict[str, Any]:
     """The unmapped and ambiguous rows of these documents by failure class. The first `limit`
-    documents in id order are taken; one with no PDF is counted and listed, never fetched."""
+    documents in id order are taken; one with no PDF is counted and listed, never fetched. A
+    document the OCR engine failed on is listed with its reason and detail; when the first
+    documents all fail that way the run stops and the report carries `aborted`."""
     chosen = sorted(entries, key=lambda e: str(e["id"]))
     controls = [e for e in chosen if e.get("role") == NEGATIVE_CONTROL]
     chosen = [e for e in chosen if e.get("role") != NEGATIVE_CONTROL][:limit]
@@ -224,6 +226,8 @@ def fit_report(
     errored: list[dict[str, str]] = []
     documents: list[dict[str, Any]] = []
     slots: dict[str, Counter[str]] = {k: Counter() for k in (*STRATA, "total")}
+    guard = EngineGuard(len(chosen))
+    stopped: EngineFailure | None = None
     for e in chosen:
         pdf = pdf_of(str(e["id"]))
         if not pdf.is_file():
@@ -231,9 +235,18 @@ def fit_report(
             continue
         try:
             result = structure(pdf)
-        except IngestError as exc:
-            errored.append({"id": str(e["id"]), "reason": exc.reason})
+        except DOCUMENT_ERRORS as exc:
+            failure = document_failure(exc)
+            errored.append(
+                {"id": str(e["id"]), "reason": failure["error"], "detail": failure["detail"]}
+            )
+            try:
+                guard.record(failure["error"], failure["detail"])
+            except EngineFailure as exc_stop:
+                stopped = exc_stop
+                break
             continue
+        guard.record(None)
         found = first_statements(result, MAPPED_TYPES)
         documents.append(
             {
@@ -253,7 +266,12 @@ def fit_report(
         slots[str(e["period"])].update(states)
         slots["total"].update(states)
         print(f"{e['id']}: {len(documents[-1]['flagged'])} flagged rows")
-    return {
+    if stopped is None:
+        try:
+            guard.finish()
+        except EngineFailure as exc_stop:
+            stopped = exc_stop
+    report = {
         "target": "fit",
         "documents_selected": len(chosen),
         "documents_run": len(documents),
@@ -264,6 +282,7 @@ def fit_report(
         "failure_classes": summarize(documents),
         "documents": documents,
     }
+    return report if stopped is None else aborted(report, stopped)
 
 
 def run_fit(
@@ -297,6 +316,8 @@ def run_fit(
     out = OUT / "mapping-fit.json"
     out.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"wrote {out.relative_to(REPO_ROOT)}")
+    if "aborted" in report:
+        raise EngineFailure(report["aborted"])
     return 0
 
 
@@ -323,14 +344,26 @@ def run_golden() -> int:
     failures: list[str] = []
     total: Counter[str] = Counter()
     reports: list[dict[str, object]] = []
+    errored: list[dict[str, str]] = []
+    guard = EngineGuard(len(documents))
+    stopped: EngineFailure | None = None
     for entry in documents:
         doc_id = entry["id"]
         try:
             result = structure_pdf(MANIFEST.parent / entry["file"], config, ocr, use_cache=False)
-        except IngestError as exc:
-            print(f"{doc_id}: error {exc.reason}")
-            failures.append(f"{doc_id}: {exc.reason}")
+        except DOCUMENT_ERRORS as exc:
+            failure = document_failure(exc)
+            reason, detail = failure["error"], failure["detail"]
+            print(f"{doc_id}: error {reason} {detail}".rstrip())
+            failures.append(f"{doc_id}: {reason}")
+            errored.append({"id": doc_id, "reason": reason, "detail": detail})
+            try:
+                guard.record(reason, detail)
+            except EngineFailure as exc_stop:
+                stopped = exc_stop
+                break
             continue
+        guard.record(None)
         first: dict[StatementType, Statement] = {}
         for s in result.statements:
             first.setdefault(s.type, s)
@@ -368,21 +401,25 @@ def run_golden() -> int:
         "(a misread figure for the extraction eval, not a mapping error)"
     )
     print(IN_SAMPLE_NOTE)
+    if stopped is not None:
+        failures.append(f"aborted: {stopped}")
     print("PASS" if not failures else "FAIL\n  " + "\n  ".join(failures))
+    golden: dict[str, object] = {
+        "documents": reports,
+        "totals": dict(total),
+        "note": IN_SAMPLE_NOTE,
+        "failures": failures,
+        "errored": errored,
+    }
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "mapping-golden.json").write_text(
         json.dumps(
-            {
-                "documents": reports,
-                "totals": dict(total),
-                "note": IN_SAMPLE_NOTE,
-                "failures": failures,
-            },
-            indent=2,
-            ensure_ascii=False,
+            golden if stopped is None else aborted(golden, stopped), indent=2, ensure_ascii=False
         ),
         encoding="utf-8",
     )
+    if stopped is not None:
+        raise stopped
     return 0 if not failures else 1
 
 
