@@ -258,3 +258,24 @@ def test_tesseract_settings_do_not_split_the_cache_of_another_engine(tmp_path: P
     again = FakeOcr(fail=True)
     read_pages(pdf, IngestConfig(tesseract_psm=6), again, cache_dir=tmp_path / "cache")
     assert again.calls == 0
+
+
+def test_progress_is_reported_every_ten_pages_and_at_the_end(tmp_path: Path) -> None:
+    heard: list[str] = []
+    read_pages(
+        make_blank_pdf(tmp_path / "scan.pdf", pages=23),
+        IngestConfig(),
+        None,
+        progress=heard.append,
+    )
+    assert heard == ["pages 10/23", "pages 20/23", "pages 23/23"]
+
+
+def test_a_cached_read_reports_no_progress(tmp_path: Path) -> None:
+    pdf = make_blank_pdf(tmp_path / "scan.pdf")
+    read_pages(pdf, IngestConfig(), FakeOcr([TITLE]), cache_dir=tmp_path / "cache")
+    heard: list[str] = []
+    read_pages(
+        pdf, IngestConfig(), FakeOcr([TITLE]), cache_dir=tmp_path / "cache", progress=heard.append
+    )
+    assert heard == []

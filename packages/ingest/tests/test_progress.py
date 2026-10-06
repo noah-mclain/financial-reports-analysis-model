@@ -35,8 +35,7 @@ def test_other_lines_are_not_progress() -> None:
 
 def test_the_last_progress_line_wins_and_noise_is_ignored() -> None:
     text = (
-        "warning: slow\nprogress: 1.0s locate start\nprogress: 2.5s locate done\n"
-        "some traceback\n"
+        "warning: slow\nprogress: 1.0s locate start\nprogress: 2.5s locate done\nsome traceback\n"
     )
     assert last_progress(text) == ProgressLine(seconds=2.5, message="locate done")
     assert last_progress("nothing here\n") is None

@@ -132,8 +132,7 @@ def test_a_timeout_names_the_last_stage_the_child_reported(tmp_path: Path) -> No
         convert_in_child(pdf, config, command=fake(script))
     assert caught.value.reason == "convert_timeout"
     assert caught.value.detail == (
-        "doc.pdf: still running after 2 s; last progress: convert pp. 58-60 start "
-        "(at 1.8 s)"
+        "doc.pdf: still running after 2 s; last progress: convert pp. 58-60 start (at 1.8 s)"
     )
 
 

@@ -13,6 +13,7 @@ from fra_ingest.errors import IngestError
 from fra_ingest.locate import LOCATE_VERSION, locate
 from fra_ingest.ocr import OcrEngine
 from fra_ingest.pages import ocr_key, read_pages, sha256_file
+from fra_ingest.progress import Progress
 from fra_ingest.results import LocateResult
 
 
@@ -22,6 +23,7 @@ def locate_pdf(
     ocr: OcrEngine | None,
     *,
     use_cache: bool = True,
+    progress: Progress | None = None,
 ) -> LocateResult:
     if not pdf_path.is_file():
         raise IngestError("unreadable_pdf", f"{pdf_path}: not a file")
@@ -29,7 +31,9 @@ def locate_pdf(
     out_dir = config.artifact_root / sha256
 
     started = time.perf_counter()
-    pages = read_pages(pdf_path, config, ocr, cache_dir=out_dir if use_cache else None)
+    pages = read_pages(
+        pdf_path, config, ocr, cache_dir=out_dir if use_cache else None, progress=progress
+    )
     read_seconds = time.perf_counter() - started
     ocr_seconds = min(sum(page.ocr_seconds for page in pages), read_seconds)
 
@@ -52,7 +56,13 @@ def locate_pdf(
     return result
 
 
-def load_or_locate(pdf_path: Path, config: IngestConfig, ocr: OcrEngine | None) -> LocateResult:
+def load_or_locate(
+    pdf_path: Path,
+    config: IngestConfig,
+    ocr: OcrEngine | None,
+    *,
+    progress: Progress | None = None,
+) -> LocateResult:
     """The stored locate result when it is current and was made by the same engine and OCR
     settings, else a fresh one. A corrupt or older ``locate.json`` is recomputed, never
     trusted."""
@@ -74,7 +84,7 @@ def load_or_locate(pdf_path: Path, config: IngestConfig, ocr: OcrEngine | None) 
             )
         ):
             return result
-    return locate_pdf(pdf_path, config, ocr)
+    return locate_pdf(pdf_path, config, ocr, progress=progress)
 
 
 def page_ocr_languages(

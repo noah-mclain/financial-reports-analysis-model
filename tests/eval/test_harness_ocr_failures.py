@@ -350,6 +350,19 @@ def test_convert_aborts_on_engine_failure_after_writing_a_partial_report(
     assert "ocr_engine" in report["aborted"]
 
 
+def test_convert_timeout_detail_reaches_the_report_and_the_printed_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    detail = "d.pdf: still running after 900 s; last progress: convert pp. 58-60 start (at 61.9 s)"
+    failures: Failures = {i: IngestError("convert_timeout", detail) for i in IDS[:ENGINE_PROBE]}
+    report = read(run_convert(tmp_path, monkeypatch, failures, []))
+    # A timeout is a per-document failure: the same three in a row do not stop the run.
+    assert [r["id"] for r in report["rows"]] == IDS
+    assert "aborted" not in report
+    assert report["rows"][0]["detail"] == detail
+    assert f"ERROR convert_timeout {detail}" in capsys.readouterr().out
+
+
 # ---- locate, golden ---------------------------------------------------------------------------
 
 

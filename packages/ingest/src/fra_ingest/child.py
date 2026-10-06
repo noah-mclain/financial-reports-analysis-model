@@ -86,7 +86,10 @@ def convert_in_child(
 
     if done.returncode < 0:
         raise IngestError("convert_crashed", f"signal {-done.returncode}")
-    if done.returncode == _EXIT_ERROR and (reason := _reason(without_progress(done.stderr), pdf)) is not None:
+    if (
+        done.returncode == _EXIT_ERROR
+        and (reason := _reason(without_progress(done.stderr), pdf)) is not None
+    ):
         raise IngestError(reason, _tail(done.stderr))
     stored = config.artifact_root / sha256 / "convert.json"
     if done.returncode not in (0, _EXIT_ALL_FAILED) or not stored.is_file():

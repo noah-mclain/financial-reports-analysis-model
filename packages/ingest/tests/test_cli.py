@@ -10,6 +10,7 @@ from support import make_blank_pdf
 from fra_ingest import cli
 from fra_ingest.cli import main
 from fra_ingest.ocr import OcrEngineError, OcrTimeoutError, OcrUnavailableError
+from fra_ingest.progress import parse_progress_line
 from fra_ingest.results import ConvertResult, LocateResult, RangeConversion, StructureResult
 
 
@@ -277,3 +278,29 @@ def test_an_ocr_failure_is_printed_on_one_line(
     assert main(argv) == 2
     last = capsys.readouterr().err.splitlines()[-1]
     assert last == f"{pdf}: ocr_engine{printed}"
+
+
+def test_convert_reports_its_stages_on_stderr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    pdf = make_blank_pdf(tmp_path / "doc.pdf")
+
+    def fake_convert(
+        pdf_path: Path, located: object, languages: object, config: object, **kwargs: object
+    ) -> ConvertResult:
+        kwargs["progress"]("write start")  # type: ignore[operator]
+        return canned(located.document.sha256, "ok")  # type: ignore[attr-defined]
+
+    monkeypatch.setattr(cli, "convert_pdf", fake_convert)
+    assert main(["convert", str(pdf), "--no-ocr", "--artifacts", str(tmp_path / "a")]) == 0
+    stages = [
+        parse_progress_line(line)
+        for line in capsys.readouterr().err.splitlines()
+        if parse_progress_line(line)
+    ]
+    assert [p.message.split(" in ")[0] for p in stages if p] == [
+        "locate start",
+        "pages 1/1",
+        "locate done",
+        "write start",
+    ]

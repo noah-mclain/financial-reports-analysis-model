@@ -18,6 +18,7 @@ from fra_ingest.converter import DoclingRunner, RangeRunner, docling_version
 from fra_ingest.footprint import peak_footprint_reading
 from fra_ingest.ocr_policy import plan_ranges
 from fra_ingest.pages import PAGES_STAGE_VERSION
+from fra_ingest.progress import Progress
 from fra_ingest.results import ConvertResult, LocateResult, RangeConversion, RangePlan
 
 CONVERT_VERSION = "2"  # OCR region failures must not survive as successful conversions
@@ -73,6 +74,7 @@ def convert_pdf(
     use_cache: bool = True,
     docling: str | None = None,
     timings: Mapping[str, float] | None = None,
+    progress: Progress | None = None,
 ) -> ConvertResult:
     out_dir = config.artifact_root / located.document.sha256
     plans = plan_ranges(located, ocr_languages, config)
@@ -96,9 +98,13 @@ def convert_pdf(
             continue
         if runner is None:
             runner = runner_factory(config)
+        if progress is not None:
+            progress(f"convert pp. {plan.label} start")
         started = time.perf_counter()
         ranges.append(_convert_range(runner, pdf, plan, out_dir, page_images))
         run_seconds += time.perf_counter() - started
+        if progress is not None:
+            progress(f"convert pp. {plan.label} done in {time.perf_counter() - started:.1f}s")
 
     models = runner.models_seconds if runner is not None else 0.0
     flags = [] if plans else ["no_statements_found"]
@@ -117,6 +123,8 @@ def convert_pdf(
     )
     if result.all_failed:
         result.flags.append("all_ranges_failed")
+    if progress is not None:
+        progress("write start")
     return _write(out_dir, result, config)
 
 
