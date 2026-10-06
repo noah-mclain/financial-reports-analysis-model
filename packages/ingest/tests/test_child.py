@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from fra_ingest.child import convert_in_child
-from fra_ingest.config import IngestConfig
+from fra_ingest.config import IngestConfig, load_config
 from fra_ingest.convert import CONVERT_VERSION, settings_hash
 from fra_ingest.errors import IngestError
 from fra_ingest.locate import LOCATE_VERSION
@@ -177,11 +177,10 @@ def test_a_missing_pdf_is_refused_before_starting_a_child(tmp_path: Path) -> Non
     assert caught.value.reason == "unreadable_pdf"
 
 
-@pytest.mark.mac
 @pytest.mark.slow
 @pytest.mark.golden
 def test_almarai_converts_in_a_real_child(golden: Callable[[str], Path], tmp_path: Path) -> None:
-    config = IngestConfig(artifact_root=tmp_path)
+    config = load_config().model_copy(update={"artifact_root": tmp_path})
     result = convert_in_child(golden("almarai-2025-en-annualreport.pdf"), config)
     assert result.ranges
     assert all(r.status == "ok" for r in result.ranges)

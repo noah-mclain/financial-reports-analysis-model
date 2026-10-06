@@ -9,7 +9,7 @@ import pypdfium2 as pdfium
 import pytest
 from support import run_python
 
-from fra_ingest.config import IngestConfig, OcrEngineName
+from fra_ingest.config import IngestConfig, OcrEngineName, load_config
 from fra_ingest.converter import DoclingRunner, docling_version, pipeline_options
 from fra_ingest.ocr import TESSERACT_COMMAND
 from fra_ingest.results import RangePlan
@@ -96,14 +96,13 @@ def test_without_an_engine_image_ranges_are_skipped_and_text_ranges_have_no_ocr(
         pipeline_options(config, read)
 
 
-@pytest.mark.mac
 @pytest.mark.slow
 @pytest.mark.golden
 def test_almarai_balance_sheet_converts_with_its_page_numbers_and_images(
     golden: Callable[[str], Path], tmp_path: Path
 ) -> None:
     pdf = golden(ALMARAI_EN)
-    runner = DoclingRunner(IngestConfig())
+    runner = DoclingRunner(load_config())
     plan = RangePlan(first_page=156, last_page=158, ocr="pdf_aware", ocr_language="en-US")
     output = runner(pdf, plan)
 
@@ -121,13 +120,12 @@ def test_almarai_balance_sheet_converts_with_its_page_numbers_and_images(
     assert runner.models_seconds > 0
 
 
-@pytest.mark.mac
 @pytest.mark.slow
 @pytest.mark.golden
 def test_a_scanned_arabic_statement_converts_with_full_page_ocr(
     golden: Callable[[str], Path],
 ) -> None:
-    runner = DoclingRunner(IngestConfig())
+    runner = DoclingRunner(load_config())
     plan = RangePlan(
         first_page=5, last_page=5, ocr="full_page", ocr_language="ar-SA", image_pages=(5,)
     )
