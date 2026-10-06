@@ -19,7 +19,8 @@ import subprocess
 import sys
 from dataclasses import dataclass
 
-# Assistant names, matched ignoring case and not inside a longer run of letters. The one place they are listed.
+# Assistant names, matched ignoring case and not inside a longer run of letters. The one place
+# they are listed.
 ASSISTANT_NAMES = ("claude", "anthropic", "chatgpt", "openai", "copilot", "gemini", "codex")
 # A name followed by one of these is a reference, not attribution: the project's own CLAUDE.md,
 # an "OpenAI-compatible" endpoint.
