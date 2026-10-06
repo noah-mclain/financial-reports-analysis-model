@@ -35,7 +35,7 @@ OCR engine come from `configs/ingest.toml`:
 
 | Setting | Mac (default) | Docker |
 |---------|---------------|--------|
-| `convert.device` | `mps` | `mps` in the shipped file, which a Linux container cannot use; `cpu` only through a copy of the file named by `FRA_INGEST_CONFIG`. A per-profile value is week 4 work ([14](14-run-profiles.md)) |
+| `convert.device` | `mps` | `mps` in the shipped file, which a Linux container cannot use; `load_config` sets `cpu` for `FRA_PROFILE=docker` since 7618503. The image's own convert run is unmeasured ([14](14-run-profiles.md)) |
 | `convert.ocr_engine` | `ocrmac` | `tesseract`, set by `FRA_OCR_ENGINE` in the image; `none` skips image ranges and flags them |
 
 ## Components

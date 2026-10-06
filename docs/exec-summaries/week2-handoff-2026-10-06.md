@@ -13,11 +13,11 @@ The tasks are those of [2026-10-03-week2.md](../plans/2026-10-03-week2.md). "Bui
 | Task | Status | Evidence |
 | --- | --- | --- |
 | 1. Issuer split, override record, scoring log | Done. Fit 81 issuers / 144 documents, validation 15 / 29, holdout 22 / 35 | `scripts/corpus.py split`, re-run today |
-| 2. First dry run on the holdout | Done twice: 4 October (3abdc22) and 6 October (7618503), 35 of 35 documents each | [closing note](week2-closing-2026-10-06.md) |
+| 2. First dry run on the holdout | Done on 4 October (3abdc22), 35 of 35 documents. The 6 October run (7618503) is Task 7's second look; its time-budget comparison is in the closing note | [closing note](week2-closing-2026-10-06.md) |
 | 3. OCR bake-off | Done on 4 October. Docker uses Tesseract `ara+eng`; scanned Arabic is native-only. RapidOCR was cut, as the plan allowed | 14-run-profiles.md, "The OCR bake-off" |
-| 4. Label mapping | Built (72b4508). Fuzzy matching, which the plan made conditional, was not built | `git log` |
+| 4. Label mapping | Built (72b4508). Fuzzy matching was cut under item 1 of the plan's "What is cut first" list, not skipped: its condition was met, since 55 critical slots on `dev` are explicitly flagged, so still unmapped | `git log` |
 | 5. Analytics | Built (05080b1): identity checks, metrics, unit caveats | `git log` |
-| 6. Decline banks and insurers | Built (e37f2d5), then widened today. Its done-when is met on fit and not on validation (see "Measured today") | below |
+| 6. Decline banks and insurers | Built (e37f2d5), then widened today. Its done-when is met on fit by a rescore from cached Linux/Tesseract pages, not a fresh locate run under LOCATE_VERSION 6, and is not met on validation (see "Measured today") | below |
 | 7. Gates A and B on `dev` and the dry runs | Reported. Both gates NOT MET | [closing note](week2-closing-2026-10-06.md) |
 
 ## What is on week2-integration-2 and how to merge it
@@ -35,7 +35,7 @@ The branch is pushed. Its head before this note is 2a09a1f. It is `origin/dev-ga
 
 Merges 1 to 4 are the merge order in the plan, after `dev-gates-repair`. Merge 4 conflicted: `dev-gates-repair` and `rounding-tolerance-policy` had both replaced the scattered rounding constants, with two copies of the rule. The kept rule is `fra_core.tolerance`. `fra_ingest/check_tolerance.py` is deleted, and its three tests were folded into `packages/core/tests/test_tolerance.py`. No test was dropped.
 
-**For the owner: open one pull request from `week2-integration-2` into `main`.** The other branches need no pull request of their own. Nothing here is pushed or opened by me.
+**For the owner: open one pull request from `week2-integration-2` into `main`.** This note is added to `week2-integration-2` before that pull request, so the one pull request carries it and `week2-handoff` needs no merge of its own. The other branches need no pull request of their own.
 
 Each branch was implemented and reviewed separately. All were approved with no Critical or Important finding open.
 
@@ -50,7 +50,7 @@ All lines are Linux/Tesseract unless marked.
 | `var/artifacts` before and after the suite | Byte-identical | the cache guard added by `test-cache-isolation` |
 | ruff, mypy, `make docs-check`, `corpus.py check` | Exit 0 | run on the branch head |
 | Fit negative controls (8) | 3 right / 5 held / 0 wrong, from 3 / 1 / 4 | rescored from cached pages |
-| Fit corporates | 72 right and 1 held of 81 with a cache | the same rescore; 11 of the 92 fit PDFs present have no cache and are unmeasured |
+| Fit corporates | 72 right, 1 held of 73 cached corporates | the same rescore. The 73 and the 8 controls above make the 81 cached fit documents; 11 of the 92 fit PDFs present have no cache and are unmeasured |
 | Validation negative controls (9) | 2 right / 5 held / 2 wrong | the same rescore |
 | Golden documents recomputed with the new cues | 12 of 12 still pass as corporate; none declined or held | the same rescore |
 | Golden conversion, Docker profile | 10 of 12 converted | the golden conversion run under the Docker profile |
@@ -59,7 +59,7 @@ All lines are Linux/Tesseract unless marked.
 Three things the validation line needs said plainly:
 
 - **The two wrong are both B Investments (2020 and 2023).** Its income statement page is scanned upside down and Tesseract reads mirrored text. No industry cue can fix that. It is a page orientation failure.
-- **The investment-holding cue was tuned on validation.** The owner chose that, and it is recorded in `eval/corpus/validation_uses.yaml` (the 2026-10-06 entry, three investment-holding documents). Validation results for this sub-kind are therefore not an untuned check, until fit has investment-holding filings.
+- **The investment-holding cue was tuned on validation.** The owner chose that, and it is recorded in `eval/corpus/validation_uses.yaml` (the 2026-10-06 entry, three investment-holding documents). This departs from the closing note's "validation is now an untuned check only", by the owner's decision. Validation results for this sub-kind are therefore not an untuned check, until fit has investment-holding filings.
 - **Coast Investment is held at exactly the 4.0 `near_threshold` boundary.** The score and the threshold are equal, so a small change in either flips it. The cue "management fees" was tried and rejected: it held Qalaa Holdings, a fit corporate.
 
 Not comparable with Mac/Vision: in today's Docker-profile conversion, Tesseract found no statement pages in `juhayna-2024-ar-consolidated` and `juhayna-2025-ar-consolidated` (the locator reported no ranges). Vision on the Mac finds them. This fits the decision that scanned Arabic is native-only. The image's own convert run is still unmeasured (see the second correction).
@@ -83,7 +83,7 @@ Each is fixed on fit, validation or `dev` material. None is debugged on a holdou
 | Scanned Arabic on Tesseract | 0 of 128 cells; Juhayna not located (Linux/Tesseract) | Not fixed in Docker: native-only by decision. Show it held |
 | Page orientation | 2 validation documents (B Investments) | Fit or validation pages that show the failure. No decline cue can fix it |
 | Near-threshold industry boundary | Coast Investment at 4.0 | Investment-holding filings added to fit (week 3 start list), then re-score |
-| Identity checks | 4 ok, 4 skipped, 3 without a balance sheet (Mac, `dev`) | `dev` |
+| Identity checks | 4 ok, 1 accepted by rule, 4 skipped, 3 without a balance sheet (Mac, `dev`) | `dev` |
 | Scale and currency | 31/36 (Mac, `dev`) | `dev` |
 | Mapped slots without a verdict | 36 (Mac, `dev`, LOCATE_VERSION 5) | `dev`, after the re-measure |
 | Negative controls classed as corporate | Both holdout controls, in the second dry run | Re-check with LOCATE_VERSION 6 in the next dry run. Fix on fit and validation only |
@@ -115,5 +115,7 @@ Dataset contracts, split tests, grounding and template tests can start on synthe
 ## Owner actions
 
 1. Open one pull request, `week2-integration-2` into `main`.
-2. On the Mac, with LOCATE_VERSION 6 and STRUCTURE_VERSION 19, re-run `make eval-convert`, `eval-structure`, `eval-gates` and `eval-mapping`, and refresh the `dev` numbers. LOCATE_VERSION 6 makes every earlier locate and conversion cache stale.
-3. Collect the investment-holding filings for fit.
+2. On the Mac, run `make eval-locate TARGET=train`. With LOCATE_VERSION 6 and STRUCTURE_VERSION 19, also re-run `make eval-convert`, `eval-structure`, `eval-gates` and `eval-mapping`, and refresh the `dev` numbers. LOCATE_VERSION 6 makes every earlier locate and conversion cache stale.
+3. Rebuild the caches of the 11 uncached fit documents on the Mac, so the decline rule is measured on all of fit.
+4. Collect the investment-holding filings for fit.
+5. At the next dry run, re-check the holdout negative controls (both were classed corporate in the second dry run).
