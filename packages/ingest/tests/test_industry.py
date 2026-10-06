@@ -3,7 +3,7 @@
 from support import numbers_block, text_page
 
 from fra_core.schemas import PageMode, StatementType
-from fra_ingest.industry import detect_industry, load_industry_book
+from fra_ingest.industry import detect_industry, industry_decision, load_industry_book
 from fra_ingest.results import PageText, StatementRange
 
 BOOK = load_industry_book()
@@ -205,3 +205,78 @@ def test_the_signal_counts_distinct_cues_before_the_evidence_is_cut() -> None:
         "Balances with the central bank\nDeposits from customers"
     )
     assert detect_industry(pages, ranges, BOOK).distinct_cues == 3
+
+
+def test_a_consumer_finance_company_named_by_its_income_lines() -> None:
+    # Contact Financial (fit): securitized portfolios and financing income, no bank vocabulary.
+    pages, ranges = on_statement_pages(
+        "Revenue from portfolio transfer\nOff balance sheet portfolio management fee\n"
+        "Securitization surplus\nIncome from financing activities"
+    )
+    signal = detect_industry(pages, ranges, BOOK)
+    assert (signal.kind, signal.subkind) == ("other_financial", "consumer_finance")
+
+
+def test_an_arabic_consumer_finance_company_named_by_its_income_lines() -> None:
+    pages, ranges = on_statement_pages(
+        "ناتج إحالة محافظ حقوق مالية\nأتعاب المحافظ المدارة\nإيرادات عوائد الأنشطة التمويلية"
+    )
+    signal = detect_industry(pages, ranges, BOOK)
+    assert (signal.kind, signal.subkind) == ("other_financial", "consumer_finance")
+
+
+def test_a_licensed_asset_manager_is_read_from_its_notes() -> None:
+    # Musharaka Capital (fit): ordinary-looking statements; its Arabic notes name the licensed
+    # securities business, asset management services, custody and subscription fees.
+    pages, ranges = on_statement_pages("Revenue from service contracts with customers")
+    pages += [
+        text_page("Notes", body, page_no=n)
+        for n, body in enumerate(
+            [
+                "تقوم الشركة بأعمال الأوراق المالية بموجب الترخيص",
+                "يتم إثبات أتعاب خدمات إدارة الموجودات عند تقديم الخدمة",
+                "يتم إثبات رسوم الحفظ مقدما",
+                "يتم إثبات أتعاب الاشتراك في الصناديق الاستثمارية",
+            ],
+            start=2,
+        )
+    ]
+    signal = detect_industry(pages, ranges, BOOK)
+    assert (signal.kind, signal.subkind) == ("other_financial", "asset_manager")
+
+
+def test_an_investment_company_whose_income_is_investment_income() -> None:
+    # Coast Investment (validation, recorded in validation_uses.yaml): no revenue line, only
+    # net investment income, fees and associates.
+    pages, ranges = on_statement_pages(
+        "Net investment income\nManagement fees\nShare of results of associates"
+    )
+    pages.append(text_page("Notes", "Private equity investments", page_no=2))
+    signal = detect_industry(pages, ranges, BOOK)
+    # Two investment cues are too few for a verdict, but close enough to hold for review.
+    assert (signal.kind, signal.score, signal.distinct_cues) == ("corporate", 4.0, 2)
+    decision = industry_decision(signal)
+    assert decision is not None
+    assert (decision.outcome, decision.code) == ("needs_review", "near_threshold")
+
+
+def test_management_fees_alone_do_not_mark_a_group_as_financial() -> None:
+    # Qalaa Holdings (fit, corporate) reports management fees from its platform companies.
+    pages, ranges = on_statement_pages("Revenue\nCost of sales\nManagement fees")
+    assert detect_industry(pages, ranges, BOOK).score == 0.0
+
+
+def test_a_property_developer_that_securitizes_receivables_stays_corporate() -> None:
+    # Madinet Nasr (fit, corporate) securitizes receivables and manages property assets.
+    pages, ranges = on_statement_pages("Revenue from sale of units\nCost of sales")
+    pages += [
+        text_page(
+            "Notes",
+            "Securitization of receivables\nProperty and asset management services",
+            page_no=n,
+        )
+        for n in range(2, 6)
+    ]
+    signal = detect_industry(pages, ranges, BOOK)
+    assert signal.kind == "corporate"
+    assert industry_decision(signal) is None

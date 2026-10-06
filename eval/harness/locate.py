@@ -31,7 +31,7 @@ from fra_core.split import Part
 from fra_ingest.config import REPO_ROOT, load_config
 from fra_ingest.errors import IngestError
 from fra_ingest.industry import industry_decision
-from fra_ingest.ocr import make_engine
+from fra_ingest.ocr import OcrEngineError, OcrTimeoutError, make_engine
 from fra_ingest.results import IndustryDecision, LocateResult
 from fra_ingest.stage import locate_pdf
 from harness.development import development_set, positive_int
@@ -281,6 +281,19 @@ def run_pool(
                 {"id": entry["id"], "period": entry["period"], "truth": truth, "error": exc.reason}
             )
             continue
+        except (OcrTimeoutError, OcrEngineError) as exc:
+            # One page the engine could not read fails its document, not the whole run.
+            kind = "ocr_timeout" if isinstance(exc, OcrTimeoutError) else "ocr_engine"
+            rows.append(
+                {
+                    "id": entry["id"],
+                    "period": entry["period"],
+                    "truth": truth,
+                    "error": kind,
+                    "detail": str(exc),
+                }
+            )
+            continue
         types = {r.type for r in result.ranges}
         decision = decision_label(industry_decision(result.industry))
         rows.append(
@@ -297,6 +310,10 @@ def run_pool(
             }
         )
 
+    kinds = {r.get("error") for r in rows}
+    if rows and len(kinds) == 1 and next(iter(kinds)) in ("ocr_timeout", "ocr_engine"):
+        # Every document failing the same way is a broken engine, not a property of the pool.
+        raise RuntimeError(f"every document failed with {rows[0]['error']}: {rows[0]['detail']}")
     summary = pool_summary(rows, missing)
     corporates = sum(1 for r in rows if r.get("truth") == "corporate")
     print(
@@ -304,7 +321,12 @@ def run_pool(
         f"{corporates} (target 95%)"
     )
     print("not covered: " + (", ".join(summary["uncovered"]) or "none"))
-    print("unreadable: " + (", ".join(summary["errored"]) or "none"))
+    unreadable = [
+        f"{r['id']}: {r['error']}" + (f" ({r['detail']})" if "detail" in r else "")
+        for r in rows
+        if "error" in r
+    ]
+    print("unreadable: " + ("; ".join(unreadable) or "none"))
     print(f"missing files: {len(missing)}" + (f" ({', '.join(missing)})" if missing else ""))
     print("industry (truth -> verdict):")
     for truth, verdict, n in summary["confusion"]:

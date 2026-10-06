@@ -87,6 +87,8 @@ cues:
     net gains on investments at fair value through profit or loss: 2
     dividend income from investees: 2
     private equity: 2
+    net investment income: 2
+    صافي إيرادات الاستثمار: 2
     أرباح الاستثمارات: 2
     إيرادات توزيعات من الشركات المستثمر فيها: 2
     الاستثمارات المباشرة: 2
@@ -101,6 +103,12 @@ cues:
     التمويل الاستهلاكي: 3
     مدينو التمويل: 2
     مدينو عقود التأجير التمويلي: 2
+    income from financing activities: 3
+    revenue from portfolio transfer: 3
+    portfolio management fee: 2
+    عوائد الأنشطة التمويلية: 3
+    ناتج إحالة محافظ حقوق مالية: 3
+    أتعاب المحافظ المدارة: 2
   other_financial/asset_manager:
     assets under management: 3
     fund management fees: 3
@@ -111,3 +119,7 @@ cues:
     أتعاب إدارة الصناديق: 3
     أتعاب إدارة الأصول: 3
     رسوم الاشتراك: 2
+    أعمال الأوراق المالية: 2
+    خدمات إدارة الموجودات: 3
+    رسوم الحفظ: 2
+    أتعاب الاشتراك: 2
