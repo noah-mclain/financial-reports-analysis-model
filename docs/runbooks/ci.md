@@ -33,7 +33,32 @@ healthy, the helper requests a bounded SIGTERM stop. Both services may exit with
 
 The smoke is a build and runtime contract for the current API skeleton. It does not establish
 OCR accuracy, worker functionality, extraction quality, the blueprint's Gate D, or application
-deployment. CI does not download model weights or corpora, train, score, or call inference APIs.
+deployment. The `CI` workflow does not download model weights or corpora, train, score, or call
+inference APIs; only the `Slow tests` workflow downloads models.
+
+## Slow tests
+
+The `Slow tests` workflow runs the tests marked `slow` that do not need a Mac, as
+`pytest -m "slow and not mac"` with `FRA_PROFILE=docker` and `FRA_OCR_ENGINE=tesseract`. It runs
+every Monday at 04:41 UTC, on manual dispatch, and on a pull request that edits the workflow or
+`scripts/ci/docling_models.py`. It is not a pull request gate: the tests load docling's layout and
+table models and convert real pages. Measured on a 4-core box with the models already cached, the
+12 tests take about 1.5 minutes; the job has a 30-minute timeout.
+
+The `mac` marker, declared in `pyproject.toml`, is for a test that needs Apple Vision (`ocrmac`) or
+the Metal device. Such a test fails or skips on Linux, so it carries the marker and the Linux job
+deselects it. Nothing else is marked: a slow test that fails on Linux for another reason is a bug
+to fix, not a test to mark. No check enforces the marker beyond the job itself, because a test
+that needs Vision fails there with `OcrMac is only supported on Mac`, which is the signal to mark it.
+
+The job restores `~/.cache/huggingface/hub` under a key built from the installed `docling` and
+`docling-ibm-models` versions and the runner OS (`scripts/ci/docling_models.py key`), so a lock
+change that moves either version builds a new cache. Only on a miss, one step sets
+`HF_HUB_OFFLINE=0` and runs `scripts/ci/docling_models.py warm`, which downloads the layout
+detector and the table structure model, the two repositories the conversion pipeline reads, through
+docling's own download helpers (about 506 MB). Every other step, including the tests, runs with
+`HF_HUB_OFFLINE=1`, so a model missing from the cache is an error. To change what is downloaded,
+edit that script; the key follows the lock without any edit.
 
 ## Commit and branch hygiene
 
