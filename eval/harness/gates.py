@@ -53,7 +53,6 @@ import yaml
 from fra_core.schemas import CheckResult, Statement, StatementType
 from fra_core.taxonomy.loader import Taxonomy, load_taxonomy
 from fra_ingest.config import REPO_ROOT, load_config
-from fra_ingest.errors import IngestError
 from fra_ingest.label_match import LabelIndex
 from fra_ingest.ocr import make_engine
 from fra_ingest.results import StructureResult
@@ -61,6 +60,7 @@ from fra_ingest.review import StatementReview
 from fra_ingest.structure import structure_pdf
 from harness.expected import EXPECTED_DIR, ExpectedFile, load_expected
 from harness.extraction import DIGITAL, SCANNED, score_statement, wilson_interval
+from harness.failures import DOCUMENT_ERRORS, EngineFailure, EngineGuard, aborted, document_failure
 from harness.mapping import SLOT_STATES, critical_slots, document_period_kind
 from harness.paths import STRATA
 from harness.structure import (
@@ -379,13 +379,26 @@ def main(argv: list[str] | None = None) -> int:
     documents: list[dict[str, Any]] = []
     by_id: dict[str, dict[StatementType, Statement]] = {}
     errors: list[str] = []
+    errored: list[dict[str, str]] = []
+    guard = EngineGuard(len(entries))
+    stopped: EngineFailure | None = None
     for entry in entries:
         print(f"{entry['id']} ...", file=sys.stderr, flush=True)
         try:
             result = structure_pdf(MANIFEST.parent / entry["file"], config, ocr)
-        except IngestError as exc:
-            errors.append(f"{entry['id']}: {exc.reason}")
+        except DOCUMENT_ERRORS as exc:
+            failure = document_failure(exc)
+            errors.append(f"{entry['id']}: {failure['error']}")
+            errored.append(
+                {"id": entry["id"], "reason": failure["error"], "detail": failure["detail"]}
+            )
+            try:
+                guard.record(failure["error"], failure["detail"])
+            except EngineFailure as exc_stop:
+                stopped = exc_stop
+                break
             continue
+        guard.record(None)
         path = EXPECTED_DIR / f"{entry['id']}.json"
         checks = load_checks(config.artifact_root / result.sha256 / "table_checks.json")
         documents.append(
@@ -404,14 +417,21 @@ def main(argv: list[str] | None = None) -> int:
     report = {
         **gate_report(documents, pair_records(by_id, kinds), errors),
         "errors": errors,
+        "errored": errored,
         "documents": documents,
     }
+    if stopped is not None:
+        report = aborted(report, stopped)
     print("\n".join(lines(report)))
     print("unreadable documents: " + (", ".join(errors) or "none"))
+    if stopped is not None:
+        print(f"aborted: {stopped}")
     OUT.mkdir(parents=True, exist_ok=True)
     out = OUT / "gates-dev.json"
     out.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"wrote {out.relative_to(REPO_ROOT)}")
+    if stopped is not None:
+        raise stopped
     return 0
 
 

@@ -29,12 +29,12 @@ import yaml
 from fra_core.schemas import StatementType
 from fra_core.split import Part
 from fra_ingest.config import REPO_ROOT, load_config
-from fra_ingest.errors import IngestError
 from fra_ingest.industry import industry_decision
-from fra_ingest.ocr import OcrEngineError, OcrTimeoutError, make_engine
+from fra_ingest.ocr import make_engine
 from fra_ingest.results import IndustryDecision, LocateResult
 from fra_ingest.stage import locate_pdf
 from harness.development import development_set, positive_int
+from harness.failures import DOCUMENT_ERRORS, EngineFailure, EngineGuard, aborted, document_failure
 from harness.paths import (
     CANDIDATES,
     CORPUS,
@@ -176,13 +176,28 @@ def run_golden(no_ocr: bool, fresh: bool = False) -> dict[str, Any]:
     engine = None if no_ocr else make_engine(config)
     enabled = set(config.enabled_types)
     rows, shares, top_shares, misses, top_misses = [], [], [], [], []
-    for doc in yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))["documents"]:
+    documents = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))["documents"]
+    guard = EngineGuard(sum(1 for d in documents if d.get("statement_pages")))
+    stopped: EngineFailure | None = None
+    for doc in documents:
         pages = doc.get("statement_pages")
         if not pages:
             print(f"skip {doc['id']}: not labelled")
             continue
         started = time.perf_counter()
-        result = locate_pdf(MANIFEST.parent / doc["file"], config, engine, use_cache=not fresh)
+        try:
+            result = locate_pdf(MANIFEST.parent / doc["file"], config, engine, use_cache=not fresh)
+        except DOCUMENT_ERRORS as exc:
+            failure = document_failure(exc)
+            rows.append({"id": doc["id"], **failure})
+            print(f"{doc['id']:34} unreadable: {failure['error']} ({failure['detail']})")
+            try:
+                guard.record(failure["error"], failure["detail"])
+            except EngineFailure as exc_stop:
+                stopped = exc_stop
+                break
+            continue
+        guard.record(None)
         row: dict[str, Any] = {
             "id": doc["id"],
             "share": result.candidate_share,
@@ -225,13 +240,17 @@ def run_golden(no_ocr: bool, fresh: bool = False) -> dict[str, Any]:
         "enabled-type misses, top-ranked range only: "
         + ("none" if not top_misses else "\n  " + "\n  ".join(top_misses))
     )
-    return {
+    report = {
         "documents": rows,
         "median_share": median_share,
         "median_top_share": median_top,
         "misses": misses,
         "top_misses": top_misses,
     }
+    if stopped is not None:
+        stopped.partial = aborted(report, stopped)
+        raise stopped
+    return report
 
 
 def pool_summary(rows: list[dict[str, Any]], missing: list[str]) -> dict[str, Any]:
@@ -266,9 +285,10 @@ def run_pool(
     engine = None if no_ocr else make_engine(config)
     rows: list[dict[str, Any]] = []
     missing: list[str] = []
-    for entry in sorted(pool_entries(pool, candidates, moves, log), key=lambda e: str(e["id"]))[
-        :limit
-    ]:
+    entries = sorted(pool_entries(pool, candidates, moves, log), key=lambda e: str(e["id"]))[:limit]
+    guard = EngineGuard(len(entries))
+    stopped: EngineFailure | None = None
+    for entry in entries:
         path = store / pool / f"{entry['id']}.pdf"
         if not path.exists():
             missing.append(entry["id"])
@@ -276,24 +296,17 @@ def run_pool(
         truth = truth_label(entry)
         try:
             result = locate_pdf(path, config, engine)
-        except IngestError as exc:
-            rows.append(
-                {"id": entry["id"], "period": entry["period"], "truth": truth, "error": exc.reason}
-            )
-            continue
-        except (OcrTimeoutError, OcrEngineError) as exc:
+        except DOCUMENT_ERRORS as exc:
             # One page the engine could not read fails its document, not the whole run.
-            kind = "ocr_timeout" if isinstance(exc, OcrTimeoutError) else "ocr_engine"
-            rows.append(
-                {
-                    "id": entry["id"],
-                    "period": entry["period"],
-                    "truth": truth,
-                    "error": kind,
-                    "detail": str(exc),
-                }
-            )
+            failure = document_failure(exc)
+            rows.append({"id": entry["id"], "period": entry["period"], "truth": truth, **failure})
+            try:
+                guard.record(failure["error"], failure["detail"])
+            except EngineFailure as exc_stop:
+                stopped = exc_stop
+                break
             continue
+        guard.record(None)
         types = {r.type for r in result.ranges}
         decision = decision_label(industry_decision(result.industry))
         rows.append(
@@ -310,11 +323,15 @@ def run_pool(
             }
         )
 
-    kinds = {r.get("error") for r in rows}
-    if rows and len(kinds) == 1 and next(iter(kinds)) in ("ocr_timeout", "ocr_engine"):
-        # Every document failing the same way is a broken engine, not a property of the pool.
-        raise RuntimeError(f"every document failed with {rows[0]['error']}: {rows[0]['detail']}")
+    if stopped is None:
+        try:
+            guard.finish()  # a pool with files missing may attempt fewer documents than planned
+        except EngineFailure as exc_stop:
+            stopped = exc_stop
     summary = pool_summary(rows, missing)
+    if stopped is not None:
+        stopped.partial = aborted(summary, stopped)
+        raise stopped
     corporates = sum(1 for r in rows if r.get("truth") == "corporate")
     print(
         f"{pool}: {len(rows)} documents, corporate coverage {summary['coverage']:.1%} of "
@@ -322,7 +339,7 @@ def run_pool(
     )
     print("not covered: " + (", ".join(summary["uncovered"]) or "none"))
     unreadable = [
-        f"{r['id']}: {r['error']}" + (f" ({r['detail']})" if "detail" in r else "")
+        f"{r['id']}: {r['error']}" + (f" ({r['detail']})" if r.get("detail") else "")
         for r in rows
         if "error" in r
     ]
@@ -344,6 +361,13 @@ def run_pool(
     return summary
 
 
+def write_report(target: str, report: Mapping[str, Any]) -> None:
+    OUT.mkdir(parents=True, exist_ok=True)
+    out = OUT / f"locate-{target}.json"
+    out.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"\nwrote {out.relative_to(REPO_ROOT)}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("target", help="golden, dev, train or model_test")
@@ -358,15 +382,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     check_target(args.target, args.checkpoint)
 
-    report = (
-        run_golden(args.no_ocr, args.fresh)
-        if args.target == "golden"
-        else run_pool(args.target, args.no_ocr, args.limit)
-    )
-    OUT.mkdir(parents=True, exist_ok=True)
-    out = OUT / f"locate-{args.target}.json"
-    out.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(f"\nwrote {out.relative_to(REPO_ROOT)}")
+    try:
+        report = (
+            run_golden(args.no_ocr, args.fresh)
+            if args.target == "golden"
+            else run_pool(args.target, args.no_ocr, args.limit)
+        )
+    except EngineFailure as exc:
+        if exc.partial is not None:
+            write_report(args.target, exc.partial)
+        raise
+    write_report(args.target, report)
     return 0
 
 

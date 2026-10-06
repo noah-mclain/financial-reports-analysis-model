@@ -18,6 +18,7 @@ from typing import Any, Protocol
 from PIL import Image
 
 from fra_ingest.config import IngestConfig
+from fra_ingest.errors import IngestError
 
 # Script letters a read must contain to count as a read in that language. Measured at 72 dpi:
 # Arabic reads of English pages found 0 to 5 Arabic letters, of Arabic pages 798 to 1,338.
@@ -73,6 +74,21 @@ class OcrTimeoutError(RuntimeError):
 
 class OcrEngineError(RuntimeError):
     """The engine ran and broke: a failed exit, or output that is not in its format."""
+
+
+# What fails one document, not the run. ``OcrUnavailableError`` is left out: it means the setup
+# is broken, so it stays fatal.
+PER_DOCUMENT_OCR_ERRORS = (OcrTimeoutError, OcrEngineError)
+
+
+def ocr_failure(exc: Exception) -> IngestError:
+    """The ingest error for a document whose page the engine could not read. Any other exception,
+    ``OcrUnavailableError`` included, is raised again: it is not a property of the document."""
+    if isinstance(exc, OcrTimeoutError):
+        return IngestError("ocr_timeout", str(exc))
+    if isinstance(exc, OcrEngineError):
+        return IngestError("ocr_engine", str(exc))
+    raise exc
 
 
 def line_from_vision(

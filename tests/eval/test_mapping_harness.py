@@ -263,7 +263,7 @@ def test_an_unreadable_document_is_listed_with_its_reason(tmp_path: Path) -> Non
         raise IngestError("unreadable_pdf", "detail")
 
     report = fit_report([entry("bad")], lambda d: tmp_path / f"{d}.pdf", fail, INDEX, TAXONOMY)
-    assert report["errored"] == [{"id": "bad", "reason": "unreadable_pdf"}]
+    assert report["errored"] == [{"id": "bad", "reason": "unreadable_pdf", "detail": "detail"}]
 
 
 def test_negative_controls_are_not_mapped_and_are_counted(tmp_path: Path) -> None:
