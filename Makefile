@@ -55,7 +55,7 @@ lint: ## Lint without fixing
 
 typecheck: ## Type check the packages, apps, the analytics golden test, eval harness and CI scripts
 	@$(MAKE) --no-print-directory unhide-pth
-	$(UV) run mypy packages $(wildcard apps) tests/analytics tests/test_cache_guard.py cache_isolation.py
+	$(UV) run mypy packages $(wildcard apps) tests/analytics tests/test_cache_guard.py tests/test_fail_on_skip.py cache_isolation.py
 	$(UV) run mypy conftest.py
 	$(UV) run mypy eval/harness
 	$(UV) run mypy $(wildcard scripts/ci/*.py)
