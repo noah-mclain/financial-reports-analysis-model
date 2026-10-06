@@ -163,6 +163,7 @@ In the parent, `convert_in_child` returns the `ConvertResult` read from disk, or
 | The child outlives `child_timeout_s` | Killed; `IngestError("convert_timeout")` |
 | The child ends on a signal (out-of-memory kill) | `IngestError("convert_crashed", "signal <n>")` |
 | The child exits with no `convert.json` | `IngestError("convert_crashed", <last lines of stderr>)` |
+| The OCR engine times out or fails on a page the child reads | The child prints `<pdf>: ocr_timeout <detail>` or `<pdf>: ocr_engine <detail>` and exits 2; the parent raises `IngestError` with that reason. An eval harness records it against the document and goes on; when the first three documents all fail the same way it stops and writes its partial report with `aborted` |
 | An image range with `ocr_engine = "none"` | `skipped`, flag `ocr_unavailable:<a>-<b>` |
 | Peak footprint above `memory_budget_gb` | `memory_over_budget`; the result is kept |
 | The macOS footprint read fails and RSS is used instead | flag `peak_footprint_rss_fallback`; the result is kept |
