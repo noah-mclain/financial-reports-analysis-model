@@ -96,6 +96,7 @@ def test_without_an_engine_image_ranges_are_skipped_and_text_ranges_have_no_ocr(
         pipeline_options(config, read)
 
 
+@pytest.mark.mac
 @pytest.mark.slow
 @pytest.mark.golden
 def test_almarai_balance_sheet_converts_with_its_page_numbers_and_images(
@@ -120,6 +121,7 @@ def test_almarai_balance_sheet_converts_with_its_page_numbers_and_images(
     assert runner.models_seconds > 0
 
 
+@pytest.mark.mac
 @pytest.mark.slow
 @pytest.mark.golden
 def test_a_scanned_arabic_statement_converts_with_full_page_ocr(

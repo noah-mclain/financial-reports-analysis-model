@@ -177,6 +177,7 @@ def test_a_missing_pdf_is_refused_before_starting_a_child(tmp_path: Path) -> Non
     assert caught.value.reason == "unreadable_pdf"
 
 
+@pytest.mark.mac
 @pytest.mark.slow
 @pytest.mark.golden
 def test_almarai_converts_in_a_real_child(golden: Callable[[str], Path], tmp_path: Path) -> None:

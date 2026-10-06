@@ -104,4 +104,5 @@ addopts = "-q --strict-markers"
 markers = [
   "slow: needs model weights or OCR, excluded from the default run",
   "golden: reads documents from eval/golden",
+  "mac: needs Apple Vision or the Metal device",
 ]
