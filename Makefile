@@ -78,11 +78,11 @@ eval-locate: ## Score the locator (TARGET=golden, dev, or train = the fit and va
 
 eval-convert: ## Convert the golden set, a child process per document; records time and peak memory
 	@$(MAKE) --no-print-directory unhide-pth
-	$(UV) run python eval/harness/convert.py $(if $(ONLY),--only $(ONLY)) $(if $(FRESH),--no-cache)
+	PYTHONPATH=eval $(UV) run python -m harness.convert $(if $(ONLY),--only $(ONLY)) $(if $(FRESH),--no-cache)
 
 eval-structure: ## Structure the golden set: statements, scale and currency, identity, language pairs
 	@$(MAKE) --no-print-directory unhide-pth
-	$(UV) run python eval/harness/structure.py
+	PYTHONPATH=eval $(UV) run python -m harness.structure
 
 dry-run: ## One look at the train holdout through the whole pipeline; logged, spent once per candidate, no pool argument; EARLIER=path compares with an earlier run's report
 	@$(MAKE) --no-print-directory unhide-pth
@@ -90,7 +90,7 @@ dry-run: ## One look at the train holdout through the whole pipeline; logged, sp
 
 expected-drafts: ## Draft expected files from the extraction (ONLY=id; keeps checked or confirmed files)
 	@$(MAKE) --no-print-directory unhide-pth
-	$(UV) run python eval/harness/expected.py $(if $(ONLY),--only $(ONLY))
+	PYTHONPATH=eval $(UV) run python -m harness.expected $(if $(ONLY),--only $(ONLY))
 
 eval-mapping: ## Label mapping: TARGET=golden (default) the critical items and the expected files; TARGET=fit [LIMIT=n] unmapped labels by failure class
 	@$(MAKE) --no-print-directory unhide-pth
