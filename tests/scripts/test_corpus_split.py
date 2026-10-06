@@ -34,13 +34,13 @@ def report() -> dict[str, Any]:
 
 
 def test_train_pool_totals(report: dict[str, Any]) -> None:
-    assert report["train"] == {"issuers": 123, "documents": 214}
+    assert report["train"] == {"issuers": 122, "documents": 213}
 
 
 def test_as_hashed(report: dict[str, Any]) -> None:
     hashed = report["as"]
     assert {p: (hashed[p]["issuers"], hashed[p]["documents"]) for p in hashed} == {
-        "fit": (82, 139),
+        "fit": (81, 138),
         "validation": (15, 29),
         "holdout": (26, 46),
     }
@@ -49,12 +49,12 @@ def test_as_hashed(report: dict[str, Any]) -> None:
 def test_after_the_four_overrides(report: dict[str, Any]) -> None:
     after = report["after"]
     assert {p: (after[p]["issuers"], after[p]["documents"]) for p in after} == {
-        "fit": (86, 150),
+        "fit": (85, 149),
         "validation": (15, 29),
         "holdout": (22, 35),
     }
     assert {p: (after[p]["annual"], after[p]["interim"]) for p in after} == {
-        "fit": (51, 99),
+        "fit": (50, 99),
         "validation": (9, 20),
         "holdout": (5, 30),
     }
