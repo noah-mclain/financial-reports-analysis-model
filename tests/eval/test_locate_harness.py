@@ -332,7 +332,10 @@ def test_a_limit_that_is_not_a_positive_number_is_refused(limit: str) -> None:
 
 @pytest.mark.parametrize("error", ["timeout", "engine"])
 def test_an_ocr_failure_is_recorded_against_its_document_and_the_run_goes_on(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, error: str
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    error: str,
 ) -> None:
     import harness.locate as locate_module
 
@@ -353,8 +356,29 @@ def test_an_ocr_failure_is_recorded_against_its_document_and_the_run_goes_on(
     summary = locate_module.run_pool(
         "train", True, candidates=candidates, moves=moves, log=log, store=store
     )
+    printed = capsys.readouterr().out
+    assert f"unreadable: f1: ocr_{error} (tesseract did not finish within 120.0 s)" in printed
     assert summary["errored"] == ["f1"]
     failed = next(r for r in summary["documents"] if r["id"] == "f1")
     assert failed["error"] == f"ocr_{error}"
     assert failed["detail"] == "tesseract did not finish within 120.0 s"
     assert [r["id"] for r in summary["documents"]] == ["f1", "v1"]
+
+
+def test_a_run_where_every_document_fails_on_the_engine_stops_loudly(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import harness.locate as locate_module
+
+    from fra_ingest.ocr import OcrEngineError
+
+    candidates, moves, log, store = _train_records(tmp_path)
+
+    def broken(path: Path, *args: object, **kwargs: object) -> LocateResult:
+        raise OcrEngineError("tesseract --list-langs failed")
+
+    monkeypatch.setattr(locate_module, "locate_pdf", broken)
+    with pytest.raises(RuntimeError, match="every document failed with ocr_engine"):
+        locate_module.run_pool(
+            "train", True, candidates=candidates, moves=moves, log=log, store=store
+        )

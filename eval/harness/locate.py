@@ -310,6 +310,10 @@ def run_pool(
             }
         )
 
+    kinds = {r.get("error") for r in rows}
+    if rows and len(kinds) == 1 and next(iter(kinds)) in ("ocr_timeout", "ocr_engine"):
+        # Every document failing the same way is a broken engine, not a property of the pool.
+        raise RuntimeError(f"every document failed with {rows[0]['error']}: {rows[0]['detail']}")
     summary = pool_summary(rows, missing)
     corporates = sum(1 for r in rows if r.get("truth") == "corporate")
     print(
@@ -317,7 +321,12 @@ def run_pool(
         f"{corporates} (target 95%)"
     )
     print("not covered: " + (", ".join(summary["uncovered"]) or "none"))
-    print("unreadable: " + (", ".join(summary["errored"]) or "none"))
+    unreadable = [
+        f"{r['id']}: {r['error']}" + (f" ({r['detail']})" if "detail" in r else "")
+        for r in rows
+        if "error" in r
+    ]
+    print("unreadable: " + ("; ".join(unreadable) or "none"))
     print(f"missing files: {len(missing)}" + (f" ({', '.join(missing)})" if missing else ""))
     print("industry (truth -> verdict):")
     for truth, verdict, n in summary["confusion"]:
