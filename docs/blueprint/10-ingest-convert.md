@@ -49,6 +49,7 @@ load PyTorch.
 | `fra_ingest/converter.py` | `build_converter(cfg, plan) -> DocumentConverter`, and the mapping from our types to docling's |
 | `fra_ingest/convert.py` | `convert_pdf(pdf, located, cfg) -> ConvertResult`: runs docling per range and writes the artifacts |
 | `fra_ingest/child.py` | `convert_in_child(pdf, cfg, timeout_s) -> ConvertResult`: runs `fra-ingest convert` in a subprocess and maps how it ended to a result or an `IngestError` |
+| `fra_ingest/progress.py` | The progress line format: written by the child, read by the parent |
 | `fra_ingest/footprint.py` | The process's lifetime peak memory footprint |
 | `fra_ingest/results.py` | `RangePlan`, `RangeConversion`, `ConvertResult` |
 | `fra_ingest/cli.py` | `convert` subcommand |
@@ -149,6 +150,19 @@ Inside the child, `fra-ingest convert <pdf>`:
 
 In the parent, `convert_in_child` returns the `ConvertResult` read from disk, or raises.
 
+## Progress lines
+
+The child writes one flushed line, `progress: <seconds>s <message>`, to stderr at each stage
+boundary, with the seconds counted from the start of the child's run: `locate start`,
+`pages <n>/<total>` after every 10 pages of page reading (OCR included) and after the last,
+`locate done in <t>s`, `convert pp. <a>-<b> start` and `done in <t>s` for each range, and
+`write start`. Docling's models load inside the first range, so a stall there is reported as
+that range's `start`. A timed-out parent reads the last such line from the stderr it had
+received. Progress lines are left out of the lines the parent reads a reason or a tail from.
+Page reading served from the page cache writes no `pages` lines. `fra_ingest/progress.py`
+holds the format, so the writer and the reader cannot drift apart; stages report through an
+injected callable and print nothing themselves.
+
 ## Failure handling
 
 "Right, or visibly unsure": one bad range does not sink the document.
@@ -160,7 +174,7 @@ In the parent, `convert_in_child` returns the `ConvertResult` read from disk, or
 | docling returns a page outside the range | That range `failed`, flag `page_outside_range:<a>-<b>` |
 | docling returns `ok` but a page of the range is missing from its output, or has no image; docling returned zero pages | That range `partial`, flag `convert_partial:<a>-<b>` plus `page_not_converted:<n>` / `page_image_missing:<n>` per page; zero pages: `failed`, flag `convert_failed:<a>-<b>`, nothing written |
 | Every range failed | The child writes `convert.json` and exits 3; the parent raises `IngestError("convert_failed")` |
-| The child outlives `child_timeout_s` | Killed; `IngestError("convert_timeout")` |
+| The child outlives `child_timeout_s` | Killed; `IngestError("convert_timeout")` whose detail names the last progress line the child wrote and when (`...still running after 900 s; last progress: convert pp. 58-60 start (at 61.9 s)`), or says `no progress reported` |
 | The child ends on a signal (out-of-memory kill) | `IngestError("convert_crashed", "signal <n>")` |
 | The child exits with no `convert.json` | `IngestError("convert_crashed", <last lines of stderr>)` |
 | The OCR engine times out or fails on a page the child reads | The child prints `<pdf>: ocr_timeout <detail>` or `<pdf>: ocr_engine <detail>` and exits 2; the parent raises `IngestError` with that reason. An eval harness records it against the document and goes on; when the first three documents all fail the same way it stops and writes its partial report with `aborted` |
