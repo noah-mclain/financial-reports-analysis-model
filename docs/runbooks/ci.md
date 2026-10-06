@@ -67,18 +67,20 @@ installs for that reason: the Tesseract packages, through the workspace action, 
 letters. Only the tests need that font, so it is not in the Dockerfile.
 
 The job restores `~/.cache/huggingface/hub` under a key built from the installed `docling` and
-`docling-ibm-models` versions (`scripts/ci/docling_models.py key`), the runner OS and a hash of
-`scripts/ci/docling_models.py`, so a lock change that moves either version, or an edit to what the
-script downloads, builds a new cache. Only on a miss, one step sets `HF_HUB_OFFLINE=0` and runs
-`scripts/ci/docling_models.py warm`, which downloads the layout detector and the table structure
-model, the two repositories the conversion pipeline reads, through docling's own download helpers
-(about 506 MB, 16 s measured on a 4-core box). The layout model is the one the project's
-`pipeline_options` selects, at the revision docling names (`main`), not one this repository
-pins. The next step saves the cache right after the download, so a failing test does not discard
-it. Every other step, including the tests, runs with `HF_HUB_OFFLINE=1`, so a model missing from
-the cache is an error. GitHub evicts a cache that has not been used for 7 days, so the weekly run
-may often download; the cache pays off for the runs between. To change what is
-downloaded, edit that script: the hash in the key makes the next run download afresh.
+`docling-ibm-models` versions and the layout model the pipeline selects
+(`scripts/ci/docling_models.py key`), the runner OS and a hash of `scripts/ci/docling_models.py`, so
+a lock change that moves either version, or an edit to what the script downloads, builds a new
+cache. Only on a miss, one step sets `HF_HUB_OFFLINE=0` and runs `scripts/ci/docling_models.py
+warm`, which downloads the layout detector and the table structure model, the two repositories the
+conversion pipeline reads, through docling's own download helpers (about 506 MB, 16 s measured on a
+4-core box). The layout model is the one the project's `pipeline_options` selects, at the revision
+docling names (`main`), not one this repository pins. The next step saves the cache right after the
+download, so a failing test does not discard it; pull requests do not save, because their caches are
+scoped to the pull request and `main` cannot reuse them. Every other step, including the tests, runs
+with `HF_HUB_OFFLINE=1`, so a model missing from the cache is an error. GitHub evicts a cache that
+has not been used for 7 days, so the weekly run may often download; the cache pays off for the runs
+between. To change what is downloaded, edit that script: the hash in the key makes the next run
+download afresh.
 
 ## Commit and branch hygiene
 

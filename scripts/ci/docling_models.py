@@ -1,6 +1,7 @@
 """The docling model weights the pipeline loads from the Hugging Face cache, for CI.
 
-``key`` prints a cache key naming the installed docling and docling-ibm-models versions.
+``key`` prints a cache key naming the installed docling and docling-ibm-models versions and the
+layout model the pipeline options select (the table model is fixed by the docling version).
 ``warm`` downloads exactly the repositories the conversion pipeline reads (the layout detector,
 named by the pipeline options of ``fra_ingest.converter``, and the table structure model) into
 the Hugging Face cache, the same call docling makes. Run with network access; everything after
@@ -20,7 +21,11 @@ from fra_ingest.results import RangePlan
 
 
 def cache_key() -> str:
-    return f"docling-hf-{version('docling')}-{version('docling-ibm-models')}"
+    layout = layout_model_spec()
+    return (
+        f"docling-hf-{version('docling')}-{version('docling-ibm-models')}"
+        f"-{layout.repo_id.replace('/', '_')}@{layout.revision}"
+    )
 
 
 def layout_model_spec() -> Any:

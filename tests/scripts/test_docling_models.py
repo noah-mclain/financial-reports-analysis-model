@@ -9,13 +9,17 @@ from pathlib import Path
 SCRIPT = Path(__file__).parents[2] / "scripts" / "ci" / "docling_models.py"
 
 
-def test_the_cache_key_names_both_installed_versions() -> None:
+def test_the_cache_key_names_both_installed_versions_and_the_layout_model() -> None:
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
+
+    layout = PdfPipelineOptions().layout_options.model_spec
     done = subprocess.run(
         [sys.executable, str(SCRIPT), "key"], capture_output=True, text=True, check=False
     )
     assert done.returncode == 0, done.stderr
     assert done.stdout.strip() == (
         f"docling-hf-{version('docling')}-{version('docling-ibm-models')}"
+        f"-{layout.repo_id.replace('/', '_')}@{layout.revision}"
     )
 
 
