@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import subprocess
 import sys
 from importlib.metadata import version
@@ -24,3 +25,15 @@ def test_an_unknown_command_is_refused() -> None:
     )
     assert done.returncode == 2
     assert "invalid choice" in done.stderr
+
+
+def test_the_layout_model_is_the_one_the_conversion_pipeline_selects() -> None:
+    from docling.datamodel.pipeline_options import PdfPipelineOptions
+
+    spec = importlib.util.spec_from_file_location("docling_models_under_test", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module.layout_model_spec() == PdfPipelineOptions().layout_options.model_spec
+    assert module.layout_model_spec().repo_id == "docling-project/docling-layout-heron"
