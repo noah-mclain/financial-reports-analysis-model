@@ -31,7 +31,7 @@ from fra_core.split import Part
 from fra_ingest.config import REPO_ROOT, load_config
 from fra_ingest.errors import IngestError
 from fra_ingest.industry import industry_decision
-from fra_ingest.ocr import make_engine
+from fra_ingest.ocr import OcrEngineError, OcrTimeoutError, make_engine
 from fra_ingest.results import IndustryDecision, LocateResult
 from fra_ingest.stage import locate_pdf
 from harness.development import development_set, positive_int
@@ -279,6 +279,19 @@ def run_pool(
         except IngestError as exc:
             rows.append(
                 {"id": entry["id"], "period": entry["period"], "truth": truth, "error": exc.reason}
+            )
+            continue
+        except (OcrTimeoutError, OcrEngineError) as exc:
+            # One page the engine could not read fails its document, not the whole run.
+            kind = "ocr_timeout" if isinstance(exc, OcrTimeoutError) else "ocr_engine"
+            rows.append(
+                {
+                    "id": entry["id"],
+                    "period": entry["period"],
+                    "truth": truth,
+                    "error": kind,
+                    "detail": str(exc),
+                }
             )
             continue
         types = {r.type for r in result.ranges}
