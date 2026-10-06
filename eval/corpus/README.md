@@ -273,6 +273,10 @@ uses the shared `fra_core.pools` identity/assignment contract, excludes `blind` 
 and keeps banks and insurers (SIC 6000 to 6499) as `negative_control`. It needs network
 access to sec.gov and `FRA_SEC_USER_AGENT` set to a name and email.
 
+The contract in `fra_core.pools` holds values and rules only. `scripts/pool_store.py` is the one
+module that reads, writes and locks `var/issuer-pools.json` and reads the recorded YAML; the
+corpus script, the Argaam listing and `sec_fsds.py` all go through it.
+
 Recorded pools in `candidates.yaml`, `deferred.yaml`, fetched metadata and the local
 `var/issuer-pools.json` are authoritative. Golden identities are always `dev`. Conflicting
 records fail; a later pin cannot replace an earlier assignment. Identity links use normalized
