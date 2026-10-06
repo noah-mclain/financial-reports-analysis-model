@@ -35,10 +35,16 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     if not changes:
         return
     writer = session.config.get_terminal_writer()
-    writer.line(f"\nthe test run changed the real cache {REAL_ARTIFACTS}:", red=True)
+    writer.line(
+        f"\nFAILED: the test run changed the real cache {REAL_ARTIFACTS} "
+        "(exit status set to 1, whatever the summary above says):",
+        red=True,
+    )
     for line in changes:
         writer.line(f"  {line}", red=True)
-    session.exitstatus = pytest.ExitCode.TESTS_FAILED
+    # An interrupted run or one that collected no tests keeps its own status.
+    if exitstatus in (pytest.ExitCode.OK, pytest.ExitCode.TESTS_FAILED):
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
 
 
 @pytest.fixture(scope="session")

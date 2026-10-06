@@ -12,13 +12,14 @@ from pathlib import Path
 
 import pytest
 
-from fra_ingest.config import IngestConfig
+from fra_ingest.config import IngestConfig, load_config
 from fra_ingest.locate import LOCATE_VERSION
 from fra_ingest.pages import sha256_file
 from fra_ingest.results import ConvertResult, StructureResult
 from fra_ingest.structure import structure_pdf
 
-REAL_ARTIFACTS = IngestConfig().artifact_root
+# The same settings the golden fixture copies from, so the guard watches that directory.
+REAL_ARTIFACTS = load_config().artifact_root
 
 Fingerprint = Mapping[str, tuple[int, int, str]]
 
