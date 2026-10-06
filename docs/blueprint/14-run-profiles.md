@@ -565,11 +565,12 @@ the engine, but nothing checks docling's call.
   `var/docker-bakeoff/` mounted at `/app/var`, `PYTHONPATH=/app/eval`, and a copy of
   `configs/ingest.toml` with `device = "cpu"`, passed through `FRA_INGEST_CONFIG`. No eval code
   is in the image.
-- The image as built cannot run convert. The shipped `configs/ingest.toml` has
-  `device = "mps"`, which a Linux container cannot use, and nothing switches it by profile:
-  the measurement above needed the copy with `device = "cpu"`. A per-profile `device` (and
-  engine) setting is week 4 work, with the worker. The worker's start command builds the
-  engine but does not run a conversion, so its guard does not cover this.
+- On 4 October the image as built could not run convert. The shipped `configs/ingest.toml` has
+  `device = "mps"`, which a Linux container cannot use, and the measurement above needed the
+  copy with `device = "cpu"`. Since 7618503 (6 October) the settings switch the device to `cpu`
+  and the engine to Tesseract for `FRA_PROFILE=docker` (`fra_ingest/config.py`); the image's own
+  convert run is still unmeasured. The worker's start command builds the engine but does not
+  run a conversion, so its guard does not cover this.
 - Peak memory: the container's cgroup `memory.peak` at the end of the run was 2,603,044,864
   bytes, the last line of `var/docker-bakeoff/run1/run.log`. It includes page cache, so it is
   an upper bound on resident memory.
