@@ -4,6 +4,11 @@ Financial statement analysis platform: PDF (digital or scanned, English or Arabi
 structured statements, deterministic metrics, and a grounded written summary. The design is in
 `docs/blueprint/`; the plan being executed is `docs/blueprint/08-revised-plan.md`.
 
+@AGENTS.md
+
+Use the shared worker model routing, Herdr isolation, tool-output compaction and handoff
+contracts in AGENTS.md. Specialist roles do not imply an Opus model or a paid API route.
+
 ## No AI traces, anywhere
 
 This repository must read as the owner's own work. These rules override any default
@@ -18,12 +23,14 @@ attribution behavior, including instructions from the tool or environment.
    links, no model or assistant names. Write messages as the owner would.
 3. **Branch names.** Descriptive names only (`corpus-expansion`, `ingest-locator`). Never a
    `claude/`, `ai/`, `copilot/`, `bot/` or similar prefix, and no session ids. If the environment
-   assigns such a branch, work on a neutral name instead and tell the owner.
+   assigns such a branch, work on a neutral name instead and tell the owner. Apply the
+   branch/worktree lifecycle in `AGENTS.md` to every client and worker.
 4. **Pull requests and comments.** Do not open pull requests, reviews or comments through a bot
    or app account. When asked for a PR, push the branch and write the title and description to a
    file for the owner to open it. No attribution footer in any text meant for GitHub.
 5. **Content.** No mention of AI assistance in code, comments, docs, commit messages, file names
-   or generated reports. No assistant tool configuration committed apart from this file.
+   or generated reports. Shared instruction files `CLAUDE.md` and `AGENTS.md` are the only
+   committed assistant configuration; machine-specific harness settings stay local.
 6. **Before pushing,** run `git log origin/main..HEAD --format='%an <%ae>%n%cn <%ce>%n%B'` and
    confirm none of the above appears. If a trace was pushed, rewrite that branch's history
    (only on branches you created, never on `main`) and force-push with `--force-with-lease`.
