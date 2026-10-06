@@ -36,19 +36,13 @@ import yaml
 
 import corpus
 from corpus import Politeness, assign_pool, issuer_key
-from fra_core.pools import (
-    Identity,
-    PoolError,
-    PoolRegistry,
-    locked_registry,
-    record_pdf_metadata,
-    save_registry,
-)
+from fra_core.pools import Identity, PoolError, PoolRegistry
 from fra_core.schemas import PageMode, StatementType
 from fra_ingest.config import IngestConfig, load_config
 from fra_ingest.locate import TitleBook, find_ranges, load_title_book, score_page
 from fra_ingest.pages import GARBLED_TEXT_LAYER, read_pages
 from fra_ingest.results import PageScore, PageText, StatementRange
+from pool_store import locked_registry, record_pdf_metadata, save_registry
 
 T = TypeVar("T")
 DECISIONS = corpus.ROOT / "eval/corpus/argaam_decisions.yaml"

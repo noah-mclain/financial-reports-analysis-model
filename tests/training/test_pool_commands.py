@@ -13,7 +13,8 @@ from test_sec_fsds import make_zip, pre
 import argaam_listing
 import corpus
 import sec_fsds
-from fra_core.pools import Identity, Source, load_registry
+from fra_core.pools import Identity, Source
+from pool_store import load_registry
 
 
 @pytest.fixture
@@ -242,7 +243,7 @@ def test_documented_recovery_schema_restores_synthetic_metadata_only(
 def test_registry_sync_failure_prevents_sec_output(
     files: dict[str, Path], monkeypatch: pytest.MonkeyPatch, failed_sync: int
 ) -> None:
-    import fra_core.pools as pools
+    import pool_store
 
     calls = 0
 
@@ -252,7 +253,7 @@ def test_registry_sync_failure_prevents_sec_output(
         if calls == failed_sync:
             raise OSError("synthetic sync failure")
 
-    monkeypatch.setattr(pools.os, "fsync", fail_sync)
+    monkeypatch.setattr(pool_store.os, "fsync", fail_sync)
     monkeypatch.setattr(sec_fsds, "write", lambda *_: pytest.fail("output before durable record"))
     assert sec_fsds.main(["2025q1"]) == 1
     assert files["registry"].exists() == (failed_sync == 2)

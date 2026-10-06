@@ -3,25 +3,18 @@
 Recorded assignments win over either source's legacy default. Names and CIKs are
 linked only by a supplied identity, never fuzzy matched. Conflicts require review.
 The local metadata file is written before SEC output, without reading label datasets.
+This module holds values only; reading, writing and locking that file is ``scripts/pool_store.py``.
 """
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
-import json
-import os
 import re
-from collections.abc import Iterable, Iterator, Mapping
-from contextlib import contextmanager
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
-from pathlib import Path
 
 from fra_core.split import issuer_key
-
-REGISTRY_RELATIVE_PATH = Path("var/issuer-pools.json")
-SEC_OUTPUT_RELATIVE_PATH = Path("training/data/sec_fsds")
 
 
 class PoolError(ValueError):
@@ -225,36 +218,34 @@ class PoolRegistry:
             "ambiguous_names": sorted(self._ambiguous_names),
         }
 
-
-def load_registry(path: Path, sec_outputs: Iterable[Path] = ()) -> PoolRegistry:
-    registry = PoolRegistry()
-    if path.exists():
-        data = json.loads(path.read_text(encoding="utf-8"))
+    @classmethod
+    def from_metadata(cls, data: object, source: str) -> PoolRegistry:
+        """Rebuild a registry from a ``metadata()`` dict; ``source`` names it in errors."""
         if (
             not isinstance(data, dict)
             or type(data.get("version")) is not int
             or data["version"] != 1
         ):
-            raise PoolError(f"{path}: expected pool metadata version 1")
+            raise PoolError(f"{source}: expected pool metadata version 1")
         entries, outputs = data.get("assignments"), data.get("sec_outputs")
         if not isinstance(entries, list) or not isinstance(outputs, list):
-            raise PoolError(f"{path}: expected assignments and sec_outputs lists")
+            raise PoolError(f"{source}: expected assignments and sec_outputs lists")
         ambiguous_names = data.get("ambiguous_names", [])
         if not isinstance(ambiguous_names, list):
-            raise PoolError(f"{path}: expected ambiguous_names list")
-        registry = PoolRegistry(ambiguous_names=ambiguous_names)
+            raise PoolError(f"{source}: expected ambiguous_names list")
+        registry = cls(ambiguous_names=ambiguous_names)
         for entry in entries:
             if not isinstance(entry, dict) or not isinstance(entry.get("names"), list):
-                raise PoolError(f"{path}: invalid assignment {entry!r}")
+                raise PoolError(f"{source}: invalid assignment {entry!r}")
             names, cik, pool = entry["names"], entry.get("cik"), entry.get("pool")
             if not isinstance(pool, str) or (cik is not None and not isinstance(cik, (str, int))):
-                raise PoolError(f"{path}: invalid pool/CIK in assignment")
+                raise PoolError(f"{source}: invalid pool/CIK in assignment")
             if not names:
                 registry.register(Identity(cik=cik), pool)
             first: Identity | None = None
             for name in names:
                 if not isinstance(name, str):
-                    raise PoolError(f"{path}: invalid issuer name {name!r}")
+                    raise PoolError(f"{source}: invalid issuer name {name!r}")
                 identity = Identity(name, cik)
                 registry.register(identity, pool)
                 if first is None:
@@ -265,82 +256,48 @@ def load_registry(path: Path, sec_outputs: Iterable[Path] = ()) -> PoolRegistry:
             if not isinstance(output, str) or not re.fullmatch(
                 r"labels-[0-9]{4}q[1-4]\.jsonl\.gz", output
             ):
-                raise PoolError(f"{path}: invalid SEC output name {output!r}")
+                raise PoolError(f"{source}: invalid SEC output name {output!r}")
             registry.sec_outputs.add(output)
-    missing = sorted(
-        output.name for output in sec_outputs if output.name not in registry.sec_outputs
-    )
-    if missing:
-        raise PoolError(
-            f"{path}: historical SEC outputs lack recorded assignments: {', '.join(missing)}; "
-            "recover reviewed identity/pool metadata before proceeding; do not reallocate"
-        )
-    return registry
+        return registry
 
+    def require_sec_outputs(self, names: Iterable[str], source: str) -> None:
+        """Every historical SEC output must already have recorded assignments."""
+        missing = sorted(name for name in names if name not in self.sec_outputs)
+        if missing:
+            raise PoolError(
+                f"{source}: historical SEC outputs lack recorded assignments: "
+                f"{', '.join(missing)}; "
+                "recover reviewed identity/pool metadata before proceeding; do not reallocate"
+            )
 
-def save_registry(registry: PoolRegistry, path: Path) -> None:
-    """Atomic metadata replacement; command writers must hold ``locked_registry``."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".tmp")
-    with temporary.open("w", encoding="utf-8") as handle:
-        handle.write(json.dumps(registry.metadata(), indent=2) + "\n")
-        handle.flush()
-        os.fsync(handle.fileno())
-    temporary.replace(path)
-    directory = os.open(path.parent, os.O_RDONLY)
-    try:
-        os.fsync(directory)
-    finally:
-        os.close(directory)
+    def record_golden(self, rows: Iterable[Mapping[str, object]]) -> None:
+        """Golden identities are always dev."""
+        for row in rows:
+            self.register(Identity.from_document(row), Pool.DEV)
 
-
-@contextmanager
-def locked_registry(path: Path, sec_outputs: Iterable[Path] = ()) -> Iterator[PoolRegistry]:
-    """Serialize command writers; no metadata is saved implicitly on failure."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.with_suffix(".lock").open("a", encoding="utf-8") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        try:
-            yield load_registry(path, sec_outputs)
-        finally:
-            fcntl.flock(lock, fcntl.LOCK_UN)
-
-
-def record_pdf_metadata(registry: PoolRegistry, corpus_dir: Path, golden_manifest: Path) -> None:
-    """Load recorded candidate/deferred pools and verify fetched pools by document id.
-
-    These are metadata files only. Golden identities are dev; no document bytes or
-    label datasets are opened. A fetched row without identity metadata needs review.
-    """
-    import yaml
-
-    def documents(path: Path, *, optional: bool = False) -> list[Mapping[str, object]]:
-        if optional and not path.exists():
-            return []
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            raise PoolError(f"{path}: expected document metadata mapping")
-        rows = data.get("documents")
-        if rows is None and optional:
-            return []
-        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
-            raise PoolError(f"{path}: expected documents list")
-        return rows
-
-    for doc in documents(golden_manifest):
-        registry.register(Identity.from_document(doc), Pool.DEV)
-    recorded = documents(corpus_dir / "candidates.yaml") + documents(
-        corpus_dir / "deferred.yaml", optional=True
-    )
-    registry.record_documents(recorded)
-    fetched = corpus_dir / "fetched.yaml"
-    if fetched.exists():
-        data = yaml.safe_load(fetched.read_text(encoding="utf-8"))
+    def record_fetched(
+        self, data: object, source: str, recorded: Iterable[Mapping[str, object]]
+    ) -> None:
+        """Verify fetched pools by document id against the recorded candidate rows."""
         rows = data.get("documents") if isinstance(data, dict) else None
         if not isinstance(rows, dict):
-            raise PoolError(f"{fetched}: expected documents mapping")
+            raise PoolError(f"{source}: expected documents mapping")
         by_id = {doc.get("id"): doc for doc in recorded}
         for doc_id, row in rows.items():
             if doc_id not in by_id or not isinstance(row, dict):
-                raise PoolError(f"{fetched}: {doc_id!r} lacks issuer identity metadata")
-            registry.record_documents([{**by_id[doc_id], "pool": row.get("pool")}])
+                raise PoolError(f"{source}: {doc_id!r} lacks issuer identity metadata")
+            self.record_documents([{**by_id[doc_id], "pool": row.get("pool")}])
+
+
+def document_rows(
+    data: object, source: str, *, optional: bool = False
+) -> list[Mapping[str, object]]:
+    """The ``documents`` list of an already loaded metadata mapping, validated."""
+    if not isinstance(data, dict):
+        raise PoolError(f"{source}: expected document metadata mapping")
+    rows = data.get("documents")
+    if rows is None and optional:
+        return []
+    if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+        raise PoolError(f"{source}: expected documents list")
+    return rows

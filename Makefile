@@ -122,7 +122,7 @@ corpus-fetch: ## Download, measure and dedupe the corpus into var/corpus (NEW=1:
 
 sec-fsds: ## SEC statement labels for training (needs FRA_SEC_USER_AGENT; QUARTERS=8)
 	@$(MAKE) --no-print-directory unhide-pth
-	$(UV) run python training/sources/sec_fsds.py --last $(or $(QUARTERS),8)
+	PYTHONPATH=scripts $(UV) run python training/sources/sec_fsds.py --last $(or $(QUARTERS),8)
 
 dev: ## Serve the API natively (profile native) on FRA_API_PORT
 	@$(MAKE) --no-print-directory unhide-pth
