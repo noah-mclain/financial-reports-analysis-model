@@ -338,3 +338,78 @@ def test_fresh_conversion_records_plans_and_reuses_them(tmp_path: Path) -> None:
     )
     assert repeated.calls == []
     assert cached == result
+
+
+def test_mapping_findings_change_only_the_structure_cache_contract(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert structure.STRUCTURE_VERSION == "19"
+    assert convert.CONVERT_VERSION == "2"
+    assert pages.PAGES_STAGE_VERSION == "5"
+    config = IngestConfig()
+    where = located([PageMode.TEXT], [(1, 1)], sha256=SHA)
+    converted = ConvertResult(
+        version=convert.CONVERT_VERSION,
+        sha256=SHA,
+        locate_version=where.version,
+        docling_version=RELEASE,
+        device=config.device,
+        settings_hash=_digest(config, where),
+        ranges=[],
+    )
+    current = structure._settings_hash(config, converted)
+    monkeypatch.setattr(structure, "STRUCTURE_VERSION", "18")
+    assert structure._settings_hash(config, converted) != current
+    assert _digest(config, where) == converted.settings_hash
+
+
+def test_version_18_structure_is_not_reused_but_healthy_conversion_is(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = IngestConfig(artifact_root=tmp_path)
+    where = located([PageMode.TEXT], [(1, 1)], sha256=SHA)
+    runner = FakeRunner()
+    converted = convert.convert_pdf(
+        Path("synthetic.pdf"),
+        where,
+        {},
+        config,
+        runner_factory=lambda _config: runner,
+        docling=RELEASE,
+    )
+    with monkeypatch.context() as legacy:
+        legacy.setattr(structure, "STRUCTURE_VERSION", "18")
+        old = StructureResult(
+            version="18",
+            sha256=SHA,
+            convert_version=converted.version,
+            settings_hash=structure._settings_hash(config, converted),
+            flags=["obsolete_structure"],
+        )
+    out = tmp_path / SHA
+    (out / "statements.raw.json").write_text(old.model_dump_json())
+    (out / "table_checks.json").write_text("[]")
+    monkeypatch.setattr(structure, "load_or_locate", lambda *_args: where)
+    monkeypatch.setattr(structure, "page_ocr_languages", lambda *_args: {})
+    monkeypatch.setattr(structure, "docling_version", lambda: RELEASE)
+    monkeypatch.setattr(structure, "read_pages", lambda *_args, **_kwargs: [])
+    calls: list[Path] = []
+
+    def cached_convert(pdf: Path, _config: IngestConfig) -> ConvertResult:
+        calls.append(pdf)
+        return convert.convert_pdf(
+            pdf,
+            where,
+            {},
+            config,
+            runner_factory=lambda _config: FakeRunner({"1-1": "raise"}),
+            docling=RELEASE,
+        )
+
+    result = structure.structure_pdf(Path("synthetic.pdf"), config, None, convert=cached_convert)
+    assert calls == []
+    assert result.version == "19"
+    assert result.settings_hash != old.settings_hash
+    assert "obsolete_structure" not in result.flags
+    assert ConvertResult.model_validate_json((out / "convert.json").read_text()) == converted

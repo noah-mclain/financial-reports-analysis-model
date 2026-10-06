@@ -140,14 +140,28 @@ def reviews(golden: Callable[[str], Path], name: str) -> dict[str, StatementRevi
     return {r.statement_id: r for r in stored.reviews}
 
 
-def test_almarai_statements_pass_review(golden: Callable[[str], Path]) -> None:
+def test_almarai_unmapped_critical_items_hold_review(golden: Callable[[str], Path]) -> None:
     for name in ("almarai-2025-en-annualreport.pdf", "almarai-2025-ar-annualreport.pdf"):
-        found = reviews(golden, name)
-        for kind in ("balance-1", "income-", "comprehensive_income-"):
-            first = next(
-                r for i, r in found.items() if kind in i and r.reasons != ["duplicate_statement"]
-            )
-            assert first.status == "passed", (name, first)
+        found = statements(golden, name)
+        pdf = golden(name)
+        stored = StructureResult.model_validate_json(
+            (artifact_dir(pdf) / "statements.raw.json").read_text(encoding="utf-8")
+        )
+        stored_reviews = {r.statement_id: r for r in stored.reviews}
+        assert found
+        for statement_type, statement in found.items():
+            review = stored_reviews[statement.id]
+            expected = [
+                f"{finding.reason}:{finding.item_id}" for finding in statement.mapping_findings
+            ]
+            if not expected:
+                assert review.status == "passed", (name, statement_type, review)
+            elif review.checked_cells == review.numeric_cells and review.flagged_cells == 0:
+                assert review.status == "needs_review", (name, statement_type, review)
+                assert review.reasons == expected, (name, statement_type, review)
+            else:
+                assert review.status == "needs_review", (name, statement_type, review)
+                assert set(expected) <= set(review.reasons), (name, statement_type, review)
 
 
 def test_edita_2024_ar_balance_sheet_is_held_with_its_reasons(

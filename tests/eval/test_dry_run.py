@@ -1038,6 +1038,7 @@ def test_a_row_carries_the_industry_decision_critical_item_counts_and_metric_cou
         "mapped": 0,
         "ambiguous": 0,
         "unmapped": slots,
+        "explicitly_flagged": 0,
         "statement_not_found": 0,
     }
     assert row["metrics"] == {
@@ -1111,8 +1112,20 @@ def test_negative_controls_are_judged_apart_from_the_corporate_headline() -> Non
 
 
 def test_critical_items_are_summed_per_stratum_over_documents_that_reached_statements() -> None:
-    full = {"mapped": 8, "ambiguous": 1, "unmapped": 2, "statement_not_found": 0}
-    none = {"mapped": 0, "ambiguous": 0, "unmapped": 0, "statement_not_found": 11}
+    full = {
+        "mapped": 8,
+        "ambiguous": 1,
+        "unmapped": 2,
+        "explicitly_flagged": 0,
+        "statement_not_found": 0,
+    }
+    none = {
+        "mapped": 0,
+        "ambiguous": 0,
+        "unmapped": 0,
+        "explicitly_flagged": 0,
+        "statement_not_found": 11,
+    }
     declined = row("interim", 5, industry="declined/bank", judgement="wrong", found=())
     a = aggregate(
         [
@@ -1124,7 +1137,24 @@ def test_critical_items_are_summed_per_stratum_over_documents_that_reached_state
     )["critical_items"]
     assert a["documents"] == {"annual": 1, "interim": 2, "total": 3}
     assert a["mapped"] == {"annual": 8, "interim": 8, "total": 16}
+    assert a["explicitly_flagged"] == {"annual": 0, "interim": 0, "total": 0}
     assert a["statement_not_found"] == {"annual": 0, "interim": 11, "total": 11}
+
+
+def test_critical_counts_accept_legacy_rows_and_sum_new_explicit_flags() -> None:
+    legacy = {"mapped": 2, "ambiguous": 1, "unmapped": 3, "statement_not_found": 4}
+    current = {
+        **legacy,
+        "unmapped": 1,
+        "explicitly_flagged": 2,
+        "statement_not_found": 6,
+    }
+    critical = aggregate([row("annual", 1, critical=legacy), row("interim", 1, critical=current)])[
+        "critical_items"
+    ]
+    assert critical["unmapped"] == {"annual": 3, "interim": 1, "total": 4}
+    assert critical["explicitly_flagged"] == {"annual": 0, "interim": 2, "total": 2}
+    assert critical["statement_not_found"] == {"annual": 4, "interim": 6, "total": 10}
 
 
 def test_metrics_computed_and_null_are_counted_by_id_and_stratum_with_flag_classes() -> None:
@@ -1315,7 +1345,13 @@ def test_metric_availability_is_documents_with_a_value_over_documents_where_metr
 
 # ---- the six plan items, holds, languages, controls -------------------------------------------
 
-CRIT = {"mapped": 12, "ambiguous": 0, "unmapped": 0, "statement_not_found": 0}
+CRIT = {
+    "mapped": 12,
+    "ambiguous": 0,
+    "unmapped": 0,
+    "explicitly_flagged": 0,
+    "statement_not_found": 0,
+}
 SIX = dict.fromkeys(PLAN_CRITICAL_IDS, "mapped")
 FIVE = {**SIX, "revenue": "ambiguous"}
 

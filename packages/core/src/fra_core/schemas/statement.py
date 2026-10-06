@@ -192,6 +192,24 @@ class LineItem(BaseModel):
         return None
 
 
+class MappingFinding(BaseModel):
+    """A named critical item with no canonical row in the observed statement periods."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    item_id: str = Field(min_length=1, pattern=r"^\S+$")
+    reason: Literal["critical_item_unmapped"] = "critical_item_unmapped"
+    observed_period_keys: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _check_period_keys(self) -> MappingFinding:
+        keys = self.observed_period_keys
+        if any(not key.strip() for key in keys) or len(keys) != len(set(keys)):
+            msg = f"mapping finding {self.item_id!r}: empty or duplicate period keys {keys}"
+            raise ValueError(msg)
+        return self
+
+
 class Statement(BaseModel):
     """One primary statement, extracted from one document."""
 
@@ -208,6 +226,7 @@ class Statement(BaseModel):
     language: str = Field(default="en")
     periods: list[Period] = Field(min_length=1)
     line_items: list[LineItem] = Field(default_factory=list)
+    mapping_findings: tuple[MappingFinding, ...] = ()
     source_pages: list[int] = Field(default_factory=list)
     flags: list[str] = Field(default_factory=list)
     caveats: list[Caveat] = Field(
@@ -233,6 +252,21 @@ class Statement(BaseModel):
                         f"{cell.period_key!r}; statement has {sorted(known)}"
                     )
                     raise ValueError(msg)
+        finding_ids = [finding.item_id for finding in self.mapping_findings]
+        if len(finding_ids) != len(set(finding_ids)):
+            msg = f"duplicate mapping findings in statement {self.id!r}: {finding_ids}"
+            raise ValueError(msg)
+        mapped = {item.canonical_id for item in self.line_items if item.canonical_id is not None}
+        for finding in self.mapping_findings:
+            if set(finding.observed_period_keys) != known:
+                msg = (
+                    f"mapping finding {finding.item_id!r}: period keys must cover exactly "
+                    f"the statement periods {keys}"
+                )
+                raise ValueError(msg)
+            if finding.item_id in mapped:
+                msg = f"mapping finding contradicts mapped item {finding.item_id!r}"
+                raise ValueError(msg)
         return self
 
     def find(self, canonical_id: str) -> LineItem | None:

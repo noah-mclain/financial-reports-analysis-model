@@ -402,3 +402,33 @@ def test_golden_gate_run_builds_one_configured_engine_and_reuses_it(
     assert factory_configs == [config]
     assert [call[0].name for call in calls] == ["first.pdf", "second.pdf"]
     assert all(call[1] is engine for call in calls)
+
+
+def test_explicit_findings_keep_slot_denominator_and_missing_statements_blocking() -> None:
+    mapping = {
+        "mapped": 56,
+        "ambiguous": 9,
+        "explicitly_flagged": 55,
+        "statement_not_found": 24,
+        "absent": 0,
+        "no_verdict": 36,
+    }
+    report = gate_report([doc("synthetic", "annual", mapping=mapping)], pairs=[])
+    gate = report["strata"]["total"]["gate_b"]
+    assert gate["slots"] == 144
+    assert gate["mapped"] == 56 and gate["ambiguous"] == 9 and gate["no_verdict"] == 36
+    assert gate["explicitly_flagged"] == 55 and gate["not_accounted"] == 24
+    assert gate["met"] is False
+    assert "explicitly flagged 55" in "\n".join(lines(report))
+    complete = {"explicitly_flagged": 6}
+    assert (
+        gate_report([doc("synthetic", "annual", mapping=complete)], pairs=[])["strata"]["total"][
+            "gate_b"
+        ]["met"]
+        is True
+    )
+    for blockers, errors in [({"disagrees": 1}, []), ({"unmapped": 1}, []), ({}, ["unreadable"])]:
+        blocked = gate_report(
+            [doc("synthetic", "annual", mapping={**complete, **blockers})], pairs=[], errors=errors
+        )
+        assert blocked["strata"]["total"]["gate_b"]["met"] is False

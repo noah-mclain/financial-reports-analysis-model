@@ -151,7 +151,8 @@ def critical_states(
     result: StructureResult, taxonomy: Taxonomy, index: LabelIndex
 ) -> dict[str, str]:
     """The state of each critical item: mapped, ambiguous (a flagged row names the item),
-    unmapped (no row carries it) or statement_not_found. Item ids are unique in the taxonomy."""
+    explicitly_flagged (a valid finding names it), unmapped (no row carries it) or
+    statement_not_found. Item ids are unique in the taxonomy."""
     slots = critical_slots(first_statements(result, MAPPED_TYPES), None, index, taxonomy)[1]
     return {slot["item"]: slot["state"] for slot in slots}
 
@@ -507,6 +508,9 @@ def _judgement_figures(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _total_of(state: str) -> Callable[[list[dict[str, Any]]], int]:
+    # reports written before explicit findings existed carry no explicitly_flagged count
+    if state == "explicitly_flagged":
+        return lambda rs: sum(r["critical"].get(state, 0) for r in rs)
     return lambda rs: sum(r["critical"][state] for r in rs)
 
 

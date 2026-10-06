@@ -4,8 +4,9 @@
     make eval-mapping TARGET=fit [LIMIT=n]     the fit documents of the train pool
 
 For every critical item of the taxonomy (``critical: true``, the one definition the golden test
-shares) in each document's balance sheet and income statement: mapped, flagged unmapped, flagged
-ambiguous, or statement not found. Of the mapped rows, what an expected file says about each:
+shares) in each document's balance sheet and income statement: mapped, silently unmapped, flagged
+ambiguous, explicitly flagged by a named item finding, or statement not found. Of the mapped rows,
+what an expected file says about each:
 
   verified      the expected row's label names the item and the row was mapped by an anchor, so
                 the two readings do not share the lexicon
@@ -45,8 +46,9 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
+from pydantic import ValidationError
 
-from fra_core.schemas import MappingSource, Period, Statement, StatementType
+from fra_core.schemas import MappingFinding, MappingSource, Period, Statement, StatementType
 from fra_core.split import Part
 from fra_core.taxonomy.loader import Taxonomy, load_taxonomy
 from fra_ingest.config import REPO_ROOT, load_config
@@ -86,9 +88,10 @@ class Verdict:
     reason: str = ""
 
 
-def slot_state(statement: Statement | None, item_id: str) -> str:
+def slot_state(statement: Statement | None, item_id: str, taxonomy: Taxonomy) -> str:
     """Mapped when a row carries the item. Otherwise ambiguous when a flagged row names the item
-    among its candidates (by exact id), else unmapped."""
+    among its candidates (by exact id), then explicitly flagged by a valid item finding, else
+    unmapped. Each slot covers the statement, not an individual period."""
     if statement is None:
         return "statement_not_found"
     if any(i.canonical_id == item_id for i in statement.line_items):
@@ -97,7 +100,30 @@ def slot_state(statement: Statement | None, item_id: str) -> str:
         i.mapping_flag == "ambiguous" and item_id in _ID.findall(i.mapping_evidence or "")
         for i in statement.line_items
     )
-    return "ambiguous" if any(named) else "unmapped"
+    if any(named):
+        return "ambiguous"
+    if item_id not in taxonomy.critical_ids(statement.type):
+        return "unmapped"
+    matching = [
+        finding
+        for finding in statement.mapping_findings
+        if isinstance(finding, MappingFinding) and finding.item_id == item_id
+    ]
+    if len(matching) != 1:
+        return "unmapped"
+    # model_copy/model_construct can bypass validation; only a valid typed finding counts.
+    try:
+        finding = MappingFinding.model_validate(matching[0].model_dump())
+    except ValidationError:
+        return "unmapped"
+    period_keys = tuple(period.key for period in statement.periods)
+    if (
+        not period_keys
+        or len(period_keys) != len(set(period_keys))
+        or set(finding.observed_period_keys) != set(period_keys)
+    ):
+        return "unmapped"
+    return "explicitly_flagged"
 
 
 def verdict(
@@ -150,7 +176,7 @@ def critical_slots(
     for kind in MAPPED_TYPES:
         statement = first.get(kind)
         for item_id in taxonomy.critical_ids(kind):
-            state = slot_state(statement, item_id)
+            state = slot_state(statement, item_id, taxonomy)
             counts[state] += 1
             slot = {"statement": kind.value, "item": item_id, "state": state}
             if state == "mapped" and statement is not None:
@@ -178,7 +204,7 @@ def document_period_kind(statements: list[Statement]) -> str:
     return "unknown"
 
 
-SLOT_STATES = ("mapped", "unmapped", "ambiguous", "statement_not_found")
+SLOT_STATES = ("mapped", "unmapped", "ambiguous", "explicitly_flagged", "statement_not_found")
 
 
 def fit_report(
@@ -326,9 +352,9 @@ def run_golden() -> int:
                 "slots": slots,
             }
         )
-    slots_total = sum(total[k] for k in ("mapped", "unmapped", "ambiguous", "statement_not_found"))
+    slots_total = sum(total[k] for k in SLOT_STATES)
     print(f"\n{slots_total} critical slots over {len(reports)} documents")
-    for key in ("mapped", "unmapped", "ambiguous", "statement_not_found"):
+    for key in SLOT_STATES:
         print(f"  {key.replace('_', ' ')}: {total[key]}")
     print("of the mapped:")
     print(f"  verified (expected label read apart from the lexicon): {total['verified']}")
