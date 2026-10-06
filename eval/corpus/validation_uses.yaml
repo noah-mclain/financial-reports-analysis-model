@@ -20,3 +20,13 @@ uses:
       - northern-region-cement-2026-ar-interim
       - sabic-2026-ar-interim
       - tabuk-cement-2026-ar-interim
+  - date: '2026-10-06'
+    purpose: >-
+      Developing the industry cues for investment holdings (fra_ingest/data/industry_cues.yaml,
+      "net investment income"): the owner chose to tune on validation for this rule. The page
+      text of the three investment-holding negative controls was read to choose the cue, and
+      every validation document with a cached locate result was rescored with it.
+    documents:
+      - b-investments-holding-2020-en-interim
+      - b-investments-holding-2023-en-interim
+      - coast-investment-and-development-2025-en-interim
