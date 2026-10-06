@@ -43,13 +43,14 @@ out with `fetch-depth: 0`. A shallow history, a range base that is all zeros, or
 not an ancestor of the head (a force push) is an error, never a pass.
 
 - **Identity.** The owner's email is the author of the oldest root commit reachable from the
-  range base, so a pull request cannot bring in its own root and become the owner. An author must be that
-  email or `<digits>+<login>@users.noreply.github.com`. A committer may also be
+  range base, so a pull request cannot bring in its own root and become the owner. An author
+  must be that email or `<digits>+<login>@users.noreply.github.com`. A committer may also be
   `noreply@github.com`, which is how GitHub records a merge made in the web interface.
 - **Messages.** No `Co-Authored-By` trailer, no tool footer line (a line that starts with the
   phrase and carries a link; the phrase inside a sentence is fine), no session link, and no
-  assistant name outside a longer run of letters, so `_` and CamelCase joins are caught. A name followed by `.md` or `-compatible` (the project file,
-  an "OpenAI-compatible" endpoint) is a reference, not a match.
+  assistant name outside a longer run of lowercase letters, so `_` and CamelCase joins are
+  caught. A name followed by `.md` or `-compatible` (the project file, an "OpenAI-compatible"
+  endpoint) is a reference, not a match.
 - **Branch.** For a pull request, the head branch must not start with a forbidden prefix or hold
   a session id. Pushes to `main` have no branch to check.
 - **Added lines.** Only lines added in the range are scanned, for assistant names, tool footer

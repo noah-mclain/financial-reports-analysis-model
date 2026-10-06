@@ -418,6 +418,24 @@ def test_names_joined_by_underscore_or_camel_case_fail(
     assert result.returncode == 1, token
 
 
+def mixed_case_spellings(name: str) -> list[str]:
+    humped = name[:4].capitalize() + name[4:].upper()
+    return [name.capitalize(), humped, f"use{humped}Client", f"use{name.capitalize()}Client"]
+
+
+@pytest.mark.parametrize(
+    "token",
+    [spelling for name in checker.ASSISTANT_NAMES for spelling in mixed_case_spellings(name)],
+)
+def test_mixed_case_spellings_of_a_name_fail(repository: Path, commit: Commit, token: str) -> None:
+    base = git(repository, "rev-parse", "HEAD")
+    commit("Add a thing", {"docs/notes.md": f"client = {token}()\n"})
+
+    result = run_check(repository, base)
+
+    assert result.returncode == 1, token
+
+
 def test_a_back_dated_orphan_root_in_the_range_does_not_become_the_owner(
     repository: Path, commit: Commit
 ) -> None:

@@ -43,14 +43,16 @@ GITHUB_WEB_COMMITTER = "noreply@github.com"
 
 # A session id carries a digit: `session_01AbCdEfGhIj`, not `session_management`.
 SESSION_ID = r"session_(?=[A-Za-z]*\d)[0-9A-Za-z]{10,}"
-# Letter boundaries, not \b: an underscore is a word character, so OPENAI_API_KEY and
-# claude_code must still match. CamelCase is split first (see split_camel_case).
+# A name must not sit inside a longer run of letters. Underscore and CamelCase joins still match
+# (OPENAI_API_KEY, claude_code, useOpenAIClient): a name starts after a non-letter or, when it
+# starts with a capital, after a lowercase letter, and it ends before anything but a lowercase
+# letter. `(?-i:...)` keeps those case tests exact under IGNORECASE.
 NAME_PATTERN = re.compile(
-    r"(?<![A-Za-z])(?:" + "|".join(ASSISTANT_NAMES) + r")(?![A-Za-z])"
+    r"(?:(?<![A-Za-z])|(?<=(?-i:[a-z]))(?=(?-i:[A-Z])))"
+    r"(?:" + "|".join(ASSISTANT_NAMES) + r")(?!(?-i:[a-z]))"
     r"(?!(?:" + "|".join(map(re.escape, NAME_ALLOWED_SUFFIXES)) + r")\b)",
     re.IGNORECASE,
 )
-CAMEL_CASE_JOINT = re.compile(r"(?<=[a-z])(?=[A-Z])")
 # The tool footer, not the phrase in prose: at the start of a line, after at most a few
 # non-word characters (an emoji, "[", "**"), and followed on that line by a link.
 GENERATED_PATTERN = re.compile(
@@ -153,7 +155,7 @@ def check_identity(commit: Commit, owner: str, login: str) -> list[str]:
 def forbidden_text(text: str) -> list[str]:
     """Which rules the text breaks, by description."""
     broken = []
-    if NAME_PATTERN.search(CAMEL_CASE_JOINT.sub(" ", text)):
+    if NAME_PATTERN.search(text):
         broken.append("names an assistant")
     if GENERATED_PATTERN.search(text):
         broken.append(f"says {GENERATED_MARKER!r}")
