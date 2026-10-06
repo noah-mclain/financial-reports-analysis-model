@@ -254,7 +254,7 @@ These change the ingest design, not just the dataset:
   and date (overrides before the first look, spent looks after). Hand-edited; the rules are in
   `docs/blueprint/04-execution-phases.md` 2.4 and the file format is read by
   `eval/harness/holdout_records.py`. `make corpus-split` prints the split; run directly,
-  `scripts/corpus.py split` needs `PYTHONPATH=eval`, which no other command does.
+  `scripts/corpus.py split` needs `PYTHONPATH=eval`.
 - `validation_uses.yaml`: the validation documents that were read while an ingest rule was
   developed, with the date and the purpose. Hand-edited; the rule is in
   `docs/blueprint/04-execution-phases.md` 2.4 and the format is read by
@@ -275,7 +275,9 @@ access to sec.gov and `FRA_SEC_USER_AGENT` set to a name and email.
 
 The contract in `fra_core.pools` holds values and rules only. `scripts/pool_store.py` is the one
 module that reads, writes and locks `var/issuer-pools.json` and reads the recorded YAML; the
-corpus script, the Argaam listing and `sec_fsds.py` all go through it.
+corpus script, the Argaam listing and `sec_fsds.py` all go through it. Run directly,
+`sec_fsds.py` needs `PYTHONPATH=scripts`; `make sec-fsds` sets it (`QUARTERS=8` for the latest
+eight quarters, or `ONLY="2024q3 2024q4"` for those).
 
 Recorded pools in `candidates.yaml`, `deferred.yaml`, fetched metadata and the local
 `var/issuer-pools.json` are authoritative. Golden identities are always `dev`. Conflicting

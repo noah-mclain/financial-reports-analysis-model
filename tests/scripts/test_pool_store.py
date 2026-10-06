@@ -1,4 +1,4 @@
-"""Recorded top-level assignments survive source order and identity aliases."""
+"""The registry file: round trips, malformed metadata, durable writes. The rules are core's."""
 
 import json
 import os
@@ -19,64 +19,6 @@ def test_late_pdf_preserves_sec_default(tmp_path: Path) -> None:
     restored = load_registry(path)
     assert restored.assign(Identity("ACME WIDGETS CO.", 1111), Source.PDF) == pool
     assert restored.assign(Identity("Acme Widgets"), Source.PDF) == pool
-
-
-def test_late_sec_preserves_pdf_and_links_renames() -> None:
-    registry = PoolRegistry()
-    registry.register(Identity("Acme Widgets"), "blind")
-    assert registry.assign(Identity("ACME WIDGETS INC", 1111), Source.SEC) == "blind"
-    assert registry.assign(Identity("Renamed Widgets", "0000001111"), Source.PDF) == "blind"
-    assert registry.assign(Identity("Renamed Widgets Co."), Source.SEC) == "blind"
-
-
-def test_bridge_conflict_is_rejected_without_mutation() -> None:
-    registry = PoolRegistry()
-    registry.register(Identity("Acme"), "train")
-    registry.register(Identity(cik=1111), "model_test")
-    with pytest.raises(PoolError, match="spans pools"):
-        registry.assign(Identity("Acme", 1111), Source.SEC)
-    assert registry.assign(Identity("Acme"), Source.PDF) == "train"
-    assert registry.assign(Identity(cik=1111), Source.SEC) == "model_test"
-
-
-def test_duplicate_pin_is_idempotent_but_conflicting_pin_fails() -> None:
-    registry = PoolRegistry()
-    registry.register(Identity("Acme", 1111), "dev")
-    registry.register(Identity("ACME CO.", "0000001111"), "dev")
-    with pytest.raises(PoolError, match="spans pools"):
-        registry.register(Identity("Another Name", 1111), "train")
-
-
-@pytest.mark.parametrize(
-    "name,cik",
-    [
-        (None, None),
-        ("", None),
-        ("Company", None),
-        (123, None),
-        ("Acme", 0),
-        ("Acme", -1),
-        ("Acme", True),
-        ("Acme", "bad"),
-        ("Acme", 1.5),
-    ],
-)
-def test_invalid_identity_is_loud(name: object, cik: object) -> None:
-    with pytest.raises(PoolError):
-        Identity(name, cik)  # type: ignore[arg-type]
-
-
-@pytest.mark.parametrize("pool", [None, "", "fit", "TRAIN", 1])
-def test_invalid_pool_is_loud(pool: object) -> None:
-    with pytest.raises(PoolError, match="pool"):
-        PoolRegistry().register(Identity("Acme"), pool)  # type: ignore[arg-type]
-
-
-def test_distinct_ciks_for_one_normalized_name_require_review() -> None:
-    registry = PoolRegistry()
-    registry.register(Identity("Acme", 1111), "train")
-    with pytest.raises(PoolError, match="CIK"):
-        registry.register(Identity("ACME CO.", 2222), "train")
 
 
 def test_historical_sec_outputs_require_recorded_metadata(tmp_path: Path) -> None:
@@ -188,13 +130,6 @@ def test_legacy_version_one_metadata_without_ambiguity_list_loads(tmp_path: Path
     path = tmp_path / "pools.json"
     path.write_text(json.dumps(metadata))
     assert load_registry(path).assign(Identity("Acme"), Source.PDF) == "train"
-
-
-def test_collision_diagnostic_names_ciks_and_recovery() -> None:
-    registry = PoolRegistry()
-    registry.register(Identity("Acme Corp", 1111), "train")
-    with pytest.raises(PoolError, match=r"1111.*2222.*ambiguous_names"):
-        registry.assign(Identity("Acme Inc", 2222), Source.SEC)
 
 
 @pytest.mark.parametrize("names", [None, "acme", [1], [""], ["ACME CORP"], ["acme", "acme"]])

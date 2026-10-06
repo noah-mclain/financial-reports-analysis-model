@@ -2,7 +2,6 @@
 
 Recorded assignments win over either source's legacy default. Names and CIKs are
 linked only by a supplied identity, never fuzzy matched. Conflicts require review.
-The local metadata file is written before SEC output, without reading label datasets.
 This module holds values only; reading, writing and locking that file is ``scripts/pool_store.py``.
 """
 

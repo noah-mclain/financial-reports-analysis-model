@@ -1,7 +1,8 @@
 """The files behind the pool registry: read, write, lock, and the recorded document metadata.
 
 ``fra_core.pools`` holds the rules and parses an already loaded dict; this is the one place that
-touches the disk for it. Shared by ``scripts/corpus.py``, ``scripts/argaam_listing.py`` and
+touches the disk for it. The local metadata file is written before SEC output, without reading
+label datasets. Shared by ``scripts/corpus.py``, ``scripts/argaam_listing.py`` and
 ``training/sources/sec_fsds.py``, which finds it with ``PYTHONPATH=scripts`` (see the Makefile).
 """
 

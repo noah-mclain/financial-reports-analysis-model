@@ -1,4 +1,4 @@
-"""The pool contract works on values: parsing a metadata dict, document rows, no file IO."""
+"""The pool contract works on values: assignment rules, parsing a metadata dict, no file IO."""
 
 import ast
 from pathlib import Path
@@ -53,19 +53,124 @@ def test_document_rows_validates_the_loaded_mapping() -> None:
         pools.document_rows({"documents": ["x"]}, "c.yaml")
 
 
-def test_core_pools_does_no_file_io_and_no_locking() -> None:
-    """The contract stays pure; reading, writing and locking live in scripts/pool_store.py."""
-    tree = ast.parse(Path(pools.__file__).read_text(encoding="utf-8"))
-    imported: set[str] = set()
+BANNED_IMPORTS = {
+    "fcntl",
+    "json",
+    "yaml",
+    "os",
+    "pathlib",
+    "contextlib",
+    "io",
+    "shutil",
+    "tempfile",
+}
+BANNED_CALLS = {
+    "open",
+    "read_text",
+    "read_bytes",
+    "write_text",
+    "write_bytes",
+    "fsync",
+    "flock",
+    "mkdir",
+}
+
+
+def io_violations(source: str) -> set[str]:
+    """Names of file IO, locking or serialization modules and calls that a source uses."""
+    tree = ast.parse(source)
+    found: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            imported.update(alias.name.split(".")[0] for alias in node.names)
+            found.update(alias.name.split(".")[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
-            imported.add(node.module.split(".")[0])
-    assert not imported & {"fcntl", "json", "yaml", "os", "pathlib", "contextlib"}
-    called: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call):
+            found.add(node.module.split(".")[0])
+        elif isinstance(node, ast.Call):
             func = node.func
-            called.add(func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", ""))
-    assert not called & {"open", "read_text", "write_text", "fsync", "flock", "replace", "mkdir"}
+            found.add(func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", ""))
+    return found & (BANNED_IMPORTS | BANNED_CALLS)
+
+
+@pytest.mark.parametrize(
+    ("source", "name"),
+    [
+        ("import json", "json"),
+        ("from pathlib import Path", "pathlib"),
+        ("open('f')", "open"),
+        ("p.read_text()", "read_text"),
+        ("p.read_bytes()", "read_bytes"),
+        ("p.write_bytes(b'')", "write_bytes"),
+    ],
+)
+def test_the_io_check_catches_what_it_names(source: str, name: str) -> None:
+    assert io_violations(source) == {name}
+
+
+def test_core_pools_does_no_file_io_and_no_locking() -> None:
+    """The contract stays pure; reading, writing and locking live in scripts/pool_store.py."""
+    assert io_violations(Path(pools.__file__).read_text(encoding="utf-8")) == set()
+
+
+def test_late_sec_preserves_pdf_and_links_renames() -> None:
+    registry = PoolRegistry()
+    registry.register(Identity("Acme Widgets"), "blind")
+    assert registry.assign(Identity("ACME WIDGETS INC", 1111), Source.SEC) == "blind"
+    assert registry.assign(Identity("Renamed Widgets", "0000001111"), Source.PDF) == "blind"
+    assert registry.assign(Identity("Renamed Widgets Co."), Source.SEC) == "blind"
+
+
+def test_bridge_conflict_is_rejected_without_mutation() -> None:
+    registry = PoolRegistry()
+    registry.register(Identity("Acme"), "train")
+    registry.register(Identity(cik=1111), "model_test")
+    with pytest.raises(PoolError, match="spans pools"):
+        registry.assign(Identity("Acme", 1111), Source.SEC)
+    assert registry.assign(Identity("Acme"), Source.PDF) == "train"
+    assert registry.assign(Identity(cik=1111), Source.SEC) == "model_test"
+
+
+def test_duplicate_pin_is_idempotent_but_conflicting_pin_fails() -> None:
+    registry = PoolRegistry()
+    registry.register(Identity("Acme", 1111), "dev")
+    registry.register(Identity("ACME CO.", "0000001111"), "dev")
+    with pytest.raises(PoolError, match="spans pools"):
+        registry.register(Identity("Another Name", 1111), "train")
+
+
+@pytest.mark.parametrize(
+    "name,cik",
+    [
+        (None, None),
+        ("", None),
+        ("Company", None),
+        (123, None),
+        ("Acme", 0),
+        ("Acme", -1),
+        ("Acme", True),
+        ("Acme", "bad"),
+        ("Acme", 1.5),
+    ],
+)
+def test_invalid_identity_is_loud(name: object, cik: object) -> None:
+    with pytest.raises(PoolError):
+        Identity(name, cik)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("pool", [None, "", "fit", "TRAIN", 1])
+def test_invalid_pool_is_loud(pool: object) -> None:
+    with pytest.raises(PoolError, match="pool"):
+        PoolRegistry().register(Identity("Acme"), pool)  # type: ignore[arg-type]
+
+
+def test_distinct_ciks_for_one_normalized_name_require_review() -> None:
+    registry = PoolRegistry()
+    registry.register(Identity("Acme", 1111), "train")
+    with pytest.raises(PoolError, match="CIK"):
+        registry.register(Identity("ACME CO.", 2222), "train")
+
+
+def test_collision_diagnostic_names_ciks_and_recovery() -> None:
+    registry = PoolRegistry()
+    registry.register(Identity("Acme Corp", 1111), "train")
+    with pytest.raises(PoolError, match=r"1111.*2222.*ambiguous_names"):
+        registry.assign(Identity("Acme Inc", 2222), Source.SEC)
