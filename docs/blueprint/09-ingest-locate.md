@@ -257,7 +257,7 @@ type's top-ranked range, the measurement behind keeping every candidate (10, Dec
 wider than banks and insurers (it also holds investment holdings, brokerages and exchange
 operators), so each negative control gets `sector: bank | insurer | other_financial`, and an
 `other_financial` one also gets `subsector: investment_holding | brokerage | exchange_operator
-| consumer_finance | asset_manager | other`. In `train` that is 4 bank, 2 insurer and 13 other
+| consumer_finance | asset_manager | other`. In `train` that is 4 bank, 2 insurer and 18 other
 financial documents. Only `bank`
 and `insurer` have a target here; sub-sector verdicts are reported, and how `other_financial`
 is treated is part of the week 2 decline rule, which can act on the whole group or on one

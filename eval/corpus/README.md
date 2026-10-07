@@ -54,12 +54,13 @@ rule 2 again on the downloaded bytes.
 
 ## Current size
 
-Measured 2026-09-26 to 2026-10-03 (`fetched.yaml`): 348 documents from 194 issuers in Saudi
+Measured 2026-09-26 to 2026-10-03 (`fetched.yaml`): 353 documents from 198 issuers in Saudi
 Arabia, Egypt, the UAE, Kuwait, Bahrain, the UK and the US; 343 are downloaded and measured,
-the five Egyptian Exchange filings of the blind top-up wait for a browser. The measured files
+the five Egyptian Exchange filings of the blind top-up wait for a browser and the five of the
+6 October investment-holding additions (below) wait for `make corpus-fetch`. The 343 measured files
 have 14,933 pages (222 mixed, 110 digital, 11 fully scanned). 4 byte-identical duplicates and 3
-golden-issuer documents are flagged. By language, 170 documents are Arabic and 178 English;
-by period, 229 are interim and 119 annual.
+golden-issuer documents are flagged. By language, 170 documents are Arabic and 183 English;
+by period, 230 are interim and 123 annual (all 353 documents, measured or not).
 
 The first 224 files were fetched on two machines, and the 207 measured on both have identical
 sha256, so the URLs serve the same bytes regardless of where they are fetched from. Seven
@@ -69,7 +70,7 @@ saved from a browser to the paths `make corpus-fetch` prints, then measured.
 | Pool | Issuers | Documents | Issuers with Arabic | Issuers with both editions |
 |------|---------|-----------|---------------------|----------------------------|
 | dev | 1 | 3 | 1 | 0 |
-| train | 118 | 208 | 87 | 46 |
+| train | 122 | 213 | 87 | 46 |
 | model_test | 36 | 65 | 25 | 14 |
 | blind | 39 | 72 | 23 | 12 |
 
@@ -160,6 +161,41 @@ documents are `period: interim`, `fiscal_year: 2026` like the main market's; `ca
 has no field for the market, so a Nomu document differs from a main-market Q1 one only by the
 period it shows and, where an id repeated, by the four-character suffix. The ones set aside
 are in `deferred.yaml`. In all, the Arabic and English counts are now 170 and 178.
+
+Investment holdings for fit, 6 October 2026. The industry decline rule had no investment holding
+among the fit negative controls: `train` has 12 negative-control issuers, 6 of them in fit (Abu
+Dhabi Commercial Bank, Arab Banking Corporation, Malath Cooperative Insurance, Orient Takaful,
+Contact Financial Holding, Musharaka Capital) and none of those an investment holding; the three
+investment holdings are Coast Investment and Development and B Investments Holding (validation)
+and Pioneers Holding (holdout). Four investment companies were added by hand to `candidates.yaml`
+as `negative_control`, `other_financial`, `investment_holding`, `verified: false` (5 English
+documents). They were chosen from companies whose name hashes into `train` and its fit part
+(`assign_pool` and `fra_core.split.hashed_part`, computed before adding), each under the name on
+the filing; other companies were looked at and not added; those whose documents were opened are recorded in
+`deferred.yaml`. Why each counts, from its
+statements:
+
+- Al Waha Capital: income from financial investments AED 1,089m against revenue from the sale of
+  goods and services AED 140m (cost of sale 107m) in net operating income of AED 1,222m, so
+  investment income dominates.
+- Arzan Financial Group for Financing and Investment: mostly fair-value changes, associates and
+  dividends; instalment credit is KD 2.85m of KD 25.4m total revenue. It is supervised by the
+  Central Bank of Kuwait and has instalment-credit and brokerage segments.
+- Gulf Investment Corporation: interest income 43, net gain on investments 103, dividends 12 and
+  associates 214 (US$m), no customer deposits or loans, but it carries "Deposits from banks and
+  other financial institutions" and a Basel III section, which makes it a useful bank-versus-other-
+  financial hard case.
+- Esterad Investment Company: the principal activity is investing in a wide variety of investment
+  assets; there is no revenue or cost of sales. The FY2024 statement pages have no text layer
+  (OCR).
+
+Al Safat Investment Company was considered and left out: it consolidates operating subsidiaries
+with sales (Safat Industries Holding, Synergy Holding, Modern Printing and Publishing) and so
+resembles Qalaa Holdings, which the project treats as corporate. Future documents of these issuers
+must use the recorded names: "Esterad" alone and "Safat Investment" hash to the holdout, and a
+"Gulf Investment Company" would key to `gulf investment` and merge with Gulf Investment
+Corporation. Aref Investment Group and Kuwait and Middle East Financial Investment had files
+opened while choosing; they are in `deferred.yaml` (see `04-execution-phases.md` 2.4).
 
 Limits: the new documents in `model_test` and `blind` were chosen for clean text layers, so those
 pools lean cleaner than documents found at random, and a pool score on them will read better than
