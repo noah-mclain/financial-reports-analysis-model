@@ -53,12 +53,13 @@ lint: ## Lint without fixing
 	$(UV) run ruff format --check .
 	$(UV) run ruff check .
 
-typecheck: ## Type check the packages, apps, the analytics golden test, eval harness and CI scripts
+typecheck: ## Type check the packages, apps, the analytics golden test, eval harness, CI scripts and the pool store
 	@$(MAKE) --no-print-directory unhide-pth
 	$(UV) run mypy packages $(wildcard apps) tests/analytics tests/test_cache_guard.py tests/test_fail_on_skip.py cache_isolation.py
 	$(UV) run mypy conftest.py
 	$(UV) run mypy eval/harness
 	$(UV) run mypy $(wildcard scripts/ci/*.py)
+	$(UV) run mypy scripts/pool_store.py
 
 test: ## Fast tests (no models, no OCR)
 	@$(MAKE) --no-print-directory unhide-pth
@@ -123,9 +124,9 @@ corpus-fetch: ## Download, measure and dedupe the corpus into var/corpus (NEW=1:
 	@$(MAKE) --no-print-directory unhide-pth
 	$(UV) run python scripts/corpus.py fetch $(if $(filter 1,$(NEW)),--new)
 
-sec-fsds: ## SEC statement labels for training (needs FRA_SEC_USER_AGENT; QUARTERS=8)
+sec-fsds: ## SEC statement labels for training (needs FRA_SEC_USER_AGENT; QUARTERS=8 the latest N, ONLY="2024q3 2024q4" these quarters)
 	@$(MAKE) --no-print-directory unhide-pth
-	$(UV) run python training/sources/sec_fsds.py --last $(or $(QUARTERS),8)
+	PYTHONPATH=scripts $(UV) run python training/sources/sec_fsds.py $(or $(ONLY),--last $(or $(QUARTERS),8))
 
 dev: ## Serve the API natively (profile native) on FRA_API_PORT
 	@$(MAKE) --no-print-directory unhide-pth

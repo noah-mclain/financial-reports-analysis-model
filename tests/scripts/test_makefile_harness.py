@@ -50,3 +50,23 @@ def test_each_harness_a_target_runs_starts_with_only_the_path_make_gives_it(modu
         timeout=120,
     )
     assert done.returncode == 0, done.stderr[-2000:]
+
+
+def test_sec_fsds_target_starts_with_only_the_path_make_gives_it() -> None:
+    recipe = next(
+        line
+        for line in MAKEFILE.read_text(encoding="utf-8").splitlines()
+        if "training/sources/sec_fsds.py" in line and line.startswith("\t")
+    )
+    path = re.search(r"PYTHONPATH=(\S+)", recipe)
+    assert path, f"the sec-fsds recipe must set PYTHONPATH itself: {recipe.strip()}"
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"} | {"PYTHONPATH": path[1]}
+    done = subprocess.run(
+        [sys.executable, "training/sources/sec_fsds.py", "--help"],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert done.returncode == 0, done.stderr[-2000:]

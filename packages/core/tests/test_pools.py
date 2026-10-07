@@ -1,30 +1,114 @@
-"""Recorded top-level assignments survive source order and identity aliases."""
+"""The pool contract works on values: assignment rules, parsing a metadata dict, no file IO."""
 
-import json
-import os
+import ast
 from pathlib import Path
 
 import pytest
 
-from fra_core.pools import (
-    Identity,
-    PoolError,
-    PoolRegistry,
-    Source,
-    load_registry,
-    save_registry,
+import fra_core.pools as pools
+from fra_core.pools import Identity, PoolError, PoolRegistry, Source
+
+
+def test_metadata_round_trips_through_from_metadata() -> None:
+    registry = PoolRegistry(ambiguous_names=["acme"])
+    registry.assign(Identity("Acme Widgets Inc.", "0000001111"), Source.SEC)
+    registry.sec_outputs.add("labels-2025q1.jsonl.gz")
+    restored = PoolRegistry.from_metadata(registry.metadata(), "pools.json")
+    assert restored.metadata() == registry.metadata()
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        [],
+        {"version": True, "assignments": [], "sec_outputs": []},
+        {"version": 1, "assignments": {}, "sec_outputs": []},
+        {"version": 1, "assignments": [], "sec_outputs": [], "ambiguous_names": {}},
+        {"version": 1, "assignments": [], "sec_outputs": ["labels-2025.jsonl.gz"]},
+    ],
 )
+def test_from_metadata_names_the_source_in_every_error(data: object) -> None:
+    with pytest.raises(PoolError) as error:
+        PoolRegistry.from_metadata(data, "pools.json")
+    assert str(error.value).startswith("pools.json: ")
 
 
-def test_late_pdf_preserves_sec_default(tmp_path: Path) -> None:
+def test_require_sec_outputs_lists_the_missing_ones_sorted() -> None:
     registry = PoolRegistry()
-    identity = Identity("Acme Widgets Inc.", "0000001111")
-    pool = registry.assign(identity, Source.SEC)
-    path = tmp_path / "pools.json"
-    save_registry(registry, path)
-    restored = load_registry(path)
-    assert restored.assign(Identity("ACME WIDGETS CO.", 1111), Source.PDF) == pool
-    assert restored.assign(Identity("Acme Widgets"), Source.PDF) == pool
+    registry.sec_outputs.add("labels-2025q1.jsonl.gz")
+    registry.require_sec_outputs(["labels-2025q1.jsonl.gz"], "pools.json")
+    with pytest.raises(PoolError, match=r"pools.json: .*: labels-2025q2.*, labels-2025q3"):
+        registry.require_sec_outputs(
+            ["labels-2025q3.jsonl.gz", "labels-2025q2.jsonl.gz"], "pools.json"
+        )
+
+
+def test_document_rows_validates_the_loaded_mapping() -> None:
+    rows = [{"issuer": "Acme", "pool": "train"}]
+    assert pools.document_rows({"documents": rows}, "c.yaml") == rows
+    assert pools.document_rows({}, "d.yaml", optional=True) == []
+    with pytest.raises(PoolError, match=r"c\.yaml: expected document metadata mapping"):
+        pools.document_rows([], "c.yaml")
+    with pytest.raises(PoolError, match=r"c\.yaml: expected documents list"):
+        pools.document_rows({"documents": ["x"]}, "c.yaml")
+
+
+BANNED_IMPORTS = {
+    "fcntl",
+    "json",
+    "yaml",
+    "os",
+    "pathlib",
+    "contextlib",
+    "io",
+    "shutil",
+    "tempfile",
+}
+BANNED_CALLS = {
+    "open",
+    "read_text",
+    "read_bytes",
+    "write_text",
+    "write_bytes",
+    "fsync",
+    "flock",
+    "mkdir",
+}
+
+
+def io_violations(source: str) -> set[str]:
+    """Names of file IO, locking or serialization modules and calls that a source uses."""
+    tree = ast.parse(source)
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            found.add(node.module.split(".")[0])
+        elif isinstance(node, ast.Call):
+            func = node.func
+            found.add(func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", ""))
+    return found & (BANNED_IMPORTS | BANNED_CALLS)
+
+
+@pytest.mark.parametrize(
+    ("source", "name"),
+    [
+        ("import json", "json"),
+        ("from pathlib import Path", "pathlib"),
+        ("open('f')", "open"),
+        ("p.read_text()", "read_text"),
+        ("p.read_bytes()", "read_bytes"),
+        ("p.write_bytes(b'')", "write_bytes"),
+    ],
+)
+def test_the_io_check_catches_what_it_names(source: str, name: str) -> None:
+    assert io_violations(source) == {name}
+
+
+def test_core_pools_does_no_file_io_and_no_locking() -> None:
+    """The contract stays pure; reading, writing and locking live in scripts/pool_store.py."""
+    assert io_violations(Path(pools.__file__).read_text(encoding="utf-8")) == set()
 
 
 def test_late_sec_preserves_pdf_and_links_renames() -> None:
@@ -85,173 +169,8 @@ def test_distinct_ciks_for_one_normalized_name_require_review() -> None:
         registry.register(Identity("ACME CO.", 2222), "train")
 
 
-def test_historical_sec_outputs_require_recorded_metadata(tmp_path: Path) -> None:
-    output = tmp_path / "labels-2025q1.jsonl.gz"
-    output.touch()
-    path = tmp_path / "pools.json"
-    with pytest.raises(PoolError, match="historical SEC"):
-        load_registry(path, [output])
-    save_registry(PoolRegistry(), path)
-    with pytest.raises(PoolError, match="historical SEC"):
-        load_registry(path, [output])
-
-
-def test_covered_sec_outputs_are_metadata_only(tmp_path: Path) -> None:
-    output = tmp_path / "labels-2025q1.jsonl.gz"
-    output.write_bytes(b"not a label dataset")
-    registry = PoolRegistry()
-    registry.sec_outputs.add(output.name)
-    registry.register(Identity("Acme", 1111), "train")
-    path = tmp_path / "pools.json"
-    save_registry(registry, path)
-    assert load_registry(path, [output]).assign(Identity("Acme"), Source.PDF) == "train"
-
-
-def test_explicit_alias_survives_a_later_cik_link(tmp_path: Path) -> None:
-    registry = PoolRegistry()
-    registry.register(Identity("Original Widgets"), "model_test")
-    registry.alias("New Brand", Identity("Original Widgets"))
-    registry.assign(Identity("New Brand", 1111), Source.SEC)
-    path = tmp_path / "pools.json"
-    save_registry(registry, path)
-    restored = load_registry(path)
-    assert restored.assign(Identity("Original Widgets", 1111), Source.PDF) == "model_test"
-
-
-@pytest.mark.parametrize(
-    "text",
-    [
-        "{}",
-        '{"version": true}',
-        '{"version": 2}',
-        '{"version": 1, "assignments": [], "sec_outputs": ["bad"]}',
-        '{"version": 1, "assignments": [{"names": [], "pool": "train"}], "sec_outputs": []}',
-    ],
-)
-def test_malformed_metadata_is_rejected(tmp_path: Path, text: str) -> None:
-    path = tmp_path / "pools.json"
-    path.write_text(text)
-    with pytest.raises(PoolError):
-        load_registry(path)
-
-
-def test_name_only_alias_group_survives_reload_before_cik_arrives(tmp_path: Path) -> None:
-    registry = PoolRegistry()
-    registry.register(Identity("Original Widgets"), "train")
-    registry.alias("New Brand", Identity("Original Widgets"))
-    path = tmp_path / "pools.json"
-    save_registry(registry, path)
-    restored = load_registry(path)
-    restored.assign(Identity("New Brand", 1111), Source.SEC)
-    assert restored.cik_for(Identity("Original Widgets")) == 1111
-
-
-def test_reviewed_ambiguous_name_keeps_ciks_separate_and_refuses_bare_pdf(tmp_path: Path) -> None:
-    registry = PoolRegistry(ambiguous_names=["acme"])
-    registry.register(Identity("Acme Corp", 1111), "train")
-    registry.register(Identity("Acme Inc", 2222), "model_test")
-    path = tmp_path / "pools.json"
-    save_registry(registry, path)
-    restored = load_registry(path)
-    assert restored.cik_pools() == {1111: "train", 2222: "model_test"}
-    assert restored.metadata()["ambiguous_names"] == ["acme"]
-    with pytest.raises(PoolError, match=r"ambiguous.*supply.*CIK"):
-        restored.assign(Identity("Acme"), Source.PDF)
-    assert restored.assign(Identity("Acme", 1111), Source.PDF) == "train"
-    assert restored.assign(Identity("Acme", 2222), Source.PDF) == "model_test"
-    with pytest.raises(PoolError, match="spans pools"):
-        restored.register(Identity("Acme", 1111), "model_test")
-
-
-def test_ambiguity_cannot_discard_existing_name_only_assignment(tmp_path: Path) -> None:
-    path = tmp_path / "pools.json"
-    registry = PoolRegistry()
-    registry.register(Identity("Acme"), "blind")
-    metadata = registry.metadata()
-    metadata["ambiguous_names"] = ["acme"]
-    path.write_text(json.dumps(metadata))
-    with pytest.raises(PoolError, match=r"ambiguous.*reviewed.*CIK"):
-        load_registry(path)
-
-
-def test_ambiguity_declaration_preserves_existing_cik_pinned_pool(tmp_path: Path) -> None:
-    path = tmp_path / "pools.json"
-    registry = PoolRegistry()
-    registry.register(Identity("Acme", 1111), "blind")
-    metadata = registry.metadata()
-    metadata["ambiguous_names"] = ["acme"]
-    path.write_text(json.dumps(metadata))
-    restored = load_registry(path)
-    assert restored.cik_pools() == {1111: "blind"}
-    assert restored.assign(Identity("Acme", 1111), Source.SEC) == "blind"
-
-
-def test_legacy_version_one_metadata_without_ambiguity_list_loads(tmp_path: Path) -> None:
-    registry = PoolRegistry()
-    registry.register(Identity("Acme", 1111), "train")
-    metadata = registry.metadata()
-    del metadata["ambiguous_names"]
-    path = tmp_path / "pools.json"
-    path.write_text(json.dumps(metadata))
-    assert load_registry(path).assign(Identity("Acme"), Source.PDF) == "train"
-
-
 def test_collision_diagnostic_names_ciks_and_recovery() -> None:
     registry = PoolRegistry()
     registry.register(Identity("Acme Corp", 1111), "train")
     with pytest.raises(PoolError, match=r"1111.*2222.*ambiguous_names"):
         registry.assign(Identity("Acme Inc", 2222), Source.SEC)
-
-
-@pytest.mark.parametrize("names", [None, "acme", [1], [""], ["ACME CORP"], ["acme", "acme"]])
-def test_ambiguous_names_metadata_is_validated(tmp_path: Path, names: object) -> None:
-    path = tmp_path / "pools.json"
-    metadata = PoolRegistry().metadata()
-    metadata["ambiguous_names"] = names
-    path.write_text(json.dumps(metadata))
-    with pytest.raises(PoolError, match="ambiguous_names"):
-        load_registry(path)
-
-
-def test_durable_registry_flushes_before_replace_and_syncs_parent(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    path = tmp_path / "pools.json"
-    events = []
-    fsync, replace = os.fsync, Path.replace
-
-    def sync(fd: int) -> None:
-        events.append("sync")
-        if len(events) == 1:
-            assert json.loads(path.with_suffix(".tmp").read_text())["version"] == 1
-        fsync(fd)
-
-    def move(self: Path, target: Path) -> Path:
-        events.append("replace")
-        return replace(self, target)
-
-    monkeypatch.setattr(os, "fsync", sync)
-    monkeypatch.setattr(Path, "replace", move)
-    save_registry(PoolRegistry(), path)
-    assert events == ["sync", "replace", "sync"]
-
-
-@pytest.mark.parametrize("failed_sync", [1, 2])
-def test_registry_sync_failure_is_loud(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failed_sync: int
-) -> None:
-    path = tmp_path / "pools.json"
-    path.write_text("old allocation records")
-    calls = 0
-
-    def fail_sync(fd: int) -> None:
-        nonlocal calls
-        calls += 1
-        if calls == failed_sync:
-            raise OSError("synthetic durability failure")
-
-    monkeypatch.setattr(os, "fsync", fail_sync)
-    with pytest.raises(OSError, match="durability"):
-        save_registry(PoolRegistry(), path)
-    if failed_sync == 1:
-        assert path.read_text() == "old allocation records"

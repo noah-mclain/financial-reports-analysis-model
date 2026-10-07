@@ -1,8 +1,10 @@
 """SEC Financial Statement Data Sets: English line-item labels at scale.
 
-    FRA_SEC_USER_AGENT="Your Name you@example.com" \
-        uv run python training/sources/sec_fsds.py 2024q1 2024q2 ...
-    uv run python training/sources/sec_fsds.py --last 8
+    FRA_SEC_USER_AGENT="Your Name you@example.com" make sec-fsds              # latest 8 quarters
+    FRA_SEC_USER_AGENT="Your Name you@example.com" make sec-fsds ONLY="2024q3 2024q4"
+    PYTHONPATH=scripts uv run python training/sources/sec_fsds.py --last 8   # the same, directly
+
+It imports `pool_store` from scripts/, so run directly it needs `PYTHONPATH=scripts`.
 
 Each quarterly zip holds `sub.txt` (one row per filing) and `pre.txt` (how each line item is
 presented: statement, tag, label). Both are read straight from the zip, never unpacked. The
@@ -37,18 +39,15 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
-from fra_core.pools import (
+from fra_core.pools import Identity, PoolError, PoolRegistry, Source
+from fra_core.split import issuer_key
+from pool_store import (
     REGISTRY_RELATIVE_PATH,
     SEC_OUTPUT_RELATIVE_PATH,
-    Identity,
-    PoolError,
-    PoolRegistry,
-    Source,
     locked_registry,
     record_pdf_metadata,
     save_registry,
 )
-from fra_core.split import issuer_key
 
 ROOT = Path(__file__).resolve().parents[2]
 CANDIDATES = ROOT / "eval/corpus/candidates.yaml"

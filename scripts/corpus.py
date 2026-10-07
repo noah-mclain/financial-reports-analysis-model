@@ -33,20 +33,16 @@ from typing import Any
 import yaml
 
 from fra_core import split
-from fra_core.pools import (
+from fra_core.pools import Identity, Pool, PoolError, PoolRegistry, Source
+from fra_core.split import issuer_key
+from pool_store import (
     REGISTRY_RELATIVE_PATH,
     SEC_OUTPUT_RELATIVE_PATH,
-    Identity,
-    Pool,
-    PoolError,
-    PoolRegistry,
-    Source,
     load_registry,
     locked_registry,
     record_pdf_metadata,
     save_registry,
 )
-from fra_core.split import issuer_key
 
 ROOT = Path(__file__).resolve().parents[1]
 CANDIDATES = ROOT / "eval/corpus/candidates.yaml"
