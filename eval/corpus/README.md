@@ -57,8 +57,7 @@ rule 2 again on the downloaded bytes.
 Measured 2026-09-26 to 2026-10-03 (`fetched.yaml`): 353 documents from 198 issuers in Saudi
 Arabia, Egypt, the UAE, Kuwait, Bahrain, the UK and the US; 343 are downloaded and measured,
 the five Egyptian Exchange filings of the blind top-up wait for a browser and the five of the
-6 October investment-holding additions (below) wait for `make corpus-fetch`. The page counts
-below are of the 343 measured files
+6 October investment-holding additions (below) wait for `make corpus-fetch`. The 343 measured files
 have 14,933 pages (222 mixed, 110 digital, 11 fully scanned). 4 byte-identical duplicates and 3
 golden-issuer documents are flagged. By language, 170 documents are Arabic and 183 English;
 by period, 230 are interim and 123 annual (all 353 documents, measured or not).
@@ -172,7 +171,8 @@ and Pioneers Holding (holdout). Four investment companies were added by hand to 
 as `negative_control`, `other_financial`, `investment_holding`, `verified: false` (5 English
 documents). They were chosen from companies whose name hashes into `train` and its fit part
 (`assign_pool` and `fra_core.split.hashed_part`, computed before adding), each under the name on
-the filing; companies that hash elsewhere were looked at and not added. Why each counts, from its
+the filing; other companies were looked at and not added; those whose documents were opened are recorded in
+`deferred.yaml`. Why each counts, from its
 statements:
 
 - Al Waha Capital: income from financial investments AED 1,089m against revenue from the sale of
