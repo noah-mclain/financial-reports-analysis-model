@@ -246,7 +246,8 @@ ARABIC_WORDS = ("دور", "ورد", "دار", "زور", "وزر")
 def _font(size: int) -> ImageFont.FreeTypeFont:
     for path in FONTS:
         if Path(path).is_file():
-            return ImageFont.truetype(path, size)
+            # BASIC: raqm, where Pillow has it, reorders the already reversed words back.
+            return ImageFont.truetype(path, size, layout_engine=ImageFont.Layout.BASIC)
     pytest.skip("no font with Arabic letters found")
 
 
@@ -260,7 +261,8 @@ def _english_image() -> Image.Image:
 
 def _arabic_image() -> Image.Image:
     """Words made only of letters that never join the next, so each reads the same shaped or
-    not (Pillow here has no shaping), drawn right to left by reversing each word."""
+    not (the BASIC layout does no shaping or reordering), drawn right to left by reversing each
+    word."""
     image = Image.new("RGB", (900, 120), "white")
     ImageDraw.Draw(image).text(
         (20, 20), " ".join(word[::-1] for word in ARABIC_WORDS), font=_font(40), fill="black"

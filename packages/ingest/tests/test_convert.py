@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from pathlib import Path
 
@@ -367,3 +368,23 @@ def test_the_settings_hash_follows_settings_and_plans(
         settings_hash(base.model_copy(update={"child_timeout_s": 5.0}), plans, "2.126.0", "2")
         == digest
     )
+
+
+def test_progress_names_each_range_and_the_write(tmp_path: Path) -> None:
+    heard: list[str] = []
+    convert_pdf(
+        PDF,
+        doc([(1, 2), (4, 5)]),
+        {},
+        config(tmp_path),
+        runner_factory=factory(FakeRunner()),
+        docling="2.126.0",
+        progress=heard.append,
+    )
+    assert [re.sub(r" in [\d.]+s", "", m) for m in heard] == [
+        "convert pp. 1-2 start",
+        "convert pp. 1-2 done",
+        "convert pp. 4-5 start",
+        "convert pp. 4-5 done",
+        "write start",
+    ]

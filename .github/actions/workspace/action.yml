@@ -1,0 +1,38 @@
+name: Workspace
+description: Check the lock, install the locked workspace with the uv and Python versions the repository pins, and optionally the Docker image's Tesseract packages.
+inputs:
+  tesseract:
+    description: Install the Tesseract packages the Dockerfile lists ('true' or 'false')
+    required: false
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Read the locked uv version
+      id: uv-version
+      shell: bash
+      run: |
+        version="$(sed -n 's/^ARG UV_IMAGE=ghcr.io\/astral-sh\/uv:\([^@]*\)@.*/\1/p' docker/Dockerfile)"
+        test -n "$version"
+        printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+        printf 'python-version=%s\n' "$(cat .python-version)" >> "$GITHUB_OUTPUT"
+    - name: Set up uv and managed Python
+      uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      with:
+        version: ${{ steps.uv-version.outputs.version }}
+        python-version: ${{ steps.uv-version.outputs.python-version }}
+        enable-cache: false
+    - name: Install Tesseract
+      if: ${{ inputs.tesseract == 'true' }}
+      shell: bash
+      run: |
+        packages="$(bash scripts/ci/tesseract-packages.sh)"
+        sudo apt-get update
+        sudo apt-get install --no-install-recommends -y $packages
+        tesseract --version
+    - name: Check lock consistency
+      shell: bash
+      run: uv lock --check
+    - name: Install locked workspace
+      shell: bash
+      run: uv sync --locked --all-packages

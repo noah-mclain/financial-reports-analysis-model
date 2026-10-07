@@ -192,8 +192,8 @@ def test_cli_cannot_add_plan_evidence_to_an_old_result(
     old = _store_convert(config, where)
     stored = tmp_path / SHA / "convert.json"
     before = stored.read_bytes()
-    monkeypatch.setattr(cli, "load_or_locate", lambda *_args: where)
-    monkeypatch.setattr(cli, "page_ocr_languages", lambda *_args: {})
+    monkeypatch.setattr(cli, "load_or_locate", lambda *_args, **_kwargs: where)
+    monkeypatch.setattr(cli, "page_ocr_languages", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(cli, "convert_pdf", lambda *_args, **_kwargs: old)
     args = argparse.Namespace(
         pdf=Path("synthetic.pdf"), no_cache=False, json=True, transported_config=True
@@ -261,7 +261,7 @@ def test_legacy_structure_forces_current_conversion(
     out = tmp_path / SHA
     (out / "statements.raw.json").write_text(cached.model_dump_json())
     (out / "table_checks.json").write_text("[]")
-    monkeypatch.setattr(structure, "load_or_locate", lambda *_args: where)
+    monkeypatch.setattr(structure, "load_or_locate", lambda *_args, **_kwargs: where)
     monkeypatch.setattr(structure, "page_ocr_languages", lambda *_args: {})
     monkeypatch.setattr(structure, "docling_version", lambda: RELEASE)
     monkeypatch.setattr(structure, "read_pages", lambda *_args, **_kwargs: [])
@@ -390,7 +390,7 @@ def test_version_18_structure_is_not_reused_but_healthy_conversion_is(
     out = tmp_path / SHA
     (out / "statements.raw.json").write_text(old.model_dump_json())
     (out / "table_checks.json").write_text("[]")
-    monkeypatch.setattr(structure, "load_or_locate", lambda *_args: where)
+    monkeypatch.setattr(structure, "load_or_locate", lambda *_args, **_kwargs: where)
     monkeypatch.setattr(structure, "page_ocr_languages", lambda *_args: {})
     monkeypatch.setattr(structure, "docling_version", lambda: RELEASE)
     monkeypatch.setattr(structure, "read_pages", lambda *_args, **_kwargs: [])

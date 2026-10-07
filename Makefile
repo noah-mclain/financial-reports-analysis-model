@@ -1,5 +1,8 @@
 .DEFAULT_GOAL := help
 UV ?= uv
+# The GitHub login of the repository owner, whose noreply address is a valid commit identity:
+# the owner segment of the origin remote, as the Hygiene workflow's github.repository_owner is.
+OWNER_LOGIN ?= $(shell git remote get-url origin 2>/dev/null | sed -nE 's,^(https://github\.com/|git@github\.com:)([^/]+)/.*,\2,p')
 
 # Ports shared with compose.yaml. .env is the single source and is read here, not included: it
 # holds blank lines, `#` comment lines and NAME=value lines (see its header), and anything else
@@ -26,7 +29,7 @@ $(error FRA_LLM_PORT is empty: set it in $(ENV_FILE))
 endif
 export FRA_API_PORT FRA_LLM_PORT
 
-.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping eval-gates dry-run expected-drafts eval-extraction verify-expected dev docker-up docker-health ci-workflows-check container-smoke
+.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping eval-gates dry-run expected-drafts eval-extraction verify-expected dev docker-up docker-health ci-workflows-check container-smoke hygiene-check
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -50,12 +53,12 @@ lint: ## Lint without fixing
 	$(UV) run ruff format --check .
 	$(UV) run ruff check .
 
-typecheck: ## Type check the packages, apps, the analytics golden test, eval harness and release validation
+typecheck: ## Type check the packages, apps, the analytics golden test, eval harness and CI scripts
 	@$(MAKE) --no-print-directory unhide-pth
-	$(UV) run mypy packages $(wildcard apps) tests/analytics tests/test_cache_guard.py cache_isolation.py
+	$(UV) run mypy packages $(wildcard apps) tests/analytics tests/test_cache_guard.py tests/test_fail_on_skip.py cache_isolation.py
 	$(UV) run mypy conftest.py
 	$(UV) run mypy eval/harness
-	$(UV) run mypy scripts/ci/release.py
+	$(UV) run mypy $(wildcard scripts/ci/*.py)
 
 test: ## Fast tests (no models, no OCR)
 	@$(MAKE) --no-print-directory unhide-pth
@@ -137,6 +140,10 @@ docker-health: ## Check the Docker profile's API from the host: status ok, profi
 
 ci-workflows-check: ## Validate GitHub Actions workflows with actionlint
 	bash scripts/ci/check-workflows.sh
+
+hygiene-check: ## Check the commits not on origin/main, and the branch name, against the attribution rules
+	@test -n "$(OWNER_LOGIN)" || { echo "hygiene-check: cannot read the owner login from the origin remote URL; pass OWNER_LOGIN=<login>"; exit 1; }
+	python3 scripts/ci/hygiene.py --range origin/main..HEAD --branch "$$(git branch --show-current)" --owner-login $(OWNER_LOGIN)
 
 container-smoke: ## Build and smoke-test the Docker API and placeholder worker
 	bash scripts/ci/container-smoke.sh

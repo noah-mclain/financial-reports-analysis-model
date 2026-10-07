@@ -1,10 +1,25 @@
 # Continuous integration and container delivery
 
-The `CI` workflow runs for pull requests targeting `main`, pushes to `main`, and manual
-dispatches. It uses GitHub hosted `ubuntu-24.04` runners with read-only repository access. The
-quality job checks the lock, installs every locked workspace package, and runs the Makefile
-test, lint, typecheck, docs, corpus and workflow checks. The container smoke job runs only after
-quality passes. It validates both Compose configurations without starting the optional `llm`
+The `CI` workflow runs for pull requests targeting `main`, pushes to `main`, manual dispatches,
+and every Monday at 04:23 UTC. The Monday run exists to catch a change in the runner image or in
+apt that no commit caused. It uses GitHub hosted `ubuntu-24.04` runners with read-only repository
+access.
+
+The `quality` and `tests-docker-profile` jobs set up the workspace through one composite action,
+`.github/actions/workspace`. It reads the uv version from `docker/Dockerfile` and the Python
+version from `.python-version`, installs uv with the SHA-pinned `setup-uv`, checks the lock and
+runs `uv sync --locked --all-packages`. With `tesseract: 'true'` it also installs the apt
+packages named on the Dockerfile's `apt-get install` line, read by
+`scripts/ci/tesseract-packages.sh`. The package list therefore lives only in the Dockerfile, and
+the script fails if it cannot find the line. actionlint does not lint an `action.yml` on its
+own, but `make ci-workflows-check` checks every use of the action against its declared inputs.
+
+The `quality` job records the reviewed source SHA, sets up the workspace and runs the Makefile
+test, lint, typecheck, docs, corpus and workflow checks. The `tests-docker-profile` job runs in
+parallel with it: the same workspace plus Tesseract, then
+`FRA_PROFILE=docker FRA_OCR_ENGINE=tesseract make test`. The fast tests that need Tesseract skip
+when it is missing, so `quality` alone never runs them. The container smoke job runs only after
+`quality` passes. It validates both Compose configurations without starting the optional `llm`
 service, builds the Docker image, and checks its runtime imports, non-root identity, CPU-only
 PyTorch, API health and placeholder worker startup and shutdown.
 
@@ -18,7 +33,90 @@ healthy, the helper requests a bounded SIGTERM stop. Both services may exit with
 
 The smoke is a build and runtime contract for the current API skeleton. It does not establish
 OCR accuracy, worker functionality, extraction quality, the blueprint's Gate D, or application
-deployment. CI does not download model weights or corpora, train, score, or call inference APIs.
+deployment. The `CI` workflow does not download model weights or corpora, train, score, or call
+inference APIs; only the `Slow tests` workflow downloads models.
+
+## Slow tests
+
+The `Slow tests` workflow runs the tests marked `slow` that do not need a Mac, as
+`pytest -m "slow and not mac"` with `FRA_PROFILE=docker` and `FRA_OCR_ENGINE=tesseract`. It runs
+every Monday at 04:41 UTC, on manual dispatch, and on a pull request that touches what those
+tests depend on: the workflow, the workspace action and the Dockerfile it reads, the lock,
+`pyproject.toml`, the Python version, the CI scripts, `configs/`, the packages, the tests, the
+eval harness and the golden documents. It is not a pull request gate: the tests load docling's
+layout and table models and convert real pages. Measured on a 4-core box with the models already
+cached, the 15 tests take about 6.5 minutes, 4.5 of them in the real-child Almarai conversion; the
+job has a 30-minute timeout.
+
+The `mac` marker, declared in `pyproject.toml`, is for a test that needs Apple Vision (`ocrmac`) or
+the Metal device. Such a test fails or skips on Linux, so it carries the marker and the Linux job
+deselects it. Nothing else is marked: a slow test that fails on Linux for another reason is a bug
+to fix, not a test to mark. A test that builds its settings with `load_config()` runs under the
+active profile, so the Linux job covers it with CPU and Tesseract; only a test that hard-codes
+Vision, or that the Docker profile cannot pass by design, is marked `mac`. No check enforces the
+marker beyond the job itself: a test that needs Vision fails there with `OcrMac is only supported
+on Mac`, which is the signal to mark it.
+
+A skipped test fails the job. The job sets `FRA_FAIL_ON_SKIP=1`, and `conftest.py` then ends the
+session with exit status 1 and lists every skipped test, so a runner that lacks something a test
+needs cannot pass by skipping it. Unset or any other value, a skip stays a skip, which is what
+`make test` wants on a machine without the golden documents or Tesseract. Two things the job
+installs for that reason: the Tesseract packages, through the workspace action, and
+`fonts-dejavu-core` in its own step, because the OCR tests draw the images they read with
+`/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf` and skip without a font that has Arabic
+letters. Only the tests need that font, so it is not in the Dockerfile.
+
+The job restores `~/.cache/huggingface/hub` under a key built from the installed `docling` and
+`docling-ibm-models` versions and the layout model the pipeline selects
+(`scripts/ci/docling_models.py key`), the runner OS and a hash of `scripts/ci/docling_models.py`, so
+a lock change that moves either version, or an edit to what the script downloads, builds a new
+cache. Only on a miss, one step sets `HF_HUB_OFFLINE=0` and runs `scripts/ci/docling_models.py
+warm`, which downloads the layout detector and the table structure model, the two repositories the
+conversion pipeline reads, through docling's own download helpers (about 506 MB, 16 s measured on a
+4-core box). The layout model is the one the project's `pipeline_options` selects, at the revision
+docling names (`main`), not one this repository pins. The next step saves the cache right after the
+download, so a failing test does not discard it; pull requests do not save, because their caches are
+scoped to the pull request and `main` cannot reuse them. Every other step, including the tests, runs
+with `HF_HUB_OFFLINE=1`, so a model missing from the cache is an error. GitHub evicts a cache that
+has not been used for 7 days, so the weekly run may often download; the cache pays off for the runs
+between. To change what is downloaded, edit that script: the hash in the key makes the next run
+download afresh.
+
+## Commit and branch hygiene
+
+The `Hygiene` workflow runs `scripts/ci/hygiene.py` on pull requests to `main` and on pushes to
+`main`. It enforces the attribution rules in `CLAUDE.md`, and it needs full history, so it checks
+out with `fetch-depth: 0`. A shallow history, a range base that is all zeros, or a base that is
+not an ancestor of the head (a force push) is an error, never a pass.
+
+- **Identity.** The owner's email is the author of the oldest root commit reachable from the
+  range base, so a pull request cannot bring in its own root and become the owner. An author
+  must be that email or `<digits>+<login>@users.noreply.github.com`. A committer may also be
+  `noreply@github.com`, which is how GitHub records a merge made in the web interface.
+- **Messages.** No `Co-Authored-By` trailer, no tool footer line (a line that starts with the
+  phrase and carries a link; the phrase inside a sentence is fine), no session link, and no
+  assistant name outside a longer run of lowercase letters, so `_` and CamelCase joins are
+  caught. A name followed by `.md` or `-compatible` (the project file, an "OpenAI-compatible"
+  endpoint) is a reference, not a match.
+- **Branch.** For a pull request, the head branch must not start with a forbidden prefix or hold
+  a session id. Pushes to `main` have no branch to check.
+- **Added lines.** Only lines added in the range are scanned, for assistant names, tool footer
+  lines and session links. `CLAUDE.md`, the checker and its test are excluded because they have
+  to spell the rules out, and `AGENTS.md` by the owner's decision. A file already in the repository that names an assistant is flagged
+  only when someone edits it.
+
+The word lists and the excluded paths are constants at the top of `scripts/ci/hygiene.py`; the
+tests build their bad input from those constants. Pull request values (`head_ref`, the SHAs) reach
+the shell only as environment variables.
+
+`make hygiene-check` runs the same check on `origin/main..HEAD` and the current branch name, which
+is `CLAUDE.md` rule 6 as a command. It needs a full clone. The owner login comes from
+the owner segment of the `origin` remote URL, the same value the workflow takes from
+`github.repository_owner`. The target fails if the URL has none; `OWNER_LOGIN=<login>` overrides
+it. The `Hygiene` job needs only the standard library, so it runs plain `python3` and does not
+use the workspace action.
+
+The check does not look at branches that already exist on the remote.
 
 ## Manual GHCR delivery
 

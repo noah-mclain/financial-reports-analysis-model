@@ -32,6 +32,7 @@ from fra_ingest.ocr import (
     OcrUnavailableError,
     read_with_fallback,
 )
+from fra_ingest.progress import Progress
 from fra_ingest.results import PageText
 from fra_ingest.text_match import is_visual_arabic
 
@@ -54,6 +55,9 @@ _TEXT_SETTINGS = ("min_text_chars", "header_fraction", "ocr_dpi", "ocr_languages
 GARBLED_TEXT_LAYER = "garbled_text_layer"
 
 
+PAGE_PROGRESS_EVERY = 10
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -68,8 +72,12 @@ def read_pages(
     ocr: OcrEngine | None,
     *,
     cache_dir: Path | None = None,
+    progress: Progress | None = None,
 ) -> list[PageText]:
-    """Read every page. ``cache_dir`` holds ``pages.v<N>.json``; None disables the cache."""
+    """Read every page. ``cache_dir`` holds ``pages.v<N>.json``; None disables the cache.
+
+    ``progress`` hears ``pages <n>/<total>`` after every ``PAGE_PROGRESS_EVERY`` pages and after
+    the last, so a stall inside page OCR is located to within that many pages."""
     settings = _settings(config, ocr)
     cache_file = cache_dir / f"pages.v{PAGES_STAGE_VERSION}.json" if cache_dir else None
     if cache_file is not None:
@@ -81,7 +89,14 @@ def read_pages(
     try:
         if len(pdf) == 0:
             raise IngestError("empty_pdf", str(pdf_path))
-        pages = [_read_page(pdf[index], index + 1, config, ocr) for index in range(len(pdf))]
+        total = len(pdf)
+        pages: list[PageText] = []
+        for index in range(total):
+            pages.append(_read_page(pdf[index], index + 1, config, ocr))
+            if progress is not None and (
+                (index + 1) % PAGE_PROGRESS_EVERY == 0 or index + 1 == total
+            ):
+                progress(f"pages {index + 1}/{total}")
     finally:
         pdf.close()
 

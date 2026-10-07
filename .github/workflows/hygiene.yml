@@ -1,0 +1,45 @@
+name: Hygiene
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  hygiene:
+    name: Commit and branch hygiene
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Refs and branch names are attacker-controlled text: they reach the shell only as
+      # environment variables, never through ${{ }} inside a script.
+      - name: Check the pull request's commits, branch and added lines
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+          OWNER_LOGIN: ${{ github.repository_owner }}
+        run: |
+          merge_base="$(git merge-base "$BASE_SHA" "$HEAD_SHA")"
+          python3 scripts/ci/hygiene.py --range "$merge_base..$HEAD_SHA" --branch="$HEAD_REF" --owner-login "$OWNER_LOGIN"
+      - name: Check the pushed commits and added lines
+        if: ${{ github.event_name == 'push' }}
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.sha }}
+          OWNER_LOGIN: ${{ github.repository_owner }}
+        run: python3 scripts/ci/hygiene.py --range "$BEFORE_SHA..$AFTER_SHA" --owner-login "$OWNER_LOGIN"

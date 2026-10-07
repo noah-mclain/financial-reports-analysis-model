@@ -3,10 +3,14 @@
 Tests never write to the real ``var/artifacts``. A session guard fails the run when anything
 under it changed, and ``golden_structure`` runs the structure stage over a copy of one
 document's cache, so a stale cache is a named skip rather than a deletion or a conversion.
+
+``FRA_FAIL_ON_SKIP=1`` makes any skipped test fail the run, with the skips listed. CI sets it
+for the slow job, where a skip means the environment lacks something the tests need.
 """
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from pathlib import Path
 
@@ -23,21 +27,58 @@ from fra_ingest.config import load_config
 
 GOLDEN_DIR = Path(__file__).resolve().parent / "eval" / "golden" / "documents"
 
+FAIL_ON_SKIP_ENV = "FRA_FAIL_ON_SKIP"
+
 _BEFORE: dict[str, tuple[int, int, str]] = {}
+_SKIPPED: list[str] = []
 
 
 def pytest_sessionstart(session: pytest.Session) -> None:
     _BEFORE.update(fingerprint(REAL_ARTIFACTS))
 
 
+def pytest_runtest_logreport(report: pytest.TestReport) -> None:
+    # An expected failure also reports as skipped; it is not a skip.
+    if report.skipped and not hasattr(report, "wasxfail"):
+        _SKIPPED.append(report.nodeid)
+
+
+def pytest_collectreport(report: pytest.CollectReport) -> None:
+    # A whole module skipped while it is collected (importorskip, allow_module_level) never
+    # reaches pytest_runtest_logreport.
+    if report.skipped:
+        _SKIPPED.append(report.nodeid)
+
+
+def _fail_on_skip(session: pytest.Session, exitstatus: int) -> None:
+    if os.environ.get(FAIL_ON_SKIP_ENV) != "1" or not _SKIPPED:
+        return
+    writer = session.config.get_terminal_writer()
+    writer.line(
+        f"\nFAILED: {len(_SKIPPED)} test(s) skipped while {FAIL_ON_SKIP_ENV}=1 "
+        "(exit status set to 1, whatever the summary line says):",
+        red=True,
+    )
+    for nodeid in _SKIPPED:
+        writer.line(f"  {nodeid}", red=True)
+    # No tests collected is what a run whose every module was skipped reports.
+    if exitstatus in (
+        pytest.ExitCode.OK,
+        pytest.ExitCode.TESTS_FAILED,
+        pytest.ExitCode.NO_TESTS_COLLECTED,
+    ):
+        session.exitstatus = pytest.ExitCode.TESTS_FAILED
+
+
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    _fail_on_skip(session, exitstatus)
     changes = changed_paths(_BEFORE, fingerprint(REAL_ARTIFACTS))
     if not changes:
         return
     writer = session.config.get_terminal_writer()
     writer.line(
         f"\nFAILED: the test run changed the real cache {REAL_ARTIFACTS} "
-        "(exit status set to 1, whatever the summary above says):",
+        "(exit status set to 1, whatever the summary line says):",
         red=True,
     )
     for line in changes:

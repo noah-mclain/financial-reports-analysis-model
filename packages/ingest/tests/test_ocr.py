@@ -67,6 +67,7 @@ def test_the_last_language_is_kept_even_when_it_finds_little() -> None:
     assert (lines, language) == ([], "en-US")
 
 
+@pytest.mark.mac
 @pytest.mark.slow
 @pytest.mark.golden
 @pytest.mark.parametrize(

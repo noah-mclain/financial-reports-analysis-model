@@ -32,6 +32,7 @@ from fra_ingest.ocr import (
     make_engine,
     ocr_failure,
 )
+from fra_ingest.progress import StderrProgress
 from fra_ingest.results import ConvertResult, LocateResult, StructureResult
 from fra_ingest.review_report import write_review_report
 from fra_ingest.stage import load_or_locate, locate_pdf, page_ocr_languages
@@ -121,9 +122,12 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _convert(args: argparse.Namespace, config: IngestConfig, engine: OcrEngine | None) -> int:
+    progress = StderrProgress()
     started = time.perf_counter()
-    located = load_or_locate(args.pdf, config, engine)
-    languages = page_ocr_languages(args.pdf, config, engine)
+    progress("locate start")
+    located = load_or_locate(args.pdf, config, engine, progress=progress)
+    progress(f"locate done in {time.perf_counter() - started:.1f}s")
+    languages = page_ocr_languages(args.pdf, config, engine, progress=progress)
     result = convert_pdf(
         args.pdf,
         located,
@@ -131,6 +135,7 @@ def _convert(args: argparse.Namespace, config: IngestConfig, engine: OcrEngine |
         config,
         use_cache=not args.no_cache,
         timings={"locate": time.perf_counter() - started},
+        progress=progress,
     )
     print(result.model_dump_json(indent=2) if args.json else _convert_summary(result))
     return EXIT_ALL_FAILED if result.all_failed else 0
