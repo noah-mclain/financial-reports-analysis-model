@@ -29,7 +29,7 @@ $(error FRA_LLM_PORT is empty: set it in $(ENV_FILE))
 endif
 export FRA_API_PORT FRA_LLM_PORT
 
-.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping eval-gates dry-run expected-drafts eval-extraction verify-expected dev docker-up docker-health ci-workflows-check container-smoke hygiene-check
+.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping eval-gates dry-run expected-drafts eval-extraction verify-expected dev docker-up docker-health ci-workflows-check container-smoke hygiene-check eval-outcomes
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -110,6 +110,10 @@ verify-expected: ## Independent evidence for every figure of the expected files 
 eval-extraction: ## Score the extraction against eval/golden/expected (OCR=ocrmac|tesseract|none, LABEL=name, FRESH=1 try one engine)
 	@$(MAKE) --no-print-directory unhide-pth
 	PYTHONPATH=eval $(UV) run python -m harness.extraction $(if $(OCR),--ocr $(OCR)) $(if $(LABEL),--label $(LABEL)) $(if $(FRESH),--fresh)
+
+eval-outcomes: ## Run the golden harnesses and compare each outcome with eval/golden/outcomes/docker-linux.toml; run under FRA_PROFILE=docker FRA_OCR_ENGINE=tesseract (RUN=name limits it; slow)
+	@$(MAKE) --no-print-directory unhide-pth
+	$(UV) run python scripts/ci/eval_outcomes.py eval/golden/outcomes/docker-linux.toml $(foreach name,$(RUN),--run $(name))
 
 corpus-check: ## Validate the corpus pool split (no network)
 	@$(MAKE) --no-print-directory unhide-pth

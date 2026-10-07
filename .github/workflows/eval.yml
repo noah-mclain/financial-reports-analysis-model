@@ -1,0 +1,80 @@
+name: Eval
+
+on:
+  pull_request:
+    branches: [main]
+    # What the golden harness runs exercise: the workflow, the comparator and its record, the
+    # composite actions (the workspace action reads the Dockerfile), the lock and the Python
+    # version, the docling download script, the code under test, the settings and the golden
+    # documents. The Makefile is here because the targets are what the run goes through.
+    paths:
+      - .github/workflows/eval.yml
+      - .github/actions/workspace/**
+      - .github/actions/docling-models/**
+      - docker/Dockerfile
+      - scripts/ci/eval_outcomes.py
+      - scripts/ci/docling_models.py
+      - scripts/ci/tesseract-packages.sh
+      - eval/golden/**
+      - eval/harness/**
+      - packages/**
+      - configs/**
+      - conftest.py
+      - cache_isolation.py
+      - Makefile
+      - uv.lock
+      - pyproject.toml
+      - .python-version
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  UV_LOCKED: 'true'
+  HF_HUB_OFFLINE: '1'
+  TRANSFORMERS_OFFLINE: '1'
+  FRA_PROFILE: docker
+  FRA_OCR_ENGINE: tesseract
+
+jobs:
+  golden-e2e:
+    name: Golden harnesses and tests, Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: TIMEOUT
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up the locked workspace with Tesseract
+        uses: ./.github/actions/workspace
+        with:
+          tesseract: 'true'
+      - name: Provide the docling models, offline after this step
+        uses: ./.github/actions/docling-models
+      # Every harness through its Makefile target, as a person types it, against the record of
+      # the outcomes they are known to have under this profile. The runs fill var/artifacts,
+      # which the golden tests below read.
+      - name: Run the golden harnesses and compare them with the record
+        run: make eval-outcomes
+      # A golden test whose cache is missing or not current skips, and a skip fails the step:
+      # the runs above just filled the cache, so a skip means they did not.
+      - name: Run the golden tests that read the harness caches
+        env:
+          FRA_FAIL_ON_SKIP: '1'
+        run: uv run pytest -m "golden and not slow" -rs -p no:cacheprovider
+      - name: Keep the harness reports
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: eval-reports
+          path: var/eval/*.json
+          if-no-files-found: warn
+          retention-days: 14
