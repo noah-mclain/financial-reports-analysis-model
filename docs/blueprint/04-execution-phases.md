@@ -373,7 +373,10 @@ that says what the builder does is what it will do.
   then set aside; the issuer stays in `train` with older documents). By the same rule both go to
   fit, dated 2 October. The four overrides are Al Dawaa Medical Services, Alramz Real Estate, ADES
   Holding and Saudi Industrial Investment Group. Four more issuers were opened earlier (Nahdi
-  Medical, Aldrees, Catrion Catering, Development Works Food); they are set aside in
+  Medical, Aldrees, Catrion Catering, Development Works Food), and on 6 October two more were
+  opened while choosing investment-holding additions (Aref Investment Group, which hashes to
+  train/fit, and Kuwait and Middle East Financial Investment, which hashes to `model_test`);
+  they are set aside in
   `eval/corpus/deferred.yaml`, in no pool, so the split does not place them, and one that joins
   `train` later falls under this rule.
 - **Validation documents used for ingest development.** The validation part is reserved for
@@ -408,7 +411,12 @@ that says what the builder does is what it will do.
   companies with half-year 2026 statements (Basma Adeem Medical, National Environmental Recycling,
   Natural Gas Distribution, Professional Medical Expertise; 6 documents), and none of the issuers
   added that day was opened by eye, so no new override is applied; the rule above requires nothing
-  else. The holdout that will be used has 21 corporate issuers and 1 negative control (Pioneers
+  else. On 6 October four investment-holding issuers (Al Waha Capital, Arzan Financial Group, Esterad
+  Investment, Gulf Investment Corporation; 5 documents, all negative controls, `verified: false`
+  until fetched) were added to `train`, and by the hash all four are in fit: `train` is then 122
+  issuers and 213 documents, fit 81 issuers and 138 documents as hashed (85 and 149 after the
+  overrides, 50 annual and 99 interim), validation and holdout unchanged.
+  The holdout that will be used has 21 corporate issuers and 1 negative control (Pioneers
   Holding, a financial company that structure holds for review when the locator reads it as
   `other_financial`, and passes as corporate otherwise; the structural test to decline it is not built), 16 issuers with Arabic documents (18
   documents) and 15 with English ones (17), 9 with both editions, and 3 Egyptian. No holdout
@@ -417,7 +425,7 @@ that says what the builder does is what it will do.
   (`text_layer_undecodable`). 30 of the 35 are interim statements and 5 annual. In all, 58 of the
   holdout's 955 pages have no text layer, so a dry run exercises OCR on those pages and on no
   whole scanned filing, and the holdout is light on OCR. By period kind (annual / interim, D18):
-  fit 46 / 98 documents, validation 9 / 20, holdout 5 / 30 and `model_test` 26 / 39. Validation
+  fit 50 / 99 documents, validation 9 / 20, holdout 5 / 30 and `model_test` 26 / 39. Validation
   has 15 issuers, of which 5 are negative controls, so 10 corporate issuers (20 documents of 29);
   9 of the 15 have Arabic documents (8 of the 10 corporate) and 6 both editions; that is enough
   for early stopping and the 50-label quantization check once the SEC rows are in, and not enough
