@@ -46,6 +46,7 @@ _STATEMENT_TYPES = (StatementType.BALANCE, StatementType.INCOME)
 class IndustryBook:
     exclude: PhraseIndex
     cues: PhraseIndex
+    contextual: frozenset[str]
     weights: dict[tuple[str, str], float]  # (group, canonical phrase) -> weight
     order: tuple[str, ...]  # groups as listed in the cue file; ties go to the first
 
@@ -57,9 +58,23 @@ def load_industry_book(path: Path | None = None) -> IndustryBook:
         raw = path.read_text(encoding="utf-8")
     data: dict[str, Any] = yaml.safe_load(raw)
     groups: dict[str, dict[str, float]] = data["cues"]
+    contextual_values = data["contextual"]
+    if not isinstance(contextual_values, list):
+        raise ValueError("contextual must be a list of configured cue phrases")
+    contextual_phrases: set[str] = set()
+    configured_phrases = {canonical(phrase) for cues in groups.values() for phrase in cues}
+    for phrase in contextual_values:
+        if not isinstance(phrase, str) or not canonical(phrase):
+            raise ValueError(f"contextual contains an invalid cue phrase: {phrase!r}")
+        normalized = canonical(phrase)
+        if normalized not in configured_phrases:
+            raise ValueError(f"contextual contains an unknown cue phrase: {phrase!r}")
+        contextual_phrases.add(normalized)
+    contextual = frozenset(contextual_phrases)
     return IndustryBook(
         exclude=PhraseIndex.build({"exclude": data["exclude"]}),
         cues=PhraseIndex.build({group: list(cues) for group, cues in groups.items()}),
+        contextual=contextual,
         weights={
             (group, canonical(phrase)): float(weight)
             for group, cues in groups.items()
@@ -89,11 +104,16 @@ def detect_industry(
         signal = _verdict(on_statements, book)
         if signal.kind != "corporate":
             return signal
-    return _verdict(readable, book, whole_document=True)
+    contextual = _matched_contextual(on_statements, book) if on_statements else frozenset()
+    return _verdict(readable, book, whole_document=True, contextual_allowed=contextual)
 
 
 def _verdict(
-    pages: list[PageText], book: IndustryBook, *, whole_document: bool = False
+    pages: list[PageText],
+    book: IndustryBook,
+    *,
+    whole_document: bool = False,
+    contextual_allowed: frozenset[str] | None = None,
 ) -> IndustrySignal:
     totals: dict[str, float] = defaultdict(float)
     distinct: dict[str, set[str]] = defaultdict(set)
@@ -103,6 +123,12 @@ def _verdict(
             _without(book, text) for text in reading_variants(page.text, page.visual_arabic)
         ]
         for phrase, groups in book.cues.find(variants).items():
+            if (
+                phrase in book.contextual
+                and contextual_allowed is not None
+                and phrase not in contextual_allowed
+            ):
+                continue
             for group in groups:
                 if whole_document and phrase in distinct[group]:
                     continue
@@ -128,6 +154,16 @@ def _verdict(
         distinct_cues=cues,
         evidence=shown[:_EVIDENCE_LIMIT],
     )
+
+
+def _matched_contextual(pages: list[PageText], book: IndustryBook) -> frozenset[str]:
+    matched: set[str] = set()
+    for page in pages:
+        variants = [
+            _without(book, text) for text in reading_variants(page.text, page.visual_arabic)
+        ]
+        matched.update(book.cues.find(variants).keys() & book.contextual)
+    return frozenset(matched)
 
 
 def _without(book: IndustryBook, text: str) -> str:
