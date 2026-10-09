@@ -8,17 +8,21 @@ from __future__ import annotations
 
 import calendar
 import re
+from collections.abc import Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from fra_core.numbers import normalize_digits, parse_number
-from fra_core.periods import parse_period
-from fra_core.schemas import Period, PeriodKind, StatementType
+from fra_core.periods import interpret_period, parse_period
+from fra_core.schemas import Period, PeriodKind, StatementType, TextSource
+from fra_core.schemas.statement import PeriodCandidate, PeriodConflict, PeriodEvidence
 from fra_core.units import detect_currency, detect_scale
 from fra_ingest.label_match import squash
+from fra_ingest.period_evidence import period_identity, unresolved, validate_evidence
 from fra_ingest.table_grid import Grid
+from fra_ingest.visual_order import join_split_year, repair_text
 
-_YEAR = re.compile(r"(?<!\d)(19|20)\d{2}(?!\d)")
+_YEAR = re.compile(r"(?<!\d)\d{4}(?!\d)")
 _NOTE = re.compile(
     r"^\(?\d{1,2}(\s*[-.]\s*\d{1,2})?\)?(\s*[-,]\s*\(?\d{1,2}(\s*[-.]\s*\d{1,2})?\)?)*$"
 )
@@ -85,6 +89,7 @@ def split_note(label: str) -> tuple[str, str | None]:
 class HeaderLayout(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    period_conflicts: tuple[PeriodConflict, ...] = ()
     header_rows: list[int] = Field(default_factory=list)
     label_col: int | None = None
     note_col: int | None = None
@@ -182,109 +187,86 @@ def _with_date_hint(period: Period, header: str, hint: Period | None) -> Period:
     return moved.model_copy(update={"restated": period.restated}) if moved else period
 
 
-_DATE = re.compile(r"(?<!\d)(\d{1,2})\s+([^\W\d_]+(?:\s+[^\W\d_]+)?)\s+((?:19|20)\d{2})(?!\d)")
-_DATE_TAIL = re.compile(r"(?<!\d)(\d{1,2})\s+([^\W\d_]+(?:\s+[^\W\d_]+)?)(?=\W*$)")
-_NUMERIC_DATE = re.compile(r"(?:19|20)\d{2}-\d{2}-\d{2}|\d{1,2}[/.-]\d{1,2}[/.-](?:19|20)\d{2}")
-_MONTH_COUNT = re.compile(r"(?<!\d)\d{1,2}\s*(?:months?|شهر\w*|أشهر|اشهر|شهور)", re.I)
-_PERIOD_CONTEXT = re.compile(
-    r"months?|quarter|interim|period|half.year|أشهر|اشهر|شهور|شهر|للفترة|الفترة|"
-    r"year ended|year end|full year|السنة|للسنة|عن السنة",
-    re.I,
-)
-_ANNUAL = re.compile(r"(?:twelve|12)\s+months|year ended|year end|full year|السنة|للسنة", re.I)
-
-
 def has_period_context(text: str) -> bool:
-    return _PERIOD_CONTEXT.search(text) is not None
+    return interpret_period(text).duration != "none"
 
 
 def printed_date(text: str) -> str | None:
-    """Find a printed date shape, including unreadable months, without guessing a date."""
-    plain = _MONTH_COUNT.sub(" ", _plain(text))
-    match = _NUMERIC_DATE.search(plain) or _DATE.search(plain) or _DATE_TAIL.search(plain)
-    return match[0] if match else None
+    """Return the core interpretation's date fragment, including partial dates."""
+    facts = interpret_period(text)
+    return facts.date_text if facts.calendar != "year_only" else None
 
 
 def printed_period(text: str, kind: PeriodKind = PeriodKind.INSTANT) -> Period | None:
-    """Validate a printed date with the core calendar and month vocabulary."""
-    plain = _plain(text)
-    match = _DATE.search(plain)
-    if match:
-        # Unknown months otherwise fall back to December 31 in the bare-year parser.
-        probe = parse_period(f"1 {match[2]} {match[3]}")
-        if probe is None or probe.end_date.day != 1:
-            return None
-    return parse_period(plain, default_kind=kind)
+    return interpret_period(text, default_kind=kind).period
 
 
 def is_printed_period_label(text: str) -> bool:
-    plain = _plain(text)
-    return bool(
-        _YEAR.fullmatch(plain)
-        or (
-            (_NUMERIC_DATE.fullmatch(plain) or _DATE.fullmatch(plain))
-            and printed_period(plain) is not None
-        )
-    )
+    facts = interpret_period(text)
+    return facts.period is not None and facts.calendar in {"complete", "year_only"}
 
 
 def period_with_context(
-    header: str, context: str, kind: PeriodKind, *, match_caption_date: bool = False
+    header: str,
+    context: str,
+    kind: PeriodKind,
+    *,
+    match_caption_date: bool = False,
+    preserve_explicit: bool = False,
 ) -> Period | None:
-    """Use caption duration and a validated caption date, preserving complete column dates.
-
-    A year-only column needs a real caption date when context is supplied. Every comparative
-    year is validated separately; neither unknown duration nor an invalid date means annual.
-    """
-    period = printed_period(header, kind)
+    """Fill missing facts from context without healing or rewriting printed facts."""
+    facts = interpret_period(header, default_kind=kind)
+    period = facts.period
     if period is None or not context:
         return period
-    context = _plain(context)
-    date_text = printed_date(context)
-    duration = context
-    if date_text is not None:
-        duration = context.replace(date_text, " ")
-        # Validate an explicitly printed year before checking its comparative equivalents.
-        if _YEAR.search(date_text) and printed_period(date_text) is None:
-            return None
-        dated = _YEAR.sub(str(period.end_date.year), date_text)
+    caption = interpret_period(context, default_kind=kind, reference_year=period.end_date.year)
+    if caption.calendar in {"invalid", "year_only"} or caption.duration == "invalid":
+        return None
+    contextual = caption.period
+    if contextual is not None:
+        # Validate the caption's printed year first, then each comparative year separately.
+        dated = _YEAR.sub(str(period.end_date.year), caption.date_text or "")
         if not _YEAR.search(dated):
             dated = f"{dated} {period.end_date.year}"
-        contextual = printed_period(dated, kind)
-        if contextual is None:
+        comparative = interpret_period(dated, default_kind=kind).period
+        if comparative is None:
             return None
-        if _year_only(header):
-            period = period.model_copy(update={"end_date": contextual.end_date})
+        if facts.calendar == "year_only":
+            period = period.model_copy(update={"end_date": comparative.end_date})
         elif match_caption_date and (period.end_date.month, period.end_date.day) != (
-            contextual.end_date.month,
-            contextual.end_date.day,
+            comparative.end_date.month,
+            comparative.end_date.day,
         ):
-            return None
-    elif _year_only(header) or _YEAR.search(context):
+            return period if preserve_explicit else None
+    elif facts.calendar == "year_only":
         return None
-    # Core defines the supported lengths. A numeric twelve-month spelling is equivalent to
-    # its existing word form; unsupported and unspecified lengths must not use its default.
-    duration = re.sub(r"\b12\s+months\b", "twelve months", duration, flags=re.I)
-    cue = parse_period(f"{duration} {period.end_date.isoformat()}")
-    if has_period_context(duration) and (
-        cue is None
-        or cue.kind is not PeriodKind.DURATION
-        or (cue.months == 12 and not _ANNUAL.search(duration))
-    ):
+    if caption.duration == "generic" and facts.duration != "explicit":
+        # Recovery cannot infer an annual length from an unspecified period caption.
         return None
-    # Statement type keeps a balance instant even when the nearby caption says "year".
-    if period.kind is PeriodKind.INSTANT:
-        duration = ""
-    resolved = parse_period(f"{duration} {period.end_date.isoformat()}", default_kind=period.kind)
+    length = period.months or 12
+    if period.kind is PeriodKind.DURATION and facts.duration != "explicit":
+        length = caption.months or length
+    dated = period.end_date.isoformat()
+    if period.kind is PeriodKind.DURATION:
+        dated = f"{length} months ended {dated}"
+    resolved = printed_period(dated, period.kind)
     return (
         resolved.model_copy(update={"restated": period.restated, "audited": period.audited})
-        if resolved
+        if resolved is not None
         else None
     )
 
 
-def parse_header(grid: Grid, statement_type: StatementType, date_hint: str | None) -> HeaderLayout:
+def parse_header(
+    grid: Grid,
+    statement_type: StatementType,
+    date_hint: str | None,
+    *,
+    period_evidence: Sequence[PeriodEvidence] = (),
+    visual: bool = False,
+) -> HeaderLayout:
     layout = HeaderLayout(header_rows=_header_rows(grid))
+    validate_evidence(grid, period_evidence, layout.header_rows)
     data = layout.data_rows(grid)
     kind = PeriodKind.DURATION if statement_type in _DURATION_TYPES else PeriodKind.INSTANT
     hint = parse_period(date_hint, default_kind=kind) if date_hint else None
@@ -323,6 +305,10 @@ def parse_header(grid: Grid, statement_type: StatementType, date_hint: str | Non
                 layout.note_col = col
                 break
 
+    supplied = {e.col: e for e in period_evidence}
+    if any(col not in others or col == layout.note_col or not amounts[col] for col in supplied):
+        raise ValueError("period evidence must name a value column")
+
     for col in others:
         if col == layout.note_col or amounts[col] == 0:
             continue
@@ -336,6 +322,73 @@ def parse_header(grid: Grid, statement_type: StatementType, date_hint: str | Non
             period = parse_period(header, default_kind=kind) if header else None
             if period is not None:
                 period = _with_date_hint(period, header, hint)
+        if col in supplied:
+            context = recovered_context if recovered else (date_hint or "")
+            period = period_with_context(
+                recovered or header,
+                context,
+                kind,
+                match_caption_date=bool(recovered),
+                preserve_explicit=not bool(recovered),
+            )
+            candidates = []
+            explicit_durations: set[str] = set()
+            for observation in supplied[col].observations:
+                text = repair_text(
+                    observation.raw_text,
+                    visual=visual and observation.provenance.source is TextSource.TEXT,
+                )
+                anchor = grid.cell(observation.provenance.row, col)
+                if anchor is not None and anchor.is_column_header:
+                    text = join_split_year(text)
+                if interpret_period(text).duration == "explicit":
+                    explicit_durations.add(observation.source_id)
+                candidate = period_with_context(
+                    text,
+                    context,
+                    kind,
+                    match_caption_date=bool(recovered),
+                    preserve_explicit=True,
+                )
+                candidates.append(PeriodCandidate(observation=observation, period=candidate))
+            conflict = unresolved(tuple(candidates))
+            omitted = period is not None and not any(
+                c.period is not None and period_identity(c.period) == period_identity(period)
+                for c in candidates
+            )
+            context_disagrees = False
+            for reading in candidates:
+                if reading.period is None:
+                    continue
+                caption = interpret_period(
+                    context,
+                    default_kind=kind,
+                    reference_year=reading.period.end_date.year,
+                )
+                context_disagrees |= (
+                    caption.duration == "explicit"
+                    and reading.period.kind is PeriodKind.DURATION
+                    and reading.observation.source_id in explicit_durations
+                    and reading.period.months != caption.months
+                ) or (
+                    caption.calendar in {"complete", "month_year"}
+                    and caption.end_date is not None
+                    and (reading.period.end_date.month, reading.period.end_date.day)
+                    != (caption.end_date.month, caption.end_date.day)
+                )
+            if conflict is None and (context_disagrees or (omitted and recovered)):
+                conflict = PeriodConflict(
+                    reason="conflicting_context", candidates=tuple(candidates)
+                )
+            if conflict is not None:
+                layout.period_conflicts = (*layout.period_conflicts, conflict)
+                layout.unbound_cols.append(col)
+                layout.evidence.extend((f"period_unbound:{col}", f"period_conflict:{col}"))
+                continue
+            if omitted:
+                raise ValueError(
+                    f"period evidence column {col} omits the bound header interpretation"
+                )
         if period is None:
             layout.unbound_cols.append(col)
             layout.evidence.append(f"period_unbound:{col}")

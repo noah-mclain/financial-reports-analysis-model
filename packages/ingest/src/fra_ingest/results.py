@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from fra_core.schemas import Document, PageMode, Statement, StatementType, TextSource
+from fra_core.schemas.statement import PeriodConflict
 from fra_ingest.review import StatementReview
 from fra_ingest.table_grid import GridCell
 
@@ -246,6 +247,8 @@ class TableDecision(BaseModel):
     """What structure decided about one docling table, and why."""
 
     model_config = ConfigDict(extra="forbid")
+
+    period_conflicts: tuple[PeriodConflict, ...] = ()
 
     table_ref: str
     docling_path: str

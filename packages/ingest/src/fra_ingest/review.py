@@ -28,6 +28,7 @@ CRITICAL_CELL_FLAGS = (
 )
 _HOLD_FLAGS = (
     "period_unbound",
+    "period_conflict",
     "scale_conflict",
     "currency_conflict",
     "currency_missing",

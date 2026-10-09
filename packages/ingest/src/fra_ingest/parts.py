@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from fra_core.labels import normalize_label
 from fra_core.numbers import parse_number
 from fra_core.schemas import BBox, Cell, LineItem, Period, Provenance, StatementType, TextSource
+from fra_core.schemas.statement import PeriodConflict
 from fra_ingest.classify import Classification
 from fra_ingest.header import HeaderLayout, split_note
 from fra_ingest.label_match import LabelIndex, has_subtotal_cue, squash
@@ -46,6 +47,8 @@ _UNDER_HEADING = tuple(
 
 class PartialStatement(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    period_conflicts: tuple[PeriodConflict, ...] = ()
 
     type: StatementType
     confidence: float
@@ -164,6 +167,7 @@ def build_part(
         last_page=grid.page_no,
         page_width=grid.page_width,
         periods=periods,
+        period_conflicts=layout.period_conflicts,
         header_text=" ".join(layout.header_texts.values()),
         table_refs=[f"{grid.docling_path}{grid.table_ref}"],
         flags=[*layout.evidence, *grid.flags],

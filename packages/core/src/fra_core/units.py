@@ -20,7 +20,7 @@ from dataclasses import dataclass
 
 from fra_core.numbers import strip_bidi
 
-__all__ = ["ScaleSignal", "detect_currency", "detect_scale"]
+__all__ = ["ScaleSignal", "detect_currency", "detect_scale", "unit_marker_spans"]
 
 _THOUSAND_CUES: tuple[str, ...] = (
     "'000",
@@ -105,6 +105,35 @@ _CAPITAL_ABBREVIATIONS: dict[str, str] = {"LE": "EGP", "SR": "SAR", "KD": "KWD"}
 _CURRENCY_SIGNS: dict[str, str] = {"£": "GBP", "$": "USD"}
 
 _ISO_CODE = re.compile(r"(?<![A-Za-z])(SAR|EGP|USD|GBP|EUR|AED|KWD|QAR|BHD|OMR|JOD)(?![A-Za-z])")
+
+# Whole scale wording and currency names, longest first. Plural scale words are also
+# present in the existing "in ..." / "... of" cues. Short capitals remain case-sensitive.
+_MARKER_WORDS = set(_CURRENCY_WORDS) | {
+    wording
+    for cue in (*_THOUSAND_CUES, *_MILLION_CUES, *_BILLION_CUES)
+    for wording in (cue.strip(), cue.strip().removeprefix("in ").removesuffix(" of"))
+}
+_UNIT_MARKER = re.compile(
+    r"(?<!\w)(?i:"
+    + "|".join(re.escape(cue) for cue in sorted(_MARKER_WORDS, key=len, reverse=True))
+    + r")(?!\w)|(?i:"
+    + _ISO_CODE.pattern
+    + r")|(?<![A-Za-z])(?:"
+    + "|".join(_CAPITAL_ABBREVIATIONS)
+    + r")(?![A-Za-z])|["
+    + re.escape("".join(_CURRENCY_SIGNS))
+    + "]"
+)
+
+
+def unit_marker_spans(text: str) -> tuple[tuple[int, int], ...]:
+    """Return currency/scale spans in the supplied text, preserving adjacent residue.
+
+    Offsets refer to the original input; callers perform any text normalization first.
+    Unlike the permissive detectors, a scale substring inside another word is not a
+    complete marker. A currency next to a number covers only the currency characters.
+    """
+    return tuple(match.span() for match in _UNIT_MARKER.finditer(text))
 
 
 @dataclass(frozen=True)

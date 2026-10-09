@@ -28,7 +28,11 @@ def inherit_periods(layout: HeaderLayout, grid: Grid, previous: PartialStatement
     unbound: list[int] = []
     evidence = list(layout.evidence)
     rows = layout.data_rows(grid)
+    held = {conflict.col for conflict in layout.period_conflicts}
     for col in layout.unbound_cols:
+        if col in held:
+            unbound.append(col)
+            continue
         centre = column_centre(grid, col, rows)
         match = None
         if centre is not None:
@@ -137,6 +141,7 @@ def merge_continuations(
                     "indents": {**head.indents, **part.indents},
                     "table_refs": [*head.table_refs, *part.table_refs],
                     "flags": [*head.flags, *part.flags],
+                    "period_conflicts": (*head.period_conflicts, *part.period_conflicts),
                 }
             )
         else:
