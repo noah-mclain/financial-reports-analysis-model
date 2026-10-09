@@ -109,6 +109,36 @@ def test_an_unparseable_period_observation_holds_the_column() -> None:
 
 
 @pytest.mark.parametrize(
+    "malformed",
+    [
+        "31/12-3025",
+        "31/12.3025",
+        "31-12/3025",
+        "31-12.3025",
+        "31.12/3025",
+        "31.12-3025",
+        "٣١/١٢-٣٠٢٥",
+    ],
+)
+def test_mixed_numeric_separators_hold_column_and_preserve_observations(malformed: str) -> None:
+    base = supplied(evidence(texts=("31/12/3025", malformed)))
+    originals = base.period_evidence[0].observations
+    result, _ = structure_document(base, IngestConfig())
+    statement = result.statements[0]
+    assert [p.key for p in statement.periods] == ["2024-12-31"]
+    assert "period_conflict:2" in statement.flags
+    assert result.reviews[0].status == "needs_review"
+    assert "period_conflict:2" in result.reviews[0].reasons
+    conflict = statement.period_conflicts[0]
+    assert conflict.reason == "unparseable_observation"
+    assert conflict.candidates[0].period is not None
+    assert conflict.candidates[1].period is None
+    assert tuple(candidate.observation for candidate in conflict.candidates) == originals
+    assert base.period_evidence[0].observations == originals
+    assert Statement.model_validate_json(statement.model_dump_json()) == statement
+
+
+@pytest.mark.parametrize(
     "field,value",
     [
         ("docling_path", "wrong.json"),
@@ -940,3 +970,134 @@ def test_partial_caption_date_conflict_keeps_explicit_candidate_dates() -> None:
     assert [
         c.period.end_date.isoformat() for c in layout.period_conflicts[0].candidates if c.period
     ] == ["2025-12-31", "2025-12-31"]
+
+
+@pytest.mark.parametrize("prefix", ["", "For the period ended", "For the six months ended"])
+@pytest.mark.parametrize("caption", ["For the six months ended 2025", "عن ستة أشهر المنتهية 2025"])
+@pytest.mark.parametrize("recovered", [False, True])
+def test_year_only_context_keeps_the_complete_header_and_observation_date(
+    prefix: str, caption: str, recovered: bool
+) -> None:
+    from fra_core.schemas import StatementType
+    from fra_ingest.header import parse_header
+    from fra_ingest.table_grid import build_grid
+
+    text = f"{prefix} 30 June 2024 (Unaudited)"
+    rows = [["", "Notes", text, "2023"], *PAGE_1[1:]]
+    base = supplied(evidence(texts=(text, text)), rows=rows)
+    doc = base.documents[0][1]
+    grid = build_grid(doc.tables[0], doc, PATH)
+    if recovered:
+        grid = _recovered_period_grid(grid, caption)
+        grid = grid.model_copy(
+            update={
+                "recovered_headers": tuple(
+                    c.model_copy(update={"text": text}) for c in grid.recovered_headers
+                )
+            }
+        )
+    layout = parse_header(
+        grid,
+        StatementType.INCOME,
+        caption,
+        period_evidence=base.period_evidence,
+    )
+    assert layout.period_conflicts == ()
+    assert layout.value_cols[2].key == "6M-2024-06-30"
+    assert layout.value_cols[2].audited is False
+
+
+@pytest.mark.parametrize(
+    "caption,expected",
+    [
+        ("", None),
+        ("2025", None),
+        ("For the period ended 2025", None),
+        ("For the period ended 30 June 2025", None),
+        ("30 June 2025", None),
+        ("For the three months ended", 3),
+        ("For the six months ended 2025", 6),
+        ("For the nine months ended 30 June 2025", 9),
+        ("For the year ended 2025", 12),
+        ("For the 10 months ended 2025", None),
+        ("For the six months ended 31 February 2025", None),
+    ],
+)
+def test_generic_observations_require_and_can_take_an_explicit_context_length(
+    caption: str, expected: int | None
+) -> None:
+    from fra_core.schemas import PeriodKind
+    from fra_ingest.header import period_with_context
+
+    text = "For the period ended 30 June 2024 (Restated)"
+    period = period_with_context(text, caption, PeriodKind.DURATION)
+    if expected is None:
+        assert period is None
+    else:
+        assert period is not None
+        assert period.months == expected
+        assert period.end_date.isoformat() == "2024-06-30"
+        assert period.restated is True
+
+
+@pytest.mark.parametrize("caption", ["", "2025", "For the period ended 2025"])
+def test_generic_observations_with_no_context_length_hold_the_column(caption: str) -> None:
+    from fra_core.schemas import StatementType
+    from fra_ingest.header import parse_header
+    from fra_ingest.table_grid import build_grid
+
+    text = "For the period ended 30 June 2025"
+    rows = [["", "Notes", text, "2024"], *PAGE_1[1:]]
+    base = supplied(evidence(texts=(text, text)), rows=rows)
+    doc = base.documents[0][1]
+    layout = parse_header(
+        build_grid(doc.tables[0], doc, PATH),
+        StatementType.INCOME,
+        caption,
+        period_evidence=base.period_evidence,
+    )
+    assert 2 not in layout.value_cols
+    assert 2 in layout.unbound_cols
+    assert layout.period_conflicts[0].reason == "unparseable_observation"
+    assert all(c.period is None for c in layout.period_conflicts[0].candidates)
+
+
+@pytest.mark.parametrize("caption", ["2025", "For the period ended 2025"])
+def test_complete_explicit_dates_do_not_need_a_full_caption_date(caption: str) -> None:
+    from fra_core.schemas import PeriodKind
+    from fra_ingest.header import period_with_context
+
+    text = "For the six months ended 30 June 2024"
+    period = period_with_context(text, caption, PeriodKind.DURATION, match_caption_date=True)
+    assert period is not None and period.key == "6M-2024-06-30"
+
+
+def test_contradictory_year_only_duration_context_holds_without_overwriting_candidates() -> None:
+    from fra_core.schemas import StatementType
+    from fra_ingest.header import parse_header
+    from fra_ingest.table_grid import build_grid
+
+    text = "For the three months ended 30 June 2025"
+    rows = [["", "Notes", text, "2024"], *PAGE_1[1:]]
+    base = supplied(evidence(texts=(text, text)), rows=rows)
+    doc = base.documents[0][1]
+    layout = parse_header(
+        build_grid(doc.tables[0], doc, PATH),
+        StatementType.INCOME,
+        "For the six months ended 2025",
+        period_evidence=base.period_evidence,
+    )
+    assert 2 not in layout.value_cols
+    conflict = layout.period_conflicts[0]
+    assert conflict.reason == "conflicting_context"
+    assert [c.period.key for c in conflict.candidates if c.period] == [
+        "3M-2025-06-30",
+        "3M-2025-06-30",
+    ]
+
+
+def test_year_only_context_cannot_complete_a_year_only_observation() -> None:
+    from fra_core.schemas import PeriodKind
+    from fra_ingest.header import period_with_context
+
+    assert period_with_context("2024", "six months ended 2025", PeriodKind.DURATION) is None

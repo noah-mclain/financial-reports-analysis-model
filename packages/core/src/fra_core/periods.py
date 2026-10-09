@@ -260,8 +260,12 @@ _TEXT_DATE = re.compile(
     re.I,
 )
 _TEXT_DATE_TAIL = re.compile(rf"(?<!\w)\d{{1,2}}\s+{_MONTH_NAME}(?!\w)", re.I)
+# Strict observations require one separator; the compatibility parser keeps _DMY.
+_STRICT_DMY = re.compile(r"(?<!\d)(\d{1,2})([/\-.])(\d{1,2})\2(\d{4})(?!\d)")
 _DATE_SHAPE = re.compile(r"(?<!\w)\d{1,2}\s+[^\W\d_]+(?:\s+[^\W\d_]+)?(?:\s+\d{4})?(?!\w)")
-_MONTH_WORD = re.compile(r"(?<!\w)(?:" + _MONTH_COUNT.pattern + r"|شهرين)(?!\w)", re.I)
+_MONTH_WORD = re.compile(
+    r"(?<!\w)(?:" + _MONTH_COUNT.pattern.removeprefix(r"\s*") + r"|شهرين)(?!\w)", re.I
+)
 _SUPPORTED_MONTHS = frozenset(months for _, months in _DURATION_CUES)
 _STATED_MONTH_COUNT = re.compile(
     r"(?<![\w.])([-+]?\d+(?:\.\d+)?)" + _MONTH_COUNT.pattern + r"(?!\w)", re.I
@@ -280,25 +284,36 @@ def _cue_pattern(cue: str) -> re.Pattern[str]:
     return re.compile(rf"{boundary}{re.escape(cue)}(?!\w)", re.I)
 
 
+def _masked_text(text: str, covered: bytearray) -> str:
+    return "".join(" " if mask else char for char, mask in zip(text, covered, strict=True))
+
+
+def _stated_months(token: str) -> int:
+    if not token.isdecimal():
+        return -1
+    # Compare canonical decimal digits without converting an unbounded integer. Leading
+    # zeroes do not change a count, including zeroes outside the Arabic digit alphabets.
+    digits = "".join(str(unicodedata.decimal(char)) for char in token).lstrip("0")
+    return next((months for months in _SUPPORTED_MONTHS if digits == str(months)), -1)
+
+
 def _duration_description(
     text: str,
 ) -> tuple[Literal["explicit", "generic", "none", "invalid"], int | None, str]:
     lengths: set[int] = set()
-    spans: list[tuple[int, int]] = []
+    covered = bytearray(len(text))
     for cue, months in _DURATION_CUES:
         for match in _cue_pattern(cue).finditer(text):
             # Existing cue precedence handles nested wording such as half year ended.
-            if not any(match.start() < end and start < match.end() for start, end in spans):
+            start, end = match.span()
+            if not any(covered[start:end]):
                 lengths.add(months)
-            spans.append(match.span())
-    remainder = "".join(
-        " " if any(start <= i < end for start, end in spans) else char
-        for i, char in enumerate(text)
-    )
+            # Cue width and vocabulary are fixed; overlap checks and writes are bounded.
+            covered[start:end] = b"\x01" * (end - start)
+    remainder = _masked_text(text, covered)
     # Use the same month-count vocabulary as the day detector, but validate whole counts.
     for match in _STATED_MONTH_COUNT.finditer(remainder):
-        token = match[1]
-        lengths.add(int(token) if token.isdecimal() and int(token) in _SUPPORTED_MONTHS else -1)
+        lengths.add(_stated_months(match[1]))
     remainder = _STATED_MONTH_COUNT.sub(" ", remainder)
     generic = any(_cue_pattern(cue).search(text) for cue in _PERIOD_CUES)
     for cue in _PERIOD_CUES:
@@ -316,8 +331,10 @@ def _duration_description(
         invalid = True
     if invalid:
         # Mask unsupported count words too so duration and calendar remain independent.
+        # Start only at digit/letter runs, retaining glued-token residue while avoiding
+        # repeated scans of every suffix in a long run when no month word follows.
         remainder = re.sub(
-            r"(?:[-+]?\d+(?:\.\d+)?|[^\W\d_]+)\s*" + _MONTH_WORD.pattern,
+            r"(?:(?<!\d)[-+]?\d+(?:\.\d+)?|(?<![^\W\d_])[^\W\d_]+)\s*" + _MONTH_WORD.pattern,
             " ",
             remainder,
             flags=re.I,
@@ -329,11 +346,10 @@ def _duration_description(
 
 
 def _calendar_remainder(text: str) -> str:
-    spans = unit_marker_spans(text)
-    text = "".join(
-        " " if any(start <= i < end for start, end in spans) else char
-        for i, char in enumerate(text)
-    )
+    covered = bytearray(len(text))
+    for start, end in unit_marker_spans(text):
+        covered[start:end] = b"\x01" * (end - start)
+    text = _masked_text(text, covered)
     for cue in (*_RESTATED_CUES, *_UNAUDITED_CUES, *_AUDITED_CUES):
         text = _cue_pattern(cue).sub(" ", text)
     text = _GLUE.sub(" ", text)
@@ -364,7 +380,7 @@ def interpret_period(
     calendar_fact: Literal["complete", "month_year", "year_only", "missing", "invalid"]
     end: date | None = None
     date_text: str | None = None
-    matches = list(_ISO_DATE.finditer(calendar_text)) or list(_DMY.finditer(calendar_text))
+    matches = list(_ISO_DATE.finditer(calendar_text)) or list(_STRICT_DMY.finditer(calendar_text))
     if not matches:
         matches = list(_TEXT_DATE.finditer(calendar_text))
     if matches:
@@ -373,7 +389,10 @@ def interpret_period(
         end = _detect_end_date(match.group(), match.group().casefold())
         remainder = calendar_text[: match.start()] + " " + calendar_text[match.end() :]
         calendar_fact = "complete"
-        if _ISO_DATE.fullmatch(match.group()) is None and _DMY.fullmatch(match.group()) is None:
+        if (
+            _ISO_DATE.fullmatch(match.group()) is None
+            and _STRICT_DMY.fullmatch(match.group()) is None
+        ):
             year_match = _YEAR.search(match.group())
             if year_match is not None and _find_day(match.group(), year_match.span()) is None:
                 calendar_fact = "month_year"
@@ -406,8 +425,8 @@ def interpret_period(
     if calendar_fact == "invalid":
         end = None
     period = None
-    if end is not None and duration != "invalid":
-        kind = PeriodKind.DURATION if duration in {"explicit", "generic"} else default_kind
+    if end is not None and duration not in {"invalid", "generic"}:
+        kind = PeriodKind.DURATION if duration == "explicit" else default_kind
         length = months or 12
         parsed = parse_period(cleaned, default_kind=kind)
         period = Period(

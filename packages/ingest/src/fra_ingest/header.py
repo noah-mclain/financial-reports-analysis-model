@@ -217,13 +217,20 @@ def period_with_context(
     """Fill missing facts from context without healing or rewriting printed facts."""
     facts = interpret_period(header, default_kind=kind)
     period = facts.period
-    if period is None or not context:
+    if facts.end_date is None or facts.duration == "invalid" or not context:
         return period
-    caption = interpret_period(context, default_kind=kind, reference_year=period.end_date.year)
-    if caption.calendar in {"invalid", "year_only"} or caption.duration == "invalid":
+    caption = interpret_period(context, default_kind=kind, reference_year=facts.end_date.year)
+    if caption.calendar == "invalid" or caption.duration == "invalid":
         return None
-    contextual = caption.period
-    if contextual is not None:
+    if facts.duration == "generic":
+        if caption.duration != "explicit":
+            return None
+        # The compatibility parser supplies metadata only after context has proved the
+        # missing length. A generic printed period alone never supplies an annual length.
+        period = parse_period(header, default_kind=kind)
+    if period is None:
+        return None
+    if caption.calendar in {"complete", "month_year"}:
         # Validate the caption's printed year first, then each comparative year separately.
         dated = _YEAR.sub(str(period.end_date.year), caption.date_text or "")
         if not _YEAR.search(dated):

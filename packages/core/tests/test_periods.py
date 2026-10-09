@@ -197,6 +197,77 @@ def test_strict_interpretation_does_not_change_permissive_parser() -> None:
     assert period is not None and period.months == 12
 
 
+@pytest.mark.parametrize(
+    "digits", ["0123456789", "٠١٢٣٤٥٦٧٨٩", "۰۱۲۳۴۵۶۷۸۹", "०१२३४५६७८९", "𝟢𝟣𝟤𝟥𝟦𝟧𝟨𝟩𝟪𝟫"]
+)
+@pytest.mark.parametrize(
+    "first,second", [("/", "-"), ("/", "."), ("-", "/"), ("-", "."), (".", "/"), (".", "-")]
+)
+def test_strict_numeric_dmy_rejects_mixed_separators_but_preserves_legacy(
+    digits: str, first: str, second: str
+) -> None:
+    from fra_core.periods import interpret_period
+
+    text = f"31{first}12{second}2025".translate(str.maketrans("0123456789", digits))
+    facts = interpret_period(text, reference_year=2025)
+    assert facts.calendar == "invalid"
+    assert facts.end_date is None
+    assert facts.period is None
+    legacy = parse_period(text)
+    assert legacy is not None and legacy.end_date == date(2025, 12, 31)
+
+
+@pytest.mark.parametrize(
+    "digits", ["0123456789", "٠١٢٣٤٥٦٧٨٩", "۰۱۲۳۴۵۶۷۸۹", "०१२३४५६७८९", "𝟢𝟣𝟤𝟥𝟦𝟧𝟨𝟩𝟪𝟫"]
+)
+@pytest.mark.parametrize("separator", ["/", "-", "."])
+@pytest.mark.parametrize("day,month,year", [(31, 12, 2025), (1, 2, 2025), (29, 2, 2024)])
+def test_strict_numeric_dmy_preserves_homogeneous_dates(
+    digits: str, separator: str, day: int, month: int, year: int
+) -> None:
+    from fra_core.periods import interpret_period
+
+    text = f"{day}{separator}{month}{separator}{year}".translate(
+        str.maketrans("0123456789", digits)
+    )
+    facts = interpret_period(text)
+    assert facts.calendar == "complete"
+    assert facts.end_date == date(year, month, day)
+    assert facts.period is not None and facts.period.end_date == facts.end_date
+
+
+@pytest.mark.parametrize("separator", ["/", "-", "."])
+@pytest.mark.parametrize("day,month", [(32, 12), (31, 4), (29, 2), (0, 12), (31, 0), (31, 13)])
+def test_strict_numeric_dmy_rejects_impossible_dates(separator: str, day: int, month: int) -> None:
+    from fra_core.periods import interpret_period
+
+    facts = interpret_period(f"{day}{separator}{month}{separator}2025")
+    assert facts.calendar == "invalid"
+    assert facts.end_date is None
+    assert facts.period is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "131/12/2025",
+        "31/12/20250",
+        "31/12-2025-12-31",
+        "31/12/2025-12.2025",
+        "31/12-31.12.2025",
+        "31.12.2025/12-2025",
+        "31/12-2025 (Audited) SAR '000",
+    ],
+)
+def test_strict_numeric_date_match_cannot_hide_malformed_residue(text: str) -> None:
+    from fra_core.periods import interpret_period
+
+    facts = interpret_period(text)
+    assert facts.calendar == "invalid"
+    assert facts.end_date is None
+    assert facts.period is None
+
+
 @pytest.mark.parametrize("count", ["-3", "+3", "0", "3.5", "13", "103", "thirteen", "شهرين"])
 def test_nonsensical_or_unsupported_length_is_explicitly_invalid(count: str) -> None:
     from fra_core.periods import interpret_period
@@ -283,6 +354,10 @@ def test_marker_adjacent_residue_cannot_complete_a_date(residue: str) -> None:
         "in thousands of Egyptian pounds",
         "Saudi Riyals",
         "ريال سعودي",
+        "بالريال السعودي",
+        "الريالات",
+        "بالجنيه المصري",
+        "الجنيهات المصرية",
         "بآلاف",
         "بآالف",
         "بالملايين",
@@ -309,3 +384,20 @@ def test_lowercase_short_abbreviations_are_not_period_markers(marker: str) -> No
     from fra_core.periods import interpret_period
 
     assert interpret_period(f"2025 {marker}").period is None
+
+
+@pytest.mark.parametrize(
+    "residue",
+    [
+        "بالريال السعودي30/06",
+        "2024الريالات",
+        "الريالات7",
+        "unknownريال",
+        "necessary",
+        "الدينار الكويتي",
+    ],
+)
+def test_attached_currency_markers_do_not_hide_invalid_residue(residue: str) -> None:
+    from fra_core.periods import interpret_period
+
+    assert interpret_period(f"30 June 2025 {residue}").period is None

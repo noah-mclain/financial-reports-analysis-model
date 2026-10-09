@@ -113,8 +113,28 @@ _MARKER_WORDS = set(_CURRENCY_WORDS) | {
     for cue in (*_THOUSAND_CUES, *_MILLION_CUES, *_BILLION_CUES)
     for wording in (cue.strip(), cue.strip().removeprefix("in ").removesuffix(" of"))
 }
+# Arabic currency stems allow attached articles, prepositions and plural endings, as in
+# detect_currency. Expand only Arabic letters so numeric and Latin residue stays visible.
+_ARABIC_LETTER = r"[\u0621-\u064a]"
+
+
+def _arabic_currency_word(word: str) -> str:
+    if word.isalpha():
+        # Test the stem once, then consume the whole word without backtracking through
+        # possible stem positions when the following adjective is absent.
+        return rf"(?={_ARABIC_LETTER}*{re.escape(word)}){_ARABIC_LETTER}++"
+    return _ARABIC_LETTER + "*" + re.escape(word) + _ARABIC_LETTER + "*"
+
+
+_ARABIC_CURRENCY_WORDS = "|".join(
+    r"\s+".join(_arabic_currency_word(word) for word in name.split())
+    for name in _CURRENCY_NAMES_BY_LENGTH
+    if not name.isascii()
+)
 _UNIT_MARKER = re.compile(
-    r"(?<!\w)(?i:"
+    r"(?<![^\W\d_])(?P<arabic>"
+    + _ARABIC_CURRENCY_WORDS
+    + r")(?![^\W\d_])|(?<!\w)(?i:"
     + "|".join(re.escape(cue) for cue in sorted(_MARKER_WORDS, key=len, reverse=True))
     + r")(?!\w)|(?i:"
     + _ISO_CODE.pattern
@@ -133,7 +153,11 @@ def unit_marker_spans(text: str) -> tuple[tuple[int, int], ...]:
     Unlike the permissive detectors, a scale substring inside another word is not a
     complete marker. A currency next to a number covers only the currency characters.
     """
-    return tuple(match.span() for match in _UNIT_MARKER.finditer(text))
+    return tuple(
+        match.span()
+        for match in _UNIT_MARKER.finditer(text)
+        if match.group("arabic") is None or detect_currency(match.group()) is not None
+    )
 
 
 @dataclass(frozen=True)

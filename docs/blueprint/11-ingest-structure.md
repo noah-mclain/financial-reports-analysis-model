@@ -279,7 +279,7 @@ class StructureResult(BaseModel):   # statements.raw.json
    length, so an explicit caption can fill it. Invalid facts cannot be healed by context.
    Agreeing observations that contradict a caption or the recovered header remain
    held with `conflicting_context`; their computed candidates and recovered context are retained.
-   Structure cache version 20 invalidates prior structure results; conversion is unchanged.
+   Structure results are cached against `STRUCTURE_VERSION`; changing it invalidates prior structure results while reusing cached conversion output.
 6. **Metadata.** Scale from the header text, then the caption, then the page text; per-share
    rows are exempt. Currency the same way; when none of those name one (Almarai's glyph), the
    country of incorporation decides: the earliest page with a phrase such as "a Saudi Joint
