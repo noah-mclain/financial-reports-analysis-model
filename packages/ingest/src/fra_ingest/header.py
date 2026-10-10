@@ -225,9 +225,11 @@ def period_with_context(
     if facts.duration == "generic":
         if caption.duration != "explicit":
             return None
-        # The compatibility parser supplies metadata only after context has proved the
-        # missing length. A generic printed period alone never supplies an annual length.
-        period = parse_period(header, default_kind=kind)
+        # Resolve only the proved missing length through strict grammar, so reporting
+        # status keeps the same token boundaries as every other observation.
+        period = interpret_period(
+            f"{caption.months} months ended {header}", default_kind=kind
+        ).period
     if period is None:
         return None
     if caption.calendar in {"complete", "month_year"}:
@@ -247,7 +249,11 @@ def period_with_context(
             return period if preserve_explicit else None
     elif facts.calendar == "year_only":
         return None
-    if caption.duration == "generic" and facts.duration != "explicit":
+    if (
+        caption.duration == "generic"
+        and period.kind is PeriodKind.DURATION
+        and facts.duration != "explicit"
+    ):
         # Recovery cannot infer an annual length from an unspecified period caption.
         return None
     length = period.months or 12

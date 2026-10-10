@@ -822,3 +822,37 @@ def test_caption_duration_on_a_separate_line_survives_date_recognition(
         0: ("2023-09-30", 6),
         1: ("2024-09-30", 6),
     }
+
+
+@pytest.mark.parametrize("interim_below_date", [False, True])
+@pytest.mark.parametrize("headers", [("2023", "2024"), ("2023-06-30", "2024-06-30")])
+@pytest.mark.parametrize("length", [None, 3, 6, 9])
+def test_separate_interim_caption_is_retained_and_requires_a_printed_length(
+    interim_below_date: bool,
+    headers: tuple[str, str],
+    length: int | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lines = safety_lines("30 June", headers)
+    date_line = next(line for line in lines if line.text == "30 June")
+    interim = "Interim" if length is None else f"Interim for the {length} months ended"
+    lines.append(
+        replace(
+            date_line, text=interim, top=date_line.top + (0.06 if interim_below_date else -0.06)
+        )
+    )
+    result = recover(OBSERVED[1], monkeypatch, lines)
+    assert {c.text for c in result.recovered_context} == {"30 June", interim}
+    assert result.cells == OBSERVED[1].grid.cells
+    layout = parse_header(result, StatementType.INCOME, None)
+    if length is None:
+        assert not result.recovered_headers
+        assert not layout.value_cols
+        assert "header_recovery_period_uncertain" in result.flags
+    else:
+        assert {
+            col: (p.end_date.isoformat(), p.months) for col, p in layout.value_cols.items()
+        } == {
+            0: ("2023-06-30", length),
+            1: ("2024-06-30", length),
+        }

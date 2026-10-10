@@ -14,6 +14,79 @@ from fra_core.periods import interpret_period, parse_period
 from fra_core.schemas import PeriodKind
 
 
+@pytest.mark.parametrize(
+    "marker,restated,audited",
+    [
+        ("المعدلة", True, None),
+        ("المعدّلة", True, None),
+        ("المعاد", True, None),
+        ("المراجعة", False, True),
+        ("المدققة", False, True),
+        ("غير المراجعة", False, False),
+        ("غير المدققة", False, False),
+    ],
+)
+@pytest.mark.parametrize("dated", ["2024", "٣٠ يونيو ٢٠٢٤"])
+def test_arabic_status_articles_preserve_facts_and_legacy_metadata(
+    marker: str, restated: bool, audited: bool | None, dated: str
+) -> None:
+    literal = f"{dated} ({marker})"
+    legacy = parse_period(literal)
+    facts = interpret_period(literal)
+    assert facts.calendar == ("year_only" if dated == "2024" else "complete")
+    assert legacy is not None
+    assert legacy.restated == restated
+    # The compatibility parser historically misses the article in negated status.
+    assert legacy.audited == (True if marker.startswith("غير ال") else audited)
+    assert facts.period is not None
+    assert facts.period.end_date == legacy.end_date
+    assert (facts.period.restated, facts.period.audited) == (restated, audited)
+
+
+@pytest.mark.parametrize(
+    "residue",
+    [
+        "المعدلة30/06",
+        "30/06المعدلة",
+        "المعدلة7",
+        "2024المعدلة",
+        "والمعدلة",
+        "المعدلةx",
+        "المعدلات",
+        "غيرالمراجعة",
+        "غير المراجعةSAR",
+        "SARالمعدلة",
+        "المعدلةSAR",
+        "المعدلة 7",
+        "(المعدلة)30/06",
+        "restated30/06",
+        "30/06audited",
+        "unauditedx",
+    ],
+)
+def test_status_cleanup_keeps_malformed_and_adjacent_residue(residue: str) -> None:
+    facts = interpret_period(f"30 June 2025 {residue}")
+    assert facts.calendar == "invalid"
+    assert facts.period is None
+
+
+def test_interim_is_uncertain_context_without_changing_legacy_parser() -> None:
+    assert interpret_period("Interim").duration == "generic"
+    facts = interpret_period("Interim 30 June 2025", default_kind=PeriodKind.DURATION)
+    assert facts.duration == "generic" and facts.months is None and facts.period is None
+    legacy = parse_period("Interim 30 June 2025", default_kind=PeriodKind.DURATION)
+    assert legacy is not None and legacy.months == 12
+
+
+@pytest.mark.parametrize(
+    "literal",
+    ["2024المعدلة", "المعدلة2024", "30 June 2024المراجعة", "2024audited", "restated2024"],
+)
+def test_date_removal_cannot_create_a_status_boundary(literal: str) -> None:
+    facts = interpret_period(literal)
+    assert facts.calendar == "invalid" and facts.period is None
+
+
 @pytest.mark.parametrize("cue", ["half year ended ", "SAR "])
 def test_repeated_cues_have_a_linear_scan_budget(cue: str, monkeypatch: pytest.MonkeyPatch) -> None:
     text = cue * 400 + "30 June 2025"
