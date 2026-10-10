@@ -243,11 +243,41 @@ class StructureResult(BaseModel):   # statements.raw.json
    `StructureInputs.period_evidence` optionally supplies caller-collected `PeriodEvidence`
    groups. Each group contains at least two `PeriodObservation` readings of one path, page,
    table and value column, with distinct stable source IDs, original literal text, optional
-   confidence and existing `Provenance` (PDF points, top-left origin). The producer must
-   collect every alternative period reading before binding; production currently has no
-   automatic producer for this collection. Absence preserves the existing binding behavior.
-   Scope, header row, column identity and source geometry are validated against the original
-   grid; unmatched evidence, duplicate IDs/groups and ambiguous geometry fail loudly.
+   confidence and existing `Provenance` (PDF points, top-left origin). Image-page crops
+   already triggered by partial-header recovery automatically retain attributable alternate
+   readings over existing bound columns. The primary literal is the exact original `DlCell.text`,
+   with its original converted rectangle, unit spans and nonnegative header anchor. Its stable
+   ID names the Docling-cell stage and index; confidence is null because Docling supplies none.
+   Both readings use OCR provenance on this image-only path. Alternate literals and confidence
+   remain unchanged `OcrLine` facts; their rectangles use the actual rendered crop extent,
+   including pixel rounding. IDs name the crop recognition line index, not full-page token lineage.
+   No extra recognition call runs. Fully bound tables and full-bound historical date conflicts
+   remain outside this producer's coverage. Agreement is not independent verification.
+   Composite multirow date/status anchors, missing or mismatched source cells, non-unit spans,
+   ambiguous row/column/table assignment and invalid page geometry cannot supply a comparison.
+   Alternates must fit inside the original source rectangle; unsupported or absent attribution
+   emits `period_evidence_unavailable:<col>:<reason>` without synthesizing an observation.
+   A bound column without a usable original cell gets `source_anchor_invalid` and no
+   comparison; the missing slots of the same table are still read.
+   Evidence survives subsequent missing-slot recovery rejection, including low-confidence or
+   unparseable alternate literals. A failed read or a missing engine retries the structure
+   stage through the existing cache machinery (`header_recovery_failed:`,
+   `header_recovery_unavailable`). Every other unavailable reason is a fact of the page and is
+   cached with the result. Healthy conversion and page caches are unchanged.
+   Caller and collected groups merge by real column, retaining all distinct identities.
+   Identical observations deduplicate; a reused per-column ID with different facts fails loudly.
+   Scope, source spans, header row, column identity and geometry are validated against the
+   original grid, source cells and page height before binding. A caller's group is validated
+   before any crop is read, and unmatched or ambiguous caller evidence fails loudly. A collected
+   group the original grid cannot carry is dropped with
+   `period_evidence_unavailable:<col>:raw_source_mismatch`; it never fails the document.
+   Agreeing collected readings that omit the bound header's own interpretation hold the column
+   with `conflicting_context`; the same omission in caller evidence is rejected as an input error.
+   A rendered crop whose pixel-rounded extent leaves the page or touches a sibling table
+   supplies no comparison (`geometry_invalid` for each bound column) and does not stop the
+   missing slots being read.
+   `TableDecision.period_evidence` retains agreement and conflict observations.
+   Cache version 24 invalidates prior structure results, including versions 23, 22, 21 and 20.
 
    Each observation is parsed with the same statement kind and date context as its column,
    using core's typed `interpret_period` facts for all four-digit Gregorian calendar years.
@@ -264,21 +294,32 @@ class StructureResult(BaseModel):   # statements.raw.json
    Without visual page context, digit order is preserved. Different computed period keys, end dates,
    kinds or lengths hold the column; different formats of the same computed period agree.
    An unparseable or partial observation also holds it, with a null candidate rather than a
-   guessed year. Confidence never chooses a reading. Agreeing evidence that omits the bound
-   header's interpretation is rejected. No year window or replacement date is inferred.
+   guessed year. Confidence never chooses a reading. Agreeing caller evidence that omits the bound
+   header's interpretation is rejected; collected readings that omit it hold the column. No year window or replacement date is inferred.
    `period_conflict:<col>` and `period_unbound:<col>` name the held column. Its frozen
    `PeriodConflict` retains every source observation and computed candidate through
    `HeaderLayout`, `PartialStatement`, `TableDecision` and `Statement` JSON. Other columns
    still extract, and the statement needs review. If every column is held, no statement is
    fabricated: `StructureResult.tables` retains the conflicts and reasons. Header binding
    after recovery and continuation trials use the same evidence; inheritance cannot bind a conflicted
-   column, and merged parts keep their conflicts. Resolving a conflict requires corrected
-   caller evidence and a new structure run; there is no automatic resolution policy.
+   column, and merged parts keep their conflicts. When every current printed binding is held,
+   continuation cannot introduce a binding for an undated slot. A conflict among caller
+   observations is resolved by corrected caller evidence and a new structure run. A conflict
+   that includes a collected crop reading cannot be cleared by caller evidence, because the
+   merge keeps every collected observation; it stays held for review. There is no automatic
+   resolution policy.
    A recovered caption fills missing duration information but never replaces an explicit
    observation duration or complete date. Generic period wording supplies no explicit
    length, so an explicit caption can fill it. Invalid facts cannot be healed by context.
    Agreeing observations that contradict a caption or the recovered header remain
    held with `conflicting_context`; their computed candidates and recovered context are retained.
+   One exception concerns the page heading's date on a printed (not recovered) column: the
+   heading dates one column, so when another value column of the table prints that month and
+   day as a complete date, the heading is not a second reading of the comparative beside it,
+   and an agreeing comparative binds. This applies only to a column whose own printed header is
+   a complete date. If no other column prints the heading's date in full, the disagreement
+   still holds the column. A heading length that contradicts an explicit column
+   length holds the column in every case.
    Structure results are cached against `STRUCTURE_VERSION`; changing it invalidates prior structure results while reusing cached conversion output.
 6. **Metadata.** Scale from the header text, then the caption, then the page text; per-share
    rows are exempt. Currency the same way; when none of those name one (Almarai's glyph), the

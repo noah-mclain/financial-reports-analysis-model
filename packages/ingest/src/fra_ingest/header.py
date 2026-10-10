@@ -319,12 +319,34 @@ def parse_header(
                 break
 
     supplied = {e.col: e for e in period_evidence}
+    collected = {e.col for e in grid.period_evidence}
     if any(col not in others or col == layout.note_col or not amounts[col] for col in supplied):
         raise ValueError("period evidence must name a value column")
 
-    for col in others:
-        if col == layout.note_col or amounts[col] == 0:
-            continue
+    def carries_heading_date(col: int) -> bool:
+        text = next(
+            (c.text for c in grid.recovered_headers if c.col == col),
+            layout.header_texts.get(col, ""),
+        )
+        facts = interpret_period(text, default_kind=kind)
+        if facts.calendar != "complete" or facts.end_date is None:
+            return False
+        caption = interpret_period(
+            date_hint or "", default_kind=kind, reference_year=facts.end_date.year
+        )
+        return (
+            caption.calendar in {"complete", "month_year"}
+            and caption.end_date is not None
+            and (facts.end_date.month, facts.end_date.day)
+            == (caption.end_date.month, caption.end_date.day)
+        )
+
+    value_cols = [c for c in others if c != layout.note_col and amounts[c]]
+    # The page heading dates one column. Where a column prints that date in full, the
+    # heading is accounted for and is not a second reading of the comparative beside it.
+    heading_cols = {c for c in value_cols if carries_heading_date(c)}
+
+    for col in value_cols:
         header = layout.header_texts.get(col, "")
         recovered = next((c.text for c in grid.recovered_headers if c.col == col), None)
         if recovered:
@@ -365,6 +387,9 @@ def parse_header(
                 )
                 candidates.append(PeriodCandidate(observation=observation, period=candidate))
             conflict = unresolved(tuple(candidates))
+            printed_in_full = (
+                not recovered and interpret_period(header, default_kind=kind).calendar == "complete"
+            )
             omitted = period is not None and not any(
                 c.period is not None and period_identity(c.period) == period_identity(period)
                 for c in candidates
@@ -384,12 +409,17 @@ def parse_header(
                     and reading.observation.source_id in explicit_durations
                     and reading.period.months != caption.months
                 ) or (
-                    caption.calendar in {"complete", "month_year"}
+                    not (printed_in_full and heading_cols - {col})
+                    and caption.calendar in {"complete", "month_year"}
                     and caption.end_date is not None
                     and (reading.period.end_date.month, reading.period.end_date.day)
                     != (caption.end_date.month, caption.end_date.day)
                 )
-            if conflict is None and (context_disagrees or (omitted and recovered)):
+            # A caller that omits the header's own reading has made an input error, raised
+            # below. A reading collected from the page cannot be an input error: held.
+            if conflict is None and (
+                context_disagrees or (omitted and (recovered or col in collected))
+            ):
                 conflict = PeriodConflict(
                     reason="conflicting_context", candidates=tuple(candidates)
                 )

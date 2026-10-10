@@ -5,6 +5,7 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict
 
 from fra_core.schemas import BBox
+from fra_core.schemas.statement import PeriodEvidence
 from fra_ingest.docling_json import DlDocument, DlTable
 
 
@@ -37,6 +38,7 @@ class Grid(BaseModel):
     cells: tuple[GridCell, ...]
     recovered_headers: tuple[GridCell, ...] = ()
     recovered_context: tuple[GridCell, ...] = ()
+    period_evidence: tuple[PeriodEvidence, ...] = ()
     flags: tuple[
         str, ...
     ] = ()  # what repair did to the table; the statement built from it carries them

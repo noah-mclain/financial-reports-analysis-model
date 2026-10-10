@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 from statistics import median
 
@@ -17,9 +18,11 @@ from PIL import Image
 
 from fra_core.numbers import normalize_digits
 from fra_core.periods import interpret_period, parse_period
-from fra_core.schemas import BBox, PeriodKind, StatementType
+from fra_core.schemas import BBox, PeriodKind, Provenance, StatementType, TextSource
+from fra_core.schemas.statement import PeriodEvidence, PeriodObservation
+from fra_core.units import unit_marker_spans
 from fra_ingest.config import IngestConfig
-from fra_ingest.docling_json import DlDocument
+from fra_ingest.docling_json import DlDocument, DlTable
 from fra_ingest.header import (
     _is_sub_header_text,
     has_period_context,
@@ -30,6 +33,7 @@ from fra_ingest.header import (
     printed_date,
 )
 from fra_ingest.ocr import OcrEngine, OcrLine
+from fra_ingest.period_evidence import source_cell
 from fra_ingest.table_grid import Grid, GridCell
 
 _YEAR = re.compile(r"(?:19|20)\d{2}")
@@ -107,7 +111,134 @@ def _overlap(a: BBox, b: BBox) -> bool:
 
 
 def _flag(grid: Grid, reason: str) -> Grid:
-    return grid.model_copy(update={"flags": (*grid.flags, f"header_recovery_{reason}")})
+    covered = {e.col for e in grid.period_evidence}
+    flags = [*grid.flags, f"header_recovery_{reason}"]
+    for col in parse_header(grid, StatementType.BALANCE, None).value_cols:
+        if col not in covered and not any(
+            f.startswith(f"period_evidence_unavailable:{col}:") for f in flags
+        ):
+            flags.append(f"period_evidence_unavailable:{col}:{reason}")
+    return grid.model_copy(update={"flags": tuple(flags)})
+
+
+def _unavailable(grid: Grid, cols: list[int], reason: str) -> Grid:
+    flags = (f"period_evidence_unavailable:{col}:{reason}" for col in cols)
+    return grid.model_copy(update={"flags": (*grid.flags, *flags)})
+
+
+def _only_units(text: str) -> bool:
+    covered = {i for start, end in unit_marker_spans(text) for i in range(start, end)}
+    return bool(covered) and all(
+        i in covered or c.isspace() or c in "()[]'\".,:" for i, c in enumerate(text)
+    )
+
+
+def _primary_observation(
+    grid: Grid,
+    table: DlTable,
+    anchor: GridCell,
+    height: float,
+    scope: str,
+    header_rows: list[int],
+) -> PeriodObservation | None:
+    """A unique, unit-span original Docling cell, never the repaired grid literal."""
+    source = source_cell(table, anchor.row, anchor.col, grid.page_no)
+    box = anchor.bbox
+    if source is None or box is None or anchor.row < 0 or anchor.col < 0:
+        return None
+    if any(
+        c.row in header_rows
+        and c.row != anchor.row
+        and c.col <= anchor.col < c.col + c.col_span
+        and c.text
+        and not _only_units(c.text)
+        for c in grid.cells
+    ):
+        return None
+    index, cell = source
+    if (
+        cell.bbox is None
+        or not cell.text.strip()
+        or cell.bbox.to_bbox(height) != box
+        or not all(
+            math.isfinite(v)
+            for v in (cell.bbox.left, cell.bbox.top, cell.bbox.right, cell.bbox.bottom)
+        )
+    ):
+        return None
+    return PeriodObservation(
+        source_id=f"docling-cell:{scope}:{index}",
+        raw_text=cell.text,
+        docling_path=grid.docling_path,
+        # This path runs only for image-page Docling OCR, whose token confidence and
+        # token identity are not present in DlCell. The ID names the cell stage only.
+        provenance=Provenance(
+            page_no=grid.page_no,
+            table_ref=grid.table_ref,
+            row=anchor.row,
+            col=anchor.col,
+            source=TextSource.OCR,
+            bbox=box,
+        ),
+    )
+
+
+def _collect_evidence(
+    grid: Grid,
+    primaries: dict[int, PeriodObservation],
+    crop: RasterCrop,
+    lines: list[OcrLine],
+    header_rows: list[int],
+    scope: str,
+) -> Grid:
+    """Capture before missing-slot validation; confidence does not choose a reading."""
+    groups: list[PeriodEvidence] = []
+    flags = list(grid.flags)
+    for col, primary in primaries.items():
+        anchor = primary.provenance.bbox
+        observations = [primary]
+        reasons: set[str] = set()
+        for index, line in enumerate(lines):
+            box = crop.line_box(line)
+            if box is None:
+                reasons.add("invalid_line_geometry")
+                continue
+            if not _overlap(box, anchor):
+                continue
+            if not (
+                _valid_box(box, crop.page_width, crop.page_height)
+                and anchor.left <= box.left < box.right <= anchor.right
+                and anchor.top <= box.top < box.bottom <= anchor.bottom
+            ):
+                reasons.add("outside_source_rectangle")
+                continue
+            if any(
+                c.bbox is not None
+                and c.row in header_rows
+                and (c.row, c.col) != (primary.provenance.row, col)
+                and _overlap(box, c.bbox)
+                for c in grid.cells
+            ):
+                reasons.add("ambiguous_source_geometry")
+                continue
+            if not line.text:
+                reasons.add("empty_reading")
+                continue
+            observations.append(
+                PeriodObservation(
+                    source_id=f"header-crop-line:{scope}:{index}",
+                    raw_text=line.text,
+                    confidence=line.confidence,
+                    docling_path=grid.docling_path,
+                    provenance=primary.provenance.model_copy(update={"bbox": box}),
+                )
+            )
+        if len(observations) > 1:
+            groups.append(PeriodEvidence(observations=tuple(observations)))
+        elif not reasons:
+            reasons.add("no_attributable_reading")
+        flags.extend(f"period_evidence_unavailable:{col}:{r}" for r in sorted(reasons))
+    return grid.model_copy(update={"period_evidence": tuple(groups), "flags": tuple(flags)})
 
 
 def _caption(lines: list[tuple[OcrLine, BBox]], top: float) -> list[tuple[OcrLine, BBox]]:
@@ -214,6 +345,9 @@ def recover_header(
         if boxes:
             bands[col] = median(b.left for b in boxes), median(b.right for b in boxes)
     bound_boxes: list[BBox] = []
+    primaries: dict[int, PeriodObservation] = {}
+    unanchored: list[int] = []
+    scope = sha256(f"{grid.docling_path}\0{grid.page_no}\0{grid.table_ref}".encode()).hexdigest()
     for col in layout.value_cols:
         anchors = [
             c
@@ -225,7 +359,9 @@ def recover_header(
         # A partial read needs a unique original row anchor in every bound column.
         # Alternate OCR over that column cannot supply missing source geometry.
         if len(anchors) != 1 or col not in bands:
-            return _flag(grid, "geometry_invalid")
+            return _flag(
+                _unavailable(grid, unanchored, "source_anchor_invalid"), "geometry_invalid"
+            )
         anchor = anchors[0]
         b = anchor.bbox
         left, right = bands[col]
@@ -237,8 +373,18 @@ def recover_header(
             or not (left <= b.left < b.right <= right)
             or not (header_band.top <= b.top < b.bottom <= header_band.bottom)
         ):
-            return _flag(grid, "geometry_invalid")
+            return _flag(
+                _unavailable(grid, unanchored, "source_anchor_invalid"), "geometry_invalid"
+            )
         bound_boxes.append(b)
+        primary = _primary_observation(grid, table, anchor, size.height, scope, layout.header_rows)
+        if primary is None:
+            unanchored.append(col)
+        else:
+            primaries[col] = primary
+    # No comparison for a column without a usable original cell; the missing slots can
+    # still be read, as they were before bound columns were observed.
+    grid = _unavailable(grid, unanchored, "source_anchor_invalid")
     if ocr is None:
         return _flag(grid, "unavailable")
     try:
@@ -258,6 +404,15 @@ def recover_header(
         and math.isclose(crop.page_height, size.height, abs_tol=0.01)
     ):
         return _flag(grid, "geometry_invalid")
+    # Pixel rounding can move the rendered extent a fraction of a point past the requested
+    # one. That never stopped a missing slot being read; it does stop a bound column's
+    # alternate reading being attributed to this table's own cells.
+    if _valid_box(crop.bbox, size.width, size.height) and not any(
+        b is not None and _overlap(b, crop.bbox) for b in sibling_boxes
+    ):
+        grid = _collect_evidence(grid, primaries, crop, lines, layout.header_rows, scope)
+    else:
+        grid = _unavailable(grid, list(primaries), "geometry_invalid")
     observed: list[tuple[OcrLine, BBox]] = []
     labels: dict[int, list[tuple[OcrLine, BBox]]] = {col: [] for col in targets}
     for line in lines:

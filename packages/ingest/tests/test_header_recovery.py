@@ -824,6 +824,15 @@ def test_caption_duration_on_a_separate_line_survives_date_recognition(
     }
 
 
+def _geometry_invalid(grid: Grid) -> tuple[str, ...]:
+    """The recovery flag, then one unavailable comparison for each bound column."""
+    bound = parse_header(grid, StatementType.BALANCE, None).value_cols
+    return (
+        "header_recovery_geometry_invalid",
+        *(f"period_evidence_unavailable:{col}:geometry_invalid" for col in bound),
+    )
+
+
 def partial_observation(
     bound_col: int = 0,
     header: str = "31 December 2023 (Restated) (Audited)",
@@ -996,7 +1005,10 @@ def test_partial_recovery_engine_failure_preserves_bound_column(
     result = header_recovery.recover_header(
         observation.grid, observation.document(), Path("unused.pdf"), IngestConfig(), engine
     )
-    assert result.flags == ("header_recovery_failed:RuntimeError:partial read failed",)
+    assert result.flags == (
+        "header_recovery_failed:RuntimeError:partial read failed",
+        "period_evidence_unavailable:0:failed:RuntimeError:partial read failed",
+    )
     assert result.cells == observation.grid.cells
     assert (
         parse_header(result, StatementType.BALANCE, None).value_cols
@@ -1085,9 +1097,11 @@ def test_real_partial_recovery_cannot_bypass_consumer_period_holds(
     assert [c.col for c in recovered_grids[0].recovered_headers] == [1]
     statement = result.statements[0]
     assert [p.key for p in statement.periods] == ["FY2024" if held_col == 0 else "FY2023"]
-    assert (
-        tuple(c.observation for c in statement.period_conflicts[0].candidates) == group.observations
-    )
+    candidates = tuple(c.observation for c in statement.period_conflicts[0].candidates)
+    merged = next(e for e in result.tables[0].period_evidence if e.col == held_col)
+    # Every reading of the held column is a candidate: the crop's own, then the caller's.
+    assert candidates == merged.observations
+    assert candidates[-2:] == group.observations
     assert f"period_conflict:{held_col}" in result.reviews[0].reasons
 
 
@@ -1137,7 +1151,7 @@ def test_partial_recovery_requires_original_bound_row_geometry(
         before, observation.document(), Path("unused.pdf"), IngestConfig(), engine
     )
     assert not result.recovered_headers
-    assert result.flags == ("header_recovery_geometry_invalid",)
+    assert result.flags == _geometry_invalid(before)
     assert result.cells == before.cells
     assert not result.recovered_context
     for kind in StatementType:
@@ -1209,7 +1223,7 @@ def test_partial_recovery_requires_bound_column_amount_geometry_from_source_cell
     result = header_recovery.recover_header(
         before, observation.document(), Path("unused.pdf"), IngestConfig(), engine
     )
-    assert result.flags == ("header_recovery_geometry_invalid",)
+    assert result.flags == _geometry_invalid(before)
     assert result.cells == before.cells
     assert not result.recovered_headers and not result.recovered_context
     assert not requests and not engine.calls
@@ -1264,7 +1278,7 @@ def test_partial_recovery_rejects_untrustworthy_bound_anchor(
         before, observation.document(), Path("unused.pdf"), IngestConfig(), engine
     )
     assert not result.recovered_headers
-    assert result.flags == ("header_recovery_geometry_invalid",)
+    assert result.flags == _geometry_invalid(before)
     assert result.cells == before.cells
     layout = parse_header(result, StatementType.BALANCE, None)
     assert layout.value_cols == original.value_cols and layout.unbound_cols == [target_col]

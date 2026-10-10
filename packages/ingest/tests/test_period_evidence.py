@@ -9,6 +9,7 @@ from test_structure import PAGE_1, _balance_tables, inputs, table
 
 from fra_core.schemas import Statement
 from fra_ingest.config import IngestConfig
+from fra_ingest.header import HeaderLayout
 from fra_ingest.results import StructureResult
 from fra_ingest.structure import StructureInputs, structure_document
 from fra_ingest.table_grid import Grid
@@ -286,9 +287,10 @@ def test_duplicate_source_ids_cannot_pose_as_independent_observations() -> None:
         supplied(raw)
 
 
-def test_duplicate_column_groups_are_rejected() -> None:
-    with pytest.raises(ValueError, match="repeats column"):
-        structure_document(supplied(evidence(), evidence()), IngestConfig())
+def test_identical_column_groups_merge_without_duplicate_observations() -> None:
+    result, _ = structure_document(supplied(evidence(), evidence()), IngestConfig())
+    assert len(result.tables[0].period_evidence) == 1
+    assert len(result.tables[0].period_evidence[0].observations) == 2
 
 
 def test_mixed_observation_scopes_are_rejected() -> None:
@@ -1195,3 +1197,123 @@ def test_year_only_context_cannot_complete_a_year_only_observation() -> None:
     from fra_ingest.header import period_with_context
 
     assert period_with_context("2024", "six months ended 2025", PeriodKind.DURATION) is None
+
+
+def _heading_layout(headers: tuple[str, str], texts: tuple[str, str], hint: str) -> HeaderLayout:
+    from fra_core.schemas import StatementType
+    from fra_ingest.header import parse_header
+    from fra_ingest.table_grid import build_grid
+
+    rows = [["", "Notes", *headers], *PAGE_1[1:]]
+    base = supplied(evidence(texts=texts), rows=rows)
+    doc = base.documents[0][1]
+    return parse_header(
+        build_grid(doc.tables[0], doc, PATH),
+        StatementType.BALANCE,
+        hint,
+        period_evidence=base.period_evidence,
+    )
+
+
+def test_heading_date_carried_by_another_column_does_not_hold_an_agreeing_comparative() -> None:
+    # An interim balance sheet: the heading dates the current column, and the comparative
+    # prints the prior year end in full. Both readings of the comparative agree.
+    text = "31 December 2023"
+    layout = _heading_layout((text, "30 June 2024"), (text, text), "As at 30 June 2024")
+    assert not layout.period_conflicts
+    assert [p.end_date.isoformat() for p in layout.value_cols.values()] == [
+        "2023-12-31",
+        "2024-06-30",
+    ]
+
+
+def test_disagreeing_readings_of_the_comparative_still_hold_it() -> None:
+    layout = _heading_layout(
+        ("31 December 2023", "30 June 2024"),
+        ("31 December 2023", "31 December 3023"),
+        "As at 30 June 2024",
+    )
+    assert 2 not in layout.value_cols
+    assert layout.period_conflicts[0].reason == "differing_periods"
+
+
+@pytest.mark.parametrize("other", ["2024", "30 January 2024", "31 December 2022"])
+def test_heading_date_no_column_prints_in_full_still_holds_the_comparative(other: str) -> None:
+    # Year-only, a different date, or another year end: no column accounts for the
+    # heading, so its disagreement with the agreeing readings is still unresolved.
+    text = "31 December 2023"
+    layout = _heading_layout((text, other), (text, text), "As at 30 June 2024")
+    assert 2 not in layout.value_cols
+    assert layout.period_conflicts[0].reason == "conflicting_context"
+    assert [
+        c.period.end_date.isoformat() for c in layout.period_conflicts[0].candidates if c.period
+    ] == [
+        "2023-12-31",
+        "2023-12-31",
+    ]
+
+
+def test_supported_evidence_names_the_dropped_column() -> None:
+    from fra_core.schemas import StatementType
+    from fra_core.schemas.statement import PeriodEvidence
+    from fra_ingest.header import parse_header
+    from fra_ingest.period_evidence import supported_evidence
+    from fra_ingest.table_grid import build_grid
+
+    base = supplied(evidence(texts=("31/12/3025", "31/12/3025")))
+    doc = base.documents[0][1]
+    grid = build_grid(doc.tables[0], doc, PATH)
+    rows = parse_header(grid, StatementType.BALANCE, None).header_rows
+    good = base.period_evidence[0]
+    bad = PeriodEvidence(
+        observations=tuple(
+            o.model_copy(update={"provenance": o.provenance.model_copy(update={"row": 2})})
+            for o in good.observations
+        )
+    )
+    height = doc.page_size(grid.page_no).height
+    assert supported_evidence(
+        grid, (good,), rows, source_table=doc.tables[0], page_height=height
+    ) == (
+        (good,),
+        (),
+    )
+    assert supported_evidence(
+        grid, (bad,), rows, source_table=doc.tables[0], page_height=height
+    ) == (
+        (),
+        ("period_evidence_unavailable:2:raw_source_mismatch",),
+    )
+
+
+def test_year_only_header_is_still_held_when_another_column_carries_the_heading() -> None:
+    # The exemption is for a column that prints its own date in full. A year-only header
+    # takes its month and day from the heading, so agreeing readings of another date
+    # contradict it: held, never an input error and never bound.
+    text = "31 December 2023"
+    layout = _heading_layout(("2023", "30 June 2024"), (text, text), "As at 30 June 2024")
+    assert 2 not in layout.value_cols
+    assert layout.period_conflicts[0].reason == "conflicting_context"
+
+
+def test_collected_readings_that_omit_the_header_reading_hold_the_column() -> None:
+    from fra_core.schemas import StatementType
+    from fra_ingest.header import parse_header
+    from fra_ingest.table_grid import build_grid
+
+    # The header binds 3025; both readings say 2025. From a caller that is an input error
+    # (test_agreeing_evidence_cannot_hide_another_bound_header_date). Collected from the
+    # page itself, it is an unresolved reading of that column.
+    base = supplied(evidence(texts=("31/12/2025", "2025-12-31")))
+    doc = base.documents[0][1]
+    grid = build_grid(doc.tables[0], doc, PATH)
+    with pytest.raises(ValueError, match="omits the bound header interpretation"):
+        parse_header(grid, StatementType.BALANCE, None, period_evidence=base.period_evidence)
+    collected = grid.model_copy(update={"period_evidence": base.period_evidence})
+    layout = parse_header(
+        collected, StatementType.BALANCE, None, period_evidence=base.period_evidence
+    )
+    assert 2 not in layout.value_cols
+    conflict = layout.period_conflicts[0]
+    assert conflict.reason == "conflicting_context"
+    assert tuple(c.observation for c in conflict.candidates) == base.period_evidence[0].observations

@@ -43,7 +43,7 @@ from fra_ingest.ocr import OcrEngine
 from fra_ingest.ocr_policy import plan_ranges
 from fra_ingest.pages import ocr_key, read_pages
 from fra_ingest.parts import PartialStatement, build_part
-from fra_ingest.period_evidence import validate_evidence
+from fra_ingest.period_evidence import merge_evidence, supported_evidence, validate_evidence
 from fra_ingest.results import (
     ConvertResult,
     IndustryDecision,
@@ -59,7 +59,7 @@ from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
 from fra_ingest.visual_order import repair_grid, repair_text, restore_word_order
 
-STRUCTURE_VERSION = "23"  # partial recovery and status context; conversion/pages unchanged
+STRUCTURE_VERSION = "24"  # partial-crop period observations; conversion/pages unchanged
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -180,11 +180,10 @@ def _continued_part(
     )
     if previous is None or (titles and previous.type not in titles):
         return None
-    layout = inherit_periods(
-        parse_header(grid, previous.type, hint, period_evidence=period_evidence, visual=visual),
-        grid,
-        previous,
-    )
+    layout = parse_header(grid, previous.type, hint, period_evidence=period_evidence, visual=visual)
+    if layout.period_conflicts and not layout.value_cols:
+        return None
+    layout = inherit_periods(layout, grid, previous)
     if not continues_part(layout, grid, previous):
         return None
     return previous
@@ -217,18 +216,23 @@ def structure_document(
             for n, group in enumerate(inputs.period_evidence):
                 if group in scoped:
                     remaining.discard(n)
-            if scoped:
-                # Validate against the original grid, before repair or recovered headers.
-                validate_evidence(
-                    raw, scoped, parse_header(raw, StatementType.BALANCE, None).header_rows
-                )
-                height = document.page_size(raw.page_no).height
-                if any(o.provenance.bbox.bottom > height for e in scoped for o in e.observations):
-                    raise ValueError("period evidence header geometry exceeds page height")
+            raw_rows = parse_header(raw, StatementType.BALANCE, None).header_rows
+            height = document.page_size(raw.page_no).height
+            # A caller's group is checked against the original grid before any crop is read.
+            scoped = merge_evidence(scoped)
+            validate_evidence(raw, scoped, raw_rows, source_table=table, page_height=height)
             visual = raw.page_no in inputs.visual_pages
             grid = restore_word_order(repair_grid(raw, visual=visual), index)
             if header_recover is not None and inputs.page_modes.get(grid.page_no) is PageMode.IMAGE:
                 grid = header_recover(grid, document)
+            collected, unsupported = supported_evidence(
+                raw, grid.period_evidence, raw_rows, source_table=table, page_height=height
+            )
+            grid = grid.model_copy(
+                update={"period_evidence": collected, "flags": (*grid.flags, *unsupported)}
+            )
+            # Merge by actual column, without overwriting readings from either producer.
+            scoped = merge_evidence(collected, scoped)
             headings = _headings(document, grid, visual)
             hint = _date_hint(headings)
             context = TableContext(
@@ -267,11 +271,14 @@ def structure_document(
                     *(
                         f
                         for f in grid.flags
-                        if f.startswith(("header_recovery_", "header_recovered"))
+                        if f.startswith(
+                            ("header_recovery_", "header_recovered", "period_evidence_")
+                        )
                     ),
                 ],
                 recovered_headers=grid.recovered_headers,
                 recovery_context=grid.recovered_context,
+                period_evidence=scoped,
             )
             decisions.append(decision)
             if result.type is not None or _only_below_confidence(result):
@@ -345,6 +352,10 @@ def structure_document(
                 ]
             )
         )
+        if layout.period_conflicts and not layout.value_cols:
+            # A prior statement cannot supply a new binding after all current
+            # printed bindings were held by their observed alternatives.
+            continue
         previous = next(
             (
                 p
@@ -564,6 +575,8 @@ def structure_pdf(
             and cached.settings_hash == digest
             and (out_dir / "table_checks.json").is_file()
             and not any(
+                # A missing engine or a failed read can succeed next time. Every other
+                # unavailable comparison is a fact of the page and is reused as cached.
                 e.startswith(("header_recovery_failed:", "header_recovery_unavailable"))
                 for table in cached.tables
                 for e in table.evidence
