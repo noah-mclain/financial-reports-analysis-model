@@ -246,6 +246,19 @@ def recover_header(
         return _flag(grid, "conflicting_periods")
     caption = _caption(observed, min(b.top for _, b in selected))
     context = " ".join(line.text for line, _ in caption)
+    context_cells = tuple(
+        GridCell(
+            text=line.text,
+            row=-1,
+            col=-1,
+            bbox=b,
+            page_no=grid.page_no,
+            flags=("header_recovery_context",),
+        )
+        for line, b in caption
+    )
+    # Preserve the printed uncertainty even when it prevents recovering any binding.
+    grid = grid.model_copy(update={"recovered_context": context_cells})
     if (
         any(_YEAR.fullmatch(normalize_digits(line.text)[0].strip()) for line, _ in selected)
         and not caption
@@ -269,17 +282,6 @@ def recover_header(
             flags=("header_recovered",),
         )
         for col, values in labels.items()
-    )
-    context_cells = tuple(
-        GridCell(
-            text=line.text,
-            row=-1,
-            col=-1,
-            bbox=b,
-            page_no=grid.page_no,
-            flags=("header_recovery_context",),
-        )
-        for line, b in caption
     )
     return grid.model_copy(
         update={

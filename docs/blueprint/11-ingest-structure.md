@@ -239,6 +239,47 @@ class StructureResult(BaseModel):   # statements.raw.json
    `Notes` / `إيضاح` header; the label column is the one with the most non-numeric text,
    wherever it sits, so mirrored Arabic tables need no special case. Columns are bound to
    periods by their header text, never by position.
+
+   `StructureInputs.period_evidence` optionally supplies caller-collected `PeriodEvidence`
+   groups. Each group contains at least two `PeriodObservation` readings of one path, page,
+   table and value column, with distinct stable source IDs, original literal text, optional
+   confidence and existing `Provenance` (PDF points, top-left origin). The producer must
+   collect every alternative period reading before binding; production currently has no
+   automatic producer for this collection. Absence preserves the existing binding behavior.
+   Scope, header row, column identity and source geometry are validated against the original
+   grid; unmatched evidence, duplicate IDs/groups and ambiguous geometry fail loudly.
+
+   Each observation is parsed with the same statement kind and date context as its column,
+   using core's typed `interpret_period` facts for all four-digit Gregorian calendar years.
+   It distinguishes complete dates, month/year and legitimate year-only descriptions from
+   missing or invalid calendar information before defaults. Malformed separators, impossible
+   dates, unknown months and stray date numbers cannot reach the bare-year fallback.
+   Duration facts distinguish explicit supported lengths (3, 6, 9 or 12 months and existing
+   annual/quarter cues), generic period wording, absent wording and invalid stated lengths.
+   Unsupported, negated or contradictory lengths hold the column. `parse_period` retains
+   its existing permissive behavior for other callers. Candidate
+   text uses the existing header repairs; Arabic digit runs are reversed only for `text`
+   provenance on a page explicitly marked `visual_arabic`. Logical OCR readings are not
+   reversed, and the observation's literal text, source ID and geometry remain unchanged.
+   Without visual page context, digit order is preserved. Different computed period keys, end dates,
+   kinds or lengths hold the column; different formats of the same computed period agree.
+   An unparseable or partial observation also holds it, with a null candidate rather than a
+   guessed year. Confidence never chooses a reading. Agreeing evidence that omits the bound
+   header's interpretation is rejected. No year window or replacement date is inferred.
+   `period_conflict:<col>` and `period_unbound:<col>` name the held column. Its frozen
+   `PeriodConflict` retains every source observation and computed candidate through
+   `HeaderLayout`, `PartialStatement`, `TableDecision` and `Statement` JSON. Other columns
+   still extract, and the statement needs review. If every column is held, no statement is
+   fabricated: `StructureResult.tables` retains the conflicts and reasons. Header binding
+   after recovery and continuation trials use the same evidence; inheritance cannot bind a conflicted
+   column, and merged parts keep their conflicts. Resolving a conflict requires corrected
+   caller evidence and a new structure run; there is no automatic resolution policy.
+   A recovered caption fills missing duration information but never replaces an explicit
+   observation duration or complete date. Generic period wording supplies no explicit
+   length, so an explicit caption can fill it. Invalid facts cannot be healed by context.
+   Agreeing observations that contradict a caption or the recovered header remain
+   held with `conflicting_context`; their computed candidates and recovered context are retained.
+   Structure results are cached against `STRUCTURE_VERSION`; changing it invalidates prior structure results while reusing cached conversion output.
 6. **Metadata.** Scale from the header text, then the caption, then the page text; per-share
    rows are exempt. Currency the same way; when none of those name one (Almarai's glyph), the
    country of incorporation decides: the earliest page with a phrase such as "a Saudi Joint

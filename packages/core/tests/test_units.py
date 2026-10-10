@@ -121,3 +121,44 @@ def test_short_abbreviations_are_read_only_in_capitals(text: str) -> None:
     """LE, SR and KD are currencies only as printed in capitals, and "dollars" alone names no
     country."""
     assert detect_currency(text) is None
+
+
+@pytest.mark.parametrize(
+    "text,markers,residue",
+    [
+        ("SAR30/06", ("SAR",), "30/06"),
+        ("2024SAR", ("SAR",), "2024"),
+        ("SR30/06", ("SR",), "30/06"),
+        ("million30/06", (), "million30/06"),
+        ("(000)7", (), "(000)7"),
+        ("'000+1", ("'000",), "+1"),
+        ("in thousands of Egyptian pounds", ("in thousands", "Egyptian pounds"), "of"),
+        ("USD millions", ("USD", "millions"), ""),
+        ("ريال سعودي بآلاف", ("ريال سعودي", "بآلاف"), ""),
+        ("SR LE KD", ("SR", "LE", "KD"), ""),
+        ("sr le kd Sr Le Kd", (), "sr le kd Sr Le Kd"),
+        ("unknownريال", (), "unknownريال"),
+        ("بالريال السعودي", ("بالريال السعودي",), ""),
+        ("الريالات", ("الريالات",), ""),
+        ("بالجنيه المصري", ("بالجنيه المصري",), ""),
+        ("الجنيهات المصرية", ("الجنيهات المصرية",), ""),
+        ("بالريال السعودي30/06", ("بالريال السعودي",), "30/06"),
+        ("2024الريالات7", ("الريالات",), "2024 7"),
+        ("necessary", (), "necessary"),
+        ("الدينار الكويتي", (), "الدينار الكويتي"),
+        ("sAr '000", ("sAr", "'000"), ""),
+        ("€m US$m", ("€m", "US$m"), ""),
+    ],
+)
+def test_unit_marker_spans_cover_only_validated_text(
+    text: str, markers: tuple[str, ...], residue: str
+) -> None:
+    from fra_core.units import unit_marker_spans
+
+    spans = unit_marker_spans(text)
+    assert tuple(text[start:end] for start, end in spans) == markers
+    remaining = "".join(
+        " " if any(start <= i < end for start, end in spans) else char
+        for i, char in enumerate(text)
+    )
+    assert " ".join(remaining.split()) == residue
