@@ -70,8 +70,9 @@ def _overlap(a: BBox, b: BBox) -> bool:
     return a.left < b.right and b.left < a.right and a.top < b.bottom and b.top < a.bottom
 
 
-def period_identity(period: Period) -> tuple[str, date, PeriodKind, int | None]:
-    return period.key, period.end_date, period.kind, period.months
+def period_identity(period: Period) -> tuple[str, date, PeriodKind, int | None, bool, bool | None]:
+    # Unknown audit status is a separate fact; no reading supplies another's metadata.
+    return period.key, period.end_date, period.kind, period.months, period.restated, period.audited
 
 
 def unresolved(candidates: tuple[PeriodCandidate, ...]) -> PeriodConflict | None:

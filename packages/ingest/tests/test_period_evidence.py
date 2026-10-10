@@ -72,6 +72,100 @@ def test_conflicting_valid_years_hold_only_the_affected_column() -> None:
     assert StructureResult.model_validate_json(result.model_dump_json()) == result
 
 
+@pytest.mark.parametrize("recovered", [False, True])
+@pytest.mark.parametrize(
+    "markers,statuses",
+    [
+        (("", "Restated"), ((False, None), (True, None))),
+        (("Audited", "Unaudited"), ((False, True), (False, False))),
+        (("", "Unaudited"), ((False, None), (False, False))),
+        (("", "Audited"), ((False, None), (False, True))),
+        (("المعدلة", ""), ((True, None), (False, None))),
+    ],
+)
+def test_reporting_status_disagreements_hold_and_serialize_every_candidate(
+    markers: tuple[str, str], statuses: tuple[tuple[bool, bool | None], ...], recovered: bool
+) -> None:
+    from fra_core.schemas import PageMode
+
+    texts = tuple(f"2025 ({marker})" if marker else "2025" for marker in markers)
+    rows = [["", "Notes", texts[0], "2024"], *PAGE_1[1:]]
+    base = supplied(evidence(texts=texts), rows=rows)
+    base = base.model_copy(update={"page_modes": {1: PageMode.IMAGE}})
+    before = base.model_dump_json()
+
+    def recover(grid: Grid, _doc: object) -> Grid:
+        result = _recovered_period_grid(grid, "31 December 2025")
+        return result.model_copy(
+            update={
+                "recovered_headers": tuple(
+                    c.model_copy(update={"text": texts[0]}) for c in result.recovered_headers
+                )
+            }
+        )
+
+    result, _ = structure_document(
+        base, IngestConfig(), header_recover=recover if recovered else None
+    )
+    statement = result.statements[0]
+    assert [p.key for p in statement.periods] == ["2024-12-31"]
+    conflict = statement.period_conflicts[0]
+    assert conflict.reason == "differing_periods"
+    assert (
+        tuple((c.period.restated, c.period.audited) for c in conflict.candidates if c.period)
+        == statuses
+    )
+    assert tuple(c.observation for c in conflict.candidates) == base.period_evidence[0].observations
+    assert "period_conflict:2" in result.tables[0].evidence
+    assert "period_conflict:2" in result.reviews[0].reasons
+    assert Statement.model_validate_json(statement.model_dump_json()) == statement
+    assert StructureResult.model_validate_json(result.model_dump_json()) == result
+    assert base.model_dump_json() == before
+
+
+@pytest.mark.parametrize(
+    "markers,restated,audited",
+    [
+        (("Restated", "المعدلة"), True, None),
+        (("Audited", "المراجعة"), False, True),
+        (("Unaudited", "غير المدققة"), False, False),
+        (("Restated Unaudited", "المعدلة غير المراجعة"), True, False),
+    ],
+)
+def test_agreeing_arabic_and_english_status_facts_bind_without_changing_sources(
+    markers: tuple[str, str], restated: bool, audited: bool | None
+) -> None:
+    texts = tuple(f"2025 ({marker})" for marker in markers)
+    base = supplied(evidence(texts=texts), rows=[["", "Notes", texts[0], "2024"], *PAGE_1[1:]])
+    before = base.model_dump_json()
+    result, _ = structure_document(base, IngestConfig())
+    period = result.statements[0].periods[0]
+    assert (period.restated, period.audited) == (restated, audited)
+    assert not result.statements[0].period_conflicts
+    assert base.model_dump_json() == before
+
+
+@pytest.mark.parametrize("prefix", ["For the period ended", "Interim"])
+def test_generic_context_resolution_preserves_agreeing_arabic_unaudited_status(prefix: str) -> None:
+    from fra_core.schemas import StatementType
+    from fra_ingest.header import parse_header
+    from fra_ingest.table_grid import build_grid
+
+    texts = (f"{prefix} 30 June 2025 (Unaudited)", f"{prefix} 30 June 2025 (غير المراجعة)")
+    base = supplied(evidence(texts=texts), rows=[["", "Notes", texts[0], "2024"], *PAGE_1[1:]])
+    doc = base.documents[0][1]
+    layout = parse_header(
+        build_grid(doc.tables[0], doc, PATH),
+        StatementType.INCOME,
+        "For the six months ended 30 June 2025",
+        period_evidence=base.period_evidence,
+    )
+    assert not layout.period_conflicts
+    assert layout.value_cols[2].key == "6M-2025-06-30"
+    assert layout.value_cols[2].audited is False
+    assert base.period_evidence[0].observations[1].raw_text == texts[1]
+
+
 def test_all_conflicted_columns_remain_a_reviewable_table() -> None:
     result, _ = structure_document(
         supplied(evidence(), evidence(3, texts=("31/12/2024", "31/12/2023"))), IngestConfig()

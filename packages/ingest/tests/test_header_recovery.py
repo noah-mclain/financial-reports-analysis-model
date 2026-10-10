@@ -1341,3 +1341,89 @@ def test_partial_recovery_retains_plain_currency_and_scale_subheaders(
             header_text=" ".join(layout.header_texts.values()), context_texts=[], document_texts=[]
         )
         assert after_meta == before_meta
+
+
+@pytest.mark.parametrize("interim_below_date", [False, True])
+@pytest.mark.parametrize("headers", [("2023", "2024"), ("2023-06-30", "2024-06-30")])
+@pytest.mark.parametrize("length", [None, 3, 6, 9])
+def test_separate_interim_caption_is_retained_and_requires_a_printed_length(
+    interim_below_date: bool,
+    headers: tuple[str, str],
+    length: int | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lines = safety_lines("30 June", headers)
+    date_line = next(line for line in lines if line.text == "30 June")
+    interim = "Interim" if length is None else f"Interim for the {length} months ended"
+    lines.append(
+        replace(
+            date_line, text=interim, top=date_line.top + (0.06 if interim_below_date else -0.06)
+        )
+    )
+    result = recover(OBSERVED[1], monkeypatch, lines)
+    assert {c.text for c in result.recovered_context} == {"30 June", interim}
+    assert result.cells == OBSERVED[1].grid.cells
+    layout = parse_header(result, StatementType.INCOME, None)
+    if length is None:
+        assert not result.recovered_headers
+        assert not layout.value_cols
+        assert "header_recovery_period_uncertain" in result.flags
+    else:
+        assert {
+            col: (p.end_date.isoformat(), p.months) for col, p in layout.value_cols.items()
+        } == {
+            0: ("2023-06-30", length),
+            1: ("2024-06-30", length),
+        }
+
+
+@pytest.mark.parametrize("bound_col", [0, 1])
+@pytest.mark.parametrize("interim_below_date", [False, True])
+@pytest.mark.parametrize(
+    "context,length",
+    [
+        ("Interim", None),
+        ("For the period ended", None),
+        ("Interim for the 3 months ended", 3),
+        ("Interim for the 6 months ended", 6),
+        ("Interim for the 9 months ended", 9),
+    ],
+)
+def test_partial_recovery_with_separate_interim_context_preserves_original_binding(
+    bound_col: int,
+    interim_below_date: bool,
+    context: str,
+    length: int | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    header = "For the three months ended 30 June 2023 (Restated) (Unaudited)"
+    observation = partial_observation(bound_col, header)
+    target_col = 1 - bound_col
+    headers = (header, "2024") if bound_col == 0 else ("2024", header)
+    lines = safety_lines("30 June", headers)
+    date_line = next(line for line in lines if line.text == "30 June")
+    lines.append(
+        replace(
+            date_line, text=context, top=date_line.top + (0.06 if interim_below_date else -0.06)
+        )
+    )
+    before = observation.grid
+    result = recover(observation, monkeypatch, lines)
+    assert result.cells == before.cells
+    assert {c.text for c in result.recovered_context} == {"30 June", context}
+    for kind in StatementType:
+        for hint in (None, "For the six months ended 30 June 2023"):
+            original = parse_header(before, kind, hint)
+            layout = parse_header(result, kind, hint)
+            assert layout.value_cols[bound_col] == original.value_cols[bound_col]
+            assert layout.value_cols[bound_col].restated
+            assert layout.value_cols[bound_col].audited is False
+            if length is None:
+                assert not result.recovered_headers
+                assert target_col in layout.unbound_cols
+                assert "header_recovery_period_uncertain" in result.flags
+            else:
+                assert [c.col for c in result.recovered_headers] == [target_col]
+                assert layout.value_cols[target_col].end_date.isoformat() == "2024-06-30"
+                if kind != StatementType.BALANCE:
+                    assert layout.value_cols[target_col].months == length
