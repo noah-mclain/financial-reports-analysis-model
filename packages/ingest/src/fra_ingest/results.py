@@ -171,6 +171,7 @@ class LocateResult(BaseModel):
 
 
 RangeOcr = Literal["pdf_aware", "full_page", "skipped"]
+RangeRenderer = Literal["default", "pdfium"]
 RangeStatus = Literal["ok", "partial", "failed", "skipped"]
 
 
@@ -187,6 +188,7 @@ class RangePlan(BaseModel):
         "the range is skipped or no OCR engine is configured"
     )
     image_pages: tuple[int, ...] = ()
+    renderer: RangeRenderer = "default"
 
     @model_validator(mode="after")
     def _ordered(self) -> RangePlan:
