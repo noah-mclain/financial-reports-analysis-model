@@ -432,3 +432,46 @@ def test_explicit_findings_keep_slot_denominator_and_missing_statements_blocking
             [doc("synthetic", "annual", mapping={**complete, **blockers})], pairs=[], errors=errors
         )
         assert blocked["strata"]["total"]["gate_b"]["met"] is False
+
+
+def test_rejected_remote_balance_cannot_receive_statement_or_gate_credit() -> None:
+    from support import HEADER, INCOME_1, PAGE_1, PAGE_2, page, span, structured_source
+
+    from fra_ingest.structure import structure_document
+
+    weak = [HEADER, ["Cash", "", "5", "4"], ["Inventories", "", "10", "8"]]
+    scores = [
+        page(5),
+        page(6, StatementType.INCOME),
+        page(7, StatementType.COMPREHENSIVE_INCOME),
+        page(60, StatementType.BALANCE),
+    ]
+    scores[0].cue_types = [StatementType.BALANCE]
+    scores[0].type_scores = {StatementType.BALANCE: 8}
+    base = structured_source(
+        [(5, weak), (6, INCOME_1), (60, [*PAGE_1, *PAGE_2[1:]])],
+        [
+            span(StatementType.BALANCE, 5),
+            span(StatementType.INCOME, 6),
+            span(StatementType.COMPREHENSIVE_INCOME, 7),
+            span(StatementType.BALANCE, 60, rank=2),
+        ],
+        scores,
+    )
+    result, checks = structure_document(base, IngestConfig())
+    by_statement = {s.id: [c for c in checks if c.statement_id == s.id] for s in result.statements}
+    figures = document_figures(
+        {**ENTRY, "scale": 1000},
+        result,
+        by_statement,
+        None,
+        INDEX,
+        TAXONOMY,
+        IngestConfig().enabled_types,
+    )
+    assert figures["identity"] == "no_balance"
+    assert figures["scale_currency"] == {"expected": 3, "found": 1, "right": 1}
+    assert figures["mapping"]["statement_not_found"] == 8
+    from harness.mapping import SLOT_STATES
+
+    assert sum(figures["mapping"].get(state, 0) for state in SLOT_STATES) == 12

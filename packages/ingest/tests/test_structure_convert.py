@@ -15,6 +15,7 @@ from fra_ingest.config import IngestConfig
 from fra_ingest.convert import CONVERT_VERSION, convert_pdf, settings_hash
 from fra_ingest.errors import IngestError
 from fra_ingest.ocr_policy import plan_ranges
+from fra_ingest.pages import ocr_key
 from fra_ingest.results import ConvertResult, LocateResult, PageScore, RangeConversion
 
 SHA = "d" * 64
@@ -154,7 +155,10 @@ def test_structure_rebuilds_statements_and_checks_after_same_digest_recovery(
     config = IngestConfig(artifact_root=tmp_path)
     where = located([PageMode.TEXT] * 2, [(1, 2)], sha256=SHA)
     where.pages = [
-        PageScore(page_no=n, type_scores={}, title_types=[StatementType.BALANCE]) for n in (1, 2)
+        PageScore(
+            page_no=n, type_scores={StatementType.BALANCE: 8}, title_types=[StatementType.BALANCE]
+        )
+        for n in (1, 2)
     ]
     monkeypatch.setattr(structure, "load_or_locate", lambda *_args: where)
     monkeypatch.setattr(
@@ -276,8 +280,12 @@ def _recorded_structure_setup(
     out = tmp_path / SHA
     (out / "docling").mkdir(parents=True)
     (out / "docling/p6-6.json").write_text(observation.document().model_dump_json(by_alias=True))
-    where = located([PageMode.IMAGE] * 6, [(6, 6)], sha256=SHA)
-    where.pages = [PageScore(page_no=6, type_scores={}, title_types=[StatementType.INCOME])]
+    where = located([PageMode.IMAGE] * 6, [(6, 6)], sha256=SHA, primary_type=StatementType.INCOME)
+    where.pages = [
+        PageScore(
+            page_no=6, type_scores={StatementType.INCOME: 8}, title_types=[StatementType.INCOME]
+        )
+    ]
     page = text_page("قائمة الأرباح أو الخسائر المجمعة", page_no=6).model_copy(
         update={"mode": PageMode.IMAGE}
     )
@@ -362,8 +370,9 @@ def test_failed_header_read_is_persisted_but_not_reused_as_success(
     assert len(engine.calls) == 1
 
 
+@pytest.mark.parametrize("old_version", ["17", "24", "25"])
 def test_old_structure_version_and_header_resolution_do_not_reuse_old_headers(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, old_version: str
 ) -> None:
     from test_header_recovery import OBSERVED, RecordedEngine
 
@@ -371,12 +380,108 @@ def test_old_structure_version_and_header_resolution_do_not_reuse_old_headers(
     engine = RecordedEngine(OBSERVED[1])
     first = structure.structure_pdf(PDF, config, engine)
     path = tmp_path / SHA / "statements.raw.json"
-    path.write_text(first.model_copy(update={"version": "17"}).model_dump_json())
+    path.write_text(first.model_copy(update={"version": old_version}).model_dump_json())
     structure.structure_pdf(PDF, config, engine)
     assert len(engine.calls) == 2
-    assert structure.STRUCTURE_VERSION != "17"
+    assert old_version != structure.STRUCTURE_VERSION
     changed = config.model_copy(update={"header_ocr_scale": 4.0})
     assert _current_hash(changed, _located()) == _current_hash(config, _located())
-    assert structure._settings_hash(changed, converted, engine) != structure._settings_hash(
-        config, converted, engine
+    assert structure._settings_hash(
+        changed, converted, _located(), engine
+    ) != structure._settings_hash(config, converted, _located(), engine)
+
+
+def test_source_payload_changes_only_structure_and_is_canonical() -> None:
+    from fra_ingest.results import StatementRange
+
+    where = _located()
+    config = IngestConfig()
+    converted = _result(_current_hash(config, where))
+    original = structure._settings_hash(config, converted, where)
+    reordered = where.model_copy(
+        update={"pages": list(reversed(where.pages)), "ranges": list(reversed(where.ranges))}
     )
+    assert structure._settings_hash(config, converted, reordered) == original
+    updates: list[dict[str, object]] = [
+        {
+            "ranges": [
+                StatementRange(
+                    type=StatementType.BALANCE, first_page=2, last_page=2, rank=1, score=8
+                )
+            ]
+        },
+        {"ranges": [where.ranges[0].model_copy(update={"rank": 2})]},
+        {"pages": [where.pages[0].model_copy(update={"negatives": ["notes"]}), *where.pages[1:]]},
+    ]
+    for update in updates:
+        changed = where.model_copy(update=update)
+        assert structure._settings_hash(config, converted, changed) != original
+        assert _current_hash(config, changed) == converted.settings_hash
+
+
+def test_source_change_rebuilds_structure_without_relocating_or_converting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fra_ingest import stage
+
+    where = located([PageMode.TEXT] * 2, [(1, 2)], sha256=SHA)
+    config = IngestConfig(artifact_root=tmp_path)
+    where.ocr_key = ocr_key(config, None)
+    converted = _result(_current_hash(config, where)).model_copy(update={"ranges": []})
+    _store(config, converted)
+    pdf = tmp_path / "cached.pdf"
+    pdf.write_bytes(b"saved upstream stub")
+    monkeypatch.setattr(stage, "sha256_file", lambda *_: SHA)
+    stored_locate = tmp_path / SHA / "locate.json"
+    stored_locate.write_text(where.model_dump_json())
+    locate_calls: list[Path] = []
+    convert_calls: list[Path] = []
+
+    def locate_again(path: Path, *_args: object, **_kwargs: object) -> LocateResult:
+        locate_calls.append(path)
+        raise AssertionError("cached locate must be reused")
+
+    def convert_again(path: Path, _config: IngestConfig) -> ConvertResult:
+        convert_calls.append(path)
+        raise AssertionError("cached conversion must be reused")
+
+    monkeypatch.setattr(stage, "locate_pdf", locate_again)
+    reads: list[int] = []
+
+    def read(*_args: object, **_kwargs: object) -> list[object]:
+        reads.append(1)
+        return []
+
+    monkeypatch.setattr(structure, "read_pages", read)
+    first = structure.structure_pdf(pdf, config, None, convert=convert_again)
+    assert structure.structure_pdf(pdf, config, None, convert=convert_again) == first
+    assert len(reads) == 1
+    where.ranges = [where.ranges[0].model_copy(update={"last_page": 1})]
+    stored_locate.write_text(where.model_dump_json())
+    fresh = structure.structure_pdf(pdf, config, None, convert=convert_again)
+    assert fresh.settings_hash != first.settings_hash and len(reads) == 2
+    assert _current_hash(config, where) == converted.settings_hash
+    assert locate_calls == [] and convert_calls == []
+
+
+def test_no_located_ranges_records_unextracted_statements(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    where = located([PageMode.TEXT] * 2, [], sha256=SHA, statement_ranges=[])
+    config = IngestConfig(artifact_root=tmp_path)
+    converted = _result("no-ranges").model_copy(update={"ranges": []})
+    monkeypatch.setattr(structure, "load_or_locate", lambda *_: where)
+    monkeypatch.setattr(structure, "current_convert", lambda *_: converted)
+    monkeypatch.setattr(structure, "read_pages", lambda *_args, **_kwargs: [])
+    # A saved upstream grid can still exist even when this locate run found no range.
+    converted.ranges = [
+        converted_range.model_copy(update={"docling_path": "docling/p1-2.json"})
+        for converted_range in _result("no-ranges").ranges
+    ]
+    monkeypatch.setattr(structure, "load_docling_json", lambda *_: document())
+    result = structure.structure_pdf(PDF, config, None)
+    assert not result.statements
+    assert all(f"statement_not_extracted:{t.value}" in result.flags for t in config.enabled_types)
+    assert result.tables
+    assert all(t.type is None and t.statement_id is None for t in result.tables)
+    assert all("source_outside_range" in t.evidence for t in result.tables)

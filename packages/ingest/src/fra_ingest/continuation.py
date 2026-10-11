@@ -99,7 +99,8 @@ def continues_part(layout: HeaderLayout, grid: Grid, previous: PartialStatement)
 
 def _continues(first: PartialStatement, second: PartialStatement, index: LabelIndex) -> bool:
     if (
-        is_closed(first, index)
+        first.source_group != second.source_group
+        or is_closed(first, index)
         or second.type is not first.type
         or second.first_page not in (first.last_page, first.last_page + 1)
     ):

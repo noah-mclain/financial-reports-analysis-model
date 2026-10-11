@@ -50,6 +50,7 @@ class PartialStatement(BaseModel):
 
     period_conflicts: tuple[PeriodConflict, ...] = ()
 
+    source_group: str | None = None
     type: StatementType
     confidence: float
     first_page: int

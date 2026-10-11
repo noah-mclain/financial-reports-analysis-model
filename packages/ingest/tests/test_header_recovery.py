@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 from pydantic import BaseModel
+from support import located_titles
 
 from fra_core.schemas import BBox, StatementType
 from fra_ingest import header_recovery
@@ -1077,7 +1078,7 @@ def test_real_partial_recovery_cannot_bypass_consumer_period_holds(
     base = inputs([(grid.docling_path, observation.document())]).model_copy(
         update={
             "page_modes": {grid.page_no: PageMode.IMAGE},
-            "title_types": {grid.page_no: (StatementType.INCOME,)},
+            "located": located_titles({grid.page_no: (StatementType.INCOME,)}, {}),
             "period_evidence": (group,),
         }
     )

@@ -20,6 +20,48 @@ statement, periods bound from header text, every value with its page, box, table
 Values are kept as printed (sign applied, before scale), and scale and currency are recorded on
 the statement.
 
+## Statement source authorization
+
+Structure version 27 requires the locate result. Classification identifies an apparent table
+kind; it cannot authorize a statement source. `statement_source.py` interprets the ranked,
+unpadded ranges before confidence or header binding is considered. Padded conversion spans
+provide grouping only. The unique span supported by the most distinct enabled types with a
+rank-1, named, non-negative candidate page is the primary block. Within it the lowest-rank
+range of each type is reserved, including when its table fails extraction. Support ties are
+broken by the number of distinct enabled types with named, non-negative candidate pages at
+any rank, then by the lowest sum of their locator ranks. Remaining tied spans with disjoint
+types are complementary primary sources. Competing same-type spans stay ambiguous unless two
+locally titled blocks prove opposite standalone/consolidated scopes.
+
+A start must lie on its type's primary range. Page negatives and exclusive other-type titles
+veto it. Secondary ranges, unrelated padding and outside pages cannot replace a failed
+primary. A second scope requires its own matching range, a local statement title and explicit
+opposite scope in that title; filenames, notes headings and document-wide metadata cannot
+prove it. Scope groups neither merge nor lend periods. Existing confidence, header-conflict,
+column-geometry and closed-balance rules remain in effect. An adjacent compatible table may
+continue an authorized part even in padding, but padding cannot authorize a start. Only two
+known, different title scopes veto continuation; an unmarked repeated title does not. Primary
+metadata keeps `detect_metadata` precedence; a title-scope override applies only to a separately
+authorized second-scope group. Optional cash-flow and equity types are not extracted while
+they are excluded from the enabled source types.
+
+Every rejected grid remains in `tables` with null type and statement id, original classification
+and recovery evidence, source diagnostics and a stable reason: `source_secondary_range`,
+`source_unrelated_padding`, `source_outside_range`, `source_non_statement_page`,
+`source_primary_ambiguous`, `source_scope_unproven` or `source_conflicting_title`. Data-row
+counts are diagnostic only. Statements are ordered by type, primary group first, then page and
+table order; confidence and check results do not choose the credited source. The evaluator
+consumes this order. Removing a falsely credited statement can reduce reported coverage; no
+accuracy or gate result follows from the policy alone. Grids held for period conflicts or
+missing value columns also have null type and statement id, with their diagnostic evidence
+retained. An empty enabled-type range set returns no statements, `statement_not_extracted`
+flags and `source_outside_range` on every grid; it does not raise.
+
+The structure settings hash includes document identity/page count, canonical range bounds and
+ranks, page title/cue/negative/continuation evidence, candidate status and padding configuration.
+Equivalent reordered records reuse structure; changed source evidence rebuilds statements and
+checks together without changing locate or conversion cache contracts.
+
 ## Measured before designing
 
 Read from the golden docling output of Part 2 (2026-09-29):
@@ -66,6 +108,7 @@ fields it uses; a golden contract test fails if docling's JSON stops matching th
 | `fra_ingest/docling_json.py` | Pydantic models for the docling JSON fields structure reads (tables, cells, boxes, provenance, texts) and a loader |
 | `fra_ingest/table_grid.py` | `build_grid(table, page_height) -> Grid` |
 | `fra_ingest/visual_order.py` | Digit and bracket restoration on `visual_arabic` pages; joining of spaced letters on any page; word order of reversed tables |
+| `fra_ingest/statement_source.py` | Pure located-source planning and start eligibility |
 | `fra_ingest/classify.py` | `classify(grid, context) -> Classification` |
 | `fra_ingest/header.py` | `parse_header(grid, statement_type, context) -> HeaderLayout` |
 | `fra_ingest/metadata.py` | `detect_metadata(...) -> Metadata`: scale, currency, entity, consolidated, conflicts |
@@ -228,7 +271,8 @@ class StructureResult(BaseModel):   # statements.raw.json
    Negative evidence: a note heading (`Note`, `إيضاح` followed by a number) above the table,
    or no period header. A line that also reads as a period (`Notes 31 December 2025`, a column
    header docling left above the table) is not a note heading. A grid is a statement when its best
-   type reaches `min_confidence` (0.5, `[structure]` in `configs/ingest.toml`); every decision
+   type reaches `min_confidence` (0.5, `[structure]` in `configs/ingest.toml`) and its source is
+   authorized under the source policy above; every decision
    and its evidence goes into `StructureResult.tables`.
 5. **Header.** The header rows are those flagged `column_header` plus any leading rows that
    hold no amounts (a cell that parses as a date or a year is header text, not an amount). They are joined per column top to bottom and parsed with `parse_period`, with
@@ -416,8 +460,10 @@ class StructureResult(BaseModel):   # statements.raw.json
 | A known total (`Total assets`) has no value in any period | Its cells kept with `numbers_missing`; the checks on it are `skipped` with `missing_values` |
 | A value does not parse | `reported` None, `raw_text` kept, parser flags on the cell |
 | A header column does not bind to a period | That column dropped, `period_unbound:<col>` on the statement; with no bound column, no statement and `statement_not_extracted:<type>` |
+| No located range for any enabled type | No statements; `statement_not_extracted:<type>` for each enabled type and `source_outside_range` on each grid |
+| Source does not authorize a start | Grid retained with null type/id and a named `source_*` reason (secondary range, unrelated padding, outside range, non-statement page, ambiguous primary, unproven scope or conflicting title) |
 | An enabled type has no classified table | `statement_not_extracted:<type>` on the result |
-| Two tables claim the same type on the same page and cannot be merged | Both kept, `ambiguous_statement:<type>`; the higher-confidence one first |
+| Two tables claim the same type on the same page and cannot be merged | Both kept, `ambiguous_statement:<type>`; the primary-source group first, then page and table order |
 | Scale or currency signals disagree | `scale_conflict` or `currency_conflict`; the header value wins |
 | Currency only inferred from document text | `currency_inferred` |
 | A subtotal or the identity fails | `CheckResult` fail with the difference; the statement gets `subtotal_failed` or `identity_failed` |
