@@ -1,6 +1,7 @@
 """Gate A and Gate B figures: per document from the harness's own functions, then per period kind
 on a synthetic report."""
 
+import json
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -18,6 +19,7 @@ from harness.gates import (
     lines,
     pair_records,
 )
+from harness.locate_evidence import DocumentEvidence
 from test_mapping_harness import INDEX, TAXONOMY, P, item, statement
 
 from fra_core.schemas import CheckResult, Period, PeriodKind, StatementType
@@ -368,6 +370,26 @@ def test_the_unknown_stratum_line_is_always_printed() -> None:
     assert "[unknown] 0 documents" in printed
 
 
+def test_comparison_summary_prints_changed_pages_and_ranges() -> None:
+    report = gate_report([doc("a", "annual")], [])
+    report["documents"] = [
+        {
+            "id": "a",
+            "comparison": {
+                "status": "inputs changed",
+                "changed_pages": [60],
+                "ranges_changed": True,
+                "lost_ranges": [{"type": "balance", "first_page": 60, "last_page": 60}],
+                "gained_ranges": [],
+                "conversion_plan_changed": False,
+            },
+        }
+    ]
+    printed = "\n".join(lines(report))
+    assert "locate evidence a: inputs changed; pages [60]" in printed
+    assert "lost [{'type': 'balance', 'first_page': 60, 'last_page': 60}]; gained []" in printed
+
+
 @pytest.mark.parametrize("engine", [object(), None])
 def test_golden_gate_run_builds_one_configured_engine_and_reuses_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, engine: object | None
@@ -402,6 +424,104 @@ def test_golden_gate_run_builds_one_configured_engine_and_reuses_it(
     assert factory_configs == [config]
     assert [call[0].name for call in calls] == ["first.pdf", "second.pdf"]
     assert all(call[1] is engine for call in calls)
+
+
+def test_gate_writes_requested_output_and_fails_on_incomplete_locate_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = IngestConfig(artifact_root=tmp_path / "artifacts")
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        "documents:\n  - {id: first, file: first.pdf, language: en, scale: 1, currency: SAR, text_layer: digital}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "custom" / "report.json"
+    monkeypatch.setattr(gates_module, "load_config", lambda: config)
+    monkeypatch.setattr(gates_module, "make_engine", lambda _config: None, raising=False)
+    monkeypatch.setattr(gates_module, "MANIFEST", manifest)
+    monkeypatch.setattr(gates_module, "EXPECTED_DIR", tmp_path / "expected")
+    monkeypatch.setattr(gates_module, "structure_pdf", lambda *_args: structured())
+    monkeypatch.setattr(gates_module, "load_checks", lambda _path: {})
+    monkeypatch.setattr(
+        gates_module,
+        "document_evidence",
+        lambda _path: DocumentEvidence(
+            "incomplete", "missing cache", None, None, (), None, (), (), None, None
+        ),
+    )
+
+    assert gates_module.main(["--output", str(output)]) == 1
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["evidence_schema_version"] == 1
+    assert report["documents"][0]["locate_evidence"]["status"] == "incomplete"
+
+
+def test_gate_figures_ignore_locate_comparison_fields() -> None:
+    original = doc("a", "annual", scale=(2, 2, 1))
+    extended = {
+        **original,
+        "locate_evidence": {"status": "complete", "ocr_key": "pages-key"},
+        "comparison": {"status": "conversion settings hash changed"},
+    }
+    assert gate_report([extended], []) == gate_report([original], [])
+
+
+def test_compare_with_reports_legacy_missing_and_absent_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    config = IngestConfig(artifact_root=tmp_path / "artifacts")
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        "documents:\n"
+        "  - {id: legacy, file: a.pdf, language: en, scale: 1, currency: SAR, text_layer: digital}\n"
+        "  - {id: comparable, file: b.pdf, language: en, scale: 1, currency: SAR, text_layer: digital}\n"
+        "  - {id: absent, file: c.pdf, language: en, scale: 1, currency: SAR, text_layer: digital}\n",
+        encoding="utf-8",
+    )
+    evidence = DocumentEvidence("complete", None, 1, "digest", (), "7", (), (), "hash", "pages-key")
+    earlier = tmp_path / "earlier.json"
+    earlier.write_text(
+        json.dumps(
+            {
+                "documents": [
+                    {"id": "legacy"},
+                    {"id": "comparable", "locate_evidence": evidence.as_dict()},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = tmp_path / "report.json"
+    monkeypatch.setattr(gates_module, "load_config", lambda: config)
+    monkeypatch.setattr(gates_module, "make_engine", lambda _config: None, raising=False)
+    monkeypatch.setattr(gates_module, "MANIFEST", manifest)
+    monkeypatch.setattr(gates_module, "EXPECTED_DIR", tmp_path / "expected")
+    monkeypatch.setattr(gates_module, "OUT", tmp_path)
+    monkeypatch.setattr(gates_module, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(gates_module, "structure_pdf", lambda *_args: structured())
+    monkeypatch.setattr(gates_module, "load_checks", lambda _path: {})
+    monkeypatch.setattr(gates_module, "document_evidence", lambda _path: evidence)
+
+    assert gates_module.main(["--compare-with", str(earlier), "--output", str(output)]) == 0
+    report = json.loads(output.read_text(encoding="utf-8"))
+    comparisons = {item["id"]: item["comparison"] for item in report["documents"]}
+    assert comparisons["legacy"] == {
+        "status": "not comparable",
+        "reason": "no locate_evidence in the earlier report",
+    }
+    assert comparisons["comparable"]["status"] == "unchanged"
+    assert comparisons["absent"]["reason"] == "document id absent from earlier report"
+    assert "wrote report.json" in capsys.readouterr().out
+
+
+def test_malformed_compare_with_fails_before_loading_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    malformed = tmp_path / "bad-report.json"
+    malformed.write_text("{", encoding="utf-8")
+    monkeypatch.setattr(gates_module, "load_config", lambda: pytest.fail("work started"))
+    with pytest.raises(SystemExit, match=f"cannot read comparison report {malformed}"):
+        gates_module.main(["--compare-with", str(malformed)])
 
 
 def test_explicit_findings_keep_slot_denominator_and_missing_statements_blocking() -> None:

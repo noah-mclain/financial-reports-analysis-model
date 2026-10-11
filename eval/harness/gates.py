@@ -46,6 +46,7 @@ import json
 import sys
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -61,6 +62,7 @@ from fra_ingest.structure import structure_pdf
 from harness.expected import EXPECTED_DIR, ExpectedFile, load_expected
 from harness.extraction import DIGITAL, SCANNED, score_statement, wilson_interval
 from harness.failures import DOCUMENT_ERRORS, EngineFailure, EngineGuard, aborted, document_failure
+from harness.locate_evidence import compare_evidence, document_evidence, evidence_from_dict
 from harness.mapping import SLOT_STATES, critical_slots, document_period_kind
 from harness.paths import STRATA
 from harness.structure import (
@@ -366,11 +368,53 @@ def lines(report: Mapping[str, Any]) -> list[str]:
             f"disagree. That says nothing of the {b['no_verdict']} with no verdict"
         )
     out.append("\nempty strata: " + (", ".join(report["empty_strata"]) or "none"))
+    for document in report.get("documents", []):
+        if "comparison" in document:
+            comparison = document["comparison"]
+            detail = [f"locate evidence {document['id']}: {comparison['status']}"]
+            if comparison.get("changed_pages"):
+                detail.append(f"pages {comparison['changed_pages']}")
+            if comparison.get("ranges_changed"):
+                detail.append(
+                    f"lost {comparison['lost_ranges']}; gained {comparison['gained_ranges']}"
+                )
+            if comparison.get("conversion_spans_changed"):
+                detail.append(
+                    f"conversion spans changed; lost {comparison['lost_conversion_spans']}; "
+                    f"gained {comparison['gained_conversion_spans']}"
+                )
+            if comparison.get("conversion_settings_changed"):
+                detail.append("conversion settings hash changed")
+            if comparison.get("locate_version_changed"):
+                versions = comparison["locate_version_changed"]
+                detail.append(f"locate version {versions['previous']} -> {versions['current']}")
+            if comparison.get("ocr_key_changed"):
+                detail.append(f"locate OCR key changed: {comparison['ocr_key_changed']}")
+            if comparison.get("reason"):
+                detail.append(f"reason: {comparison['reason']}")
+            out.append("; ".join(detail))
     return out
 
 
 def main(argv: list[str] | None = None) -> int:
-    argparse.ArgumentParser(prog="python -m harness.gates", description=__doc__).parse_args(argv)
+    parser = argparse.ArgumentParser(prog="python -m harness.gates", description=__doc__)
+    parser.add_argument("--compare-with", type=Path, help="earlier gates-dev.json report")
+    parser.add_argument("--output", type=Path, default=OUT / "gates-dev.json")
+    args = parser.parse_args(argv)
+    previous: dict[str, dict[str, Any]] | None = None
+    if args.compare_with is not None:
+        try:
+            earlier_report = json.loads(args.compare_with.read_text(encoding="utf-8"))
+            earlier_documents = earlier_report["documents"]
+            if not isinstance(earlier_documents, list):
+                raise ValueError("'documents' must be a list")
+            previous = {}
+            for item in earlier_documents:
+                if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+                    raise ValueError("each document must be an object with a string 'id'")
+                previous[item["id"]] = item
+        except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            raise SystemExit(f"cannot read comparison report {args.compare_with}: {exc}") from exc
     config = load_config()
     ocr = make_engine(config)
     taxonomy = load_taxonomy()
@@ -399,23 +443,40 @@ def main(argv: list[str] | None = None) -> int:
                 break
             continue
         guard.record(None)
+        evidence = document_evidence(config.artifact_root / result.sha256)
         path = EXPECTED_DIR / f"{entry['id']}.json"
         checks = load_checks(config.artifact_root / result.sha256 / "table_checks.json")
-        documents.append(
-            document_figures(
-                entry,
-                result,
-                checks,
-                load_expected(path) if path.is_file() else None,
-                index,
-                taxonomy,
-                config.enabled_types,
-            )
+        record = document_figures(
+            entry,
+            result,
+            checks,
+            load_expected(path) if path.is_file() else None,
+            index,
+            taxonomy,
+            config.enabled_types,
         )
+        record["locate_evidence"] = evidence.as_dict()
+        if previous is not None:
+            if entry["id"] not in previous:
+                record["comparison"] = {
+                    "status": "not comparable",
+                    "reason": "document id absent from earlier report",
+                }
+            else:
+                earlier = evidence_from_dict(previous[entry["id"]].get("locate_evidence"))
+                if earlier is None:
+                    record["comparison"] = {
+                        "status": "not comparable",
+                        "reason": "no locate_evidence in the earlier report",
+                    }
+                else:
+                    record["comparison"] = compare_evidence(earlier, evidence)
+        documents.append(record)
         by_id[entry["id"]] = first_statements(result, PAIR_TYPES)
     kinds = {d["id"]: d["period_kind"] for d in documents}
     report = {
         **gate_report(documents, pair_records(by_id, kinds), errors),
+        "evidence_schema_version": 1,
         "errors": errors,
         "errored": errored,
         "documents": documents,
@@ -426,13 +487,17 @@ def main(argv: list[str] | None = None) -> int:
     print("unreadable documents: " + (", ".join(errors) or "none"))
     if stopped is not None:
         print(f"aborted: {stopped}")
-    OUT.mkdir(parents=True, exist_ok=True)
-    out = OUT / "gates-dev.json"
+    out = args.output
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(f"wrote {out.relative_to(REPO_ROOT)}")
+    try:
+        display_path = out.resolve().relative_to(REPO_ROOT.resolve())
+    except ValueError:
+        display_path = out
+    print(f"wrote {display_path}")
     if stopped is not None:
         raise stopped
-    return 0
+    return 1 if any(d["locate_evidence"]["status"] != "complete" for d in documents) else 0
 
 
 if __name__ == "__main__":

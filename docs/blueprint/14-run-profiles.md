@@ -653,3 +653,18 @@ the default), for the reason in the section above.
 
 Not done: how a filing is recognised as scanned Arabic in the demo (D14 says the same), and a
 `device` and engine setting per profile (week 4, with the worker).
+
+### Locate evidence in gate reports
+
+Gate reports (`var/eval/gates-dev.json`) use `evidence_schema_version: 1` and include a
+`locate_evidence` record per structured document. It fingerprints each saved page-text record
+(excluding OCR timings), the locate version, `ocr_key`, ranges, conversion spans and settings
+hash. Missing or malformed saved artifacts are marked incomplete and make the gate command exit
+nonzero. Compare a later run with `python -m harness.gates --compare-with
+<earlier-gates-dev.json> --output <report.json>`; per-document comparisons report changed
+input pages, gained or lost ranges, changed conversion spans, a settings-hash-only difference,
+locate-version or `ocr_key` changes, or unchanged inputs. A settings hash can change when the
+locate version changes even if conversion spans do not; that is reported as a settings-hash
+difference, not as a changed conversion plan. Reports without earlier evidence, incomplete
+evidence and malformed evidence are not comparable with a stated reason. These fingerprints
+describe saved inputs and outputs; they do not establish that a cached read is correct.
