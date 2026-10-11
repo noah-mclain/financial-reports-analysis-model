@@ -243,7 +243,9 @@ def build_part(
                         row=grid_cell.source_row
                         if grid_cell is not None and grid_cell.source_row is not None
                         else row,
-                        col=col,
+                        col=grid_cell.source_col
+                        if grid_cell is not None and grid_cell.source_col is not None
+                        else col,
                         source=source,
                     ),
                     flags=flags,

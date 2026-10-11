@@ -1,0 +1,559 @@
+"""Conservative horizontal assignment of two merged OCR amounts."""
+
+from decimal import Decimal
+
+import pytest
+from test_parts import grid
+from test_structure import cells, document, inputs
+
+from fra_core.numbers import parse_number
+from fra_core.schemas import BBox, PageMode, StatementType, TextSource
+from fra_ingest.classify import Classification
+from fra_ingest.column_assignment import split_numeric_columns
+from fra_ingest.config import IngestConfig
+from fra_ingest.header import HeaderLayout, parse_header
+from fra_ingest.parts import PartialStatement, build_part
+from fra_ingest.row_alignment import realign_rows
+from fra_ingest.structure import structure_document
+from fra_ingest.table_grid import Grid, GridCell
+
+LITERAL = "2,505,304,778 1,345,663,827"
+LABEL = "TOTAL COMPREHENSIVE INCOME FOR THE YEAR"
+WITNESSES = (1, 3, 5, 6, 9, 10, 11)
+KIND = StatementType.COMPREHENSIVE_INCOME
+
+
+def merged_grid() -> Grid:
+    rows = [["", "Notes", "2025 EGP", "2024 EGP"]]
+    rows.extend(
+        [f"Line {r}", "", "1,234,567", "2,345,678"]
+        if r in WITNESSES
+        else [LABEL, "", LITERAL, ""]
+        if r == 7
+        else ["", "", "", ""]
+        for r in range(1, 12)
+    )
+    return replace_cell(grid(rows), 7, 2, bbox=BBox(left=210, right=390, top=145, bottom=155))
+
+
+def replace_cell(g: Grid, row: int, col: int, **changes: object) -> Grid:
+    return g.model_copy(
+        update={
+            "cells": tuple(
+                c.model_copy(update=changes) if (c.row, c.col) == (row, col) else c for c in g.cells
+            )
+        }
+    )
+
+
+def layout(g: Grid) -> HeaderLayout:
+    return parse_header(g, KIND, None)
+
+
+def part(g: Grid, header: HeaderLayout) -> PartialStatement:
+    return build_part(g, header, Classification(type=KIND, confidence=1), source=TextSource.OCR)
+
+
+def test_two_amounts_split_with_bound_periods_original_provenance_and_idempotence() -> None:
+    original = merged_grid()
+    header = layout(original)
+    before = original.model_dump_json()
+    unrepaired = part(original, header).line_items[4].cells
+    assert [c.reported for c in unrepaired] == [None, None]
+    assert unrepaired[0].raw_text == LITERAL
+    repaired = split_numeric_columns(original, header)
+    assert original.model_dump_json() == before
+    assert split_numeric_columns(repaired, header) is repaired
+    assert Grid.model_validate_json(repaired.model_dump_json()) == repaired
+    source = original.cell(7, 2)
+    assert source is not None
+    for col in (2, 3):
+        cell = repaired.cell(7, col)
+        assert cell is not None
+        assert (cell.source_row, cell.source_col) == (7, 2)
+        assert cell.bbox == source.bbox
+        assert cell.flags == ("numeric_columns_split",)
+    built = part(repaired, header)
+    assert PartialStatement.model_validate_json(built.model_dump_json()) == built
+    amounts = built.line_items[4].cells
+    assert [(c.period_key, c.reported, c.raw_text) for c in amounts] == [
+        (header.value_cols[2].key, Decimal("2505304778"), "2,505,304,778"),
+        (header.value_cols[3].key, Decimal("1345663827"), "1,345,663,827"),
+    ]
+    assert all(
+        c.provenance.row == 7
+        and c.provenance.col == 2
+        and c.provenance.bbox == source.bbox
+        and c.provenance.source is TextSource.OCR
+        and "numeric_columns_split" in c.flags
+        for c in amounts
+    )
+
+
+def test_rightmost_label_column_is_not_split() -> None:
+    g = merged_grid()
+    shifted = tuple(c.model_copy(update={"col": {0: 3, 1: 0, 2: 1, 3: 2}[c.col]}) for c in g.cells)
+    g = g.model_copy(update={"cells": shifted})
+    header = layout(g)
+    assert header.label_col == 3
+    assert split_numeric_columns(g, header) is g
+
+
+def test_witnesses_from_another_table_section_do_not_establish_column_order() -> None:
+    g = merged_grid()
+    # The two remaining witnesses precede a new section; target row 7 follows it.
+    g = g.model_copy(
+        update={
+            "cells": (
+                *tuple(
+                    c.model_copy(update={"text": ""})
+                    if c.row in WITNESSES[2:] and c.col in (2, 3)
+                    else c
+                    for c in g.cells
+                ),
+                GridCell(
+                    text="OTHER SECTION",
+                    row=4,
+                    col=0,
+                    bbox=None,
+                    page_no=g.page_no,
+                    is_row_section=True,
+                ),
+            )
+        }
+    )
+    assert split_numeric_columns(g, layout(g)) is g
+
+
+def test_each_table_grid_needs_its_own_two_witnesses() -> None:
+    g = merged_grid()
+    g = g.model_copy(
+        update={
+            "cells": tuple(
+                c.model_copy(update={"text": ""})
+                if c.row in WITNESSES[1:] and c.col in (2, 3)
+                else c
+                for c in g.cells
+            )
+        }
+    )
+    assert split_numeric_columns(g, layout(g)) is g
+
+
+def test_each_section_uses_its_own_witnesses_and_centres() -> None:
+    g = merged_grid()
+    cells = [
+        c.model_copy(update={"text": ""})
+        if c.row in WITNESSES and c.row not in (1, 3, 10, 11) and c.col in (2, 3)
+        else c
+        for c in g.cells
+        if (c.row, c.col) not in {(9, 0), (9, 2), (9, 3)}
+    ]
+    # Section B has one witness, so its merged row must remain unsplit.
+    cells.extend(
+        [
+            GridCell(
+                text="SECTION B", row=8, col=0, bbox=None, page_no=g.page_no, is_row_section=True
+            ),
+            GridCell(
+                text=LABEL,
+                row=9,
+                col=0,
+                bbox=BBox(left=10, right=180, top=185, bottom=195),
+                page_no=g.page_no,
+            ),
+            GridCell(
+                text=LITERAL,
+                row=9,
+                col=2,
+                bbox=BBox(left=210, right=390, top=185, bottom=195),
+                page_no=g.page_no,
+            ),
+            GridCell(text="", row=9, col=3, bbox=None, page_no=g.page_no),
+        ]
+    )
+    cells = [
+        c.model_copy(update={"text": ""}) if c.row == 11 and c.col in (2, 3) else c for c in cells
+    ]
+    g = g.model_copy(update={"cells": tuple(cells)})
+    repaired = split_numeric_columns(g, layout(g))
+    assert repaired.text(7, 3) == "1,345,663,827"
+    assert repaired.text(9, 2) == LITERAL
+    assert repaired.text(9, 3) == ""
+
+
+def test_each_section_splits_with_its_own_centres() -> None:
+    g = merged_grid()
+    cells = [
+        c.model_copy(update={"text": ""})
+        if c.row in WITNESSES and c.row not in (1, 3, 10, 11) and c.col in (2, 3)
+        else c
+        for c in g.cells
+        if (c.row, c.col) not in {(9, 0), (9, 2), (9, 3)}
+    ]
+    cells.extend(
+        [
+            GridCell(
+                text="SECTION B", row=8, col=0, bbox=None, page_no=g.page_no, is_row_section=True
+            ),
+            GridCell(
+                text=LABEL,
+                row=9,
+                col=0,
+                bbox=BBox(left=10, right=180, top=185, bottom=195),
+                page_no=g.page_no,
+            ),
+            GridCell(
+                text=LITERAL,
+                row=9,
+                col=2,
+                bbox=BBox(left=610, right=790, top=185, bottom=195),
+                page_no=g.page_no,
+            ),
+            GridCell(text="", row=9, col=3, bbox=None, page_no=g.page_no),
+        ]
+    )
+    for row, top in ((10, 205), (11, 225)):
+        for col, left, right in ((2, 610, 690), (3, 710, 790)):
+            cells = [
+                c.model_copy(
+                    update={"bbox": BBox(left=left, right=right, top=top, bottom=top + 10)}
+                )
+                if c.row == row and c.col == col
+                else c
+                for c in cells
+            ]
+    g = g.model_copy(update={"cells": tuple(cells)})
+    repaired = split_numeric_columns(g, layout(g))
+    assert repaired.text(7, 3) == "1,345,663,827"
+    assert repaired.text(9, 2) == "2,505,304,778"
+    assert repaired.text(9, 3) == "1,345,663,827"
+
+
+def test_row_left_unresolved_by_realignment_is_not_used_as_a_witness() -> None:
+    g = merged_grid()
+    # Keep two witness texts, but displace both and leave an unboxed value so neither can move.
+    for row in WITNESSES[:2]:
+        g = replace_cell(g, row, 2, bbox=BBox(left=210, right=290, top=1000, bottom=1010))
+        g = replace_cell(g, row, 3, bbox=BBox(left=310, right=390, top=1000, bottom=1010))
+    g = replace_cell(g, 1, 3, bbox=None)
+    g = g.model_copy(
+        update={
+            "cells": tuple(
+                c.model_copy(update={"text": ""})
+                if c.row in WITNESSES[2:] and c.col in (2, 3)
+                else c
+                for c in g.cells
+            )
+        }
+    )
+    aligned = realign_rows(g, layout(g))
+    assert len(aligned.unresolved) == 2
+    first = aligned.grid.cell(1, 2)
+    second_left = aligned.grid.cell(3, 2)
+    second_right = aligned.grid.cell(3, 3)
+    assert first is not None and "row_misaligned" in first.flags
+    assert second_left is not None and "row_misaligned" in second_left.flags
+    assert second_right is not None and "row_misaligned" in second_right.flags
+    assert split_numeric_columns(aligned.grid, layout(aligned.grid)) is aligned.grid
+
+
+def test_period_bindings_follow_the_layout_even_when_years_are_swapped() -> None:
+    g = merged_grid()
+    header = layout(g)
+    header.value_cols = {2: header.value_cols[3], 3: header.value_cols[2]}
+    amounts = part(split_numeric_columns(g, header), header).line_items[4].cells
+    assert amounts[0].period_key == header.value_cols[2].key
+    assert amounts[0].reported == Decimal("2505304778")
+    assert amounts[1].period_key == header.value_cols[3].key
+
+
+def test_split_preserves_an_existing_source_position_and_flags() -> None:
+    g = replace_cell(merged_grid(), 7, 2, source_row=8, source_col=1, flags=("row_realigned",))
+    amounts = part(split_numeric_columns(g, layout(g)), layout(g)).line_items[4].cells
+    assert all((c.provenance.row, c.provenance.col) == (8, 1) for c in amounts)
+    assert all("row_realigned" in c.flags and "numeric_columns_split" in c.flags for c in amounts)
+
+
+def test_witness_centres_use_medians_and_separate_physical_column_bands() -> None:
+    g = merged_grid()
+    g = replace_cell(g, 7, 2, bbox=BBox(left=240, right=360, top=145, bottom=155))
+    # Extreme centres change the mean but not the median; neither box crosses columns.
+    g = replace_cell(g, 1, 2, bbox=BBox(left=0, right=100, top=25, bottom=35))
+    g = replace_cell(g, 1, 3, bbox=BBox(left=510, right=590, top=25, bottom=35))
+    assert split_numeric_columns(g, layout(g)).text(7, 3) == "1,345,663,827"
+
+    # Every pair remains disjoint, but column bands overlap across different rows.
+    g = replace_cell(g, 1, 2, bbox=BBox(left=310, right=390, top=25, bottom=35))
+    assert split_numeric_columns(g, layout(g)) is g
+
+
+@pytest.mark.parametrize(
+    "literal",
+    [
+        "1,234 2,345 3,456",
+        "-1,234 2,345",
+        "+1,234 2,345",
+        "(1,234) 2,345",
+        "1,234.5 2,345",
+        "1,234% 2,345",
+        "1 234 2 345",
+        "1,234 2,345(a)",
+        "1,234¹ 2,345",
+        "1,23 2,345",
+        "1,234 words",
+        "١,٢٣٤ ٢,٣٤٥",
+        "1,234 567",
+        "1,234",
+        "2 505 304 778",
+    ],
+)
+def test_unsupported_literals_return_the_original_grid(literal: str) -> None:
+    g = replace_cell(merged_grid(), 7, 2, text=literal)
+    assert split_numeric_columns(g, layout(g)) is g
+
+
+def test_a_whole_literal_that_already_parses_is_never_split() -> None:
+    g = replace_cell(merged_grid(), 7, 2, text="1,234 567")
+    assert parse_number(g.text(7, 2)).value is not None
+    assert split_numeric_columns(g, layout(g)) is g
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "occupied",
+        "zero",
+        "dash",
+        "right_span",
+        "right_col_span",
+        "source_span",
+        "source_row_span",
+        "one_witness",
+        "overlap",
+        "crossed",
+        "one_median",
+        "source_unboxed",
+        "label_unboxed",
+        "witness_unboxed",
+        "source_infinite",
+        "witness_nan",
+        "label_infinite",
+        "wrong_y",
+        "unlabelled",
+        "section",
+        "misaligned",
+        "label_misaligned",
+        "witness_misaligned",
+        "duplicate",
+        "touching",
+        "ambiguous_columns",
+    ],
+)
+def test_unsupported_geometry_or_rows_return_the_original_grid(change: str) -> None:
+    g = merged_grid()
+    header = layout(g)
+    if change in {"occupied", "zero", "dash", "right_span", "right_col_span"}:
+        right = GridCell(
+            text={"occupied": "3,456", "zero": "0", "dash": "-"}.get(change, ""),
+            row=7,
+            col=3,
+            bbox=None,
+            page_no=g.page_no,
+            row_span=2 if change == "right_span" else 1,
+            col_span=2 if change == "right_col_span" else 1,
+        )
+        g = g.model_copy(update={"cells": (*g.cells, right)})
+    elif change == "source_span":
+        g = replace_cell(g, 7, 2, col_span=2)
+    elif change == "source_row_span":
+        g = replace_cell(g, 7, 2, row_span=2)
+    elif change in {"one_witness", "witness_misaligned"}:
+        g = g.model_copy(
+            update={
+                "cells": tuple(
+                    c
+                    if c.row not in WITNESSES[1:] or c.col not in (2, 3)
+                    else c.model_copy(
+                        update={"text": ""}
+                        if change == "one_witness"
+                        else {"flags": ("row_misaligned",)}
+                    )
+                    for c in g.cells
+                )
+            }
+        )
+    elif change in {"source_unboxed", "label_unboxed", "witness_unboxed"}:
+        row, col = {"source_unboxed": (7, 2), "label_unboxed": (7, 0), "witness_unboxed": (1, 2)}[
+            change
+        ]
+        g = replace_cell(g, row, col, bbox=None)
+    elif change in {"source_infinite", "witness_nan", "label_infinite"}:
+        row, col = {"source_infinite": (7, 2), "witness_nan": (1, 2), "label_infinite": (7, 0)}[
+            change
+        ]
+        g = replace_cell(
+            g,
+            row,
+            col,
+            bbox=BBox(
+                left=210,
+                right=float("nan") if change == "witness_nan" else float("inf"),
+                top=145,
+                bottom=155,
+            ),
+        )
+    elif change in {"one_median", "wrong_y"}:
+        g = replace_cell(
+            g,
+            7,
+            2,
+            bbox=BBox(
+                left=210,
+                right=300 if change == "one_median" else 390,
+                top=100 if change == "wrong_y" else 145,
+                bottom=110 if change == "wrong_y" else 155,
+            ),
+        )
+    elif change in {"unlabelled", "section", "misaligned", "label_misaligned"}:
+        g = replace_cell(
+            g,
+            7,
+            2 if change == "misaligned" else 0,
+            **(
+                {"text": ""}
+                if change == "unlabelled"
+                else {"is_row_section": True}
+                if change == "section"
+                else {"flags": ("row_misaligned",)}
+            ),
+        )
+    elif change == "duplicate":
+        source = g.cell(7, 2)
+        assert source is not None
+        g = g.model_copy(update={"cells": (*g.cells, source)})
+    else:
+        for row in WITNESSES:
+            if change == "crossed":
+                g = replace_cell(
+                    g,
+                    row,
+                    2,
+                    bbox=BBox(left=310, right=390, top=20 * row + 5, bottom=20 * row + 15),
+                )
+                g = replace_cell(
+                    g,
+                    row,
+                    3,
+                    bbox=BBox(left=210, right=290, top=20 * row + 5, bottom=20 * row + 15),
+                )
+            else:
+                left = 290 if change == "touching" else 280 if change == "overlap" else 250
+                # Disjoint within a row, but not independent physical column bands.
+                if change == "ambiguous_columns" and row != 1:
+                    continue
+                g = replace_cell(
+                    g,
+                    row,
+                    3 if change != "ambiguous_columns" else 2,
+                    bbox=BBox(left=left, right=390, top=20 * row + 5, bottom=20 * row + 15),
+                )
+    assert split_numeric_columns(g, header) is g
+
+
+@pytest.mark.parametrize(
+    "change", ["three", "unbound", "conflicted", "non_adjacent", "same_period"]
+)
+def test_ambiguous_bindings_return_the_original_grid(change: str) -> None:
+    g = merged_grid()
+    header = layout(g)
+    if change == "three":
+        header.value_cols[4] = header.value_cols[3]
+    elif change == "unbound":
+        header.unbound_cols = [3]
+    elif change == "conflicted":
+        header.evidence.append("period_conflict:3")
+    elif change == "same_period":
+        header.value_cols[3] = header.value_cols[2]
+    else:
+        header.value_cols[4] = header.value_cols.pop(3)
+    assert split_numeric_columns(g, header) is g
+
+
+def test_an_explicit_empty_unit_destination_and_two_witnesses_are_enough() -> None:
+    g = merged_grid()
+    g = g.model_copy(
+        update={
+            "cells": (
+                *(c for c in g.cells if c.row not in WITNESSES[2:]),
+                GridCell(text="  ", row=7, col=3, bbox=None, page_no=g.page_no),
+            )
+        }
+    )
+    repaired = split_numeric_columns(g, layout(g))
+    assert repaired.text(7, 3) == "1,345,663,827"
+    assert sum(c.row == 7 and c.col == 3 for c in repaired.cells) == 1
+
+
+@pytest.mark.parametrize("mode,split", [(PageMode.IMAGE, True), (PageMode.TEXT, False)])
+def test_structure_only_splits_logical_ocr_grids(mode: PageMode, split: bool) -> None:
+    doc = document()
+    table = doc.tables[0]
+    rows = [
+        ["", "Notes", "31 December 2025 SAR", "31 December 2024 SAR"],
+        ["Inventories", "", "1,234", "2,345"],
+        ["Cash", "", "3,456", "4,567"],
+        ["Total assets", "", LITERAL, ""],
+    ]
+    # Construct synthetic Docling data only; no renderer, OCR engine or conversion.
+    synthetic = type(table.data).model_validate(
+        {"num_rows": 4, "num_cols": 4, "table_cells": cells(rows)}
+    )
+    doc = doc.model_copy(update={"tables": [table.model_copy(update={"data": synthetic})]})
+    merged = doc.tables[0].data.table_cells[-1]
+    assert merged.bbox is not None
+    merged = merged.model_copy(update={"bbox": merged.bbox.model_copy(update={"right": 630})})
+    data = synthetic.model_copy(update={"table_cells": [*synthetic.table_cells[:-1], merged]})
+    doc = doc.model_copy(update={"tables": [table.model_copy(update={"data": data})]})
+    supplied = inputs([("synthetic.json", doc)]).model_copy(
+        update={"page_modes": {1: mode}, "visual_pages": set()}
+    )
+    result, _ = structure_document(supplied, IngestConfig())
+    amounts = result.statements[0].line_items[-1].cells
+    assert any("numeric_columns_split" in c.flags for c in amounts) is split
+    assert [c.reported for c in amounts] == (
+        [Decimal("2505304778"), Decimal("1345663827")] if split else [None, None]
+    )
+    if split:
+        review = result.reviews[0]
+        assert review.status == "needs_review"
+        assert "numeric_columns_split:2" in review.reasons
+        assert "numeric_columns_split:2" in review.warnings
+
+
+def test_structure_does_not_split_image_grid_with_rightmost_label() -> None:
+    doc = document()
+    table = doc.tables[0]
+    rows = [
+        ["Notes", "31 December 2025 SAR", "31 December 2024 SAR", ""],
+        ["", "1,234", "2,345", "Inventories"],
+        ["", "3,456", "4,567", "Cash"],
+        ["", LITERAL, "", "Total assets"],
+    ]
+    data = type(table.data).model_validate(
+        {"num_rows": 4, "num_cols": 4, "table_cells": cells(rows)}
+    )
+    merged = next(c for c in data.table_cells if c.text == LITERAL)
+    assert merged.bbox is not None
+    merged = merged.model_copy(update={"bbox": merged.bbox.model_copy(update={"l": 210, "r": 480})})
+    data = data.model_copy(
+        update={"table_cells": [merged if c.text == LITERAL else c for c in data.table_cells]}
+    )
+    doc = doc.model_copy(update={"tables": [table.model_copy(update={"data": data})]})
+    supplied = inputs([("synthetic.json", doc)]).model_copy(
+        update={"page_modes": {1: PageMode.IMAGE}, "visual_pages": set()}
+    )
+    result, _ = structure_document(supplied, IngestConfig())
+    amounts = result.statements[0].line_items[-1].cells
+    assert [c.reported for c in amounts] == [None, None]
+    assert all("numeric_columns_split" not in c.flags for c in amounts)

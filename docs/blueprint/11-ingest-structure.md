@@ -321,6 +321,34 @@ class StructureResult(BaseModel):   # statements.raw.json
    still holds the column. A heading length that contradicts an explicit column
    length holds the column in every case.
    Structure results are cached against `STRUCTURE_VERSION`; changing it invalidates prior structure results while reusing cached conversion output.
+   After row realignment and before building line items, logical OCR grids can split a
+   merged amount literal on a labelled data row. The layout must bind exactly two adjacent
+   value columns to distinct periods, without unbound or conflicted columns. A unit-span
+   cell starting in the left column may supply exactly two whitespace-separated tokens,
+   each matching `[0-9]{1,3}(?:,[0-9]{3})+` and parsing independently, only when the whole
+   literal fails number parsing. The right position must be absent or empty and unspanned.
+   At least two independent rows on the same page and in the same table section as the
+   merged amount must supply parseable, boxed unit-span amounts in both columns, with
+   disjoint horizontal bands. Continuation pages need their own witnesses. Their median
+   horizontal centres establish physical order. The merged source rectangle must contain
+   both centres and the label's vertical centre. Missing, non-finite, overlapping or ambiguous
+   geometry and unresolved
+   row alignment prevent assignment. The rule refuses a layout unless its label column is
+   physically left of both value columns; it therefore does not assign mirrored right-to-left
+   layouts. Digital grids do not use this rule.
+   Signs, parentheses, decimals, percentages, note references and space-grouped numbers
+   remain outside its scope. No period ordering, magnitude, expected value or check result
+   chooses an assignment.
+
+   Both derived cells retain the original source row, source column and shared rectangle;
+   each keeps its own exact token as `raw_text`. No token rectangle is invented. The original
+   combined literal stays accessible through the Docling table reference and source position.
+   Each cell carries `numeric_columns_split`, shown as a review warning and a reason to hold
+   the statement even when its numerical checks pass. This intentional hold keeps the split
+   visible for review until its provenance is checked. Assignment is pure and idempotent;
+   unsuccessful eligibility returns the original grid. The structure cache version changes
+   so statements, checks and reviews regenerate; conversion, pages and locate caches retain
+   their existing contracts.
 6. **Metadata.** Scale from the header text, then the caption, then the page text; per-share
    rows are exempt. Currency the same way; when none of those name one (Almarai's glyph), the
    country of incorporation decides: the earliest page with a phrase such as "a Saudi Joint

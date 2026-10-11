@@ -25,6 +25,7 @@ from fra_core.taxonomy.loader import load_taxonomy
 from fra_ingest.caveats import unit_caveats
 from fra_ingest.child import convert_in_child
 from fra_ingest.classify import Classification, TableContext, classify
+from fra_ingest.column_assignment import split_numeric_columns
 from fra_ingest.config import IngestConfig
 from fra_ingest.continuation import continues_part, inherit_periods, is_closed, merge_continuations
 from fra_ingest.convert import cached_convert, invalidate_convert, settings_hash
@@ -59,7 +60,7 @@ from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
 from fra_ingest.visual_order import repair_grid, repair_text, restore_word_order
 
-STRUCTURE_VERSION = "24"  # partial-crop period observations; conversion/pages unchanged
+STRUCTURE_VERSION = "25"  # split merged OCR amount columns; conversion/pages unchanged
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -374,8 +375,11 @@ def structure_document(
             else TextSource.TEXT
         )
         realigned = realign_rows(grid, layout)
+        assigned = realigned.grid
+        if source is TextSource.OCR:
+            assigned = split_numeric_columns(assigned, layout)
         part = build_part(
-            realigned.grid,
+            assigned,
             layout,
             result,
             source=source,
