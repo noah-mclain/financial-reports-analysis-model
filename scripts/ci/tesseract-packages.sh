@@ -11,7 +11,26 @@ if [[ ! -f "$dockerfile" ]]; then
 fi
 
 # Join backslash continuations, then keep the first apt-get install command.
-command_line="$(sed -e ':a' -e '/\\$/{N;s/\\\n//;ba}' "$dockerfile" | grep -m1 'apt-get install' || true)"
+command_line="$(awk '
+  {
+    if (continued) {
+      line = line $0
+    } else {
+      line = $0
+    }
+    if (line ~ /\\$/) {
+      sub(/\\$/, "", line)
+      continued = 1
+      next
+    }
+    if (index(line, "apt-get install")) {
+      print line
+      exit
+    }
+    line = ""
+    continued = 0
+  }
+' "$dockerfile")"
 if [[ -z "$command_line" ]]; then
   echo "tesseract-packages: no 'apt-get install' command in $dockerfile" >&2
   exit 1
