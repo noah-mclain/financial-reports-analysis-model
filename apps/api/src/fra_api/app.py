@@ -2,27 +2,41 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from importlib.metadata import version
 
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
+from fra_api.jobs import add_job_routes
+from fra_core.jobs import JobSettings, JobStore
 from fra_core.profile import Profile
 
 HEALTH_PATH = "/health"
 
 
-def create_app(profile: Profile) -> FastAPI:
-    """The API for one run profile. Job queue, upload and results arrive in week 4."""
+def create_app(profile: Profile, settings: JobSettings) -> FastAPI:
+    """The API for one run profile. The job store opens when the server starts, so a bad
+    storage setting stops the start, and building the app alone writes nothing."""
     package_version = version("fra-api")
-    # The generated docs and schema are off until the real API arrives in week 4.
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        app.state.store = JobStore(settings.root)
+        yield
+
+    # The generated docs and schema stay off until the results page settles the API.
     app = FastAPI(
         title="Financial statement analysis",
         version=package_version,
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
+        lifespan=lifespan,
     )
+    app.state.settings = settings
+    add_job_routes(app)
 
     @app.get(HEALTH_PATH)
     def health() -> dict[str, str]:

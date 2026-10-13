@@ -14,6 +14,7 @@ members = [
     "fra-api",
     "fra-core",
     "fra-ingest",
+    "fra-worker",
     "fra-workspace",
 ]
 overrides = [{ name = "opencv-python", marker = "sys_platform == 'never'" }]
@@ -547,6 +548,23 @@ requires-dist = [
 provides-extras = ["mac"]
 
 [[package]]
+name = "fra-worker"
+version = "0.1.0"
+source = { editable = "apps/worker" }
+dependencies = [
+    { name = "fra-analytics" },
+    { name = "fra-core" },
+    { name = "fra-ingest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fra-analytics", editable = "packages/analytics" },
+    { name = "fra-core", editable = "packages/core" },
+    { name = "fra-ingest", editable = "packages/ingest" },
+]
+
+[[package]]
 name = "fra-workspace"
 version = "0.0.0"
 source = { virtual = "." }
@@ -555,6 +573,7 @@ dependencies = [
     { name = "fra-api" },
     { name = "fra-core" },
     { name = "fra-ingest", extra = ["mac"] },
+    { name = "fra-worker" },
     { name = "opencv-python-headless" },
     { name = "torch", version = "2.14.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'linux'" },
     { name = "torch", version = "2.14.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'linux'" },
@@ -581,6 +600,7 @@ requires-dist = [
     { name = "fra-api", editable = "apps/api" },
     { name = "fra-core", editable = "packages/core" },
     { name = "fra-ingest", extras = ["mac"], editable = "packages/ingest" },
+    { name = "fra-worker", editable = "apps/worker" },
     { name = "opencv-python-headless", specifier = "==5.0.0.93" },
     { name = "torch", marker = "sys_platform != 'linux'", specifier = "==2.14.0" },
     { name = "torch", marker = "sys_platform == 'linux'", specifier = "==2.14.0", index = "https://download.pytorch.org/whl/cpu" },
