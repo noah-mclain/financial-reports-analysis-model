@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ filename }}: analysing{% endblock %}
+{% block main %}
+<h1>{{ filename }}</h1>
+<p class="muted">Job <code>{{ job.id }}</code>: <span id="overall" class="badge {{ job.status.value }}">{{ job.status.value }}</span></p>
+<div class="panel">
+  <table id="timeline">
+    <thead><tr><th>Stage</th><th>State</th><th class="num">Seconds</th><th>Detail</th></tr></thead>
+    <tbody>
+    {% for stage in stages %}
+      <tr data-stage="{{ stage }}"><td>{{ stage }}</td><td><span class="badge waiting">waiting</span></td>
+        <td class="num"></td><td class="detail muted"></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div id="end"></div>
+<script>
+const jobId = {{ job.id | tojson }};
+const started = {};
+const row = (stage) => document.querySelector(`tr[data-stage="${stage}"]`);
+const setState = (stage, state, detail, seconds) => {
+  const r = row(stage);
+  if (!r) return;
+  r.cells[1].innerHTML = `<span class="badge ${state}">${state}</span>`;
+  if (seconds !== undefined) r.cells[2].textContent = seconds.toFixed(1);
+  if (detail) r.querySelector(".detail").textContent = detail;
+};
+const finish = (kind, detail) => {
+  const overall = document.getElementById("overall");
+  overall.className = `badge ${kind}`;
+  overall.textContent = kind;
+  const end = document.getElementById("end");
+  if (kind === "failed") {
+    end.innerHTML = '<div class="banner bad"></div>';
+    end.firstChild.textContent = `The analysis failed: ${detail}`;
+  } else {
+    end.innerHTML = `<p><a href="/analyses/${jobId}/view">See the results</a></p>`;
+    setTimeout(() => { window.location = `/analyses/${jobId}/view`; }, 1200);
+  }
+};
+const source = new EventSource(`/jobs/${jobId}/events`);
+const handle = (message) => {
+  const event = JSON.parse(message.data);
+  const at = Date.parse(event.at) / 1000;
+  if (event.kind === "started") { started[event.stage] = at; setState(event.stage, "running"); }
+  else if (event.kind === "finished") {
+    const skipped = (event.detail || "").startsWith("skipped");
+    setState(event.stage, skipped ? "skipped" : "done", event.detail, at - (started[event.stage] || at));
+  } else if (event.kind === "failed") {
+    if (event.stage) setState(event.stage, "failed", event.detail);
+    source.close(); finish("failed", event.detail);
+  } else if (event.kind === "completed" || event.kind === "needs_review") {
+    source.close(); finish(event.kind);
+  }
+};
+for (const kind of ["queued", "started", "finished", "failed", "completed", "needs_review"]) {
+  source.addEventListener(kind, handle);
+}
+</script>
+{% endblock %}

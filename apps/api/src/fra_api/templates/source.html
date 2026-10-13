@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{{ filename }}: page {{ page_no }}{% endblock %}
+{% block main %}
+<h1>{{ filename }}, page {{ page_no }}</h1>
+<p class="muted">{% if overlay %}The outlined region is where the figure was read.{% else %}No region selected.{% endif %}
+  <a href="javascript:history.back()">Back</a></p>
+<div class="panel" style="padding:0">
+  <div style="position:relative">
+    <img id="page" src="/documents/{{ sha256 }}/pages/{{ page_no }}.png" alt="Page {{ page_no }}" style="display:block;width:100%;height:auto">
+    {% if overlay %}
+    <div id="region" style="position:absolute;left:{{ '%.3f' % overlay.left }}%;top:{{ '%.3f' % overlay.top }}%;width:{{ '%.3f' % overlay.width }}%;height:{{ '%.3f' % overlay.height }}%;outline:3px solid #d93025;outline-offset:2px;background:rgba(217,48,37,.12)"></div>
+    {% endif %}
+  </div>
+</div>
+{% if overlay %}<script>
+const page = document.getElementById("page");
+const show = () => document.getElementById("region").scrollIntoView({block: "center"});
+if (page.complete) show(); else page.addEventListener("load", show);
+</script>{% endif %}
+{% endblock %}

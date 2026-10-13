@@ -7,9 +7,9 @@ from contextlib import asynccontextmanager
 from importlib.metadata import version
 
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
 
 from fra_api.jobs import add_job_routes
+from fra_api.pages import add_page_routes
 from fra_core.jobs import JobSettings, JobStore
 from fra_core.profile import Profile
 
@@ -37,18 +37,10 @@ def create_app(profile: Profile, settings: JobSettings) -> FastAPI:
     )
     app.state.settings = settings
     add_job_routes(app)
+    add_page_routes(app, profile)
 
     @app.get(HEALTH_PATH)
     def health() -> dict[str, str]:
         return {"status": "ok", "version": package_version, "profile": profile.value}
-
-    @app.get("/", response_class=HTMLResponse)
-    def index() -> str:
-        return (
-            "<!doctype html><html lang=en><meta charset=utf-8>"
-            "<title>Financial statement analysis</title>"
-            f"<h1>Financial statement analysis</h1><p>Running under the {profile.value} profile. "
-            f'Health: <a href="{HEALTH_PATH}">{HEALTH_PATH}</a></p></html>'
-        )
 
     return app

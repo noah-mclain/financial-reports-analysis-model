@@ -41,7 +41,7 @@ def test_the_health_path_is_slash_health() -> None:
     assert HEALTH_PATH == "/health"
 
 
-def test_the_app_serves_the_index_health_and_the_job_routes_and_nothing_else(
+def test_the_app_serves_the_pages_health_and_the_job_routes_and_nothing_else(
     tmp_path: Path,
 ) -> None:
     job_settings = settings_at(tmp_path)
@@ -52,10 +52,14 @@ def test_the_app_serves_the_index_health_and_the_job_routes_and_nothing_else(
     assert sorted((route.path, *sorted(route.methods or ())) for route in routes) == [
         ("/", "GET"),
         ("/analyses/{job_id}", "GET"),
+        ("/analyses/{job_id}/view", "GET"),
         ("/documents", "POST"),
         ("/documents/{sha256}", "GET"),
         ("/documents/{sha256}/analyses", "POST"),
+        ("/documents/{sha256}/pages/{page_no}", "GET"),
+        ("/documents/{sha256}/pages/{page_no}.png", "GET"),
         (HEALTH_PATH, "GET"),
         ("/jobs/{job_id}", "GET"),
         ("/jobs/{job_id}/events", "GET"),
+        ("/jobs/{job_id}/view", "GET"),
     ]

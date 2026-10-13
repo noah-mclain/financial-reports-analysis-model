@@ -6,6 +6,10 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
   "fastapi==0.141.1",
   "fra-core",
+  # Templates, and page images for the source viewer (render with pdfium, encode with Pillow).
+  "jinja2>=3.1",
+  "pillow>=11.0",
+  "pypdfium2>=5.13",
   "uvicorn>=0.34",
 ]
 
