@@ -31,6 +31,7 @@ import subprocess
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
+from decimal import Decimal
 from difflib import SequenceMatcher
 from importlib import metadata
 from pathlib import Path
@@ -432,6 +433,56 @@ def _period(period: Period) -> tuple[object, ...]:
     return (period.key, period.end_date, period.kind, period.months)
 
 
+@dataclass(frozen=True)
+class CellJudgement:
+    """One confirmed expected figure against what was read for it. ``item`` is the extracted
+    row it aligned with, None when no row aligned; ``mislabelled`` is the right figure read
+    under another row's label, which is not right."""
+
+    row: ExpectedRow
+    period_key: str
+    expected: Decimal | None
+    read: Decimal | None
+    item: LineItem | None
+    right: bool
+    mislabelled: bool
+
+
+def _judge(
+    expected: ExpectedStatement, statement: Statement | None, aligned: Sequence[int | None]
+) -> list[CellJudgement]:
+    items = statement.line_items if statement is not None else []
+    judged = []
+    for row, position in zip(expected.rows, aligned, strict=True):
+        item = items[position] if position is not None else None
+        labelled = item is not None and not mislabelled(row, item.raw_label, expected.rows)
+        for key, value in row.values.items():
+            if key in row.unconfirmed:
+                continue
+            read = item.value_for(key) if item is not None else None
+            # Nothing printed must read as nothing; a figure must be read, on its own label.
+            same = statement is not None and read == value
+            right = same and (value is None or labelled)
+            judged.append(
+                CellJudgement(
+                    row=row,
+                    period_key=key,
+                    expected=value,
+                    read=read,
+                    item=item,
+                    right=right,
+                    mislabelled=same and not right,
+                )
+            )
+    return judged
+
+
+def judge_cells(expected: ExpectedStatement, statement: Statement | None) -> list[CellJudgement]:
+    """Every confirmed figure of ``expected``, in row order, judged against ``statement``."""
+    items = statement.line_items if statement is not None else []
+    return _judge(expected, statement, align_rows(expected.rows, items))
+
+
 def score_statement(expected: ExpectedStatement, statement: Statement | None) -> Score:
     score = Score(
         periods=len(expected.periods),
@@ -446,36 +497,31 @@ def score_statement(expected: ExpectedStatement, statement: Statement | None) ->
         score.metadata_right = (statement.scale == expected.scale) + (
             statement.currency == expected.currency
         )
+    score.unconfirmed = sum(
+        1 for row in expected.rows for key in row.values if key in row.unconfirmed
+    )
     aligned = align_rows(expected.rows, items)
-    for row, position in zip(expected.rows, aligned, strict=True):
-        item = items[position] if position is not None else None
-        labelled = item is not None and not mislabelled(row, item.raw_label, expected.rows)
-        for key, value in row.values.items():
-            if key in row.unconfirmed:
-                score.unconfirmed += 1
-                continue
-            read = item.value_for(key) if item is not None else None
-            score.cells += 1
-            score.cells_missing += int(statement is None)
-            # Nothing printed must read as nothing; a figure must be read, on its own label.
-            same = statement is not None and read == value
-            if same and (value is None or labelled):
-                score.right += 1
-            else:
-                score.mislabelled += same
-                score.wrong.append(
-                    {
-                        "statement": expected.type.value,
-                        "label": row.label,
-                        "period": key,
-                        "expected": "" if value is None else str(value),
-                        "read": "" if read is None else str(read),
-                        "label_read": item.raw_label if item is not None else "",
-                    }
-                )
-            if value is not None and read is not None and abs(read) == abs(value):
-                score.sign_cells += 1
-                score.sign_right += read == value
+    for cell in _judge(expected, statement, aligned):
+        value, read = cell.expected, cell.read
+        score.cells += 1
+        score.cells_missing += int(statement is None)
+        if cell.right:
+            score.right += 1
+        else:
+            score.mislabelled += cell.mislabelled
+            score.wrong.append(
+                {
+                    "statement": expected.type.value,
+                    "label": cell.row.label,
+                    "period": cell.period_key,
+                    "expected": "" if value is None else str(value),
+                    "read": "" if read is None else str(read),
+                    "label_read": cell.item.raw_label if cell.item is not None else "",
+                }
+            )
+        if value is not None and read is not None and abs(read) == abs(value):
+            score.sign_cells += 1
+            score.sign_right += read == value
     used = {p for p in aligned if p is not None}
     score.extra_rows = sum(
         1

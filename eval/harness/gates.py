@@ -10,7 +10,13 @@ Gate A, extraction.
   figures         cells of the expected files read right (`extraction.score_statement`). These are
                   cell shares over n expected files, with a 95% Wilson interval, not a verdict on
                   the gate: G1's thresholds apply to checked files, and a draft file is provisional
-                  and judged by nothing. A share over no cells is not measured.
+                  and judged by nothing. A share over no cells is not measured. Scanned cells are
+                  split by document language; scanned Arabic has no accuracy bar (D20) and its
+                  share is reported only.
+  confident       every confirmed figure as accepted, held or confident wrong
+                  (`harness.confidence`), per status, page mode and language. For scanned Arabic
+                  on checked files this is the part D20 gates: no figure wrong and shown as
+                  confident. The share of figures on passed statements is reported beside it.
   pairs           the gated language pair (Almarai) has no value row without a counterpart
                   (`structure.pair_misses`): 100% of matched rows. Over the statement types the
                   gate text names, financial position and profit or loss (`PAIR_TYPES`). A pair
@@ -58,6 +64,7 @@ from fra_ingest.ocr import make_engine
 from fra_ingest.results import StructureResult
 from fra_ingest.review import StatementReview
 from fra_ingest.structure import structure_pdf
+from harness.confidence import OUTCOMES, confidence_part, statement_outcomes
 from harness.expected import EXPECTED_DIR, ExpectedFile, load_expected
 from harness.extraction import DIGITAL, SCANNED, score_statement, wilson_interval
 from harness.failures import DOCUMENT_ERRORS, EngineFailure, EngineGuard, aborted, document_failure
@@ -77,7 +84,11 @@ from harness.structure import (
 MANIFEST = REPO_ROOT / "eval" / "golden" / "manifest.yaml"
 OUT = REPO_ROOT / "var" / "eval"
 NOT_MEASURED = "dev only; not yet measured on model_test"
-G1 = {"digital": DIGITAL, "scanned": SCANNED}
+# The cell-accuracy bar of each figures block; None is reported with no bar. Scanned cells are
+# split by document language, and scanned Arabic has no accuracy bar (D20).
+G1: dict[str, float | None] = {"digital": DIGITAL, "scanned_en": SCANNED, "scanned_ar": None}
+# Where D20's "no wrong figure shown as confident" is the verdict: (page mode, language).
+CONFIDENT_GATED = {("scanned", "ar"): True}
 PAIR_TYPES = (
     StatementType.BALANCE,
     StatementType.INCOME,
@@ -119,7 +130,11 @@ def document_figures(
     counts["absent"] = sum(1 for slot in slots if slot["state"] == "unmapped")
     figures = []
     for e in expected.statements if expected else []:
-        score = score_statement(e, everything.get(e.type))
+        extracted = everything.get(e.type)
+        score = score_statement(e, extracted)
+        outcomes, confident = statement_outcomes(
+            e, extracted, reviews.get(extracted.id) if extracted else None
+        )
         figures.append(
             {
                 "status": expected.status if expected else None,
@@ -127,6 +142,8 @@ def document_figures(
                 "type": e.type.value,
                 "cells": score.cells,
                 "right": score.right,
+                "outcomes": outcomes,
+                "confident_wrong": confident,
             }
         )
     return {
@@ -167,7 +184,8 @@ def _figures(
     files: dict[tuple[str, str], set[str]] = {}
     for d in documents:
         for f in d["figures"]:
-            key = (f["status"], f["page_mode"])
+            mode = f["page_mode"] if f["page_mode"] == "digital" else f"scanned_{d['language']}"
+            key = (f["status"], mode)
             total = cells.setdefault(key, Counter())
             total["cells"] += f["cells"]
             total["right"] += f["right"]
@@ -175,7 +193,10 @@ def _figures(
     out: dict[str, dict[str, Any]] = {"checked": {}, "draft": {}}
     for (status, mode), n in sorted(cells.items()):
         share = _share(n["right"], n["cells"])
-        met = share >= G1[mode] if status == "checked" and share is not None else None
+        bar = G1[mode]
+        met = (
+            share >= bar if status == "checked" and share is not None and bar is not None else None
+        )
         out[status][mode] = {
             "files": len(files[(status, mode)]),
             "cells": n["cells"],
@@ -200,6 +221,12 @@ def _gate_a(
     holds = sum(outcomes[k] for k in IDENTITY_MET)
     return {
         "figures": _figures(documents, unreadable),
+        "confident": {
+            key: {**block, "met": _unless_unreadable(block["met"], unreadable)}
+            if block["met"] is not None
+            else block
+            for key, block in confidence_part(documents, CONFIDENT_GATED).items()
+        },
         "pairs": {
             "gated": len(gated),
             "identical": len(identical),
@@ -321,6 +348,30 @@ def _identity_lines(a: Mapping[str, Any], documents: int) -> list[str]:
     ]
 
 
+def _confident_lines(confident: Mapping[str, Mapping[str, Any]]) -> list[str]:
+    out = []
+    for key, c in confident.items():
+        if c["status"] != "checked":
+            judged = "provisional"
+        elif c["met"] is None:
+            judged = "reported"
+        else:
+            judged = f"{_met(c['met'])} (D20)"
+        accepted = "no cells" if c["accepted_share"] is None else f"{c['accepted_share']:.2%}"
+        counts = ", ".join(f"{o} {c[o]}" for o in OUTCOMES)
+        out.append(
+            f"  A confident {key}: {c['wrong_confident']} wrong shown as confident of "
+            f"{c['cells']} cells {judged}; on passed statements {accepted} ({counts}; "
+            f"n={c['files']} files)"
+        )
+        out.extend(
+            f"    confident wrong: {w['id']} {w['statement']} {w['label']!r} {w['period']}: "
+            f"expected {w['expected'] or 'blank'}, read {w['read'] or 'blank'}"
+            for w in c["confident_wrong"]
+        )
+    return out
+
+
 def lines(report: Mapping[str, Any]) -> list[str]:
     out = [f"{report['measured_on']}; in-sample (aliases were taken from these documents)"]
     for name, s in report["strata"].items():
@@ -332,7 +383,12 @@ def lines(report: Mapping[str, Any]) -> list[str]:
             continue
         for status, modes in a["figures"].items():
             for mode, f in modes.items():
-                judged = _met(f["met"]) if status == "checked" else "provisional"
+                if status != "checked":
+                    judged = "provisional"
+                elif G1[mode] is None:
+                    judged = "reported, no accuracy bar (D20)"
+                else:
+                    judged = _met(f["met"])
                 share = "no cells" if f["share"] is None else f"{f['share']:.2%}"
                 out.append(
                     f"  A figures {status} {mode}: {f['right']} of {f['cells']} cells ({share}, "
@@ -341,6 +397,7 @@ def lines(report: Mapping[str, Any]) -> list[str]:
                 )
         if not any(a["figures"].values()):
             out.append("  A figures: no expected file")
+        out.extend(_confident_lines(a["confident"]))
         p = a["pairs"]
         out.append(
             f"  A pairs: {p['identical']} of {p['gated']} gated pairs identical "

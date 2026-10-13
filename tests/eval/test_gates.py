@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 from harness import gates as gates_module
+from harness.confidence import OUTCOMES
 from harness.expected import ExpectedFile, ExpectedRow, ExpectedStatement
 from harness.gates import (
     NOT_MEASURED,
@@ -145,7 +146,11 @@ def doc(
         "scale_currency": {"expected": scale[0], "found": scale[1], "right": scale[2]},
         "mapping": mapping or {"mapped": 6},
         "disagreements": [],
-        "figures": figures or [],
+        # A figure given without outcomes has none of interest to the test: all zero.
+        "figures": [
+            {"outcomes": dict.fromkeys(OUTCOMES, 0), "confident_wrong": [], **f}
+            for f in figures or []
+        ],
     }
 
 

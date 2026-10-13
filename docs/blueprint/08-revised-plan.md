@@ -110,7 +110,11 @@ restore if time is left, not the first thing to add.
 
 - **A. Extraction.** Almarai English and Arabic figures match on every row. Balance sheet
   identity holds, or is flagged with the correct reason, on every `dev` and `model_test`
-  document. Scale and currency correct on all of them.
+  document. Scale and currency correct on all of them. Digital cells and English scanned cells
+  meet G1's accuracy bars ([04-execution-phases.md](04-execution-phases.md)). Scanned Arabic
+  cells have no accuracy bar: no figure on them may be wrong and shown as confident, and their
+  accuracy is reported with its interval beside the share of figures on statements that passed
+  review (D20 in [06-decisions-and-risks.md](06-decisions-and-risks.md)).
 - **B. Mapping.** Every critical item (revenue, net profit, total assets, total equity, total
   current assets and liabilities) is mapped or explicitly flagged on `dev` and `model_test`,
   in both languages. No silent wrong mapping.
