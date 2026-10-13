@@ -57,9 +57,16 @@ from fra_ingest.stage import load_or_locate, page_ocr_languages
 from fra_ingest.table_checks import run_checks
 from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
-from fra_ingest.visual_order import repair_grid, repair_text, restore_word_order
+from fra_ingest.visual_order import (
+    page_vocabulary,
+    repair_grid,
+    repair_text,
+    restore_word_order,
+)
 
-STRUCTURE_VERSION = "24"  # partial-crop period observations; conversion/pages unchanged
+STRUCTURE_VERSION = (
+    "26"  # spaced Arabic letters split at the page's words; conversion/pages unchanged
+)
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -222,7 +229,8 @@ def structure_document(
             scoped = merge_evidence(scoped)
             validate_evidence(raw, scoped, raw_rows, source_table=table, page_height=height)
             visual = raw.page_no in inputs.visual_pages
-            grid = restore_word_order(repair_grid(raw, visual=visual), index)
+            vocabulary = page_vocabulary(inputs.page_texts.get(raw.page_no, ""), visual=visual)
+            grid = restore_word_order(repair_grid(raw, visual=visual, vocabulary=vocabulary), index)
             if header_recover is not None and inputs.page_modes.get(grid.page_no) is PageMode.IMAGE:
                 grid = header_recover(grid, document)
             collected, unsupported = supported_evidence(
