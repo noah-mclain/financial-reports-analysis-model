@@ -7,7 +7,6 @@ is bounded by the table and its nearest caption, and uses the configured engine 
 from __future__ import annotations
 
 import math
-import re
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
@@ -16,7 +15,6 @@ from statistics import median
 import pypdfium2 as pdfium
 from PIL import Image
 
-from fra_core.numbers import normalize_digits
 from fra_core.periods import interpret_period, parse_period
 from fra_core.schemas import BBox, PeriodKind, Provenance, StatementType, TextSource
 from fra_core.schemas.statement import PeriodEvidence, PeriodObservation
@@ -36,7 +34,6 @@ from fra_ingest.ocr import OcrEngine, OcrLine
 from fra_ingest.period_evidence import source_cell
 from fra_ingest.table_grid import Grid, GridCell
 
-_YEAR = re.compile(r"(?:19|20)\d{2}")
 _PROGRAMMING_ERRORS = (TypeError, AttributeError, NameError, IndexError, KeyError)
 
 
@@ -482,7 +479,7 @@ def recover_header(
     # Preserve the printed uncertainty even when it prevents recovering any binding.
     grid = grid.model_copy(update={"recovered_context": context_cells})
     if (
-        any(_YEAR.fullmatch(normalize_digits(line.text)[0].strip()) for line, _ in selected)
+        any(interpret_period(line.text).calendar == "year_only" for line, _ in selected)
         and not caption
     ):
         return _flag(grid, "period_uncertain")

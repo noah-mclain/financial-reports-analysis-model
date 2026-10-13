@@ -2,7 +2,7 @@
 
 import pytest
 
-from fra_core.units import detect_currency, detect_scale
+from fra_core.units import detect_currency, detect_scale, unit_marker_spans
 
 
 @pytest.mark.parametrize(
@@ -162,3 +162,41 @@ def test_unit_marker_spans_cover_only_validated_text(
         for i, char in enumerate(text)
     )
     assert " ".join(remaining.split()) == residue
+
+
+@pytest.mark.parametrize(
+    ("text", "spans"),
+    [
+        ("SAR '000", ((0, 3), (4, 8))),
+        ("EGP millions", ((0, 3), (4, 12))),
+        ("2025 SAR", ((5, 8),)),
+        ("بالملايين", ((0, 9),)),
+        ("بآلاف الريالات السعودية", ((0, 5), (6, 23))),
+    ],
+)
+def test_ordinary_unit_headers_keep_their_marker_spans(
+    text: str, spans: tuple[tuple[int, int], ...]
+) -> None:
+    assert unit_marker_spans(text) == spans
+
+
+def test_per_share_qualifier_is_marked_beside_a_unit_marker() -> None:
+    text = "in millions, except per share data"
+    spans = unit_marker_spans(text)
+    assert spans == ((0, 11), (13, 34))
+    assert text[13:34] == "except per share data"
+
+
+def test_per_share_qualifier_alone_is_not_a_unit_marker() -> None:
+    assert unit_marker_spans("except per share data") == ()
+
+
+def test_overlapping_per_share_phrases_merge_into_one_span() -> None:
+    text = "millions except per share data"
+    assert unit_marker_spans(text) == ((0, 8), (9, 30))
+
+
+def test_per_share_qualifier_does_not_change_the_scale_reading() -> None:
+    signal = detect_scale("in millions, except per share data")
+    assert signal is not None
+    assert signal.scale == 1_000_000 and signal.per_share_exempt

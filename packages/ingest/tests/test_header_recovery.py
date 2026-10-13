@@ -1441,3 +1441,43 @@ def test_partial_recovery_with_separate_interim_context_preserves_original_bindi
                 assert layout.value_cols[target_col].end_date.isoformat() == "2024-06-30"
                 if kind != StatementType.BALANCE:
                     assert layout.value_cols[target_col].months == length
+
+
+def _without_caption(lines: list[OcrLine], caption: str) -> list[OcrLine]:
+    return [line for line in lines if line.text != caption]
+
+
+@pytest.mark.parametrize("year", ["3025", "2025"])
+def test_partial_recovery_holds_a_bare_year_without_a_caption(
+    year: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    observation = partial_observation()
+    lines = _without_caption(safety_lines("CAPTION", ("31 December 2023", year)), "CAPTION")
+    result = recover(observation, monkeypatch, lines)
+    assert not result.recovered_headers
+    assert "header_recovery_period_uncertain" in result.flags
+    assert result.cells == observation.grid.cells
+
+
+# This test and the next record current behaviour: nothing checks that a year is plausible,
+# so a misread year in a complete date, or under a dated caption, still binds.
+def test_partial_recovery_with_a_complete_date_and_no_caption_is_not_a_bare_year(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observation = partial_observation()
+    lines = _without_caption(
+        safety_lines("CAPTION", ("31 December 2023", "31 December 3025")), "CAPTION"
+    )
+    result = recover(observation, monkeypatch, lines)
+    assert [c.text for c in result.recovered_headers] == ["31 December 3025"]
+    assert result.cells == observation.grid.cells
+
+
+def test_partial_recovery_with_a_dated_caption_and_a_misread_year(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observation = partial_observation()
+    lines = safety_lines("For the year ended 31 December", ("31 December 2023", "3025"))
+    result = recover(observation, monkeypatch, lines)
+    assert [c.text for c in result.recovered_headers] == ["3025"]
+    assert result.cells == observation.grid.cells
