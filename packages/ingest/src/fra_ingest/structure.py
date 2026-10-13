@@ -59,7 +59,7 @@ from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
 from fra_ingest.visual_order import repair_grid, repair_text, restore_word_order
 
-STRUCTURE_VERSION = "24"  # partial-crop period observations; conversion/pages unchanged
+STRUCTURE_VERSION = "28"  # stricter period readings; duplicate review keeps conflicts
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 

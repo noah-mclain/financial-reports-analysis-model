@@ -259,3 +259,179 @@ def test_period_evidence_contracts_are_public_schema_exports() -> None:
     for contract in (PeriodObservation, PeriodEvidence, PeriodCandidate, PeriodConflict):
         assert getattr(schemas, contract.__name__) is getattr(statement, contract.__name__)
         assert contract.__name__ in schemas.__all__
+
+
+@pytest.mark.parametrize(
+    "words,months",
+    [("الستة أشهر", 6), ("الثلاثة أشهر", 3), ("التسعة أشهر", 9)],
+)
+def test_arabic_article_before_a_duration_cue_keeps_the_length(words: str, months: int) -> None:
+    facts = interpret_period(
+        f"عن فترة {words} المنتهية في 30 يونيو 2025", default_kind=PeriodKind.DURATION
+    )
+    assert facts.duration == "explicit"
+    assert facts.months == months
+    assert facts.calendar == "complete"
+    assert facts.period is not None
+    assert facts.period.key == f"{months}M-2025-06-30"
+
+
+def test_arabic_article_does_not_join_two_duration_lengths() -> None:
+    facts = interpret_period(
+        "عن الستة أشهر والثلاثة أشهر المنتهية في 30 يونيو 2025", default_kind=PeriodKind.DURATION
+    )
+    assert facts.duration == "invalid"
+
+
+@pytest.mark.parametrize(
+    "text,months",
+    [
+        ("ستة أشهر المنتهية في 30 يونيو 2025", 6),
+        ("السنة المنتهية في 31 ديسمبر 2025", 12),
+    ],
+)
+def test_arabic_duration_cues_without_article_are_unchanged(text: str, months: int) -> None:
+    facts = interpret_period(text, default_kind=PeriodKind.DURATION)
+    assert facts.duration == "explicit"
+    assert facts.months == months
+
+
+def test_arabic_duration_cue_keeps_its_token_boundary_after_the_article() -> None:
+    facts = interpret_period(
+        "بالستة أشهر المنتهية في 30 يونيو 2025", default_kind=PeriodKind.DURATION
+    )
+    assert not (facts.duration == "explicit" and facts.months == 6)
+
+
+@pytest.mark.parametrize("text", ["فترة 30 يونيو 2025", "عن فترة 30 يونيو 2025", "الفترة 2025"])
+def test_bare_period_noun_does_not_change_the_compatibility_parser(text: str) -> None:
+    # The noun is generic wording for strict facts; a balance sheet header that carries
+    # it is still an instant for the permissive parser.
+    period = parse_period(text, default_kind=PeriodKind.INSTANT)
+    assert period is not None and period.kind is PeriodKind.INSTANT
+    assert interpret_period(text, default_kind=PeriodKind.INSTANT).duration in {"generic", "none"}
+
+
+@pytest.mark.parametrize("text", ["2025 - SAR '000", "2025 – SAR", "2025 — SAR"])
+def test_dash_before_a_unit_marker_is_a_separator(text: str) -> None:
+    facts = interpret_period(text)
+    assert facts.calendar == "year_only"
+    assert facts.period is not None and facts.period.key == "2025-12-31"
+
+
+def test_dash_before_a_unit_marker_keeps_a_complete_date() -> None:
+    facts = interpret_period("31 December 2025 - SAR '000")
+    assert facts.calendar == "complete"
+    assert facts.period is not None and facts.period.end_date == date(2025, 12, 31)
+
+
+@pytest.mark.parametrize("text", ["2025 -", "2025 - 2024 SAR"])
+def test_dash_without_a_unit_marker_or_before_a_year_stays_invalid(text: str) -> None:
+    assert interpret_period(text).calendar == "invalid"
+
+
+def test_dash_inside_a_numeric_date_is_unchanged() -> None:
+    assert interpret_period("31-12-2025 SAR").calendar == "complete"
+
+
+def test_dash_glued_to_another_token_is_unchanged() -> None:
+    # Recorded before the separator rule: the rule covers a standalone dash token only.
+    assert interpret_period("2025 -SAR").calendar == "invalid"
+    assert interpret_period("2025- SAR").calendar == "invalid"
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["Dec. 31, 2025", "Dec 31, 2025", "December 31, 2025"],
+)
+def test_month_first_date_accepts_a_full_stop_after_the_month(text: str) -> None:
+    facts = interpret_period(text)
+    assert facts.calendar == "complete"
+    assert facts.period is not None and facts.period.end_date == date(2025, 12, 31)
+
+
+def test_month_first_date_with_dotted_september() -> None:
+    facts = interpret_period("Sept. 30, 2025")
+    assert facts.calendar == "complete"
+    assert facts.period is not None and facts.period.end_date == date(2025, 9, 30)
+
+
+def test_dotted_month_year_is_unchanged() -> None:
+    assert interpret_period("Dec. 2025").calendar == "month_year"
+
+
+@pytest.mark.parametrize("text", ["Dec.. 31, 2025", "Dec. 32, 2025"])
+def test_dotted_month_first_date_rejects_malformed_forms(text: str) -> None:
+    assert interpret_period(text).calendar == "invalid"
+
+
+def test_dotted_month_first_date_resolves_a_fiscal_year() -> None:
+    facts = interpret_period("For the year ended Dec. 31, 2025", default_kind=PeriodKind.DURATION)
+    assert facts.period is not None and facts.period.key == "FY2025"
+
+
+@pytest.mark.parametrize(
+    "text,key",
+    [
+        ("Dec. 31, 2025", "2025-12-31"),
+        ("Dec 31, 2025", "2025-12-31"),
+        ("31 Dec. 2025", "2025-12-31"),
+        ("Dec. 2025", "2025-12-31"),
+        ("Sept. 30, 2025", "2025-09-30"),
+        ("2025", "2025-12-31"),
+    ],
+)
+def test_parse_period_is_unchanged_by_the_dotted_month_rule(text: str, key: str) -> None:
+    # Values recorded before the change to the strict date pattern.
+    period = parse_period(text)
+    assert period is not None and period.key == key
+
+
+def test_audited_and_unaudited_together_yield_no_period() -> None:
+    facts = interpret_period("31 December 2025 (Audited and Unaudited)")
+    assert facts.calendar == "complete"
+    assert facts.period is None
+
+
+def test_arabic_audited_and_unaudited_together_yield_no_period() -> None:
+    facts = interpret_period("31 ديسمبر 2025 مراجعة غير مراجعة")
+    assert facts.calendar == "complete"
+    assert facts.period is None
+
+
+@pytest.mark.parametrize(
+    "text,audited",
+    [
+        ("31 December 2025 (Unaudited)", False),
+        ("31 December 2025 (Audited)", True),
+        ("31 ديسمبر 2025 غير مراجعة", False),
+        ("31 December 2025 (Unaudited) (Unaudited)", False),
+    ],
+)
+def test_a_single_audit_status_is_not_a_contradiction(text: str, audited: bool) -> None:
+    period = interpret_period(text).period
+    assert period is not None and period.audited is audited
+
+
+def test_per_share_qualifier_after_a_unit_marker_leaves_the_date_complete() -> None:
+    facts = interpret_period("31 December 2025 (in millions, except per share data)")
+    assert facts.calendar == "complete" and facts.end_date == date(2025, 12, 31)
+    assert facts.period is not None
+
+
+def test_per_share_wording_without_a_unit_marker_stays_invalid() -> None:
+    assert interpret_period("31 December 2025 per share data").calendar == "invalid"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "ليس الثلاثة أشهر المنتهية في 30 يونيو 2025",
+        "غير الستة أشهر المنتهية في 30 يونيو 2025",
+        "ليس ثلاثة أشهر المنتهية في 30 يونيو 2025",
+    ],
+)
+def test_negated_arabic_duration_stays_invalid_with_the_article(text: str) -> None:
+    facts = interpret_period(text, default_kind=PeriodKind.DURATION)
+    assert facts.duration == "invalid"
+    assert facts.period is None
