@@ -475,7 +475,8 @@ def _settings_hash(
         "convert": convert.settings_hash,
         "min_confidence": config.min_confidence,
         "enabled_types": sorted(t.value for t in config.enabled_types),
-        "taxonomy": load_taxonomy().version,
+        # The content, not the version: an alias edit changes the mapping without a new version.
+        "taxonomy": load_taxonomy().digest,
         "header_ocr_scale": config.header_ocr_scale,
         "ocr": ocr_key(config, ocr),
     }

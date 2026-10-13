@@ -5,12 +5,14 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+from importlib import resources
 from pathlib import Path
 
 import pytest
 from support import FakeOcr, FakeRunner, located, make_blank_pdf, text_page
 
 from fra_core.schemas import PageMode, TextSource
+from fra_core.taxonomy.loader import load_taxonomy
 from fra_ingest import cli, convert, pages, stage, structure
 from fra_ingest.config import IngestConfig
 from fra_ingest.ocr import OcrLine
@@ -417,3 +419,32 @@ def test_prior_structure_is_not_reused_but_healthy_conversion_is(
     assert result.settings_hash != old.settings_hash
     assert "obsolete_structure" not in result.flags
     assert ConvertResult.model_validate_json((out / "convert.json").read_text()) == converted
+
+
+def test_an_alias_edit_changes_the_structure_cache_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The mapping runs inside structure, so a stored result is stale once an alias changes,
+    even though the taxonomy's version stays the same."""
+    config = IngestConfig()
+    where = located([PageMode.TEXT], [(1, 1)], sha256=SHA)
+    converted = ConvertResult(
+        version=convert.CONVERT_VERSION,
+        sha256=SHA,
+        locate_version=where.version,
+        docling_version=RELEASE,
+        device=config.device,
+        settings_hash=_digest(config, where),
+        ranges=[],
+    )
+    current = structure._settings_hash(config, converted)
+    edited = tmp_path / "taxonomy.yaml"
+    packaged = resources.files("fra_core.taxonomy").joinpath("canonical_items.yaml")
+    edited.write_text(
+        packaged.read_text(encoding="utf-8").replace("[revenue, ", "[revenue, total revenue, "),
+        encoding="utf-8",
+    )
+    taxonomy = load_taxonomy(edited)
+    assert taxonomy.version == load_taxonomy().version
+    monkeypatch.setattr(structure, "load_taxonomy", lambda: taxonomy)
+    assert structure._settings_hash(config, converted) != current

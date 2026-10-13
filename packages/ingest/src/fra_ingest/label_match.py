@@ -55,6 +55,10 @@ class LabelIndex:
         self._taxonomy = taxonomy
         self._index: _Spellings = {}
         self._headings: _Spellings = {}
+        self._statement_headings: dict[StatementType, frozenset[str]] = {
+            statement: frozenset(squash(h) for h in headings)
+            for statement, headings in taxonomy.statement_headings.items()
+        }
         for item in taxonomy.items:
             for language in ("en", "ar"):
                 for alias in item.aliases_for(language):
@@ -63,6 +67,11 @@ class LabelIndex:
                 for heading in item.headings_for(language):
                     by_key = self._headings.setdefault(item.statement, {})
                     by_key.setdefault(squash(heading), {})[item.id] = item
+
+    @property
+    def section_totals(self) -> frozenset[str]:
+        """The totals items name as the section they sum into (``CanonicalItem.within``)."""
+        return frozenset(i.within for i in self._taxonomy.items if i.within is not None)
 
     def critical_ids(self, statement: StatementType) -> tuple[str, ...]:
         """Critical items from the taxonomy used by this index."""
@@ -99,20 +108,51 @@ class LabelIndex:
         found = self._headings.get(statement, {}).get(key, {}) if key else {}
         return tuple(found.values())
 
+    def _past_statement_heading(self, squashed: str, statement: StatementType) -> list[str]:
+        """The label, and the label after each statement heading it starts with ("Assets")."""
+        return [squashed] + [
+            squashed[len(key) :]
+            for key in self._statement_headings.get(statement, frozenset())
+            if squashed.startswith(key) and len(squashed) > len(key)
+        ]
+
     def run_in_heading(self, label: str, statement: StatementType) -> tuple[CanonicalItem, ...]:
         """The totals of the longest section heading the label starts with, when the text layer
         ran that heading into the row below it: what follows the heading must itself be an
-        alias. A label that merely contains a heading, or continues with anything else, is a
-        row of its own."""
-        squashed = squash(label)
+        alias. A statement heading run in before the section heading ("Assets Non-current
+        assets Property...") is read past. A label that merely contains a heading, or continues
+        with anything else, is a row of its own."""
+        spellings = self._index.get(statement, {})
         starts = [
             key
+            for squashed in self._past_statement_heading(squash(label), statement)
             for key in self._headings.get(statement, {})
-            if squashed.startswith(key) and squashed[len(key) :] in self._index.get(statement, {})
+            if squashed.startswith(key) and squashed[len(key) :] in spellings
         ]
         if not starts:
             return ()
         return tuple(self._headings[statement][max(starts, key=len)].values())
+
+    def match_past_headings(
+        self, label: str, statement: StatementType
+    ) -> tuple[tuple[CanonicalItem, ...], bool]:
+        """``match_all``, or, when nothing matches, the items of what follows the headings a
+        text layer ran into the label (a statement heading, a section heading, or both), and
+        whether headings were read past. The rest must be an alias exactly."""
+        found = self.match_all(label, statement)
+        if found:
+            return found, False
+        spellings = self._index.get(statement, {})
+        for squashed in self._past_statement_heading(squash(label), statement):
+            rests = [squashed] + [
+                squashed[len(key) :]
+                for key in self._headings.get(statement, {})
+                if squashed.startswith(key) and len(squashed) > len(key)
+            ]
+            for rest in sorted(rests, key=len):
+                if rest != squash(label) and rest in spellings:
+                    return tuple(spellings[rest].values()), True
+        return (), False
 
     def hits(self, labels: Iterable[str], statement: StatementType) -> int:
         return sum(1 for label in labels if self.match(label, statement) is not None)
