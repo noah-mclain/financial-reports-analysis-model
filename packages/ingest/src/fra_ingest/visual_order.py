@@ -76,13 +76,16 @@ _MIN_PAGE_WORD = 2
 # below it the run is joined whole, as before. Set so that a single letter the text layer
 # printed against digits (the "م" of a year) does not stop a short heading being split.
 _MIN_COVERED = 0.8
-_ARABIC_WORD = re.compile(r"[ء-يٱ-ۓ]+")
+# Letters and the marks written on them, so a vowelled word is one word, not fragments.
+_ARABIC_WORD = re.compile("[\u0621-\u064a\u0671-\u06d3\u064b-\u065f\u0670]+")
 
 
 def page_vocabulary(text: str, *, visual: bool) -> frozenset[str]:
     """The Arabic words a page's text layer prints, in ``canonical`` form with their letters in
-    reading order (``visual`` pages print them reversed). Word order is irrelevant here."""
-    words = _ARABIC_WORD.findall(reading_variants(text, visual)[0])
+    reading order (``visual`` pages print them reversed). Word order is irrelevant here. The text
+    is read after NFKC, as the lexicon reads it, so a layer in presentation forms counts too."""
+    normalized = unicodedata.normalize("NFKC", text)
+    words = _ARABIC_WORD.findall(reading_variants(normalized, visual)[0])
     return frozenset(k for w in words if len(k := canonical(w)) >= _MIN_PAGE_WORD)
 
 

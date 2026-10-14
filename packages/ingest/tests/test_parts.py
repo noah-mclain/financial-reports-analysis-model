@@ -392,3 +392,21 @@ def test_a_per_share_heading_reaches_continuing_and_discontinued_rows() -> None:
         True,
         True,
     ]
+
+
+def test_a_label_whose_spaces_came_from_the_page_marks_every_value_of_its_row() -> None:
+    g = grid(ROWS, pads={2: 10, 3: 10, 4: 10})
+    restored = tuple(
+        c.model_copy(update={"flags": ("letters_spaced", "words_from_page")})
+        if (c.row, c.col) == (2, 0)
+        else c
+        for c in g.cells
+    )
+    g = g.model_copy(update={"cells": restored})
+    layout = parse_header(g, StatementType.BALANCE, None)
+    classification = Classification(type=StatementType.BALANCE, confidence=0.8)
+    built = build_part(g, layout, classification, source=TextSource.TEXT)
+    by_label = {i.raw_label: i for i in built.line_items}
+    ppe = by_label["Property, Plant and Equipment"]
+    assert ppe.cells and all("label_words_from_page" in c.flags for c in ppe.cells)
+    assert all("label_words_from_page" not in c.flags for c in by_label["Investments"].cells)

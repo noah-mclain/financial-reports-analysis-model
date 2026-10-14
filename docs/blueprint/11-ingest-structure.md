@@ -181,11 +181,18 @@ class StructureResult(BaseModel):   # statements.raw.json
      The cell carries `digits_reversed`. Nothing is reversed on other pages.
    - Spaced letters, on any page: in a cell where most tokens are single Arabic letters, each
      run of single-letter tokens is joined into one word; tokens of two or more characters
-     (numbers, `X`, the `لا` ligature is treated as one letter) stay separate. Word boundaries
-     inside a run cannot be recovered, so the joined label is kept as is and flagged
-     `letters_spaced`. Comparisons with taxonomy aliases and cue words on such text ignore
-     spaces on both sides. Readable Arabic labels for these documents are left to week 2's
-     label work.
+     (numbers, `X`, the `لا` ligature is treated as one letter) stay separate, and the cell is
+     flagged `letters_spaced`. Docling's spacing hides where one word ends, but the page's own
+     text layer keeps the word gaps, so each joined run is split again at the fewest words that
+     page prints (`page_vocabulary`: Arabic words after NFKC, letters in reading order on
+     `visual_arabic` pages, spellings folded as the label matcher folds them). A letter no page
+     word covers stays on the word before it. A run the page words cover less than 80% of is
+     kept joined, as before. A label split this way is flagged `words_from_page` on its cell,
+     and every value cell of its row carries `label_words_from_page`, a review warning, so a
+     reader can tell restored spacing from printed text. The failure mode is a wrong split
+     where two page words happen to concatenate into a run they do not form; matching is
+     unaffected, since comparisons with taxonomy aliases and cue words ignore spaces on both
+     sides.
    - Word order, per table: on the Arabic digital documents of the fit and validation parts
      (20 with a PDF on disk: 17 fit, 3 validation; none marked `visual_arabic`) docling returns
      the cells of a table with the words of each cell in reverse order and the letters of each

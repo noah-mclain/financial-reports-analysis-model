@@ -220,6 +220,9 @@ def build_part(
                 flags.append("per_share")
             if row in merged_rows:
                 flags.append("label_merged")
+            if label_cell is not None and "words_from_page" in label_cell.flags:
+                # The label's word gaps were restored from the page text, not read in the cell.
+                flags.append("label_words_from_page")
             bbox = (
                 grid_cell.bbox
                 if grid_cell is not None and grid_cell.bbox is not None

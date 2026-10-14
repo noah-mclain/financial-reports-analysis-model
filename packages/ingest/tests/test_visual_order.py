@@ -5,6 +5,7 @@ from fra_core.periods import parse_period
 from fra_core.taxonomy.loader import load_taxonomy
 from fra_ingest.label_match import LabelIndex
 from fra_ingest.table_grid import Grid, GridCell
+from fra_ingest.text_match import canonical
 from fra_ingest.visual_order import (
     _matches,
     _reversed_words,
@@ -332,3 +333,12 @@ def test_a_grid_split_by_page_words_is_flagged() -> None:
     (cell,) = repair_grid(grid, visual=True, vocabulary=VOCABULARY).cells
     assert cell.text == "ممتلكات وآلات ومعدات"
     assert cell.flags == ("letters_spaced", "words_from_page")
+
+
+def test_a_page_in_presentation_forms_or_with_vowel_marks_still_gives_its_words() -> None:
+    # "ممتلكات" in presentation forms, and "مقدما" written with its marks.
+    presentation = page_vocabulary("ﻣﻤﺘﻠﻜﺎﺕ", visual=False)
+    assert canonical("ممتلكات") in presentation
+    vowelled = page_vocabulary("مُقَدَّمًا طويلة", visual=False)
+    assert canonical("مقدما") in vowelled
+    assert page_vocabulary("م٢٠٢٥", visual=False) == frozenset()  # a digit ends a word

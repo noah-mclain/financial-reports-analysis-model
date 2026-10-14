@@ -43,7 +43,7 @@ _WARNING_FLAGS = (
     "words_reversed",
     "word_order_uncertain",
 )
-_WARNING_CELL_FLAGS = ("label_merged", "blank_confirmed")
+_WARNING_CELL_FLAGS = ("label_merged", "label_words_from_page", "blank_confirmed")
 _FAILED = (
     ("subtotal", "subtotal_failed"),
     ("balance_identity", "identity_failed"),
