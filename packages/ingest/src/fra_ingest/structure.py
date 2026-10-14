@@ -60,7 +60,7 @@ from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
 from fra_ingest.visual_order import repair_grid, repair_text, restore_word_order
 
-STRUCTURE_VERSION = "25"  # split merged OCR amount columns; conversion/pages unchanged
+STRUCTURE_VERSION = "29"  # split merged OCR amount columns, with stricter period readings
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 

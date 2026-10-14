@@ -153,6 +153,16 @@ def test_a_second_statement_of_a_type_is_held_as_a_duplicate() -> None:
     ]
 
 
+def test_a_duplicate_keeps_its_period_conflict_reason() -> None:
+    conflicted = statement(ROWS, flags=("period_conflict:2",))
+    assert review_statement(conflicted, PASSING, primary=False).reasons == [
+        "period_conflict:2",
+        "duplicate_statement",
+    ]
+    assert "duplicate_statement" not in review_statement(conflicted, PASSING, primary=True).reasons
+    assert "period_conflict:2" in review_statement(conflicted, PASSING, primary=True).reasons
+
+
 def test_an_implausible_assumed_scale_holds() -> None:
     flags = ("scale_missing", "scale_implausible")
     held = review_statement(statement(ROWS, flags=flags), PASSING, primary=True)
