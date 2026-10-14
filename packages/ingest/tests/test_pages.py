@@ -279,3 +279,23 @@ def test_a_cached_read_reports_no_progress(tmp_path: Path) -> None:
         pdf, IngestConfig(), FakeOcr([TITLE]), cache_dir=tmp_path / "cache", progress=heard.append
     )
     assert heard == []
+
+
+def test_page_count_reads_no_page_and_an_unreadable_file_is_an_ingest_error(
+    tmp_path: Path,
+) -> None:
+    import pypdfium2 as pdfium
+
+    from fra_ingest.errors import IngestError
+    from fra_ingest.pages import page_count
+
+    document = pdfium.PdfDocument.new()
+    for _ in range(3):
+        document.new_page(200, 200)
+    path = tmp_path / "three.pdf"
+    document.save(str(path))
+    assert page_count(path) == 3
+    broken = tmp_path / "broken.pdf"
+    broken.write_bytes(b"%PDF-1.7 not really")
+    with pytest.raises(IngestError):
+        page_count(broken)
