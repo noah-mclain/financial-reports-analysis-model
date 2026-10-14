@@ -75,7 +75,9 @@ def add_job_routes(routes: FastAPI) -> None:
         settings = settings_of(request)
         data = await _read_limited(request, settings.max_upload_bytes)
         try:
-            return store_of(request).add_upload(data, x_filename, settings)
+            # Hashing, writing and the SQLite insert run off the event loop, so a large upload
+            # never stalls health checks, polling or event streams.
+            return await run_in_threadpool(store_of(request).add_upload, data, x_filename, settings)
         except UploadRejected as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
