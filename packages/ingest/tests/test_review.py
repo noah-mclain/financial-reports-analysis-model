@@ -121,15 +121,6 @@ def test_a_confirmed_blank_holds_nothing() -> None:
     assert review.status == "passed" and review.warnings == ["blank_confirmed:1"]
 
 
-def test_split_numeric_columns_warn_and_keep_a_checked_statement_reviewable() -> None:
-    rows = [item(1, "10", "numeric_columns_split"), *ROWS[1:]]
-    review = review_statement(statement(rows), PASSING, primary=True)
-    assert review.status == "needs_review"
-    assert review.warnings == ["numeric_columns_split:1"]
-    assert review.reasons == ["numeric_columns_split:1"]
-    assert review.flagged_cells == 1
-
-
 def test_statement_flags_hold_or_warn() -> None:
     held = review_statement(
         statement(ROWS, flags=("period_unbound:2", "scale_missing")), PASSING, primary=True

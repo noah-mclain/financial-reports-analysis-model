@@ -23,7 +23,6 @@ class GridCell(BaseModel):
     is_row_section: bool = False
     page_no: int
     source_row: int | None = None  # the docling row of a cell that row alignment moved
-    source_col: int | None = None  # the docling column before numeric column assignment
     flags: tuple[str, ...] = ()
 
 

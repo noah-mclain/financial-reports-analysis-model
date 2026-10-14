@@ -25,7 +25,6 @@ from fra_core.taxonomy.loader import load_taxonomy
 from fra_ingest.caveats import unit_caveats
 from fra_ingest.child import convert_in_child
 from fra_ingest.classify import Classification, TableContext, classify
-from fra_ingest.column_assignment import split_numeric_columns
 from fra_ingest.config import IngestConfig
 from fra_ingest.continuation import continues_part, inherit_periods, is_closed, merge_continuations
 from fra_ingest.convert import cached_convert, invalidate_convert, settings_hash
@@ -33,7 +32,7 @@ from fra_ingest.converter import docling_version
 from fra_ingest.docling_json import DlDocument, load_docling_json
 from fra_ingest.errors import IngestError
 from fra_ingest.figure_checks import check_net_profit_tie
-from fra_ingest.header import HeaderLayout, parse_header
+from fra_ingest.header import parse_header
 from fra_ingest.header_recovery import recover_header
 from fra_ingest.hierarchy import RowInput, infer_hierarchy
 from fra_ingest.industry import industry_decision
@@ -53,14 +52,14 @@ from fra_ingest.results import (
     TableDecision,
 )
 from fra_ingest.review import StatementReview, hold_for_industry, review_statement
-from fra_ingest.row_alignment import Realignment, realign_rows
+from fra_ingest.row_alignment import realign_rows
 from fra_ingest.stage import load_or_locate, page_ocr_languages
 from fra_ingest.table_checks import run_checks
 from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
 from fra_ingest.visual_order import repair_grid, repair_text, restore_word_order
 
-STRUCTURE_VERSION = "37"  # split merged OCR amounts, with the stricter period readings
+STRUCTURE_VERSION = "34"  # text-date separators; X beside a marker; observations in the cell
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -163,14 +162,6 @@ def _only_below_confidence(result: Classification) -> bool:
     return "below_confidence" in result.evidence and not rejections & set(result.evidence)
 
 
-def _aligned(grid: Grid, layout: HeaderLayout, *, ocr: bool) -> Realignment:
-    """The grid with its rows realigned and, on an OCR page, its merged amounts split."""
-    realigned = realign_rows(grid, layout)
-    if not ocr:
-        return realigned
-    return realigned.model_copy(update={"grid": split_numeric_columns(realigned.grid, layout)})
-
-
 def _continued_part(
     grid: Grid,
     hint: str | None,
@@ -179,13 +170,11 @@ def _continued_part(
     period_evidence: Sequence[PeriodEvidence] = (),
     *,
     visual: bool = False,
-    ocr: bool = False,
-) -> tuple[PartialStatement, Realignment | None] | None:
+) -> PartialStatement | None:
     """The statement part a low-confidence grid continues: the latest part ending on its page
     or the page before, whose periods and value columns the grid matches, a column its header
     leaves undated taking its period from that part first. A page titled as other statements
-    only (``titles``, from locate) continues nothing. On an OCR page the columns are matched
-    on the realigned grid with its merged amounts split, which is returned for the build."""
+    only (``titles``, from locate) continues nothing."""
     previous = next(
         (p for p in reversed(parts) if p.last_page in (grid.page_no, grid.page_no - 1)), None
     )
@@ -195,10 +184,9 @@ def _continued_part(
     if layout.period_conflicts and not layout.value_cols:
         return None
     layout = inherit_periods(layout, grid, previous)
-    aligned = _aligned(grid, layout, ocr=True) if ocr else None
-    if not continues_part(layout, grid if aligned is None else aligned.grid, previous):
+    if not continues_part(layout, grid, previous):
         return None
-    return previous, aligned
+    return previous
 
 
 def structure_document(
@@ -319,22 +307,18 @@ def structure_document(
     metas: dict[str, Metadata] = {}
     for candidate in sorted(candidates, key=lambda c: c.grid.page_no):
         grid, result, hint = candidate.grid, candidate.result, candidate.hint
-        ocr = inputs.page_modes.get(grid.page_no) is PageMode.IMAGE
-        aligned: Realignment | None = None
         if result.type is None:
             titles = inputs.title_types.get(grid.page_no, ())
-            match = _continued_part(
+            continued = _continued_part(
                 grid,
                 hint,
                 parts,
                 titles,
                 candidate.period_evidence,
                 visual=grid.page_no in inputs.visual_pages,
-                ocr=ocr,
             )
-            if match is None:
+            if continued is None:
                 continue
-            continued, aligned = match
             if is_closed(continued, index):
                 candidate.decision.evidence = [
                     *candidate.decision.evidence,
@@ -384,8 +368,12 @@ def structure_document(
             layout = inherit_periods(layout, grid, previous)
         if not layout.value_cols:
             continue
-        source = TextSource.OCR if ocr else TextSource.TEXT
-        realigned = aligned if aligned is not None else _aligned(grid, layout, ocr=ocr)
+        source = (
+            TextSource.OCR
+            if inputs.page_modes.get(grid.page_no) is PageMode.IMAGE
+            else TextSource.TEXT
+        )
+        realigned = realign_rows(grid, layout)
         part = build_part(
             realigned.grid,
             layout,

@@ -279,7 +279,8 @@ class StructureResult(BaseModel):   # statements.raw.json
    supplies no comparison (`geometry_invalid` for each bound column) and does not stop the
    missing slots being read.
    `TableDecision.period_evidence` retains agreement and conflict observations.
-   Cache version 37 invalidates prior structure results, including versions 36 down to 20.
+   Cache version 34 invalidates prior structure results, including versions 33, 32, 31, 30, 29,
+   28, 27, 26, 25, 24, 23, 22, 21 and 20.
 
    Each observation is parsed with the same statement kind and date context as its column,
    using core's typed `interpret_period` facts for all four-digit Gregorian calendar years.
@@ -347,45 +348,6 @@ class StructureResult(BaseModel):   # statements.raw.json
    still holds the column. A heading length that contradicts an explicit column
    length holds the column in every case.
    Structure results are cached against `STRUCTURE_VERSION`; changing it invalidates prior structure results while reusing cached conversion output.
-   After row realignment and before building line items, logical OCR grids can split a
-   merged amount literal on a labelled data row. The layout must bind exactly two adjacent
-   value columns to distinct periods, without unbound or conflicted columns. A unit-span
-   cell starting in the left column may supply exactly two whitespace-separated tokens,
-   each matching `[0-9]{1,3}(?:,[0-9]{3})+` and parsing independently, only when the whole
-   literal fails number parsing. The right position must be absent or empty and unspanned.
-   At least two independent rows on the same page and in the same table section as the
-   merged amount must supply parseable, boxed unit-span amounts in both columns, with
-   disjoint horizontal bands. The witness rows must be physically distinct: rows whose
-   vertical bands overlap or touch count once, so a duplicated OCR row is one witness. Each
-   witness needs one boxed label cell lying left of its amounts; a witness without one is
-   ignored. Continuation pages need their own witnesses. Their median
-   horizontal centres establish physical order. The merged source rectangle must contain
-   both centres and the label's vertical centre. Missing, non-finite, overlapping or ambiguous
-   geometry and unresolved
-   row alignment prevent assignment. The rule refuses a layout unless its label lies left of
-   both value columns by column number and by box position, for the table and for the
-   merged row; it therefore does not assign mirrored right-to-left layouts. Digital grids do not use this rule.
-   On a continuation page the split runs before the continuation check, so merged amounts do
-   not displace the column centres it compares; a column whose period is inherited from the
-   previous page is bound first, since the split needs bound periods. Period inheritance still
-   measures the unsplit grid, so when the left column's period must be inherited, or both
-   columns are undated, a merged amount can shift that column's centre past the tolerance and
-   the page is not continued.
-   Signs, parentheses, decimals, percentages, note references and space-grouped numbers
-   remain outside its scope. No period ordering, magnitude, expected value or check result
-   chooses an assignment.
-
-   Both derived cells retain the original source row, source column and shared rectangle;
-   each keeps its own exact token as `raw_text`. No token rectangle is invented. The original
-   combined literal stays accessible through the Docling table reference and source position.
-   Each cell carries `numeric_columns_split`, shown as a review warning and a reason to hold
-   the statement even when its numerical checks pass. This intentional hold keeps the split
-   visible for review until its provenance is checked. Because the shared rectangle spans
-   both columns, split cells are left out of per-column geometry: column centres and the
-   horizontal band used for a synthesised missing-cell box ignore them. Assignment is pure
-   and idempotent; unsuccessful eligibility returns the original grid. Structure cache
-   version 29 makes statements, checks and reviews regenerate; conversion, pages and locate
-   caches retain their existing contracts.
 6. **Metadata.** Scale from the header text, then the caption, then the page text; per-share
    rows are exempt. Currency the same way; when none of those name one (Almarai's glyph), the
    country of incorporation decides: the earliest page with a phrase such as "a Saudi Joint
