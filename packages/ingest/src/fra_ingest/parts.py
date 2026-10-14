@@ -20,6 +20,7 @@ from fra_core.numbers import parse_number
 from fra_core.schemas import BBox, Cell, LineItem, Period, Provenance, StatementType, TextSource
 from fra_core.schemas.statement import PeriodConflict
 from fra_ingest.classify import Classification
+from fra_ingest.column_assignment import SPLIT_FLAG
 from fra_ingest.header import HeaderLayout, split_note
 from fra_ingest.label_match import LabelIndex, has_subtotal_cue, squash
 from fra_ingest.table_grid import Grid
@@ -88,7 +89,12 @@ def column_centre(grid: Grid, col: int, rows: Sequence[int]) -> float | None:
     centres = []
     for row in rows:
         cell = grid.cell(row, col)
-        if cell is not None and cell.text and cell.bbox is not None:
+        if (
+            cell is not None
+            and cell.text
+            and cell.bbox is not None
+            and SPLIT_FLAG not in cell.flags
+        ):
             centres.append((cell.bbox.left + cell.bbox.right) / 2)
     return sum(centres) / len(centres) if centres else None
 
@@ -96,10 +102,15 @@ def column_centre(grid: Grid, col: int, rows: Sequence[int]) -> float | None:
 def _band(
     grid: Grid, *, row: int | None = None, col: int | None = None
 ) -> tuple[float, float] | None:
+    # A split amount keeps the rectangle that spanned two columns: it is not evidence for the
+    # horizontal extent of either, though it still marks where its row is.
     boxes = [
         c.bbox
         for c in grid.cells
-        if c.bbox is not None and (row is None or c.row == row) and (col is None or c.col == col)
+        if c.bbox is not None
+        and (row is None or c.row == row)
+        and (col is None or c.col == col)
+        and (row is not None or SPLIT_FLAG not in c.flags)
     ]
     if not boxes:
         return None
@@ -243,7 +254,9 @@ def build_part(
                         row=grid_cell.source_row
                         if grid_cell is not None and grid_cell.source_row is not None
                         else row,
-                        col=col,
+                        col=grid_cell.source_col
+                        if grid_cell is not None and grid_cell.source_col is not None
+                        else col,
                         source=source,
                     ),
                     flags=flags,
