@@ -1,6 +1,7 @@
 """Synthetic normalization supervision and issuer authorization boundaries."""
 
 import json
+from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -17,7 +18,7 @@ from pydantic import ValidationError
 
 from fra_core.pools import Identity, Pool, PoolRegistry, Source
 from fra_core.schemas.statement import BBox, Provenance, StatementType
-from fra_core.split import Look, Move, Part, cik_key, hashed_part, issuer_key
+from fra_core.split import Look, Move, Part, SplitError, cik_key, hashed_part, issuer_key
 from fra_core.taxonomy import load_taxonomy
 
 HASH = "a" * 64
@@ -146,7 +147,7 @@ def test_recorded_moves_use_shared_contracts(kind: str) -> None:
         else (Look("2026-10-01", "dry_run", ("holdout",), ("en",), "synthetic"),)
     )
     move = Move(
-        "Synthetic Widgets",
+        "SYNTHETIC WIDGETS CO. PLC",
         issuer_key("Synthetic Widgets"),
         kind,
         "holdout",
@@ -156,11 +157,39 @@ def test_recorded_moves_use_shared_contracts(kind: str) -> None:
         "synthetic review",
     )
     assert build((record,), (row,), moves=(move,), looks=looks).fit == (row,)
+    mismatched = replace(move, issuer="Unrelated Issuer")
+    with pytest.raises(SplitError, match="normalized issuer"):
+        build((record,), (row,), moves=(mismatched,), looks=looks)
     invalid_looks = (
         () if looks else (Look("2026-10-01", "dry_run", ("holdout",), ("en",), "synthetic"),)
     )
     with pytest.raises(ValueError, match=r"override|logged|look"):
         build((record,), (row,), moves=(move,), looks=invalid_looks)
+
+
+@pytest.mark.parametrize("kind", ["override", "spent_look"])
+def test_name_key_move_releases_reviewed_cik_aliases_without_mutating_registry(kind: str) -> None:
+    cik = cik_in(Part.HOLDOUT)
+    record = source(cik)
+    alias = source(cik, name="Historical Rename", source_id="alias-filing")
+    registry = registry_for(record, alias)
+    before = registry.metadata()
+    rows = (example(record), example(alias))
+    looks = (Look("2026-10-02", "dry_run", ("holdout",), ("en",), "synthetic"),)
+    move = Move(
+        "SYNTHETIC WIDGETS CO. PLC",
+        issuer_key("Synthetic Widgets"),
+        kind,
+        "holdout",
+        "fit",
+        "2026-10-01" if kind == "override" else "2026-10-02",
+        int(kind == "spent_look"),
+        "synthetic review",
+    )
+    result = build((record, alias), rows, registry=registry, moves=(move,), looks=looks)
+    assert len(result.fit) == len(rows)
+    assert all(row in result.fit for row in rows)
+    assert registry.metadata() == before
 
 
 def test_registry_is_authoritative_and_is_not_mutated() -> None:
