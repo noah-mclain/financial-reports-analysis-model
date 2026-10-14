@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from decimal import Decimal
 
 from fra_core.schemas import PageMode, StatementType
@@ -419,3 +420,54 @@ def test_an_uncertain_industry_verdict_holds_every_statement_with_its_reason() -
     plain, _ = structure_document(inputs([("docling/p1-2.json", document())]), IngestConfig())
     assert not any("industry_uncertain:near_threshold" in r.reasons for r in plain.reviews)
     assert not any(f.startswith("industry_uncertain") for f in plain.flags)
+
+
+def _spaced(word: str) -> str:
+    return " ".join(word)
+
+
+def test_labels_rebuilt_from_the_page_words_are_marked_in_the_serialized_statement() -> None:
+    rows = [
+        HEADER,
+        [_spaced("الموجودات") + " " + _spaced("المتداولة"), "", "", ""],  # a heading: no values
+        [_spaced("النقد") + " " + _spaced("المخزون"), "19", "10", "8"],  # words on the page
+        [_spaced("عقارات"), "21", "5", "4"],  # letters joined, no page word covers them
+        ["Total assets", "", "15", "12"],
+    ]
+    doc = DlDocument.model_validate(
+        {
+            "tables": [table(0, 1, rows)],
+            "texts": [],
+            "pages": {
+                "1": {"page_no": 1, "size": {"width": 800, "height": 1000}},
+                "2": {"page_no": 2, "size": {"width": 800, "height": 1000}},
+            },
+        }
+    )
+    supplied = inputs([("docling/p1-2.json", doc)]).model_copy(
+        update={
+            "page_texts": {
+                1: "Statement of financial position الموجودات المتداولة النقد المخزون",
+                2: "",
+            }
+        }
+    )
+    result, _ = structure_document(supplied, IngestConfig())
+    written = json.loads(result.model_dump_json())
+    statement = written["statements"][0]
+    items = {i["raw_label"]: i for i in statement["line_items"]}
+    assert set(items) >= {"الموجودات المتداولة", "النقد المخزون", "عقارات", "Total assets"}
+
+    def cell_flags(label: str) -> set[str]:
+        return {f for c in items[label]["cells"] for f in c["flags"]}
+
+    assert "label_words_from_page" in cell_flags("النقد المخزون")
+    assert "label_words_from_page" not in cell_flags("عقارات")
+    assert "label_words_from_page" not in cell_flags("Total assets")
+    # The heading has no value to carry the flag, so the statement names its row.
+    assert f"label_words_from_page:{items['الموجودات المتداولة']['id']}" in statement["flags"]
+    assert not any(
+        f.startswith("label_words_from_page:") and f.endswith(items[label]["id"])
+        for label in ("النقد المخزون", "عقارات", "Total assets")
+        for f in statement["flags"]
+    )

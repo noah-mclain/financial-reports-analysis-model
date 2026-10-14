@@ -202,6 +202,8 @@ def build_part(
         if not has_values:
             under_per_share = named_per_share
         per_share = named_per_share or (under_per_share and _under_per_share_heading(label))
+        # The label's word gaps were restored from the page text, not read in the cell.
+        words_from_page = label_cell is not None and "words_from_page" in label_cell.flags
         cells = []
         for col, period in layout.value_cols.items():
             if not has_values:
@@ -220,8 +222,7 @@ def build_part(
                 flags.append("per_share")
             if row in merged_rows:
                 flags.append("label_merged")
-            if label_cell is not None and "words_from_page" in label_cell.flags:
-                # The label's word gaps were restored from the page text, not read in the cell.
+            if words_from_page:
                 flags.append("label_words_from_page")
             bbox = (
                 grid_cell.bbox
@@ -252,6 +253,8 @@ def build_part(
                     flags=flags,
                 )
             )
+        if words_from_page and not cells:  # a heading has no value cell to carry the flag
+            part.flags.append(f"label_words_from_page:{item_id}")
         part.line_items.append(
             LineItem(id=item_id, raw_label=label, note_ref=note or None, cells=cells)
         )
