@@ -1,6 +1,7 @@
 """Synthetic normalization supervision and issuer authorization boundaries."""
 
 import json
+import math
 from dataclasses import replace
 from datetime import date
 
@@ -440,3 +441,138 @@ def test_unvalidated_model_copies_cannot_bypass_boundary_validation() -> None:
     malformed = row.model_copy(update={"canonical_id": None})
     with pytest.raises(ValidationError, match="abstention"):
         build((record,), (malformed,), settings=config())
+
+
+@pytest.mark.parametrize("kind", ["override", "spent_look"])
+def test_move_naming_one_issuer_cannot_release_another_issuers_holdout_key(kind: str) -> None:
+    holdout = source(cik_in(Part.HOLDOUT), name="Holdout Widgets")
+    fit = source(cik_in(Part.FIT), name="Fit Widgets")
+    looks = (
+        ()
+        if kind == "override"
+        else (Look("2026-10-01", "dry_run", ("holdout",), ("en",), "synthetic"),)
+    )
+    rows = (example(holdout), example(fit))
+    forged = Move(
+        "Fit Widgets",
+        issuer_key("Holdout Widgets"),
+        kind,
+        "holdout",
+        "fit",
+        "2026-10-02",
+        len(looks),
+        "synthetic review",
+    )
+    with pytest.raises(SplitError, match="normalized issuer"):
+        build((holdout, fit), rows, moves=(forged,), looks=looks)
+    with pytest.raises(SplitError, match="normalized issuer"):
+        build((holdout, fit), (rows[1],), moves=(forged,), looks=looks)
+
+
+def pdf_provenance() -> Provenance:
+    return Provenance(
+        page_no=1, bbox=BBox(left=0, top=0, right=10, bottom=10), table_ref="table-1", row=1, col=0
+    )
+
+
+def pdf_row(provenance: Provenance) -> tuple[SourceRecord, NormalizationExample]:
+    record = source(cik_in(Part.FIT), source=Source.PDF)
+    return record, example(record, tag=None, provenance=provenance)
+
+
+def test_genuine_pdf_provenance_is_accepted_and_kept() -> None:
+    record, row = pdf_row(pdf_provenance())
+    assert build((record,), (row,)).fit[0].provenance == pdf_provenance()
+
+
+@pytest.mark.parametrize("field", ["left", "top", "right", "bottom"])
+def test_forged_nested_bbox_cannot_stay_on_an_approved_example(field: str) -> None:
+    good = pdf_provenance()
+    forged_box = good.bbox.model_copy(update={field: "0"})
+    forged = good.model_copy(update={"bbox": forged_box})
+    record, row = pdf_row(good)
+    with pytest.raises(ValidationError, match="provenance"):
+        example(record, tag=None, provenance=forged)
+    malformed = row.model_copy(update={"provenance": forged})
+    with pytest.raises(ValidationError, match="provenance"):
+        build((record,), (malformed,), settings=config(row))
+
+
+def test_constructed_provenance_that_skips_validation_is_refused() -> None:
+    good = pdf_provenance()
+    record, row = pdf_row(good)
+    constructed = Provenance.model_construct(
+        page_no="1", bbox=good.bbox, table_ref="table-1", row=1, col=0, source=good.source
+    )
+    with pytest.raises(ValidationError, match="provenance"):
+        build(
+            (record,), (row.model_copy(update={"provenance": constructed}),), settings=config(row)
+        )
+    unordered = good.model_copy(
+        update={"bbox": BBox.model_construct(left=5, top=0, right=1, bottom=9)}
+    )
+    with pytest.raises(ValidationError, match="provenance"):
+        build((record,), (row.model_copy(update={"provenance": unordered}),), settings=config(row))
+
+
+def test_targets_come_from_fingerprinted_taxonomy_items_not_derived_indexes() -> None:
+    record = source(cik_in(Part.FIT))
+    row = example(record)
+    taxonomy = load_taxonomy()
+    without_revenue = replace(taxonomy, items=tuple(i for i in taxonomy.items if i.id != "revenue"))
+    assert without_revenue.by_id("revenue") is not None
+    with pytest.raises(DatasetError, match="canonical"):
+        partition_examples(
+            (row,),
+            sources=(record,),
+            registry=registry_for(record),
+            config=config(row),
+            taxonomy=without_revenue,
+            moves=(),
+            looks=(),
+        )
+    emptied_index = replace(taxonomy, _by_id={})
+    result = partition_examples(
+        (row,),
+        sources=(record,),
+        registry=registry_for(record),
+        config=config(row),
+        taxonomy=emptied_index,
+        moves=(),
+        looks=(),
+    )
+    assert result.fit == (row,)
+
+
+def test_duplicate_taxonomy_ids_are_refused() -> None:
+    record = source(cik_in(Part.FIT))
+    row = example(record)
+    taxonomy = load_taxonomy()
+    duplicated = replace(taxonomy, items=(*taxonomy.items, taxonomy.items[0]))
+    with pytest.raises(DatasetError, match="duplicate"):
+        partition_examples(
+            (row,),
+            sources=(record,),
+            registry=registry_for(record),
+            config=config(row),
+            taxonomy=duplicated,
+            moves=(),
+            looks=(),
+        )
+
+
+@pytest.mark.parametrize("value", [math.nan, math.inf])
+def test_a_non_finite_provenance_coordinate_names_its_example(value: float) -> None:
+    good = pdf_provenance()
+    record, _row = pdf_row(good)
+    forged = good.model_copy(update={"bbox": good.bbox.model_copy(update={"right": value})})
+    with pytest.raises(ValidationError, match="provenance"):
+        example(record, tag=None, provenance=forged)
+
+
+def test_a_bbox_left_as_a_plain_mapping_is_refused() -> None:
+    good = pdf_provenance()
+    record, _row = pdf_row(good)
+    loose = good.model_copy(update={"bbox": good.bbox.model_dump()})
+    with pytest.raises(ValidationError, match="provenance differs"):
+        example(record, tag=None, provenance=loose)
