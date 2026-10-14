@@ -656,15 +656,35 @@ Not done: how a filing is recognised as scanned Arabic in the demo (D14 says the
 
 ### Locate evidence in gate reports
 
-Gate reports (`var/eval/gates-dev.json`) use `evidence_schema_version: 1` and include a
+Gate reports (`var/eval/gates-dev.json`) use `evidence_schema_version: 2` and include a
 `locate_evidence` record per structured document. It fingerprints each saved page-text record
 (excluding OCR timings), the locate version, `ocr_key`, ranges, conversion spans and settings
-hash. Missing or malformed saved artifacts are marked incomplete and make the gate command exit
-nonzero. Compare a later run with `python -m harness.gates --compare-with
-<earlier-gates-dev.json> --output <report.json>`; per-document comparisons report changed
-input pages, gained or lost ranges, changed conversion spans, a settings-hash-only difference,
+hash. Each conversion span records its page range, OCR mode, OCR language, image pages and
+renderer, so a change of OCR mode or image pages makes the span count as changed.
+
+The record's `conversion` field is `read` when this run converted the document. A bank or
+insurer that is declined before conversion is recorded as `not_run`, with no spans and no
+settings hash. The `convert.json` left in its artifact directory belongs to an earlier run, so
+it is not read.
+
+Saved artifacts are cross-checked. `convert.json` must share the `sha256` and locate version of
+`locate.json`, and its plan pages must lie within the page count. A page count that does not
+match the cached pages is also incomplete. An artifact that is rewritten while it is being read
+is marked incomplete with the reason `artifacts changed while being read`. Any other missing,
+unreadable or malformed artifact is incomplete, with the error in its reason. A document that
+fails to read is listed under `errored`, with incomplete evidence whose reason starts with
+`document failed`. An incomplete or errored document makes the gate command exit 1.
+
+Compare a later run with `python -m harness.gates --compare-with
+<earlier-gates-dev.json> --output <report.json>`. Per-document comparisons report changed
+input pages, gained or lost ranges, a conversion that was read in one run and not_run in the
+other (`conversion run changed`), changed conversion spans, a settings-hash-only difference,
 locate-version or `ocr_key` changes, or unchanged inputs. A settings hash can change when the
 locate version changes even if conversion spans do not; that is reported as a settings-hash
-difference, not as a changed conversion plan. Reports without earlier evidence, incomplete
-evidence and malformed evidence are not comparable with a stated reason. These fingerprints
-describe saved inputs and outputs; they do not establish that a cached read is correct.
+difference, not as a changed conversion plan. Documents in the earlier report that are absent
+from the current run are listed under `removed_documents`, each as not comparable. An earlier
+report that uses another evidence schema version is not compared field by field: every document
+is not comparable, with the reason `earlier report uses evidence schema <n>`. Reports without
+earlier evidence, incomplete evidence and malformed evidence are not comparable with a stated
+reason. These fingerprints describe saved inputs and outputs; they do not establish that a
+cached read is correct.

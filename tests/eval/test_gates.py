@@ -19,13 +19,14 @@ from harness.gates import (
     lines,
     pair_records,
 )
-from harness.locate_evidence import DocumentEvidence
+from harness.locate_evidence import DocumentEvidence, PageFingerprint
+from harness.reproducibility import record_hash
 from test_mapping_harness import INDEX, TAXONOMY, P, item, statement
 
 from fra_core.schemas import CheckResult, Period, PeriodKind, StatementType
 from fra_ingest.config import IngestConfig
 from fra_ingest.errors import IngestError
-from fra_ingest.results import StructureResult
+from fra_ingest.results import IndustryDecision, IndustrySignal, StructureResult
 from fra_ingest.review import StatementReview
 
 TYPES = (StatementType.BALANCE, StatementType.INCOME)
@@ -420,7 +421,7 @@ def test_golden_gate_run_builds_one_configured_engine_and_reuses_it(
     monkeypatch.setattr(gates_module, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(gates_module, "structure_pdf", structure_pdf)
 
-    assert gates_module.main([]) == 0
+    assert gates_module.main([]) == 1
     assert factory_configs == [config]
     assert [call[0].name for call in calls] == ["first.pdf", "second.pdf"]
     assert all(call[1] is engine for call in calls)
@@ -445,14 +446,24 @@ def test_gate_writes_requested_output_and_fails_on_incomplete_locate_evidence(
     monkeypatch.setattr(
         gates_module,
         "document_evidence",
-        lambda _path: DocumentEvidence(
-            "incomplete", "missing cache", None, None, (), None, (), (), None, None
+        lambda _path, *, converted: DocumentEvidence(
+            status="incomplete",
+            conversion="read" if converted else "not_run",
+            reason="missing cache",
+            page_count=None,
+            pages_sha256=None,
+            pages=(),
+            locate_version=None,
+            ranges=(),
+            conversion_spans=(),
+            conversion_settings_hash=None,
+            ocr_key=None,
         ),
     )
 
     assert gates_module.main(["--output", str(output)]) == 1
     report = json.loads(output.read_text(encoding="utf-8"))
-    assert report["evidence_schema_version"] == 1
+    assert report["evidence_schema_version"] == 2
     assert report["documents"][0]["locate_evidence"]["status"] == "incomplete"
 
 
@@ -478,7 +489,20 @@ def test_compare_with_reports_legacy_missing_and_absent_evidence(
         "  - {id: absent, file: c.pdf, language: en, scale: 1, currency: SAR, text_layer: digital}\n",
         encoding="utf-8",
     )
-    evidence = DocumentEvidence("complete", None, 1, "digest", (), "7", (), (), "hash", "pages-key")
+    page_hash = "a" * 64
+    evidence = DocumentEvidence(
+        status="complete",
+        reason=None,
+        page_count=1,
+        pages_sha256=record_hash([page_hash]),
+        pages=(PageFingerprint(page_no=1, sha256=page_hash),),
+        locate_version="7",
+        ranges=(),
+        conversion="read",
+        conversion_spans=(),
+        conversion_settings_hash="hash",
+        ocr_key="pages-key",
+    )
     earlier = tmp_path / "earlier.json"
     earlier.write_text(
         json.dumps(
@@ -500,7 +524,7 @@ def test_compare_with_reports_legacy_missing_and_absent_evidence(
     monkeypatch.setattr(gates_module, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(gates_module, "structure_pdf", lambda *_args: structured())
     monkeypatch.setattr(gates_module, "load_checks", lambda _path: {})
-    monkeypatch.setattr(gates_module, "document_evidence", lambda _path: evidence)
+    monkeypatch.setattr(gates_module, "document_evidence", lambda _path, *, converted: evidence)
 
     assert gates_module.main(["--compare-with", str(earlier), "--output", str(output)]) == 0
     report = json.loads(output.read_text(encoding="utf-8"))
@@ -552,3 +576,261 @@ def test_explicit_findings_keep_slot_denominator_and_missing_statements_blocking
             [doc("synthetic", "annual", mapping={**complete, **blockers})], pairs=[], errors=errors
         )
         assert blocked["strata"]["total"]["gate_b"]["met"] is False
+
+
+def test_a_declined_document_is_recorded_without_conversion_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = IngestConfig(artifact_root=tmp_path / "artifacts")
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        "documents:\n"
+        "  - {id: bank, file: a.pdf, language: en, scale: 1, currency: SAR, text_layer: digital}\n"
+        "  - {id: corporate, file: b.pdf, language: en, scale: 1, currency: SAR, text_layer: digital}\n",
+        encoding="utf-8",
+    )
+    declined = StructureResult(
+        version="v",
+        sha256="b" * 64,
+        convert_version="",
+        settings_hash="",
+        industry=IndustryDecision(
+            outcome="declined", code="bank", signal=IndustrySignal(kind="bank"), reason="a bank"
+        ),
+    )
+    held = structured().model_copy(
+        update={
+            "industry": declined.industry.model_copy(  # type: ignore[union-attr]
+                update={"outcome": "needs_review", "code": "weak_verdict"}
+            )
+        }
+    )
+    results = iter([declined, held])
+    flags: list[bool] = []
+
+    def evidence_for(_path: Path, *, converted: bool) -> DocumentEvidence:
+        flags.append(converted)
+        page_hash = "a" * 64
+        return DocumentEvidence(
+            status="complete",
+            reason=None,
+            page_count=1,
+            pages_sha256=record_hash([page_hash]),
+            pages=(PageFingerprint(page_no=1, sha256=page_hash),),
+            locate_version="7",
+            ranges=(),
+            conversion="read" if converted else "not_run",
+            conversion_spans=(),
+            conversion_settings_hash="hash" if converted else None,
+            ocr_key="pages-key",
+        )
+
+    output = tmp_path / "report.json"
+    monkeypatch.setattr(gates_module, "load_config", lambda: config)
+    monkeypatch.setattr(gates_module, "make_engine", lambda _config: None, raising=False)
+    monkeypatch.setattr(gates_module, "MANIFEST", manifest)
+    monkeypatch.setattr(gates_module, "EXPECTED_DIR", tmp_path / "expected")
+    monkeypatch.setattr(gates_module, "OUT", tmp_path)
+    monkeypatch.setattr(gates_module, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(gates_module, "structure_pdf", lambda *_args: next(results))
+    monkeypatch.setattr(gates_module, "load_checks", lambda _path: {})
+    monkeypatch.setattr(gates_module, "document_evidence", evidence_for)
+
+    assert gates_module.main(["--output", str(output)]) == 0
+    report = json.loads(output.read_text(encoding="utf-8"))
+    recorded = {item["id"]: item["locate_evidence"]["conversion"] for item in report["documents"]}
+    assert recorded == {"bank": "not_run", "corporate": "read"}
+    assert flags == [False, True]
+
+
+def _complete_evidence() -> DocumentEvidence:
+    page_hash = "a" * 64
+    return DocumentEvidence(
+        status="complete",
+        reason=None,
+        page_count=1,
+        pages_sha256=record_hash([page_hash]),
+        pages=(PageFingerprint(page_no=1, sha256=page_hash),),
+        locate_version="7",
+        ranges=(),
+        conversion="read",
+        conversion_spans=(),
+        conversion_settings_hash="hash",
+        ocr_key="pages-key",
+    )
+
+
+def _stub_gate_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    ids: tuple[str, ...],
+    failing: tuple[str, ...] = (),
+) -> Path:
+    """Run main over `ids` with the engine, the reads and the evidence stubbed. A document in
+    `failing` raises an ingest error instead of being read. Returns the report path."""
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text(
+        "documents:\n"
+        + "".join(
+            f"  - {{id: {doc_id}, file: {doc_id}.pdf, language: en, scale: 1, currency: SAR, "
+            "text_layer: digital}\n"
+            for doc_id in ids
+        ),
+        encoding="utf-8",
+    )
+
+    def structure_pdf(pdf: Path, *_args: object) -> StructureResult:
+        if pdf.stem in failing:
+            raise IngestError("unreadable_pdf", "test")
+        return structured()
+
+    monkeypatch.setattr(
+        gates_module, "load_config", lambda: IngestConfig(artifact_root=tmp_path / "artifacts")
+    )
+    monkeypatch.setattr(gates_module, "make_engine", lambda _config: None, raising=False)
+    monkeypatch.setattr(gates_module, "MANIFEST", manifest)
+    monkeypatch.setattr(gates_module, "EXPECTED_DIR", tmp_path / "expected")
+    monkeypatch.setattr(gates_module, "OUT", tmp_path)
+    monkeypatch.setattr(gates_module, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(gates_module, "structure_pdf", structure_pdf)
+    monkeypatch.setattr(gates_module, "load_checks", lambda _path: {})
+    monkeypatch.setattr(
+        gates_module, "document_evidence", lambda _path, *, converted: _complete_evidence()
+    )
+    return tmp_path / "report.json"
+
+
+def test_a_document_that_fails_to_read_fails_the_run_and_is_recorded_incomplete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = _stub_gate_run(tmp_path, monkeypatch, ("bad", "good"), failing=("bad",))
+
+    assert gates_module.main(["--output", str(output)]) == 1
+    report = json.loads(output.read_text(encoding="utf-8"))
+    [failed] = report["errored"]
+    assert failed["id"] == "bad"
+    assert failed["locate_evidence"]["status"] == "incomplete"
+    assert failed["locate_evidence"]["reason"] == "document failed: unreadable_pdf"
+    assert [item["id"] for item in report["documents"]] == ["good"]
+
+
+def test_a_failed_document_is_not_comparable_when_compared_with_an_earlier_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    earlier = tmp_path / "earlier.json"
+    earlier.write_text(json.dumps({"documents": [{"id": "bad"}, {"id": "good"}]}), encoding="utf-8")
+    output = _stub_gate_run(tmp_path, monkeypatch, ("bad", "good"), failing=("bad",))
+
+    assert gates_module.main(["--compare-with", str(earlier), "--output", str(output)]) == 1
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["errored"][0]["comparison"] == {
+        "status": "not comparable",
+        "reason": "document failed in the current run",
+    }
+
+
+def test_a_document_missing_from_the_current_run_is_listed_as_removed_and_does_not_fail(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    complete = _complete_evidence().as_dict()
+    earlier = tmp_path / "earlier.json"
+    earlier.write_text(
+        json.dumps(
+            {
+                "documents": [
+                    {"id": "a", "locate_evidence": complete},
+                    {"id": "b", "locate_evidence": complete},
+                    {"id": "gone", "locate_evidence": complete},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = _stub_gate_run(tmp_path, monkeypatch, ("a", "b"))
+
+    assert gates_module.main(["--compare-with", str(earlier), "--output", str(output)]) == 0
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["removed_documents"] == [
+        {
+            "id": "gone",
+            "comparison": {
+                "status": "not comparable",
+                "reason": "document id absent from the current run",
+            },
+        }
+    ]
+
+
+def test_removed_documents_are_listed_in_sorted_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    earlier = tmp_path / "earlier.json"
+    earlier.write_text(
+        json.dumps({"documents": [{"id": "zeta"}, {"id": "b"}, {"id": "alpha"}]}), encoding="utf-8"
+    )
+    output = _stub_gate_run(tmp_path, monkeypatch, ("b",))
+
+    assert gates_module.main(["--compare-with", str(earlier), "--output", str(output)]) == 0
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert [item["id"] for item in report["removed_documents"]] == ["alpha", "zeta"]
+
+
+def test_a_run_with_every_document_read_exits_zero_and_has_no_removed_list(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = _stub_gate_run(tmp_path, monkeypatch, ("a", "b"))
+
+    assert gates_module.main(["--output", str(output)]) == 0
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["errored"] == []
+    assert "removed_documents" not in report
+
+
+def test_an_earlier_report_on_another_evidence_schema_is_not_compared_field_by_field(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    complete = _complete_evidence().as_dict()
+    earlier = tmp_path / "earlier.json"
+    earlier.write_text(
+        json.dumps(
+            {
+                "evidence_schema_version": 1,
+                "documents": [
+                    {"id": "a", "locate_evidence": complete},
+                    {"id": "b", "locate_evidence": complete},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = _stub_gate_run(tmp_path, monkeypatch, ("a", "b", "c"))
+    monkeypatch.setattr(gates_module, "compare_evidence", lambda *_args: pytest.fail("compared"))
+
+    assert gates_module.main(["--compare-with", str(earlier), "--output", str(output)]) == 0
+    report = json.loads(output.read_text(encoding="utf-8"))
+    not_comparable = {
+        "status": "not comparable",
+        "reason": "earlier report uses evidence schema 1",
+    }
+    assert [item["comparison"] for item in report["documents"]] == [not_comparable] * 3
+
+
+def test_an_earlier_report_on_evidence_schema_2_is_compared_field_by_field(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    complete = _complete_evidence().as_dict()
+    earlier = tmp_path / "earlier.json"
+    earlier.write_text(
+        json.dumps(
+            {
+                "evidence_schema_version": 2,
+                "documents": [{"id": "a", "locate_evidence": complete}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = _stub_gate_run(tmp_path, monkeypatch, ("a",))
+
+    assert gates_module.main(["--compare-with", str(earlier), "--output", str(output)]) == 0
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["documents"][0]["comparison"]["status"] == "unchanged"

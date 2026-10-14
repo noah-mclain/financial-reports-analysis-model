@@ -62,7 +62,12 @@ from fra_ingest.structure import structure_pdf
 from harness.expected import EXPECTED_DIR, ExpectedFile, load_expected
 from harness.extraction import DIGITAL, SCANNED, score_statement, wilson_interval
 from harness.failures import DOCUMENT_ERRORS, EngineFailure, EngineGuard, aborted, document_failure
-from harness.locate_evidence import compare_evidence, document_evidence, evidence_from_dict
+from harness.locate_evidence import (
+    compare_evidence,
+    document_evidence,
+    evidence_from_dict,
+    incomplete_evidence,
+)
 from harness.mapping import SLOT_STATES, critical_slots, document_period_kind
 from harness.paths import STRATA
 from harness.structure import (
@@ -85,6 +90,7 @@ PAIR_TYPES = (
     StatementType.INCOME,
 )  # "financial position and profit or loss"
 IDENTITY_MET = ("ok", "failed_accepted")
+EVIDENCE_SCHEMA_VERSION = 2
 
 
 def identity_outcome(
@@ -402,6 +408,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, default=OUT / "gates-dev.json")
     args = parser.parse_args(argv)
     previous: dict[str, dict[str, Any]] | None = None
+    schema_reason: str | None = None
     if args.compare_with is not None:
         try:
             earlier_report = json.loads(args.compare_with.read_text(encoding="utf-8"))
@@ -413,6 +420,10 @@ def main(argv: list[str] | None = None) -> int:
                 if not isinstance(item, dict) or not isinstance(item.get("id"), str):
                     raise ValueError("each document must be an object with a string 'id'")
                 previous[item["id"]] = item
+            if "evidence_schema_version" in earlier_report:
+                found = earlier_report["evidence_schema_version"]
+                if type(found) is not int or found != EVIDENCE_SCHEMA_VERSION:
+                    schema_reason = f"earlier report uses evidence schema {found!r}"
         except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
             raise SystemExit(f"cannot read comparison report {args.compare_with}: {exc}") from exc
     config = load_config()
@@ -423,7 +434,7 @@ def main(argv: list[str] | None = None) -> int:
     documents: list[dict[str, Any]] = []
     by_id: dict[str, dict[StatementType, Statement]] = {}
     errors: list[str] = []
-    errored: list[dict[str, str]] = []
+    errored: list[dict[str, Any]] = []
     guard = EngineGuard(len(entries))
     stopped: EngineFailure | None = None
     for entry in entries:
@@ -433,9 +444,20 @@ def main(argv: list[str] | None = None) -> int:
         except DOCUMENT_ERRORS as exc:
             failure = document_failure(exc)
             errors.append(f"{entry['id']}: {failure['error']}")
-            errored.append(
-                {"id": entry["id"], "reason": failure["error"], "detail": failure["detail"]}
-            )
+            failed: dict[str, Any] = {
+                "id": entry["id"],
+                "reason": failure["error"],
+                "detail": failure["detail"],
+                "locate_evidence": incomplete_evidence(
+                    f"document failed: {failure['error']}", None
+                ).as_dict(),
+            }
+            if previous is not None:
+                failed["comparison"] = {
+                    "status": "not comparable",
+                    "reason": "document failed in the current run",
+                }
+            errored.append(failed)
             try:
                 guard.record(failure["error"], failure["detail"])
             except EngineFailure as exc_stop:
@@ -443,7 +465,9 @@ def main(argv: list[str] | None = None) -> int:
                 break
             continue
         guard.record(None)
-        evidence = document_evidence(config.artifact_root / result.sha256)
+        # A bank or insurer is declined before convert runs; its convert.json is an old run's.
+        converted = result.industry is None or result.industry.outcome != "declined"
+        evidence = document_evidence(config.artifact_root / result.sha256, converted=converted)
         path = EXPECTED_DIR / f"{entry['id']}.json"
         checks = load_checks(config.artifact_root / result.sha256 / "table_checks.json")
         record = document_figures(
@@ -457,7 +481,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         record["locate_evidence"] = evidence.as_dict()
         if previous is not None:
-            if entry["id"] not in previous:
+            if schema_reason is not None:
+                record["comparison"] = {"status": "not comparable", "reason": schema_reason}
+            elif entry["id"] not in previous:
                 record["comparison"] = {
                     "status": "not comparable",
                     "reason": "document id absent from earlier report",
@@ -476,11 +502,23 @@ def main(argv: list[str] | None = None) -> int:
     kinds = {d["id"]: d["period_kind"] for d in documents}
     report = {
         **gate_report(documents, pair_records(by_id, kinds), errors),
-        "evidence_schema_version": 1,
+        "evidence_schema_version": EVIDENCE_SCHEMA_VERSION,
         "errors": errors,
         "errored": errored,
         "documents": documents,
     }
+    if previous is not None:
+        current_ids = {entry["id"] for entry in entries}
+        report["removed_documents"] = [
+            {
+                "id": doc_id,
+                "comparison": {
+                    "status": "not comparable",
+                    "reason": "document id absent from the current run",
+                },
+            }
+            for doc_id in sorted(previous.keys() - current_ids)
+        ]
     if stopped is not None:
         report = aborted(report, stopped)
     print("\n".join(lines(report)))
@@ -497,7 +535,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"wrote {display_path}")
     if stopped is not None:
         raise stopped
-    return 1 if any(d["locate_evidence"]["status"] != "complete" for d in documents) else 0
+    incomplete = any(d["locate_evidence"]["status"] != "complete" for d in documents)
+    return 1 if errored or incomplete else 0
 
 
 if __name__ == "__main__":
