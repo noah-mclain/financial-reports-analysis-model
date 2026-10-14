@@ -29,7 +29,7 @@ import re
 import shutil
 import subprocess
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from difflib import SequenceMatcher
 from importlib import metadata
@@ -51,6 +51,7 @@ from fra_ingest.label_match import squash
 from fra_ingest.ocr import TESSERACT_COMMAND, make_engine
 from fra_ingest.pages import PAGES_STAGE_VERSION, recorded_ocr_calls, sha256_file
 from fra_ingest.results import ConvertResult
+from fra_ingest.review import CRITICAL_CELL_FLAGS
 from fra_ingest.structure import structure_pdf
 from harness.expected import (
     EXPECTED_DIR,
@@ -76,6 +77,11 @@ LABEL_MATCH = 0.85
 LABEL_READABLE = 0.6
 # Characters by which two stretches of a label may differ or overlap and still count as apart.
 _SLOP = 2
+# Flags that leave an empty cell unsure rather than blank: a value that was lost, shifted,
+# merged or placed without a box in the page, besides the flags a reviewer must look at.
+_BLANK_UNSURE_FLAGS = frozenset(
+    {*CRITICAL_CELL_FLAGS, "not_available", "spanned_cell", "label_merged", "bbox_synthesized"}
+)
 
 
 @dataclass
@@ -372,12 +378,23 @@ def mislabelled(row: ExpectedRow, read: str, expected: Sequence[ExpectedRow]) ->
         return False
     if not got:
         return True
-    places = {}
-    for label in {squash(r.label) for r in expected} | {own}:
-        place = _place(label, got) if label else None
-        if place is not None and place[0] >= LABEL_MATCH:
-            places[label] = place
-    mine = places.get(own) or _place(own, got)
+    return _foreign(own, _found(got, {squash(r.label) for r in expected} | {own}))
+
+
+def _found(read: str, labels: Iterable[str]) -> dict[str, tuple[float, int, int] | None]:
+    """Where each of the labels sits in the label read (``_place``)."""
+    return {label: _place(label, read) if label else None for label in labels}
+
+
+def _foreign(own: str, found: Mapping[str, tuple[float, int, int] | None]) -> bool:
+    """The decision of ``mislabelled`` for a row's own label, given where every expected label
+    sits in a non-empty label read."""
+    places = {
+        label: place
+        for label, place in found.items()
+        if place is not None and place[0] >= LABEL_MATCH
+    }
+    mine = found[own]
     if mine is None or mine[0] < LABEL_READABLE:
         # Not this row's label by any reading: another row's, or a heading, or nothing.
         return True
@@ -404,21 +421,24 @@ def _matches(row: ExpectedRow, item: LineItem) -> bool:
     return any(value and item.value_for(key) == value for key, value in row.values.items())
 
 
-def align_rows(expected: Sequence[ExpectedRow], items: Sequence[LineItem]) -> list[int | None]:
-    """For each expected row, the index of its extracted row or None: the longest alignment
-    that keeps both in order, two rows matching by label or by a shared non-zero value."""
+def _align(
+    expected: Sequence[ExpectedRow],
+    items: Sequence[LineItem],
+    matches: Callable[[ExpectedRow, LineItem], bool],
+) -> list[int | None]:
     rows, cols = len(expected), len(items)
+    same = [[matches(expected[i], items[j]) for j in range(cols)] for i in range(rows)]
     best = [[0] * (cols + 1) for _ in range(rows + 1)]
     for i in range(rows - 1, -1, -1):
         for j in range(cols - 1, -1, -1):
-            if _matches(expected[i], items[j]):
+            if same[i][j]:
                 best[i][j] = best[i + 1][j + 1] + 1
             else:
                 best[i][j] = max(best[i + 1][j], best[i][j + 1])
     aligned: list[int | None] = [None] * rows
     i = j = 0
     while i < rows and j < cols:
-        if _matches(expected[i], items[j]) and best[i][j] == best[i + 1][j + 1] + 1:
+        if same[i][j] and best[i][j] == best[i + 1][j + 1] + 1:
             aligned[i] = j
             i, j = i + 1, j + 1
         elif best[i + 1][j] >= best[i][j + 1]:
@@ -428,8 +448,47 @@ def align_rows(expected: Sequence[ExpectedRow], items: Sequence[LineItem]) -> li
     return aligned
 
 
+def align_rows(expected: Sequence[ExpectedRow], items: Sequence[LineItem]) -> list[int | None]:
+    """For each expected row, the index of its extracted row or None: the longest alignment
+    that keeps both in order, two rows matching by label or by a shared non-zero value."""
+    return _align(expected, items, _matches)
+
+
+def align_labels(expected: Sequence[ExpectedRow], items: Sequence[LineItem]) -> list[int | None]:
+    """The alignment of the rows by their labels alone, for what a figure does not decide: a
+    row matches when its label is read exactly or readably as its own (``mislabelled``), whether
+    or not its figures are right."""
+
+    labels = {squash(r.label) for r in expected}
+    read: dict[int, dict[str, tuple[float, int, int] | None]] = {}
+
+    def read_as(row: ExpectedRow, item: LineItem) -> bool:
+        own, got = squash(row.label), squash(item.raw_label)
+        if not own or not got:
+            return False
+        if own == got:
+            return True
+        if id(item) not in read:
+            read[id(item)] = _found(got, labels)
+        return not _foreign(own, read[id(item)])
+
+    return _align(expected, items, read_as)
+
+
 def _period(period: Period) -> tuple[object, ...]:
     return (period.key, period.end_date, period.kind, period.months)
+
+
+def _shows_blank(item: LineItem | None, key: str) -> bool:
+    """Whether the row holds a cell for the period that was read empty and is not unsure. Absent
+    output, a figure that failed to parse and a lost or shifted value are not a printed blank."""
+    cell = next((c for c in item.cells if c.period_key == key), None) if item else None
+    return (
+        cell is not None
+        and cell.reported is None
+        and not cell.raw_text.strip()
+        and not _BLANK_UNSURE_FLAGS & set(cell.flags)
+    )
 
 
 def unmatched_numeric_rows(items: Sequence[LineItem], aligned: Sequence[int | None] = ()) -> int:
@@ -467,15 +526,9 @@ def score_statement(expected: ExpectedStatement, statement: Statement | None) ->
             read = item.value_for(key) if item is not None else None
             score.cells += 1
             score.cells_missing += int(statement is None)
-            # A blank needs an actual aligned cell in a represented period, not absent output.
             same = item is not None and read == value
             if value is None:
-                same = (
-                    same
-                    and item is not None
-                    and key in period_keys
-                    and any(c.period_key == key for c in item.cells)
-                )
+                same = same and key in period_keys and _shows_blank(item, key)
             if same and (value is None or labelled):
                 score.right += 1
             else:

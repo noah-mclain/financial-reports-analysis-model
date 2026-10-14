@@ -17,7 +17,7 @@ from typing import Any, Literal
 import pypdfium2 as pdfium
 import yaml
 
-from fra_core.schemas import Statement
+from fra_core.schemas import LineItem, Statement
 from fra_ingest.config import REPO_ROOT, load_config
 from fra_ingest.ocr import make_engine
 from fra_ingest.pages import sha256_file
@@ -44,27 +44,51 @@ def approved_gold(
         stream.write(gold.model_dump_json(indent=2) + "\n")
 
 
+def source_position(row: LineItem) -> tuple[int, str, int]:
+    """Where a row sits in the source: the page, table and table row of its first cell. A
+    repeated label is told apart by this, which does not move when another run omits a row."""
+    where = row.cells[0].provenance
+    return where.page_no, where.table_ref, where.row
+
+
+def draft_positions(
+    draft: dict[str, Any], first: StructureResult
+) -> dict[tuple[str, str, tuple[int, str, int], str], tuple[int, int]]:
+    """For each cell of the draft reading, its statement and row in the draft, keyed like the
+    cell map: statement type, label, source position and period."""
+    sources: dict[str, Statement] = {}
+    for extracted in first.statements:
+        sources.setdefault(extracted.type.value, extracted)
+    positions = {}
+    for si, statement in enumerate(draft["statements"]):
+        rows = [i for i in sources[statement["type"]].line_items if i.cells]
+        for ri, (row, item) in enumerate(zip(statement["rows"], rows, strict=True)):
+            for period in row["values"]:
+                key = (statement["type"], row["label"], source_position(item), period)
+                positions[key] = (si, ri)
+    return positions
+
+
 def cell_map(results: list[StructureResult]) -> list[dict[str, Any]]:
     """Union of cells across snapshots; missing observations are explicit, not agreement."""
-    records: dict[tuple[str, str, int, str], dict[str, Any]] = {}
+    records: dict[tuple[str, str, tuple[int, str, int], str], dict[str, Any]] = {}
     for run, result in enumerate(results):
-        occurrences: dict[tuple[str, str], int] = {}
         for statement in result.statements:
             for row in statement.line_items:
                 if not row.cells:
                     continue
-                label_key = (statement.type.value, row.raw_label)
-                occurrence = occurrences.get(label_key, 0)
-                occurrences[label_key] = occurrence + 1
+                position = source_position(row)
                 for cell in row.cells:
-                    key = (*label_key, occurrence, cell.period_key)
+                    key = (statement.type.value, row.raw_label, position, cell.period_key)
                     record = records.setdefault(
                         key,
                         {
                             "statement": statement.type.value,
                             "label": row.raw_label,
                             "period": cell.period_key,
-                            "occurrence": occurrence,
+                            "position": dict(
+                                zip(("page_no", "table_ref", "row"), position, strict=True)
+                            ),
                             "runs": [None] * len(results),
                         },
                     )
@@ -130,6 +154,7 @@ def build_review(document_id: str, snapshots: list[Path], output: Path) -> Path:
     first_statements: dict[str, Statement] = {}
     for extracted in results[0].statements:
         first_statements.setdefault(extracted.type.value, extracted)
+    baseline = draft_positions(draft, results[0])
     for statement in draft["statements"]:
         extracted = first_statements[statement["type"]]
         rows = [i for i in extracted.line_items if i.cells]
@@ -170,14 +195,6 @@ def build_review(document_id: str, snapshots: list[Path], output: Path) -> Path:
             )
     finally:
         pdf.close()
-    baseline = {}
-    for si, statement in enumerate(draft["statements"]):
-        occurrences: dict[str, int] = {}
-        for ri, row in enumerate(statement["rows"]):
-            occurrence = occurrences.get(row["label"], 0)
-            occurrences[row["label"]] = occurrence + 1
-            for period in row["values"]:
-                baseline[(statement["type"], row["label"], occurrence, period)] = (si, ri)
     rows_html = []
     for index, cell in enumerate(mapping):
         observations = []
@@ -194,7 +211,13 @@ def build_review(document_id: str, snapshots: list[Path], output: Path) -> Path:
                 f"— {html.escape(str(observation['canonical_id']))}</div>"
             )
         status = "agrees" if cell["consistent"] else "REVIEW: differs / missing / only one snapshot"
-        key = (cell["statement"], cell["label"], cell["occurrence"], cell["period"])
+        where = cell["position"]
+        key = (
+            cell["statement"],
+            cell["label"],
+            (where["page_no"], where["table_ref"], where["row"]),
+            cell["period"],
+        )
         position = baseline.get(key)
         controls = "Not in first draft: add/correct this row in the answer editor below."
         if position is not None:

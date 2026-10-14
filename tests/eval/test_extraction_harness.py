@@ -247,6 +247,35 @@ def test_a_blank_requires_an_aligned_cell_and_period(missing: str) -> None:
     assert (score.cells, score.right, score.mislabelled) == (1, 0, 0)
 
 
+@pytest.mark.parametrize(
+    "raw_text,flags,credited",
+    [
+        ("", ["numbers_missing"], True),
+        ("", ["numbers_missing", "blank_confirmed"], True),
+        ("?", ["unparsed"], False),
+        ("12x", [], False),
+        ("n/a", ["not_available"], False),
+        ("", ["numbers_missing", "unparsed"], False),
+        ("", ["numbers_missing", "spanned_cell"], False),
+        ("", ["numbers_missing", "bbox_synthesized"], False),
+        ("", ["numbers_missing", "label_merged"], False),
+        ("", ["numbers_missing", "row_misaligned"], False),
+        ("", ["numbers_missing", "row_realigned"], False),
+    ],
+)
+def test_only_an_empty_unflagged_cell_is_evidence_of_a_blank(
+    raw_text: str, flags: list[str], credited: bool
+) -> None:
+    blank = ExpectedRow(label="Treasury shares", values={P.key: None})
+    blank_item = item(1, "Treasury shares", "0")
+    blank_item.cells[0].reported = None
+    blank_item.cells[0].raw_text = raw_text
+    blank_item.cells[0].flags = flags
+    score = score_statement(statement_of([blank]), extracted_of([blank_item]))
+    assert (score.cells, score.right) == (1, int(credited))
+    assert len(score.wrong) == int(not credited)
+
+
 def test_extra_rows_are_printed_for_drafts_too() -> None:
     extra = extracted_of([item(1, "Cash", "5"), item(2, "Invented", "99")])
     lines, _ = report(

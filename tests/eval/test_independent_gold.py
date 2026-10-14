@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from harness.dry_run import rows_path as rows_file
 from harness.independent_gold import FrozenGold, Reading, aggregate_gold, counts, freeze
 from pydantic import ValidationError
 from tests.eval.test_expected import SHA, item, result, statement
@@ -152,6 +153,49 @@ def test_aligned_blank_requires_explicit_evidence(missing: str | None) -> None:
     assert (scored["cells"], scored["right"]) == (1, int(missing is None))
 
 
+def test_a_blank_is_not_credited_when_the_period_column_was_dropped() -> None:
+    first, second = reading(), reading("reader-b")
+    for data in (first, second):
+        data["statements"][0]["periods"].append(
+            {"key": "2024-12-31", "end_date": "2024-12-31", "kind": "instant"}
+        )
+        data["statements"][0]["rows"][0]["values"] = {"2025-12-31": "5", "2024-12-31": None}
+    frozen = FrozenGold(readings=(Reading.model_validate(first), Reading.model_validate(second)))
+    scored = counts(frozen, result([statement(1, [item(1, "Total assets", "5")])]))[0]
+    assert (scored["cells"], scored["right"]) == (2, 1)
+
+
+def test_an_unparsed_cell_is_not_a_printed_blank() -> None:
+    first, second = reading(), reading("reader-b")
+    for data in (first, second):
+        data["statements"][0]["rows"][0]["values"]["2025-12-31"] = None
+    frozen = FrozenGold(readings=(Reading.model_validate(first), Reading.model_validate(second)))
+    unparsed = item(1, "Total assets", "")
+    unparsed.cells[0].raw_text = "1x5"
+    unparsed.cells[0].flags = ["unparsed"]
+    scored = counts(frozen, result([statement(1, [unparsed])]))[0]
+    assert (scored["cells"], scored["right"]) == (1, 0)
+
+
+def test_mapping_credits_a_readable_label_whose_figure_is_wrong() -> None:
+    noisy = item(1, "Tota1 assets", "99")
+    noisy.canonical_id = "total_assets"
+    scored = counts(gold(), result([statement(1, [noisy])]))[0]
+    assert (scored["cells"], scored["right"]) == (1, 0)
+    assert (scored["mapping_rows"], scored["mapping_right"]) == (1, 1)
+    unrelated = item(1, "Cash", "99")
+    unrelated.canonical_id = "total_assets"
+    scored = counts(gold(), result([statement(1, [unrelated])]))[0]
+    assert (scored["mapping_rows"], scored["mapping_right"]) == (1, 0)
+
+
+def test_a_readable_label_under_a_wrong_id_is_still_a_mapping_miss() -> None:
+    noisy = item(1, "Tota1 assets", "99")
+    noisy.canonical_id = "total_equity"
+    scored = counts(gold(), result([statement(1, [noisy])]))[0]
+    assert (scored["mapping_rows"], scored["mapping_right"]) == (1, 0)
+
+
 @pytest.mark.parametrize("balances,incomes", [(1, 0), (2, 0), (0, 1), (1, 1), (2, 2), (0, 0)])
 def test_all_output_predictions_count_without_choosing_duplicate_statements(
     balances: int,
@@ -256,6 +300,36 @@ def test_gold_run_hash_checks_and_count_only_report(tmp_path: Path, bad_hash: bo
         assert report["reproducibility"]["expected"][frozen.document.id]
         assert "Total assets" not in json.dumps(report)
         assert not setup.artifacts.exists()
+
+
+def test_gold_counts_stay_private_to_the_run(tmp_path: Path) -> None:
+    import hashlib
+
+    from harness.holdout_records import read_looks
+    from tests.eval.test_dry_run import HOLDOUT_ISSUERS, Setup, candidate_record, stub_stages
+
+    setup = Setup(tmp_path, [candidate_record(HOLDOUT_ISSUERS[0])])
+    document_sha = hashlib.sha256(b"").hexdigest()
+    first, second = reading(), reading("reader-b")
+    for data in (first, second):
+        data["id"] = setup.documents[0]["id"]
+        data["sha256"] = document_sha
+    frozen = FrozenGold(readings=(Reading.model_validate(first), Reading.model_validate(second)))
+    directory = tmp_path / "gold"
+    directory.mkdir()
+    (directory / f"{frozen.document.id}.json").write_text(frozen.model_dump_json())
+    actual = result([statement(1, [item(1, "Total assets", "5")])])
+    actual.sha256 = document_sha
+    report = call_run(setup, directory, stub_stages(result=actual))
+    assert len(read_looks(setup.log)) == 1
+    written = [json.loads(line) for line in rows_file(setup.report).read_text().splitlines()]
+    assert len(written) == len(report["rows"]) == 1
+    for row in [*written, *report["rows"]]:
+        assert not {"gold", "gold_method"} & set(row)
+    total = report["gold_accuracy"]["strata"]["total"]
+    assert total["figures"]["digital"]["right"] == 1
+    assert (total["documents"], total["labeled_documents"]) == (1, 1)
+    assert total["methods"]["double_pdf"] == 1
 
 
 @pytest.mark.parametrize("method,complete", [("assisted_review", True), ("double_pdf", False)])

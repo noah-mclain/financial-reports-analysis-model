@@ -23,6 +23,10 @@ PYTHONPATH=eval uv run python -m harness.review_map build --id almarai-2025-en \
 ```
 
 Open `index.html`. Each cell links to its source PDF page, table, zero-based row and column;
+a repeated label is told apart by its page, table and table row in the source, so a run that
+omits an earlier repeat does not shift the later ones. Each record carries this as `position`
+(page_no, table_ref, row), replacing the earlier `occurrence` ordinal; hand-built value
+agreement evidence still uses its own `occurrence` field;
 `map.json` includes exact PDF-point bounding boxes and original raw text from every snapshot.
 Full inputs are copied into the packet: the viewer uses a statement/cell projection and may
 not render ancillary fields from newer snapshot schemas. Source page images show highlighted
@@ -110,8 +114,20 @@ made merely to test this implementation: tests use synthetic fixtures.
 
 Scoring happens before per-document artifacts are removed. A failed pipeline or missing
 statement retains the full expected denominator and zero correct answers. Reports retain
-counts, gold-file hashes, period and language breakdowns, not expected labels or figures.
+aggregate counts, gold-file hashes, period and language breakdowns, not expected labels or
+figures. Per-document gold counts are held in memory for the aggregate and are never written
+to the rows file or the report, because they would show which holdout documents were read
+correctly; a document row carries only its failure class.
+A negative control with a gold file refuses the run before a look: controls are judged on the
+sector decline and stay out of the numeric denominator.
 Mapping accuracy compares independently assigned canonical ids; lexicon agreement is not gold.
+A row counts as mapped when its label is read exactly or readably as the gold label, whether
+or not its figures are right; a wrong figure is a numeric miss only. A blank is credited only
+when the aligned row holds a cell for that period that was read empty and not flagged unsure.
+A cell that failed to parse, was shifted, merged, spanned or placed without a box is wrong,
+not blank, and so is a missing cell. When a statement type is extracted twice, no statement
+is chosen for the numeric score, but the mapped rows and numeric rows of both count as
+predictions and extra output.
 Numeric thresholds are reused from extraction scoring. These counts do not establish every
 component of Gate A/B, financial identities, narration accuracy, or generalization beyond
 this labeled sample. A successful command exit still describes pipeline completion, not a

@@ -23,7 +23,7 @@ from harness.extraction import (
     DIGITAL,
     SCANNED,
     Score,
-    align_rows,
+    align_labels,
     mislabelled,
     score_statement,
     unmatched_numeric_rows,
@@ -140,13 +140,13 @@ def counts(gold: FrozenGold, result: StructureResult | None) -> list[dict[str, A
         scored = score_statement(expected, statement) if expected is not None else Score()
         items = statement.line_items if statement else []
         rows = expected.rows if expected is not None else []
-        aligned = align_rows(rows, items)
         emitted = [item for candidate in candidates for item in candidate.line_items]
         predictions = sum(item.canonical_id is not None for item in emitted)
         if statement is None:
             scored.extra_rows = unmatched_numeric_rows(emitted)
         mapped = right = 0
-        for row, position in zip(rows, aligned, strict=True):
+        # Alignment by label alone: a figure read wrongly is a numeric miss, not a mapping one.
+        for row, position in zip(rows, align_labels(rows, items), strict=True):
             if row.canonical_id is None:
                 continue
             mapped += 1
