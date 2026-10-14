@@ -31,7 +31,7 @@ from fra_ingest.header import (
     printed_date,
 )
 from fra_ingest.ocr import OcrEngine, OcrLine
-from fra_ingest.period_evidence import source_cell
+from fra_ingest.period_evidence import contained, source_cell
 from fra_ingest.table_grid import Grid, GridCell
 
 _PROGRAMMING_ERRORS = (TypeError, AttributeError, NameError, IndexError, KeyError)
@@ -204,11 +204,7 @@ def _collect_evidence(
                 continue
             if not _overlap(box, anchor):
                 continue
-            if not (
-                _valid_box(box, crop.page_width, crop.page_height)
-                and anchor.left <= box.left < box.right <= anchor.right
-                and anchor.top <= box.top < box.bottom <= anchor.bottom
-            ):
+            if not (_valid_box(box, crop.page_width, crop.page_height) and contained(box, anchor)):
                 reasons.add("outside_source_rectangle")
                 continue
             if any(
