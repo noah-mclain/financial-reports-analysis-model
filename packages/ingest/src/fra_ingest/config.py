@@ -49,6 +49,7 @@ _TOML_FIELDS: dict[tuple[str, str], str] = {
     ("structure", "header_ocr_scale"): "header_ocr_scale",
     ("convert", "device"): "device",
     ("convert", "ocr_engine"): "convert_ocr",
+    ("convert", "pdfium_full_page_languages"): "pdfium_full_page_languages",
     ("convert", "images_scale"): "images_scale",
     ("convert", "ocr_scale"): "ocr_scale",
     ("convert", "batch_size"): "batch_size",
@@ -83,6 +84,7 @@ class IngestConfig(BaseModel):
     low_selectivity_share: float = Field(default=0.25, gt=0.0, le=1.0)
     device: Literal["mps", "cpu", "auto"] = "mps"
     convert_ocr: OcrEngineName = "ocrmac"
+    pdfium_full_page_languages: tuple[str, ...] = ()
     images_scale: float = Field(default=2.0, gt=0.0, le=4.0)
     ocr_scale: float = Field(default=3.0, gt=0.0, le=6.0)
     # Tesseract only. Page segmentation mode (3 is Tesseract's own default) and the language
@@ -96,6 +98,25 @@ class IngestConfig(BaseModel):
     child_timeout_s: float = Field(default=900.0, gt=0.0)
     memory_budget_gb: float = Field(default=3.5, gt=0.0)
     artifact_root: Path = REPO_ROOT / "var" / "artifacts"
+
+    @model_validator(mode="after")
+    def _pdfium_languages_are_readable(self) -> IngestConfig:
+        # Reuse the engine's language contract without importing it at module load time.
+        from fra_ingest.ocr import engine_language
+
+        for language in self.pdfium_full_page_languages:
+            if language not in self.ocr_languages:
+                raise ValueError(
+                    f"pdfium_full_page_languages: {language!r} is not in ocr_languages"
+                )
+            # This is a Vision-only rule, validated even when the selected engine leaves
+            # it dormant (Tesseract is unmeasured; none skips scanned ranges).
+            vision = self.model_copy(update={"convert_ocr": "ocrmac"})
+            try:
+                engine_language(vision, language)
+            except ValueError as exc:
+                raise ValueError(f"pdfium_full_page_languages: {exc}") from exc
+        return self
 
     @model_validator(mode="after")
     def _types_are_disjoint(self) -> IngestConfig:

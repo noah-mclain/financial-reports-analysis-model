@@ -1,8 +1,10 @@
 """Scale and currency strings taken from the golden set documents."""
 
+import re
+
 import pytest
 
-from fra_core.units import detect_currency, detect_scale
+from fra_core.units import detect_currency, detect_scale, unit_marker_spans
 
 
 @pytest.mark.parametrize(
@@ -121,3 +123,111 @@ def test_short_abbreviations_are_read_only_in_capitals(text: str) -> None:
     """LE, SR and KD are currencies only as printed in capitals, and "dollars" alone names no
     country."""
     assert detect_currency(text) is None
+
+
+@pytest.mark.parametrize(
+    "text,markers,residue",
+    [
+        ("SAR30/06", ("SAR",), "30/06"),
+        ("2024SAR", ("SAR",), "2024"),
+        ("SR30/06", ("SR",), "30/06"),
+        ("million30/06", (), "million30/06"),
+        ("(000)7", (), "(000)7"),
+        ("'000+1", ("'000",), "+1"),
+        ("in thousands of Egyptian pounds", ("in thousands", "Egyptian pounds"), "of"),
+        ("USD millions", ("USD", "millions"), ""),
+        ("ريال سعودي بآلاف", ("ريال سعودي", "بآلاف"), ""),
+        ("SR LE KD", ("SR", "LE", "KD"), ""),
+        ("sr le kd Sr Le Kd", (), "sr le kd Sr Le Kd"),
+        ("unknownريال", (), "unknownريال"),
+        ("بالريال السعودي", ("بالريال السعودي",), ""),
+        ("الريالات", ("الريالات",), ""),
+        ("بالجنيه المصري", ("بالجنيه المصري",), ""),
+        ("الجنيهات المصرية", ("الجنيهات المصرية",), ""),
+        ("بالريال السعودي30/06", ("بالريال السعودي",), "30/06"),
+        ("2024الريالات7", ("الريالات",), "2024 7"),
+        ("necessary", (), "necessary"),
+        ("الدينار الكويتي", (), "الدينار الكويتي"),
+        ("sAr '000", ("sAr", "'000"), ""),
+        ("€m US$m", ("€m", "US$m"), ""),
+    ],
+)
+def test_unit_marker_spans_cover_only_validated_text(
+    text: str, markers: tuple[str, ...], residue: str
+) -> None:
+    from fra_core.units import unit_marker_spans
+
+    spans = unit_marker_spans(text)
+    assert tuple(text[start:end] for start, end in spans) == markers
+    remaining = "".join(
+        " " if any(start <= i < end for start, end in spans) else char
+        for i, char in enumerate(text)
+    )
+    assert " ".join(remaining.split()) == residue
+
+
+@pytest.mark.parametrize(
+    ("text", "spans"),
+    [
+        ("SAR '000", ((0, 3), (4, 8))),
+        ("EGP millions", ((0, 3), (4, 12))),
+        ("2025 SAR", ((5, 8),)),
+        ("بالملايين", ((0, 9),)),
+        ("بآلاف الريالات السعودية", ((0, 5), (6, 23))),
+    ],
+)
+def test_ordinary_unit_headers_keep_their_marker_spans(
+    text: str, spans: tuple[tuple[int, int], ...]
+) -> None:
+    assert unit_marker_spans(text) == spans
+
+
+def test_per_share_qualifier_is_marked_beside_a_unit_marker() -> None:
+    text = "in millions, except per share data"
+    spans = unit_marker_spans(text)
+    assert spans == ((0, 11), (13, 34))
+    assert text[13:34] == "except per share data"
+
+
+def test_per_share_qualifier_alone_is_not_a_unit_marker() -> None:
+    assert unit_marker_spans("except per share data") == ()
+
+
+def test_overlapping_per_share_phrases_merge_into_one_span() -> None:
+    text = "millions except per share data"
+    assert unit_marker_spans(text) == ((0, 8), (9, 30))
+
+
+def test_per_share_qualifier_does_not_change_the_scale_reading() -> None:
+    signal = detect_scale("in millions, except per share data")
+    assert signal is not None
+    assert signal.scale == 1_000_000 and signal.per_share_exempt
+
+
+def _arabic_scale_spellings() -> list[str]:
+    from fra_core import units
+
+    return [
+        cue.strip()
+        for cue in (*units._THOUSAND_CUES, *units._MILLION_CUES, *units._BILLION_CUES)
+        if re.search(r"[\u0621-\u064a]", cue)
+    ]
+
+
+@pytest.mark.parametrize("prefix", ["", "م", "و"])
+@pytest.mark.parametrize("cue", _arabic_scale_spellings())
+def test_every_arabic_scale_spelling_is_a_marker_span(cue: str, prefix: str) -> None:
+    text = prefix + cue
+    assert detect_scale(text) is not None
+    assert unit_marker_spans(text) == ((0, len(text)),)
+
+
+def test_an_attached_arabic_scale_is_a_marker_in_a_dated_header() -> None:
+    text = "31 ديسمبر 2025 مبآلاف X"
+    spans = unit_marker_spans(text)
+    assert [text[start:end] for start, end in spans] == ["مبآلاف"]
+
+
+@pytest.mark.parametrize("text", ["آلافx", "آلاف1", "ألف7", "مبآلاف30/06"])
+def test_arabic_scale_spellings_still_need_a_word_end(text: str) -> None:
+    assert unit_marker_spans(text) == ()

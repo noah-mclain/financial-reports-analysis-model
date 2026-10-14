@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from fra_core.periods import parse_period
 from fra_core.schemas import CheckResult, LineItem, PageMode, Statement, StatementType, TextSource
+from fra_core.schemas.statement import PeriodEvidence
 from fra_core.taxonomy.loader import load_taxonomy
 from fra_ingest.caveats import unit_caveats
 from fra_ingest.child import convert_in_child
@@ -42,6 +43,7 @@ from fra_ingest.ocr import OcrEngine
 from fra_ingest.ocr_policy import plan_ranges
 from fra_ingest.pages import ocr_key, read_pages
 from fra_ingest.parts import PartialStatement, build_part
+from fra_ingest.period_evidence import merge_evidence, supported_evidence, validate_evidence
 from fra_ingest.results import (
     ConvertResult,
     IndustryDecision,
@@ -57,7 +59,7 @@ from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
 from fra_ingest.visual_order import repair_grid, repair_text, restore_word_order
 
-STRUCTURE_VERSION = "19"  # critical-item mapping findings; conversion/pages unchanged
+STRUCTURE_VERSION = "34"  # text-date separators; X beside a marker; observations in the cell
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -67,6 +69,7 @@ class StructureInputs(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    period_evidence: tuple[PeriodEvidence, ...] = ()
     sha256: str
     language: str
     industry_flags: tuple[str, ...]
@@ -136,6 +139,7 @@ def _statement(
         scale=meta.scale or 1,
         language=inputs.language,
         periods=part.periods,
+        period_conflicts=part.period_conflicts,
         line_items=items,
         source_pages=list(range(part.first_page, part.last_page + 1)),
         flags=list(dict.fromkeys([*part.flags, *meta.flags, *caveat_flags])),
@@ -150,6 +154,7 @@ class _Candidate:
     headings: list[str]
     hint: str | None
     decision: TableDecision
+    period_evidence: tuple[PeriodEvidence, ...]
 
 
 def _only_below_confidence(result: Classification) -> bool:
@@ -162,6 +167,9 @@ def _continued_part(
     hint: str | None,
     parts: Sequence[PartialStatement],
     titles: Sequence[StatementType],
+    period_evidence: Sequence[PeriodEvidence] = (),
+    *,
+    visual: bool = False,
 ) -> PartialStatement | None:
     """The statement part a low-confidence grid continues: the latest part ending on its page
     or the page before, whose periods and value columns the grid matches, a column its header
@@ -172,7 +180,10 @@ def _continued_part(
     )
     if previous is None or (titles and previous.type not in titles):
         return None
-    layout = inherit_periods(parse_header(grid, previous.type, hint), grid, previous)
+    layout = parse_header(grid, previous.type, hint, period_evidence=period_evidence, visual=visual)
+    if layout.period_conflicts and not layout.value_cols:
+        return None
+    layout = inherit_periods(layout, grid, previous)
     if not continues_part(layout, grid, previous):
         return None
     return previous
@@ -188,13 +199,40 @@ def structure_document(
     decisions: list[TableDecision] = []
     # Every grid classify accepted, or rejected only for low confidence (a possible tail page).
     candidates: list[_Candidate] = []
+    remaining = set(range(len(inputs.period_evidence)))
     for path, document in inputs.documents:
         for table in document.tables:
             raw = build_grid(table, document, path)
+            scoped = tuple(
+                group
+                for group in inputs.period_evidence
+                if (
+                    group.observations[0].docling_path,
+                    group.observations[0].provenance.page_no,
+                    group.observations[0].provenance.table_ref,
+                )
+                == (path, raw.page_no, raw.table_ref)
+            )
+            for n, group in enumerate(inputs.period_evidence):
+                if group in scoped:
+                    remaining.discard(n)
+            raw_rows = parse_header(raw, StatementType.BALANCE, None).header_rows
+            height = document.page_size(raw.page_no).height
+            # A caller's group is checked against the original grid before any crop is read.
+            scoped = merge_evidence(scoped)
+            validate_evidence(raw, scoped, raw_rows, source_table=table, page_height=height)
             visual = raw.page_no in inputs.visual_pages
             grid = restore_word_order(repair_grid(raw, visual=visual), index)
             if header_recover is not None and inputs.page_modes.get(grid.page_no) is PageMode.IMAGE:
                 grid = header_recover(grid, document)
+            collected, unsupported = supported_evidence(
+                raw, grid.period_evidence, raw_rows, source_table=table, page_height=height
+            )
+            grid = grid.model_copy(
+                update={"period_evidence": collected, "flags": (*grid.flags, *unsupported)}
+            )
+            # Merge by actual column, without overwriting readings from either producer.
+            scoped = merge_evidence(collected, scoped)
             headings = _headings(document, grid, visual)
             hint = _date_hint(headings)
             context = TableContext(
@@ -203,33 +241,53 @@ def structure_document(
                 heading_texts=tuple(headings),
                 industry_flags=inputs.industry_flags,
             )
+            initial_layout = parse_header(grid, StatementType.BALANCE, hint)
             result = classify(
                 grid,
-                parse_header(grid, StatementType.BALANCE, hint),
+                initial_layout,
                 context,
                 index,
                 config.min_confidence,
             )
+            if scoped:
+                # Classification probes date presence; binding uses the classified kind.
+                initial_layout = parse_header(
+                    grid,
+                    result.type or StatementType.BALANCE,
+                    hint,
+                    period_evidence=scoped,
+                    visual=visual,
+                )
             decision = TableDecision(
                 table_ref=grid.table_ref,
                 docling_path=path,
                 page_no=grid.page_no,
                 type=result.type,
                 confidence=min(result.confidence, 1.0),
+                period_conflicts=initial_layout.period_conflicts,
                 evidence=[
                     *result.evidence,
+                    *(f for f in initial_layout.evidence if scoped and f.startswith("period_")),
                     *(
                         f
                         for f in grid.flags
-                        if f.startswith(("header_recovery_", "header_recovered"))
+                        if f.startswith(
+                            ("header_recovery_", "header_recovered", "period_evidence_")
+                        )
                     ),
                 ],
                 recovered_headers=grid.recovered_headers,
                 recovery_context=grid.recovered_context,
+                period_evidence=scoped,
             )
             decisions.append(decision)
             if result.type is not None or _only_below_confidence(result):
-                candidates.append(_Candidate(grid, result, headings, hint, decision))
+                candidates.append(_Candidate(grid, result, headings, hint, decision, scoped))
+
+    if remaining:
+        raise ValueError(
+            f"period evidence does not match an input path/page/table: {sorted(remaining)}"
+        )
 
     docling_texts = [
         repair_text(t.text, visual=t.prov[0].page_no in inputs.visual_pages)
@@ -251,7 +309,14 @@ def structure_document(
         grid, result, hint = candidate.grid, candidate.result, candidate.hint
         if result.type is None:
             titles = inputs.title_types.get(grid.page_no, ())
-            continued = _continued_part(grid, hint, parts, titles)
+            continued = _continued_part(
+                grid,
+                hint,
+                parts,
+                titles,
+                candidate.period_evidence,
+                visual=grid.page_no in inputs.visual_pages,
+            )
             if continued is None:
                 continue
             if is_closed(continued, index):
@@ -267,7 +332,30 @@ def structure_document(
             candidate.decision.type = continued.type
             candidate.decision.evidence = [*candidate.decision.evidence, evidence]
         assert result.type is not None
-        layout = parse_header(grid, result.type, hint)
+        layout = parse_header(
+            grid,
+            result.type,
+            hint,
+            period_evidence=candidate.period_evidence,
+            visual=grid.page_no in inputs.visual_pages,
+        )
+        candidate.decision.period_conflicts = layout.period_conflicts
+        candidate.decision.evidence = list(
+            dict.fromkeys(
+                [
+                    *candidate.decision.evidence,
+                    *(
+                        f
+                        for f in layout.evidence
+                        if candidate.period_evidence and f.startswith("period_")
+                    ),
+                ]
+            )
+        )
+        if layout.period_conflicts and not layout.value_cols:
+            # A prior statement cannot supply a new binding after all current
+            # printed bindings were held by their observed alternatives.
+            continue
         previous = next(
             (
                 p
@@ -487,6 +575,8 @@ def structure_pdf(
             and cached.settings_hash == digest
             and (out_dir / "table_checks.json").is_file()
             and not any(
+                # A missing engine or a failed read can succeed next time. Every other
+                # unavailable comparison is a fact of the page and is reused as cached.
                 e.startswith(("header_recovery_failed:", "header_recovery_unavailable"))
                 for table in cached.tables
                 for e in table.evidence

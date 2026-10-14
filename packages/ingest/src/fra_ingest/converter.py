@@ -18,6 +18,7 @@ from PIL import Image
 from fra_ingest.config import IngestConfig
 from fra_ingest.docling_ocr import tesseract_pipeline
 from fra_ingest.ocr import TESSERACT_COMMAND, engine_language
+from fra_ingest.ocr_policy import reads_through_pdfium
 from fra_ingest.results import RangePlan
 
 RunStatus = Literal["ok", "partial", "failed"]
@@ -102,16 +103,25 @@ def pipeline_options(config: IngestConfig, plan: RangePlan) -> Any:
 
 
 class DoclingRunner:
-    """Converts ranges, keeping one converter per (OCR mode, language) so a document loads
+    """Converts ranges, keeping one converter per (OCR mode, language, renderer) so a document loads
     docling's models once in the usual case."""
 
     def __init__(self, config: IngestConfig) -> None:
         self.config = config
         self.models_seconds = 0.0
-        self._converters: dict[tuple[str, str | None], Any] = {}
+        self._converters: dict[tuple[str, str | None, str], Any] = {}
 
     def _converter(self, plan: RangePlan) -> Any:
-        key = (plan.ocr, plan.ocr_language)
+        if plan.renderer == "pdfium" and not reads_through_pdfium(
+            self.config, plan.ocr, plan.ocr_language
+        ):
+            # A plan is built by plan_ranges under this rule. One that breaks it was written
+            # under other settings; converting it would pair an unmeasured engine and backend.
+            raise ValueError(
+                f"range {plan.label}: the pdfium renderer is not configured for "
+                f"{self.config.convert_ocr} {plan.ocr} OCR in {plan.ocr_language}"
+            )
+        key = (plan.ocr, plan.ocr_language, plan.renderer)
         if key not in self._converters:
             started = time.perf_counter()
             from docling.datamodel.base_models import InputFormat
@@ -119,6 +129,10 @@ class DoclingRunner:
 
             options = pipeline_options(self.config, plan)
             format_args: dict[str, Any] = {"pipeline_options": options}
+            if plan.renderer == "pdfium":
+                from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
+
+                format_args["backend"] = PyPdfiumDocumentBackend
             if self.config.convert_ocr == "tesseract":
                 format_args["pipeline_cls"] = tesseract_pipeline()
             converter = DocumentConverter(

@@ -1,5 +1,8 @@
 """Bank, insurer and other financial companies, read from their statement pages."""
 
+from pathlib import Path
+
+import pytest
 from support import numbers_block, text_page
 
 from fra_core.schemas import PageMode, StatementType
@@ -280,3 +283,122 @@ def test_a_property_developer_that_securitizes_receivables_stays_corporate() -> 
     signal = detect_industry(pages, ranges, BOOK)
     assert signal.kind == "corporate"
     assert industry_decision(signal) is None
+
+
+@pytest.mark.parametrize(
+    "balance,income",
+    [
+        ("Loan investments", "Income from financial investments, net"),
+        ("Investment securities", "Investment income"),
+        ("Instalment credit debtors", "Realised profit from instalment sales"),
+    ],
+)
+def test_financial_statement_cue_pairs_are_held(balance: str, income: str) -> None:
+    pages, ranges = on_statement_pages(balance, income)
+    signal = detect_industry(pages, ranges, BOOK)
+    decision = industry_decision(signal)
+    assert decision is not None
+    assert decision.outcome == "needs_review"
+    assert signal.distinct_cues == 2
+    assert signal.kind not in ("bank", "insurer")
+
+
+def test_investment_income_with_private_equity_is_held() -> None:
+    pages, ranges = on_statement_pages("Investment securities", "Investment income")
+    pages.append(text_page("Notes", "Private equity investments", page_no=3))
+    signal = detect_industry(pages, ranges, BOOK)
+    decision = industry_decision(signal)
+    assert decision is not None
+    assert (decision.outcome, decision.code) == ("needs_review", "other_financial")
+    assert signal.subkind == "investment_holding"
+
+
+@pytest.mark.parametrize(
+    "cue",
+    ["Investment income", "Income from financial investments", "Investment securities"],
+)
+def test_one_ancillary_investment_cue_repeated_in_notes_still_passes(cue: str) -> None:
+    pages, ranges = on_statement_pages("Revenue\nCost of sales\nCash and bank balances")
+    pages += [text_page("Notes", cue, page_no=n) for n in range(2, 12)]
+    signal = detect_industry(pages, ranges, BOOK)
+    assert signal.kind == "corporate"
+    assert industry_decision(signal) is None
+
+
+def test_notes_only_investment_pair_does_not_hold_a_corporate() -> None:
+    pages, ranges = on_statement_pages("Revenue\nCost of sales")
+    pages.append(text_page("Notes", "Investment income\nInvestment securities", page_no=2))
+    signal = detect_industry(pages, ranges, BOOK)
+    assert signal.kind == "corporate"
+    assert industry_decision(signal) is None
+
+
+def test_contextual_cues_from_separate_notes_do_not_accumulate() -> None:
+    pages, ranges = on_statement_pages("Revenue\nCost of sales")
+    pages += [
+        text_page("Notes", cue, page_no=page_no)
+        for page_no, cue in enumerate(
+            ["Investment income", "Income from financial investments", "Investment securities"],
+            start=2,
+        )
+    ]
+    signal = detect_industry(pages, ranges, BOOK)
+    assert signal.kind == "corporate"
+    assert industry_decision(signal) is None
+
+
+def test_weak_primary_cue_does_not_combine_with_an_ancillary_alias() -> None:
+    pages, ranges = on_statement_pages("Revenue\nCost of sales\nInvestment income")
+    pages.append(text_page("Notes", "Income from financial investments", page_no=2))
+    signal = detect_industry(pages, ranges, BOOK)
+    decision = industry_decision(signal)
+    assert signal.kind == "corporate"
+    assert signal.score == 2.0
+    assert decision is None
+
+
+@pytest.mark.parametrize(
+    "contextual",
+    [
+        '"investment income"',
+        "{unexpected: value}",
+        "null",
+        "[investment income, 3]",
+        '["   "]',
+        '["not a configured cue"]',
+    ],
+)
+def test_invalid_contextual_config_is_rejected(tmp_path: Path, contextual: str) -> None:
+    path = tmp_path / "industry_cues.yaml"
+    path.write_text(
+        f"exclude: []\ncues:\n  bank:\n    deposits from customers: 3\ncontextual: {contextual}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="contextual"):
+        load_industry_book(path)
+
+
+def test_contextual_config_is_canonicalized(tmp_path: Path) -> None:
+    path = tmp_path / "industry_cues.yaml"
+    path.write_text(
+        "exclude: []\n"
+        "cues:\n"
+        "  bank:\n"
+        "    deposits from customers: 3\n"
+        '    "Investment, Income!": 2\n'
+        'contextual: [" investment, income! "]\n',
+        encoding="utf-8",
+    )
+
+    assert load_industry_book(path).contextual == frozenset({"investment income"})
+
+
+def test_contextual_config_can_be_empty(tmp_path: Path) -> None:
+    path = tmp_path / "industry_cues.yaml"
+    path.write_text(
+        "exclude: []\ncues:\n  bank:\n    deposits from customers: 3\ncontextual: []\n",
+        encoding="utf-8",
+    )
+
+    assert load_industry_book(path).contextual == frozenset()

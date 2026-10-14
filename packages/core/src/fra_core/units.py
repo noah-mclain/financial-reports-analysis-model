@@ -20,7 +20,13 @@ from dataclasses import dataclass
 
 from fra_core.numbers import strip_bidi
 
-__all__ = ["ScaleSignal", "detect_currency", "detect_scale"]
+__all__ = [
+    "ScaleSignal",
+    "detect_currency",
+    "detect_scale",
+    "is_glyph_placeholder",
+    "unit_marker_spans",
+]
 
 _THOUSAND_CUES: tuple[str, ...] = (
     "'000",
@@ -56,6 +62,10 @@ _PER_SHARE_CUES: tuple[str, ...] = (
     "per share data",
     "عدا نصيب السهم",
     "فيما عدا السهم",
+)
+
+_PER_SHARE_QUALIFIERS = tuple(
+    re.compile(rf"(?<!\w){re.escape(cue)}(?!\w)", re.IGNORECASE) for cue in _PER_SHARE_CUES
 )
 
 _CURRENCY_WORDS: dict[str, str] = {
@@ -105,6 +115,90 @@ _CAPITAL_ABBREVIATIONS: dict[str, str] = {"LE": "EGP", "SR": "SAR", "KD": "KWD"}
 _CURRENCY_SIGNS: dict[str, str] = {"£": "GBP", "$": "USD"}
 
 _ISO_CODE = re.compile(r"(?<![A-Za-z])(SAR|EGP|USD|GBP|EUR|AED|KWD|QAR|BHD|OMR|JOD)(?![A-Za-z])")
+
+# Whole scale wording and currency names, longest first. Plural scale words are also
+# present in the existing "in ..." / "... of" cues. Short capitals remain case-sensitive.
+_MARKER_WORDS = set(_CURRENCY_WORDS) | {
+    wording
+    for cue in (*_THOUSAND_CUES, *_MILLION_CUES, *_BILLION_CUES)
+    for wording in (cue.strip(), cue.strip().removeprefix("in ").removesuffix(" of"))
+}
+# Arabic currency stems allow attached articles, prepositions and plural endings, as in
+# detect_currency. Expand only Arabic letters so numeric and Latin residue stays visible.
+_ARABIC_LETTER = r"[\u0621-\u064a]"
+
+
+def _arabic_currency_word(word: str) -> str:
+    if word.isalpha():
+        # Test the stem once, then consume the whole word without backtracking through
+        # possible stem positions when the following adjective is absent.
+        return rf"(?={_ARABIC_LETTER}*{re.escape(word)}){_ARABIC_LETTER}++"
+    return _ARABIC_LETTER + "*" + re.escape(word) + _ARABIC_LETTER + "*"
+
+
+_ARABIC_CURRENCY_WORDS = "|".join(
+    r"\s+".join(_arabic_currency_word(word) for word in name.split())
+    for name in _CURRENCY_NAMES_BY_LENGTH
+    if not name.isascii()
+)
+# A scale spelling is a marker with up to three attached particles or the article before it, as
+# in the joined "مبآلاف" or "وبالملايين". Any other letters make a different word ("يتألف").
+_ARABIC_ATTACHED = r"(?:[ومبلفك]|ال){0,3}"
+_ARABIC_SCALE_WORDS = "|".join(
+    re.escape(cue.strip())
+    for cue in sorted((*_THOUSAND_CUES, *_MILLION_CUES, *_BILLION_CUES), key=len, reverse=True)
+    if re.search(_ARABIC_LETTER, cue)
+)
+_UNIT_MARKER = re.compile(
+    r"(?<![^\W\d_])(?P<arabic>"
+    + _ARABIC_CURRENCY_WORDS
+    + r")(?![^\W\d_])|(?<!\w)"
+    + _ARABIC_ATTACHED
+    + r"(?:"
+    + _ARABIC_SCALE_WORDS
+    + r")(?!\w)|(?<!\w)(?i:"
+    + "|".join(re.escape(cue) for cue in sorted(_MARKER_WORDS, key=len, reverse=True))
+    + r")(?!\w)|(?i:"
+    + _ISO_CODE.pattern
+    + r")|(?<![A-Za-z])(?:"
+    + "|".join(_CAPITAL_ABBREVIATIONS)
+    + r")(?![A-Za-z])|["
+    + re.escape("".join(_CURRENCY_SIGNS))
+    + "]"
+)
+
+
+def is_glyph_placeholder(token: str) -> bool:
+    """Whether a token is the "X" that stands for a currency glyph absent from the text layer."""
+    return token.strip("()[].,:;،؛'\"").casefold() == "x"
+
+
+def unit_marker_spans(text: str) -> tuple[tuple[int, int], ...]:
+    """Return currency/scale spans in the supplied text, preserving adjacent residue.
+
+    Offsets refer to the original input; callers perform any text normalization first.
+    Unlike the permissive detectors, a scale substring inside another word is not a
+    complete marker. A currency next to a number covers only the currency characters.
+    When a marker is present, an "except per share" qualifier is returned as well, so that
+    it is not mistaken for residue.
+    """
+    markers = [
+        match.span()
+        for match in _UNIT_MARKER.finditer(text)
+        if match.group("arabic") is None or detect_currency(match.group()) is not None
+    ]
+    if not markers:
+        return ()
+    qualifiers = sorted(
+        match.span() for pattern in _PER_SHARE_QUALIFIERS for match in pattern.finditer(text)
+    )
+    merged: list[tuple[int, int]] = []
+    for start, end in qualifiers:
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
+        else:
+            merged.append((start, end))
+    return tuple(sorted(markers + merged))
 
 
 @dataclass(frozen=True)

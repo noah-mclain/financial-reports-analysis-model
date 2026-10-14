@@ -340,10 +340,32 @@ def test_fresh_conversion_records_plans_and_reuses_them(tmp_path: Path) -> None:
     assert cached == result
 
 
-def test_mapping_findings_change_only_the_structure_cache_contract(
+@pytest.mark.parametrize(
+    "prior_version",
+    [
+        "18",
+        "19",
+        "20",
+        "21",
+        "22",
+        "23",
+        "24",
+        "25",
+        "26",
+        "27",
+        "28",
+        "29",
+        "30",
+        "31",
+        "32",
+        "33",
+    ],
+)
+def test_period_evidence_changes_only_the_structure_cache_contract(
     monkeypatch: pytest.MonkeyPatch,
+    prior_version: str,
 ) -> None:
-    assert structure.STRUCTURE_VERSION == "19"
+    assert structure.STRUCTURE_VERSION == "34"
     assert convert.CONVERT_VERSION == "2"
     assert pages.PAGES_STAGE_VERSION == "5"
     config = IngestConfig()
@@ -358,14 +380,36 @@ def test_mapping_findings_change_only_the_structure_cache_contract(
         ranges=[],
     )
     current = structure._settings_hash(config, converted)
-    monkeypatch.setattr(structure, "STRUCTURE_VERSION", "18")
+    monkeypatch.setattr(structure, "STRUCTURE_VERSION", prior_version)
     assert structure._settings_hash(config, converted) != current
     assert _digest(config, where) == converted.settings_hash
 
 
-def test_version_18_structure_is_not_reused_but_healthy_conversion_is(
+@pytest.mark.parametrize(
+    "prior_version",
+    [
+        "18",
+        "19",
+        "20",
+        "21",
+        "22",
+        "23",
+        "24",
+        "25",
+        "26",
+        "27",
+        "28",
+        "29",
+        "30",
+        "31",
+        "32",
+        "33",
+    ],
+)
+def test_prior_structure_is_not_reused_but_healthy_conversion_is(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    prior_version: str,
 ) -> None:
     config = IngestConfig(artifact_root=tmp_path)
     where = located([PageMode.TEXT], [(1, 1)], sha256=SHA)
@@ -379,9 +423,9 @@ def test_version_18_structure_is_not_reused_but_healthy_conversion_is(
         docling=RELEASE,
     )
     with monkeypatch.context() as legacy:
-        legacy.setattr(structure, "STRUCTURE_VERSION", "18")
+        legacy.setattr(structure, "STRUCTURE_VERSION", prior_version)
         old = StructureResult(
-            version="18",
+            version=prior_version,
             sha256=SHA,
             convert_version=converted.version,
             settings_hash=structure._settings_hash(config, converted),
@@ -409,7 +453,7 @@ def test_version_18_structure_is_not_reused_but_healthy_conversion_is(
 
     result = structure.structure_pdf(Path("synthetic.pdf"), config, None, convert=cached_convert)
     assert calls == []
-    assert result.version == "19"
+    assert result.version == "34"
     assert result.settings_hash != old.settings_hash
     assert "obsolete_structure" not in result.flags
     assert ConvertResult.model_validate_json((out / "convert.json").read_text()) == converted

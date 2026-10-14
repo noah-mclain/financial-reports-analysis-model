@@ -577,6 +577,58 @@ the engine, but nothing checks docling's call.
 - Docker's Arabic run extracted 0 of 3 statements where the Mac's `ara+eng` run extracted 1 of
   3. Both are 0 right of 128; they are not different results on this measure.
 
+### Scan renderer
+
+The native Vision path uses Docling's `PyPdfiumDocumentBackend` for a conversion range
+only when its plan calls for full-page OCR and its one OCR language is listed in
+`convert.pdfium_full_page_languages`. The setting is a list in `configs/ingest.toml`, initially
+`["en-US"]`; an empty list keeps Docling's default backend for every range. Each entry must
+be in `ocr.languages` and readable by Vision, or configuration fails.
+
+The rule applies only to `ocrmac`. Tesseract, including the Docker profile, keeps the default
+backend whatever the list contains: its pdfium path is unmeasured. Layout-region OCR, text
+and skipped ranges also keep the default. Arabic stays on the default because the diagnostic
+pdfium run read the print better but assigned tokens to cells worse; digital ranges stay on
+the default because they have not been measured. The initial list enables English only.
+
+This choice was made on `dev` on 10 October 2026 and awaits confirmation on fit scans. The
+diagnostic comparisons are not a gate result. `convert.json` records `renderer` (`default`
+or `pdfium`) in each `settings_plans` entry. The plans govern the conversion settings hash:
+a changed renderer invalidates conversion and its derived outputs, while unaffected ranges
+retain their cache keys. An older plan without `renderer` loads as `default`. Locate and
+page-read caches are unaffected.
+
+#### Measured scan renderer table
+
+Measured on 10 October 2026 with `make eval-gates`: the twelve `dev` documents, native
+profile, Vision, empty caches. Two of the runs were timed with `/usr/bin/time -l`: 605 s and
+601 s of wall time, 2.35 GB and 2.17 GB maximum resident set size. The first column is
+the list empty; the second is `["en-US"]`. Only the five English scanned documents differ
+between the two; the other seven records are identical.
+
+| Gate part | Default backend everywhere | English full-page ranges on pdfium |
+| --- | --- | --- |
+| Digital cells right | 138 of 138 | 138 of 138 |
+| Scanned cells right | 218 of 254 | 219 of 254 |
+| Gated language pairs identical | 2 of 2 | 2 of 2 |
+| Identity | 4 ok, 1 accepted by rule, 3 skipped, 4 without a balance sheet | 5 ok, 2 accepted by rule, 2 skipped, 3 without a balance sheet |
+| Scale and currency found and right | 30 of 36 | 31 of 36 |
+| Critical slots not accounted for | 32 of 144 | 24 of 144 |
+| Critical slots mapped | 55 | 63 |
+
+Gates A and B are not met in either column. The default column was run on the change applied
+to `main`; the `["en-US"]` column was run there and again on this branch's base, with the same
+figures. One mapped slot of `edita-2025-en-consolidated-ifrs` became an explicit flag.
+
+Limits: `dev` is in-sample and annual only; no fit, validation or holdout scan has been read
+with this setting. Arabic was tried only as a diagnostic on `edita-2024-ar-consolidated`, where
+checked cells fell from 98 to 82 of 128, which is why it is not listed. The default column
+differs from the report of 7 October (three documents without a balance sheet, 24 slots not
+accounted for) on the same code. Read from this run's conversion plans and table decisions,
+not from a controlled test: `juhayna-2025-ar-standalone` has no range covering pages 59 to 61,
+where the earlier run found the table it counted as a balance sheet. Why the located ranges
+differ between runs is open.
+
 ### Decision
 
 The Docker profile uses Tesseract with `ara+eng`. Scanned Arabic is native-only: Vision is the

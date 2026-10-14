@@ -239,6 +239,115 @@ class StructureResult(BaseModel):   # statements.raw.json
    `Notes` / `إيضاح` header; the label column is the one with the most non-numeric text,
    wherever it sits, so mirrored Arabic tables need no special case. Columns are bound to
    periods by their header text, never by position.
+
+   `StructureInputs.period_evidence` optionally supplies caller-collected `PeriodEvidence`
+   groups. Each group contains at least two `PeriodObservation` readings of one path, page,
+   table and value column, with distinct stable source IDs, original literal text, optional
+   confidence and existing `Provenance` (PDF points, top-left origin). Image-page crops
+   already triggered by partial-header recovery automatically retain attributable alternate
+   readings over existing bound columns. The primary literal is the exact original `DlCell.text`,
+   with its original converted rectangle, unit spans and nonnegative header anchor. Its stable
+   ID names the Docling-cell stage and index; confidence is null because Docling supplies none.
+   Both readings use OCR provenance on this image-only path. Alternate literals and confidence
+   remain unchanged `OcrLine` facts; their rectangles use the actual rendered crop extent,
+   including pixel rounding. IDs name the crop recognition line index, not full-page token lineage.
+   No extra recognition call runs. Fully bound tables and full-bound historical date conflicts
+   remain outside this producer's coverage. Agreement is not independent verification.
+   Composite multirow date/status anchors, missing or mismatched source cells, non-unit spans,
+   ambiguous row/column/table assignment and invalid page geometry cannot supply a comparison.
+   Alternates must fit inside the original source rectangle; unsupported or absent attribution
+   emits `period_evidence_unavailable:<col>:<reason>` without synthesizing an observation.
+   A bound column without a usable original cell gets `source_anchor_invalid` and no
+   comparison; the missing slots of the same table are still read.
+   Evidence survives subsequent missing-slot recovery rejection, including low-confidence or
+   unparseable alternate literals. A failed read or a missing engine retries the structure
+   stage through the existing cache machinery (`header_recovery_failed:`,
+   `header_recovery_unavailable`). Every other unavailable reason is a fact of the page and is
+   cached with the result. Healthy conversion and page caches are unchanged.
+   Caller and collected groups merge by real column, retaining all distinct identities.
+   Identical observations deduplicate; a reused per-column ID with different facts fails loudly.
+   Scope, source spans, header row, column identity and geometry are validated against the
+   original grid, source cells and page height before binding. A caller's observation rectangle
+   must lie wholly inside the original source cell's rectangle, the same rule collected
+   alternates meet; one that extends beyond it is rejected as an input error. A caller's group
+   is validated before any crop is read, and unmatched or ambiguous caller evidence fails loudly. A collected
+   group the original grid cannot carry is dropped with
+   `period_evidence_unavailable:<col>:raw_source_mismatch`; it never fails the document.
+   Agreeing collected readings that omit the bound header's own interpretation hold the column
+   with `conflicting_context`; the same omission in caller evidence is rejected as an input error.
+   A rendered crop whose pixel-rounded extent leaves the page or touches a sibling table
+   supplies no comparison (`geometry_invalid` for each bound column) and does not stop the
+   missing slots being read.
+   `TableDecision.period_evidence` retains agreement and conflict observations.
+   Cache version 34 invalidates prior structure results, including versions 33, 32, 31, 30, 29,
+   28, 27, 26, 25, 24, 23, 22, 21 and 20.
+
+   Each observation is parsed with the same statement kind and date context as its column,
+   using core's typed `interpret_period` facts for all four-digit Gregorian calendar years.
+   It distinguishes complete dates, month/year and legitimate year-only descriptions from
+   missing or invalid calendar information before defaults. Malformed separators, impossible
+   dates, unknown months and stray date numbers cannot reach the bare-year fallback.
+   Duration facts distinguish explicit supported lengths (3, 6, 9 or 12 months and existing
+   annual/quarter cues), generic period wording, absent wording and invalid stated lengths.
+   Unsupported, negated or contradictory lengths hold the column. `parse_period` retains
+   its existing permissive behavior for other callers. Within strict facts the bare Arabic
+   noun "فترة" is generic period wording. Arabic duration cues accept the article ("ال").
+   A dash standing alone in a reading that carries a unit marker is a separator. A dotted month
+   abbreviation ("Dec. 31, 2025") is read in month-first dates. A day-first date
+   separates month and year by at most one "." and one ",", in that order, with any
+   whitespace ("31 Dec., 2025", "31 Dec.2025"); "31 Dec2025" and "31 Dec.. 2025" are not
+   complete dates. A month-first date is the month, at most one ".", whitespace, the day, at
+   most one "," with any whitespace, then the year ("Dec 31, 2025", "Dec. 31, 2025",
+   "December 31 2025"); "Dec 31,,2025" and "Dec.. 31, 2025" are not complete dates. A month
+   and year are separated by at most one "." with any whitespace and at least one separator
+   ("Dec 2025", "Dec. 2025", "Dec.2025"); "Dec.. 2025" is not a date. An Arabic scale
+   spelling that `detect_scale` accepts is a unit marker with up to three attached particles
+   or the article before it ("مبآلاف", "وبالملايين"), but not inside another word ("يتألف").
+   The "X" that stands for a currency glyph is unit text in a reading or a header row only
+   when a scale or currency marker is in the same text, so a second header row such as
+   `X '000` does not discard the date anchor above it, and "31 December 2025 X" is not a
+   complete date. An "x" left behind by masking a stated month count ("x2 months") is not a
+   printed placeholder, so the date beside it stays readable. A reading that states both
+   audited and unaudited is unparseable. Candidate
+   text uses the existing header repairs; Arabic digit runs are reversed only for `text`
+   provenance on a page explicitly marked `visual_arabic`. Logical OCR readings are not
+   reversed, and the observation's literal text, source ID and geometry remain unchanged.
+   Without visual page context, digit order is preserved. Different computed period keys, end dates,
+   kinds or lengths hold the column; different formats of the same computed period agree.
+   An unparseable or partial observation also holds it, with a null candidate rather than a
+   guessed year. Confidence never chooses a reading. Agreeing caller evidence that omits the bound
+   header's interpretation is rejected; collected readings that omit it hold the column. No year window or replacement date is inferred.
+   `period_conflict:<col>` and `period_unbound:<col>` name the held column. Its frozen
+   `PeriodConflict` retains every source observation and computed candidate through
+   `HeaderLayout`, `PartialStatement`, `TableDecision` and `Statement` JSON. Other columns
+   still extract, and the statement needs review. If every column is held, no statement is
+   fabricated: `StructureResult.tables` retains the conflicts and reasons. Header binding
+   after recovery and continuation trials use the same evidence; inheritance cannot bind a conflicted
+   column, and merged parts keep their conflicts. When every current printed binding is held,
+   continuation cannot introduce a binding for an undated slot. A conflict among caller
+   observations is resolved by corrected caller evidence and a new structure run. A conflict
+   that includes a collected crop reading cannot be cleared by caller evidence, because the
+   merge keeps every collected observation; it stays held for review. There is no automatic
+   resolution policy.
+   A recovered reading that gives only a year (any four-digit Gregorian year, read through
+   `interpret_period`, with or without unit or status text) and has no caption flags
+   `period_uncertain`; the printed uncertainty is kept and no binding is recovered.
+   A per-share qualifier ("except per share") beside a unit marker is unit text, not period
+   residue. A duplicate statement's review keeps its `period_conflict` reasons beside
+   `duplicate_statement`.
+   A recovered caption fills missing duration information but never replaces an explicit
+   observation duration or complete date. Generic period wording supplies no explicit
+   length, so an explicit caption can fill it. Invalid facts cannot be healed by context.
+   Agreeing observations that contradict a caption or the recovered header remain
+   held with `conflicting_context`; their computed candidates and recovered context are retained.
+   One exception concerns the page heading's date on a printed (not recovered) column: the
+   heading dates one column, so when another value column of the table prints that month and
+   day as a complete date, the heading is not a second reading of the comparative beside it,
+   and an agreeing comparative binds. This applies only to a column whose own printed header is
+   a complete date. If no other column prints the heading's date in full, the disagreement
+   still holds the column. A heading length that contradicts an explicit column
+   length holds the column in every case.
+   Structure results are cached against `STRUCTURE_VERSION`; changing it invalidates prior structure results while reusing cached conversion output.
 6. **Metadata.** Scale from the header text, then the caption, then the page text; per-share
    rows are exempt. Currency the same way; when none of those name one (Almarai's glyph), the
    country of incorporation decides: the earliest page with a phrase such as "a Saudi Joint

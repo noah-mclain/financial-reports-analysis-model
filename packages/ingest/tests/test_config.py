@@ -23,7 +23,7 @@ def write(tmp_path: Path, text: str) -> Path:
 
 
 def test_repository_config_matches_the_defaults() -> None:
-    assert load_config() == IngestConfig()
+    assert load_config() == IngestConfig(pdfium_full_page_languages=("en-US",))
 
 
 def test_defaults_convert_balance_income_and_comprehensive_income() -> None:

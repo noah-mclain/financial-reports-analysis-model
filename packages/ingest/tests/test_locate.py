@@ -5,6 +5,7 @@ from pathlib import Path
 from support import FakeOcr, make_blank_pdf, numbers_block, text_page
 
 from fra_ingest.config import IngestConfig
+from fra_ingest.industry import industry_decision
 from fra_ingest.locate import locate
 from fra_ingest.results import LocateResult, PageText
 from fra_ingest.stage import locate_pdf
@@ -95,3 +96,15 @@ def test_a_run_from_cache_reports_no_ocr_time(tmp_path: Path) -> None:
     again = locate_pdf(pdf, config, FakeOcr())
     assert again.timings["ocr"] == 0.0
     assert again.timings["text"] >= 0.0
+
+
+def test_a_weak_investment_pair_is_held_after_statement_location() -> None:
+    pages = [
+        text_page(BALANCE_HEADER, "Investment securities\n" + numbers_block(), page_no=1),
+        text_page(INCOME_HEADER, "Investment income\n" + numbers_block(), page_no=2),
+    ]
+    result = locate(pages, IngestConfig(), sha256=SHA, filename="investment.pdf")
+    assert result.ranges
+    decision = industry_decision(result.industry)
+    assert decision is not None
+    assert (decision.outcome, decision.code) == ("needs_review", "near_threshold")

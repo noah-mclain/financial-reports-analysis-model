@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from fra_core.schemas import Document, PageMode, Statement, StatementType, TextSource
+from fra_core.schemas.statement import PeriodConflict, PeriodEvidence
 from fra_ingest.review import StatementReview
 from fra_ingest.table_grid import GridCell
 
@@ -170,6 +171,7 @@ class LocateResult(BaseModel):
 
 
 RangeOcr = Literal["pdf_aware", "full_page", "skipped"]
+RangeRenderer = Literal["default", "pdfium"]
 RangeStatus = Literal["ok", "partial", "failed", "skipped"]
 
 
@@ -186,6 +188,7 @@ class RangePlan(BaseModel):
         "the range is skipped or no OCR engine is configured"
     )
     image_pages: tuple[int, ...] = ()
+    renderer: RangeRenderer = "default"
 
     @model_validator(mode="after")
     def _ordered(self) -> RangePlan:
@@ -246,6 +249,9 @@ class TableDecision(BaseModel):
     """What structure decided about one docling table, and why."""
 
     model_config = ConfigDict(extra="forbid")
+
+    period_conflicts: tuple[PeriodConflict, ...] = ()
+    period_evidence: tuple[PeriodEvidence, ...] = ()
 
     table_ref: str
     docling_path: str
