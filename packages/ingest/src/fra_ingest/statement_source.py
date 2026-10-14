@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from fra_core.schemas import StatementType
 from fra_ingest.locate import plan_conversion
@@ -104,25 +104,7 @@ def source_plan(
     competing = any(types[a] & types[b] for i, a in enumerate(tied) for b in tied[i + 1 :])
     primary_span = tied[0] if best[1] else None
     primary_spans = tied[:1] if competing else tied
-    primary = tuple(
-        min(
-            (
-                r
-                for r in selected
-                if r.type is t
-                and primary_span is not None
-                and any(a <= r.first_page <= r.last_page <= b for a, b in primary_spans)
-            ),
-            key=lambda r: r.rank,
-        )
-        for t in sorted(set(r.type for r in selected), key=lambda t: t.value)
-        if any(
-            r.type is t
-            and primary_span is not None
-            and any(a <= r.first_page <= r.last_page <= b for a, b in primary_spans)
-            for r in selected
-        )
-    )
+    primary = _lowest_ranked(selected, primary_spans if primary_span is not None else ())
     return SourcePlan(
         selected,
         tuple(sorted(pages, key=lambda p: p.page_no)),
@@ -133,6 +115,34 @@ def source_plan(
         competing or not best[1],
         page_count,
     )
+
+
+def _lowest_ranked(
+    selected: Sequence[StatementRange], spans: Sequence[tuple[int, int]]
+) -> tuple[StatementRange, ...]:
+    """The lowest-rank range of each type that lies wholly inside one of ``spans``."""
+    inside = [r for r in selected if any(a <= r.first_page <= r.last_page <= b for a, b in spans)]
+    return tuple(
+        min((r for r in inside if r.type is t), key=lambda r: r.rank)
+        for t in sorted({r.type for r in inside}, key=lambda t: t.value)
+    )
+
+
+def resolve_tied_blocks(plan: SourcePlan) -> SourcePlan:
+    """The plan once two tied blocks are proved to be opposite scopes: nothing is ambiguous, and
+    the second block is a primary source for each type the first does not name. A type both
+    blocks name keeps the first block's range. A tie in which neither block was located as a
+    candidate has no primary block to extend, so it stays as it is."""
+    if plan.primary_span is None:
+        return plan
+    if len(plan.tied_spans) != 2:
+        raise ValueError(f"only two tied source blocks can be resolved, got {len(plan.tied_spans)}")
+    named = {r.type for r in plan.primary}
+    second = tuple(
+        r for r in _lowest_ranked(plan.ranges, plan.tied_spans[1:]) if r.type not in named
+    )
+    primary = sorted((*plan.primary, *second), key=lambda r: r.type.value)
+    return replace(plan, primary=tuple(primary), ambiguous=False)
 
 
 def table_source(

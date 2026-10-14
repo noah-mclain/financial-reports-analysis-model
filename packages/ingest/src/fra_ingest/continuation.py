@@ -127,15 +127,23 @@ def _table_index(part: PartialStatement) -> int:
 def merge_continuations(
     parts: Sequence[PartialStatement], index: LabelIndex
 ) -> list[PartialStatement]:
-    """Parts of one type in page order, then table order on a page, each merged into the one
-    before it when it starts on that part's last page or the next, its columns line up and
-    that part is not closed."""
+    """Parts of one type in page order, then table order on a page, each merged into the latest
+    part of its own type and source group when it starts on that part's last page or the next,
+    its columns line up and that part is not closed."""
     ordered = sorted(parts, key=lambda p: (p.type.value, p.first_page, _table_index(p)))
     merged: list[PartialStatement] = []
     for part in ordered:
-        if merged and _continues(merged[-1], part, index):
-            head = merged[-1]
-            merged[-1] = head.model_copy(
+        at = next(
+            (
+                i
+                for i in range(len(merged) - 1, -1, -1)
+                if merged[i].type is part.type and merged[i].source_group == part.source_group
+            ),
+            None,
+        )
+        if at is not None and _continues(merged[at], part, index):
+            head = merged[at]
+            merged[at] = head.model_copy(
                 update={
                     "last_page": part.last_page,
                     "line_items": [*head.line_items, *part.line_items],

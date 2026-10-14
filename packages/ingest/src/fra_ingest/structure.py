@@ -13,7 +13,7 @@ import os
 import time
 from collections import Counter
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -58,6 +58,7 @@ from fra_ingest.row_alignment import realign_rows
 from fra_ingest.stage import load_or_locate, page_ocr_languages
 from fra_ingest.statement_source import (
     TableSourceContext,
+    resolve_tied_blocks,
     source_plan,
     start_decision,
     table_source,
@@ -67,7 +68,7 @@ from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
 from fra_ingest.visual_order import repair_grid, repair_text, restore_word_order
 
-STRUCTURE_VERSION = "33"  # source guard, split merged OCR amounts, stricter period readings
+STRUCTURE_VERSION = "36"  # source guard, split merged OCR amounts, stricter period readings
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -335,28 +336,22 @@ def structure_document(
     book = load_title_book()
     local_titles: dict[int, tuple[str, ...]] = {}
     scopes: dict[int, bool | None] = {}
-    contexts: dict[int, TableSourceContext] = {}
+    data_rows: dict[int, int] = {}
     for n, candidate in enumerate(candidates):
         kind = candidate.proposed_type
         local_titles[n] = _local_statement_titles(candidate.headings, kind, book)
         scopes[n] = statement_title_scope(local_titles[n])
-        contexts[n] = table_source(
-            plan,
-            candidate.grid.page_no,
-            kind,
-            len(parse_header(candidate.grid, kind, candidate.hint).data_rows(candidate.grid)),
+        data_rows[n] = len(
+            parse_header(candidate.grid, kind, candidate.hint).data_rows(candidate.grid)
         )
-    primary_scopes: dict[StatementType, bool | None] = {}
-    for kind in config.enabled_types:
-        heads = sorted(
-            (
-                n
-                for n, c in contexts.items()
-                if c.proposed_type is kind and c.role == "primary" and local_titles[n]
-            ),
-            key=lambda n: _candidate_order(candidates[n]),
-        )
-        primary_scopes[kind] = scopes[heads[0]] if heads else None
+
+    def source_contexts() -> dict[int, TableSourceContext]:
+        return {
+            n: table_source(plan, c.grid.page_no, c.proposed_type, data_rows[n])
+            for n, c in enumerate(candidates)
+        }
+
+    contexts = source_contexts()
     # A tied block may be resolved only by two fully explicit, opposite local scopes.
     if plan.ambiguous and len(plan.tied_spans) == 2:
         block_scopes = []
@@ -368,7 +363,19 @@ def structure_document(
             }
             block_scopes.append(next(iter(values)) if len(values) == 1 else None)
         if set(block_scopes) == {True, False}:
-            contexts = {n: replace(c, ambiguous=False) for n, c in contexts.items()}
+            plan = resolve_tied_blocks(plan)
+            contexts = source_contexts()
+    primary_scopes: dict[StatementType, bool | None] = {}
+    for kind in config.enabled_types:
+        heads = sorted(
+            (
+                n
+                for n, c in contexts.items()
+                if c.proposed_type is kind and c.role == "primary" and local_titles[n]
+            ),
+            key=lambda n: _candidate_order(candidates[n]),
+        )
+        primary_scopes[kind] = scopes[heads[0]] if heads else None
 
     part_scopes: dict[str, bool | None] = {}
     part_order: dict[str, tuple[int, int, int]] = {}
@@ -379,15 +386,13 @@ def structure_document(
         candidate = candidates[n]
         grid, result, hint = candidate.grid, candidate.result, candidate.hint
         kind = candidate.proposed_type
-        previous = next(
-            (
-                p
-                for p in reversed(parts)
-                if (p.type is kind or _only_below_confidence(result))
-                and p.last_page in (grid.page_no, grid.page_no - 1)
-            ),
-            None,
-        )
+        nearby = [
+            p
+            for p in reversed(parts)
+            if (p.type is kind or _only_below_confidence(result))
+            and p.last_page in (grid.page_no, grid.page_no - 1)
+        ]
+        previous = nearby[0] if nearby else None
         if previous is not None and _only_below_confidence(result) and previous.type is not kind:
             # Low-confidence tails have no reliable winning kind. Preserve the existing
             # continuation rule by probing the latest authorized part's kind instead.
@@ -404,17 +409,26 @@ def structure_document(
         )
         candidate.decision.type = None
         candidate.decision.evidence = [*candidate.decision.evidence, *eligibility.evidence]
-        if previous is not None and (
-            source_context.negatives
-            or (source_context.titles and kind not in source_context.titles)
-            or (
-                scopes[n] is not None
-                and part_scopes[previous.table_refs[0]] is not None
-                and scopes[n] is not part_scopes[previous.table_refs[0]]
-            )
-            or (eligibility.allowed and eligibility.group_key != previous.source_group)
+        if source_context.negatives or (
+            source_context.titles and kind not in source_context.titles
         ):
             previous = None
+        else:
+            # The latest nearby part of the candidate's own kind, scope and source group.
+            previous = next(
+                (
+                    p
+                    for p in nearby
+                    if p.type is kind
+                    and not (
+                        scopes[n] is not None
+                        and part_scopes[p.table_refs[0]] is not None
+                        and scopes[n] is not part_scopes[p.table_refs[0]]
+                    )
+                    and not (eligibility.allowed and eligibility.group_key != p.source_group)
+                ),
+                None,
+            )
         layout = parse_header(
             grid,
             kind,

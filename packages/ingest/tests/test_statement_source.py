@@ -7,8 +7,15 @@ from support import HEADER, PAGE_1, PAGE_2, inputs, page, span, structured_sourc
 
 from fra_core.schemas import StatementType as T
 from fra_ingest.config import IngestConfig
+from fra_ingest.docling_json import DlDocument
 from fra_ingest.results import PageScore, StatementRange, StructureResult
-from fra_ingest.statement_source import SourcePlan, source_plan, start_decision, table_source
+from fra_ingest.statement_source import (
+    SourcePlan,
+    resolve_tied_blocks,
+    source_plan,
+    start_decision,
+    table_source,
+)
 from fra_ingest.structure import StructureInputs, structure_document
 
 
@@ -515,3 +522,155 @@ def test_income_scopes_keep_separate_metadata_and_cannot_inherit() -> None:
     result, _ = structure_document(base, IngestConfig())
     assert [s.source_pages for s in result.statements] == [[5]]
     assert "below_confidence" in result.tables[1].evidence and result.tables[1].type is None
+
+
+CONSOLIDATED_BALANCE = "Consolidated statement of financial position"
+STANDALONE_BALANCE = "Standalone statement of financial position"
+
+
+def _placed_source(
+    tables: list[tuple[int, list[list[str]], float]],
+    ranges: list[StatementRange],
+    scores: list[PageScore],
+    titles: list[tuple[int, int, str]],
+) -> StructureInputs:
+    """Tables with an explicit vertical shift, so titles sit above their own table."""
+    from support import table
+
+    placed = []
+    for i, (n, rows, shift) in enumerate(tables):
+        t = table(i, n, rows)
+        for cell in t["data"]["table_cells"]:  # type: ignore[index]
+            cell["bbox"]["t"] += shift
+            cell["bbox"]["b"] += shift
+        placed.append(t)
+    doc = DlDocument.model_validate(
+        {
+            "tables": placed,
+            "texts": [
+                {
+                    "self_ref": f"#/texts/{i}",
+                    "text": text,
+                    "label": "section_header",
+                    "prov": [
+                        {
+                            "page_no": n,
+                            "bbox": {
+                                "l": 50,
+                                "t": y,
+                                "r": 700,
+                                "b": y + 10,
+                                "coord_origin": "TOPLEFT",
+                            },
+                        }
+                    ],
+                }
+                for i, (n, y, text) in enumerate(titles)
+            ],
+            "pages": {
+                str(n): {"page_no": n, "size": {"width": 800, "height": 1000}}
+                for n in {n for n, _, _ in tables}
+            },
+        }
+    )
+    base = inputs([("docling/source.json", doc)])
+    where = base.located.model_copy(
+        update={
+            "document": base.located.document.model_copy(update={"page_count": 65}),
+            "ranges": ranges,
+            "pages": scores,
+        }
+    )
+    return base.model_copy(update={"located": where})
+
+
+def test_a_resolved_second_block_is_primary_for_its_unique_types() -> None:
+    from support import INCOME_1
+
+    comprehensive = [
+        [
+            "",
+            "Notes",
+            "For the year ended 31 December 2025 SAR thousands",
+            "For the year ended 31 December 2024 SAR thousands",
+        ],
+        ["Other comprehensive income", "", "1", "2"],
+        ["Will not be reclassified", "", "1", "2"],
+        ["May be reclassified", "", "0", "0"],
+        ["Total comprehensive income", "", "1", "2"],
+    ]
+    full = [*PAGE_1, *PAGE_2[1:]]
+    ranges = [
+        span(T.BALANCE, 5),
+        span(T.INCOME, 6, rank=2),
+        span(T.BALANCE, 40, rank=2),
+        span(T.COMPREHENSIVE_INCOME, 41),
+    ]
+    scores = [
+        page(5, T.BALANCE),
+        page(6, T.INCOME),
+        page(40, T.BALANCE),
+        page(41, T.COMPREHENSIVE_INCOME),
+    ]
+    titles = [
+        (5, 50, CONSOLIDATED_BALANCE),
+        (6, 50, "Consolidated statement of income"),
+        (40, 50, STANDALONE_BALANCE),
+        (41, 50, "Standalone statement of comprehensive income"),
+    ]
+    base = structured_source(
+        [(5, full), (6, INCOME_1), (40, full), (41, comprehensive)], ranges, scores, titles
+    )
+    result, _ = structure_document(base, IngestConfig())
+    assert [(s.type, s.consolidated) for s in result.statements] == [
+        (T.BALANCE, True),
+        (T.BALANCE, False),
+        (T.COMPREHENSIVE_INCOME, False),
+        (T.INCOME, True),
+    ]
+    # The same blocks without explicit titles stay ambiguous.
+    unmarked = [
+        (n, y, t.replace("Consolidated ", "").replace("Standalone ", "")) for n, y, t in titles
+    ]
+    base = structured_source(
+        [(5, full), (6, INCOME_1), (40, full), (41, comprehensive)], ranges, scores, unmarked
+    )
+    result, _ = structure_document(base, IngestConfig())
+    assert not result.statements
+    assert all("source_primary_ambiguous" in t.evidence for t in result.tables)
+
+
+@pytest.mark.parametrize("weak", [True, False])
+def test_interleaved_scopes_continue_within_their_own_group(weak: bool) -> None:
+    tail_a = [HEADER, ["Unrecognized qzx", "", "3", "2"]] if weak else PAGE_2
+    tail_b = [HEADER, ["Unrecognized qzy", "", "4", "1"]] if weak else PAGE_2
+    base = _placed_source(
+        [(5, PAGE_1, 0), (5, PAGE_1, 350), (6, tail_a, 0), (6, tail_b, 350)],
+        [span(T.BALANCE, 5, 6)],
+        [page(5, T.BALANCE), page(6, T.BALANCE)],
+        [
+            (5, 50, CONSOLIDATED_BALANCE),
+            (5, 350, STANDALONE_BALANCE),
+            (6, 50, CONSOLIDATED_BALANCE),
+            (6, 350, STANDALONE_BALANCE),
+        ],
+    )
+    result, _ = structure_document(base, IngestConfig())
+    assert [(s.consolidated, s.source_pages) for s in result.statements] == [
+        (True, [5, 6]),
+        (False, [5, 6]),
+    ]
+    expected = len(PAGE_1) - 1 + len(tail_a) - 1
+    assert [len(s.line_items) for s in result.statements] == [expected, expected]
+
+
+def test_a_tie_without_any_candidate_block_is_not_resolved() -> None:
+    p = source_plan(
+        [span(T.BALANCE, 5), span(T.BALANCE, 40, rank=2)],
+        [page(5), page(40)],
+        [T.BALANCE],
+        45,
+        1,
+    )
+    assert p.ambiguous and p.primary_span is None and len(p.tied_spans) == 2
+    assert resolve_tied_blocks(p) == p

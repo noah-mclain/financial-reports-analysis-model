@@ -31,7 +31,11 @@ range of each type is reserved, including when its table fails extraction. Suppo
 broken by the number of distinct enabled types with named, non-negative candidate pages at
 any rank, then by the lowest sum of their locator ranks. Remaining tied spans with disjoint
 types are complementary primary sources. Competing same-type spans stay ambiguous unless two
-locally titled blocks prove opposite standalone/consolidated scopes.
+locally titled blocks prove opposite standalone/consolidated scopes. Once they do, the second
+block is a primary source for every type it names that the first block does not, so such a
+type starts a statement on its own range; a type both blocks name keeps the first block's range
+as primary and the second block's tables start their own scope group. A tie that is not proved
+stays ambiguous.
 
 A start must lie on its type's primary range. Page negatives and exclusive other-type titles
 veto it. Secondary ranges, unrelated padding and outside pages cannot replace a failed
@@ -40,7 +44,10 @@ opposite scope in that title; filenames, notes headings and document-wide metada
 prove it. Scope groups neither merge nor lend periods. Existing confidence, header-conflict,
 column-geometry and closed-balance rules remain in effect. An adjacent compatible table may
 continue an authorized part even in padding, but padding cannot authorize a start. Only two
-known, different title scopes veto continuation; an unmarked repeated title does not. Primary
+known, different title scopes veto continuation; an unmarked repeated title does not. A table
+continues the latest nearby part of its own type, title scope and source group, so interleaved
+tables of two scopes each continue their own scope, and parts are merged into the latest part
+of the same type and source group rather than the part that precedes them. Primary
 metadata keeps `detect_metadata` precedence; a title-scope override applies only to a separately
 authorized second-scope group. Optional cash-flow and equity types are not extracted while
 they are excluded from the enabled source types.
@@ -321,8 +328,8 @@ class StructureResult(BaseModel):   # statements.raw.json
    supplies no comparison (`geometry_invalid` for each bound column) and does not stop the
    missing slots being read.
    `TableDecision.period_evidence` retains agreement and conflict observations.
-   Cache version 33 invalidates prior structure results, including versions 32, 31, 30, 29,
-   28, 27, 26, 25, 24, 23, 22, 21 and 20.
+   Cache version 36 invalidates prior structure results, including versions 35, 34, 33, 32,
+   31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21 and 20.
 
    Each observation is parsed with the same statement kind and date context as its column,
    using core's typed `interpret_period` facts for all four-digit Gregorian calendar years.
