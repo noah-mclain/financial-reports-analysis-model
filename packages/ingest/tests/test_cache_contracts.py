@@ -343,13 +343,13 @@ def test_fresh_conversion_records_plans_and_reuses_them(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     "prior_version",
-    [str(version) for version in range(18, 42)],
+    [str(version) for version in range(18, 43)],
 )
 def test_period_evidence_changes_only_the_structure_cache_contract(
     monkeypatch: pytest.MonkeyPatch,
     prior_version: str,
 ) -> None:
-    assert structure.STRUCTURE_VERSION == "42"
+    assert structure.STRUCTURE_VERSION == "43"
     assert convert.CONVERT_VERSION == "2"
     assert pages.PAGES_STAGE_VERSION == "5"
     config = IngestConfig()
@@ -371,7 +371,7 @@ def test_period_evidence_changes_only_the_structure_cache_contract(
 
 @pytest.mark.parametrize(
     "prior_version",
-    [str(version) for version in range(18, 42)],
+    [str(version) for version in range(18, 43)],
 )
 def test_prior_structure_is_not_reused_but_healthy_conversion_is(
     tmp_path: Path,
@@ -420,7 +420,7 @@ def test_prior_structure_is_not_reused_but_healthy_conversion_is(
 
     result = structure.structure_pdf(Path("synthetic.pdf"), config, None, convert=cached_convert)
     assert calls == []
-    assert result.version == "42"
+    assert result.version == "43"
     assert result.settings_hash != old.settings_hash
     assert "obsolete_structure" not in result.flags
     assert ConvertResult.model_validate_json((out / "convert.json").read_text()) == converted

@@ -137,6 +137,9 @@ def test_statement_flags_hold_or_warn() -> None:
     assert held.reasons == ["period_unbound:2"] and held.warnings == ["scale_missing"]
     merged = [item(1, "10", "label_merged"), *ROWS[1:]]
     assert review_statement(statement(merged), PASSING, primary=True).warnings == ["label_merged:1"]
+    restored = [item(1, "10", "label_words_from_page"), *ROWS[1:]]
+    review = review_statement(statement(restored), PASSING, primary=True)
+    assert review.warnings == ["label_words_from_page:1"] and review.status == "passed"
 
 
 def test_a_word_order_repair_warns_and_holds_nothing() -> None:

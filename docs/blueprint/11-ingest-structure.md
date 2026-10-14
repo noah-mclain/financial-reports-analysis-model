@@ -243,11 +243,23 @@ class StructureResult(BaseModel):   # statements.raw.json
      The cell carries `digits_reversed`. Nothing is reversed on other pages.
    - Spaced letters, on any page: in a cell where most tokens are single Arabic letters, each
      run of single-letter tokens is joined into one word; tokens of two or more characters
-     (numbers, `X`, the `لا` ligature is treated as one letter) stay separate. Word boundaries
-     inside a run cannot be recovered, so the joined label is kept as is and flagged
-     `letters_spaced`. Comparisons with taxonomy aliases and cue words on such text ignore
-     spaces on both sides. Readable Arabic labels for these documents are left to week 2's
-     label work.
+     (numbers, `X`, the `لا` ligature is treated as one letter) stay separate, and the cell is
+     flagged `letters_spaced`. Docling's spacing hides where one word ends and the next begins,
+     but the page's own text layer keeps the word gaps. So each joined run is split again at
+     the words that page prints (`page_vocabulary`: the page's Arabic words of two or more
+     letters after NFKC, in reading order on `visual_arabic` pages, spellings folded as the label
+     matcher folds them). The split leaves the fewest letters uncovered, then uses the fewest
+     page words; a letter no page word covers stays on the word before it. The split applies
+     only when page words cover at least 80% of the run's letters. When they cover less, or
+     the page has no text layer, the run stays joined into one word, with no word gaps, and the
+     cell carries `letters_spaced` alone. A label that the page words split into more words than
+     the plain join carries `words_from_page` on its cell. Every value cell of its row then
+     carries `label_words_from_page`, a review warning, so a reader of `statements.raw.json`
+     can tell restored spacing from printed text. A heading row has no value cell, so the
+     statement's `flags` carry `label_words_from_page:<line item id>` instead. The failure mode is a wrong split
+     where two page words happen to concatenate into a run they do not form, or a word missing
+     from the page that is fused with its neighbour. Matching is unaffected either way, since
+     comparisons with taxonomy aliases and cue words ignore spaces on both sides.
    - Word order, per table: on the Arabic digital documents of the fit and validation parts
      (20 with a PDF on disk: 17 fit, 3 validation; none marked `visual_arabic`) docling returns
      the cells of a table with the words of each cell in reverse order and the letters of each
@@ -342,7 +354,7 @@ class StructureResult(BaseModel):   # statements.raw.json
    supplies no comparison (`geometry_invalid` for each bound column) and does not stop the
    missing slots being read.
    `TableDecision.period_evidence` retains agreement and conflict observations.
-   Cache version 42 invalidates prior structure results, including versions 41 down to 20.
+   Cache version 43 invalidates prior structure results, including versions 42 down to 20.
 
    Each observation is parsed with the same statement kind and date context as its column,
    using core's typed `interpret_period` facts for all four-digit Gregorian calendar years.
