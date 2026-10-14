@@ -277,8 +277,8 @@ class StructureResult(BaseModel):   # statements.raw.json
    supplies no comparison (`geometry_invalid` for each bound column) and does not stop the
    missing slots being read.
    `TableDecision.period_evidence` retains agreement and conflict observations.
-   Cache version 28 invalidates prior structure results, including versions 27, 26, 25, 24,
-   23, 22, 21 and 20.
+   Cache version 31 invalidates prior structure results, including versions 30, 29, 28, 27,
+   26, 25, 24, 23, 22, 21 and 20.
 
    Each observation is parsed with the same statement kind and date context as its column,
    using core's typed `interpret_period` facts for all four-digit Gregorian calendar years.
@@ -291,7 +291,14 @@ class StructureResult(BaseModel):   # statements.raw.json
    its existing permissive behavior for other callers. Within strict facts the bare Arabic
    noun "فترة" is generic period wording. Arabic duration cues accept the article ("ال").
    A dash standing alone in a reading that carries a unit marker is a separator. A dotted month
-   abbreviation ("Dec. 31, 2025") is read in month-first dates. A reading that states both
+   abbreviation ("Dec. 31, 2025") is read in month-first dates. A day-first date
+   separates month and year by at most one "." and one ",", in that order, with any
+   whitespace ("31 Dec., 2025", "31 Dec.2025"); "31 Dec2025" and "31 Dec.. 2025" are not
+   complete dates. An Arabic scale spelling that `detect_scale` accepts is a unit marker with
+   up to three attached particles or the article before it ("مبآلاف", "وبالملايين"), but not
+   inside another word ("يتألف"). The "X" that stands for a currency glyph is unit text in a
+   header row only when a scale or currency marker is in the same text, so a second header row
+   such as `X '000` does not discard the date anchor above it. A reading that states both
    audited and unaudited is unparseable. Candidate
    text uses the existing header repairs; Arabic digit runs are reversed only for `text`
    provenance on a page explicitly marked `visual_arabic`. Logical OCR readings are not

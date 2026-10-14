@@ -20,7 +20,13 @@ from dataclasses import dataclass
 
 from fra_core.numbers import strip_bidi
 
-__all__ = ["ScaleSignal", "detect_currency", "detect_scale", "unit_marker_spans"]
+__all__ = [
+    "ScaleSignal",
+    "detect_currency",
+    "detect_scale",
+    "is_glyph_placeholder",
+    "unit_marker_spans",
+]
 
 _THOUSAND_CUES: tuple[str, ...] = (
     "'000",
@@ -135,10 +141,22 @@ _ARABIC_CURRENCY_WORDS = "|".join(
     for name in _CURRENCY_NAMES_BY_LENGTH
     if not name.isascii()
 )
+# A scale spelling is a marker with up to three attached particles or the article before it, as
+# in the joined "مبآلاف" or "وبالملايين". Any other letters make a different word ("يتألف").
+_ARABIC_ATTACHED = r"(?:[ومبلفك]|ال){0,3}"
+_ARABIC_SCALE_WORDS = "|".join(
+    re.escape(cue.strip())
+    for cue in sorted((*_THOUSAND_CUES, *_MILLION_CUES, *_BILLION_CUES), key=len, reverse=True)
+    if re.search(_ARABIC_LETTER, cue)
+)
 _UNIT_MARKER = re.compile(
     r"(?<![^\W\d_])(?P<arabic>"
     + _ARABIC_CURRENCY_WORDS
-    + r")(?![^\W\d_])|(?<!\w)(?i:"
+    + r")(?![^\W\d_])|(?<!\w)"
+    + _ARABIC_ATTACHED
+    + r"(?:"
+    + _ARABIC_SCALE_WORDS
+    + r")(?!\w)|(?<!\w)(?i:"
     + "|".join(re.escape(cue) for cue in sorted(_MARKER_WORDS, key=len, reverse=True))
     + r")(?!\w)|(?i:"
     + _ISO_CODE.pattern
@@ -148,6 +166,11 @@ _UNIT_MARKER = re.compile(
     + re.escape("".join(_CURRENCY_SIGNS))
     + "]"
 )
+
+
+def is_glyph_placeholder(token: str) -> bool:
+    """Whether a token is the "X" that stands for a currency glyph absent from the text layer."""
+    return token.strip("()[].,:;،؛'\"").casefold() == "x"
 
 
 def unit_marker_spans(text: str) -> tuple[tuple[int, int], ...]:
