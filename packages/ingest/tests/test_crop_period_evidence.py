@@ -7,6 +7,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from support import located_titles
 from test_header_recovery import (
     Observation,
     RecordedEngine,
@@ -42,7 +43,7 @@ def run_crop(
     original = inputs([(observation.docling_path, observation.document())]).model_copy(
         update={
             "page_modes": {observation.grid.page_no: PageMode.IMAGE},
-            "title_types": {observation.grid.page_no: (StatementType.INCOME,)},
+            "located": located_titles({observation.grid.page_no: (StatementType.INCOME,)}, {}),
         }
     )
     captured: list[Grid] = []
@@ -144,8 +145,17 @@ def test_structure_pdf_serializes_real_crop_observations_and_holds(
     config = IngestConfig(artifact_root=tmp_path)
     base = inputs([(observation.docling_path, observation.document())])
     page = observation.grid.page_no
-    where = located([PageMode.IMAGE] * page, [(page, page)], sha256=base.sha256)
-    where.pages = [PageScore(page_no=page, title_types=[StatementType.INCOME], type_scores={})]
+    where = located(
+        [PageMode.IMAGE] * page,
+        [(page, page)],
+        sha256=base.sha256,
+        primary_type=StatementType.INCOME,
+    )
+    where.pages = [
+        PageScore(
+            page_no=page, title_types=[StatementType.INCOME], type_scores={StatementType.INCOME: 8}
+        )
+    ]
     converted = base.convert.model_copy(
         update={
             "ranges": [
@@ -221,7 +231,7 @@ def test_multiple_crop_lines_and_caller_groups_are_all_retained(
     base = inputs([(observation.docling_path, observation.document())]).model_copy(
         update={
             "page_modes": {observation.grid.page_no: PageMode.IMAGE},
-            "title_types": {observation.grid.page_no: (StatementType.INCOME,)},
+            "located": located_titles({observation.grid.page_no: (StatementType.INCOME,)}, {}),
             "period_evidence": (
                 PeriodEvidence(observations=(primary, caller1)),
                 PeriodEvidence(observations=(primary, caller2)),
@@ -477,7 +487,9 @@ def test_partial_crop_hold_cannot_rebind_from_previous_part(
     base = inputs([(current.docling_path, document)]).model_copy(
         update={
             "page_modes": {page - 1: PageMode.IMAGE, page: PageMode.IMAGE},
-            "title_types": {page - 1: (StatementType.INCOME,), page: (StatementType.INCOME,)},
+            "located": located_titles(
+                {page - 1: (StatementType.INCOME,), page: (StatementType.INCOME,)}, {}
+            ),
         }
     )
     inject_render(monkeypatch, current)
@@ -598,7 +610,7 @@ def test_collected_group_the_original_grid_cannot_carry_is_dropped_not_fatal(
     base = inputs([(observation.docling_path, observation.document())]).model_copy(
         update={
             "page_modes": {observation.grid.page_no: PageMode.IMAGE},
-            "title_types": {observation.grid.page_no: (StatementType.INCOME,)},
+            "located": located_titles({observation.grid.page_no: (StatementType.INCOME,)}, {}),
         }
     )
 
@@ -633,7 +645,7 @@ def test_invalid_caller_group_fails_before_any_crop_is_read(
     base = inputs([(observation.docling_path, observation.document())]).model_copy(
         update={
             "page_modes": {observation.grid.page_no: PageMode.IMAGE},
-            "title_types": {observation.grid.page_no: (StatementType.INCOME,)},
+            "located": located_titles({observation.grid.page_no: (StatementType.INCOME,)}, {}),
             "period_evidence": (invalid,),
         }
     )

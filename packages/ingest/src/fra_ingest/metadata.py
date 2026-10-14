@@ -120,6 +120,13 @@ class Metadata(BaseModel):
     flags: list[str] = Field(default_factory=list)
 
 
+def statement_title_scope(texts: Sequence[str]) -> bool | None:
+    """Explicit scope from local statement titles only; conflicting markers stay unknown."""
+    consolidated = any(squash(m) in squash(t) for t in texts for m in _CONSOLIDATED)
+    standalone = any(squash(m) in squash(t) for t in texts for m in _STANDALONE_PHRASES)
+    return consolidated if consolidated != standalone else None
+
+
 def detect_metadata(
     *,
     header_text: str,

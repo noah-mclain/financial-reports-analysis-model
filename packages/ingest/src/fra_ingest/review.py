@@ -25,6 +25,7 @@ CRITICAL_CELL_FLAGS = (
     "row_misaligned",
     "row_realigned",
     "ambiguous_separator",
+    "numeric_columns_split",
 )
 _HOLD_FLAGS = (
     "period_unbound",
@@ -43,7 +44,7 @@ _WARNING_FLAGS = (
     "words_reversed",
     "word_order_uncertain",
 )
-_WARNING_CELL_FLAGS = ("label_merged", "blank_confirmed")
+_WARNING_CELL_FLAGS = ("label_merged", "blank_confirmed", "numeric_columns_split")
 _FAILED = (
     ("subtotal", "subtotal_failed"),
     ("balance_identity", "identity_failed"),
