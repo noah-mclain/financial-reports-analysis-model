@@ -19,7 +19,11 @@ from fra_ingest.table_grid import Grid
 COLUMN_TOLERANCE = 0.05
 
 
-def inherit_periods(layout: HeaderLayout, grid: Grid, previous: PartialStatement) -> HeaderLayout:
+def inherit_periods(
+    layout: HeaderLayout, grid: Grid, previous: PartialStatement, *, ocr: bool = False
+) -> HeaderLayout:
+    """``layout`` with each unbound column that lines up with a period of ``previous`` bound to
+    it. On an OCR grid, cells holding two merged amounts are left out of the column centres."""
     if not layout.unbound_cols:
         return layout
     tolerance = COLUMN_TOLERANCE * grid.page_width
@@ -33,7 +37,7 @@ def inherit_periods(layout: HeaderLayout, grid: Grid, previous: PartialStatement
         if col in held:
             unbound.append(col)
             continue
-        centre = column_centre(grid, col, rows)
+        centre = column_centre(grid, col, rows, skip_merged=ocr)
         match = None
         if centre is not None:
             candidates = [
@@ -77,11 +81,14 @@ def is_closed(part: PartialStatement, index: LabelIndex) -> bool:
     return match is not None and match.id == CLOSING_TOTAL_ID
 
 
-def continues_part(layout: HeaderLayout, grid: Grid, previous: PartialStatement) -> bool:
+def continues_part(
+    layout: HeaderLayout, grid: Grid, previous: PartialStatement, *, ocr: bool = False
+) -> bool:
     """Whether a grid that classification found below confidence continues ``previous``: the
     part ends on the grid's page or the page before, the grid binds exactly the part's period
     keys, and each bound column lines up with the part's column for that period within
-    COLUMN_TOLERANCE of the page width. Whether ``previous`` is closed is for the caller."""
+    COLUMN_TOLERANCE of the page width, merged-amount cells of an OCR grid left out. Whether
+    ``previous`` is closed is for the caller."""
     if previous.last_page not in (grid.page_no, grid.page_no - 1):
         return False
     keys = {p.key for p in layout.value_cols.values()}
@@ -90,7 +97,7 @@ def continues_part(layout: HeaderLayout, grid: Grid, previous: PartialStatement)
     tolerance = COLUMN_TOLERANCE * grid.page_width
     rows = layout.data_rows(grid)
     for col, period in layout.value_cols.items():
-        centre = column_centre(grid, col, rows)
+        centre = column_centre(grid, col, rows, skip_merged=ocr)
         expected = previous.column_centres.get(period.key)
         if centre is None or expected is None or abs(expected - centre) > tolerance:
             return False
@@ -99,7 +106,8 @@ def continues_part(layout: HeaderLayout, grid: Grid, previous: PartialStatement)
 
 def _continues(first: PartialStatement, second: PartialStatement, index: LabelIndex) -> bool:
     if (
-        is_closed(first, index)
+        first.source_group != second.source_group
+        or is_closed(first, index)
         or second.type is not first.type
         or second.first_page not in (first.last_page, first.last_page + 1)
     ):
@@ -126,15 +134,23 @@ def _table_index(part: PartialStatement) -> int:
 def merge_continuations(
     parts: Sequence[PartialStatement], index: LabelIndex
 ) -> list[PartialStatement]:
-    """Parts of one type in page order, then table order on a page, each merged into the one
-    before it when it starts on that part's last page or the next, its columns line up and
-    that part is not closed."""
+    """Parts of one type in page order, then table order on a page, each merged into the latest
+    part of its own type and source group when it starts on that part's last page or the next,
+    its columns line up and that part is not closed."""
     ordered = sorted(parts, key=lambda p: (p.type.value, p.first_page, _table_index(p)))
     merged: list[PartialStatement] = []
     for part in ordered:
-        if merged and _continues(merged[-1], part, index):
-            head = merged[-1]
-            merged[-1] = head.model_copy(
+        at = next(
+            (
+                i
+                for i in range(len(merged) - 1, -1, -1)
+                if merged[i].type is part.type and merged[i].source_group == part.source_group
+            ),
+            None,
+        )
+        if at is not None and _continues(merged[at], part, index):
+            head = merged[at]
+            merged[at] = head.model_copy(
                 update={
                     "last_page": part.last_page,
                     "line_items": [*head.line_items, *part.line_items],

@@ -5,104 +5,43 @@ from __future__ import annotations
 import json
 from decimal import Decimal
 
+from support import (
+    HEADER as HEADER,
+)
+from support import (
+    INCOME_1 as INCOME_1,
+)
+from support import (
+    INCOME_HEADER as INCOME_HEADER,
+)
+from support import (
+    PAGE_1 as PAGE_1,
+)
+from support import (
+    PAGE_2 as PAGE_2,
+)
+from support import (
+    cells as cells,
+)
+from support import (
+    inputs as inputs,
+)
+from support import (
+    located_titles,
+)
+from support import (
+    table as table,
+)
+
 from fra_core.schemas import PageMode, StatementType
 from fra_ingest.config import IngestConfig
 from fra_ingest.docling_json import DlDocument
-from fra_ingest.results import ConvertResult, RangeConversion
 from fra_ingest.structure import StructureInputs, structure_document
 
 SHA = "b" * 64
 
 
-def cells(rows: list[list[str]], x0: float = 60) -> list[dict[str, object]]:
-    out = []
-    for r, row in enumerate(rows):
-        for c, text in enumerate(row):
-            if not text:
-                continue
-            left = x0 + 150 * c
-            out.append(
-                {
-                    "text": text,
-                    "start_row_offset_idx": r,
-                    "end_row_offset_idx": r + 1,
-                    "start_col_offset_idx": c,
-                    "end_col_offset_idx": c + 1,
-                    "column_header": r == 0,
-                    "bbox": {
-                        "l": left,
-                        "t": 100 + 20 * r,
-                        "r": left + 120,
-                        "b": 112 + 20 * r,
-                        "coord_origin": "TOPLEFT",
-                    },
-                }
-            )
-    return out
-
-
-def table(ref: int, page: int, rows: list[list[str]], x0: float = 60) -> dict[str, object]:
-    return {
-        "self_ref": f"#/tables/{ref}",
-        "prov": [
-            {
-                "page_no": page,
-                "bbox": {"l": 50, "t": 700, "r": 700, "b": 300, "coord_origin": "BOTTOMLEFT"},
-            }
-        ],
-        "data": {"num_rows": len(rows), "num_cols": 4, "table_cells": cells(rows, x0)},
-    }
-
-
-HEADER = ["", "Notes", "31 December 2025 SAR '000", "31 December 2024 SAR '000"]
-PAGE_1 = [
-    HEADER,
-    ["Inventories", "19", "10", "8"],
-    ["Cash", "21", "5", "4"],
-    ["Total current assets", "", "15", "12"],
-    ["Total assets", "", "15", "12"],
-]
-PAGE_2 = [
-    HEADER,
-    ["Trade payables", "", "6", "5"],
-    ["Total liabilities", "", "6", "5"],
-    ["Share capital", "", "9", "7"],
-    ["Total equity", "", "9", "7"],
-]
 SIGNATURES = [["Chief Financial Officer", "Chief Executive Officer", "Chairman", ""]]
-
-
-def inputs(documents: list[tuple[str, DlDocument]]) -> StructureInputs:
-    convert = ConvertResult(
-        version="1",
-        sha256=SHA,
-        locate_version="2",
-        docling_version="2.126.0",
-        device="mps",
-        settings_hash="h",
-        ranges=[
-            RangeConversion(
-                first_page=1,
-                last_page=2,
-                ocr="pdf_aware",
-                ocr_language="en-US",
-                docling_path="docling/p1-2.json",
-                status="ok",
-            )
-        ],
-    )
-    return StructureInputs(
-        sha256=SHA,
-        language="en",
-        industry_flags=(),
-        page_modes={1: PageMode.TEXT, 2: PageMode.TEXT},
-        visual_pages=set(),
-        page_texts={1: "Statement of financial position", 2: ""},
-        title_types={1: (StatementType.BALANCE,), 2: (StatementType.BALANCE,)},
-        cue_types={},
-        documents=documents,
-        convert=convert,
-    )
 
 
 def document() -> DlDocument:
@@ -208,8 +147,9 @@ def _after_closed(first: list[list[str]]) -> StructureInputs:
     base = inputs([("docling/p1-2.json", document)])
     return base.model_copy(
         update={
-            "title_types": {1: (StatementType.BALANCE,), 2: ()},
-            "cue_types": {2: (StatementType.BALANCE,)},
+            "located": located_titles(
+                {1: (StatementType.BALANCE,), 2: ()}, {2: (StatementType.BALANCE,)}
+            )
         }
     )
 
@@ -251,13 +191,6 @@ def test_a_missing_enabled_type_is_flagged() -> None:
     assert "statement_not_extracted:income" in result.flags
 
 
-INCOME_HEADER = ["", "Notes", "2025 SAR '000", "2024 SAR '000"]
-INCOME_1 = [
-    INCOME_HEADER,
-    ["Revenue", "5", "100", "90"],
-    ["Cost of sales", "", "(60)", "(55)"],
-    ["Gross profit", "", "40", "35"],
-]
 INCOME_2 = [
     INCOME_HEADER,
     ["Profit for the year", "", "40", "35"],
@@ -280,8 +213,9 @@ def test_a_tail_page_below_confidence_continues_the_statement_before_it() -> Non
     tail = base.model_copy(
         update={
             "page_texts": {1: "Statement of profit or loss", 2: ""},
-            "title_types": {1: (StatementType.INCOME,), 2: ()},
-            "cue_types": {2: (StatementType.INCOME,)},
+            "located": located_titles(
+                {1: (StatementType.INCOME,), 2: ()}, {2: (StatementType.INCOME,)}
+            ),
         }
     )
     result, _ = structure_document(tail, IngestConfig())
@@ -318,8 +252,9 @@ def _income_inputs(
     return base.model_copy(
         update={
             "page_texts": {1: "Statement of profit or loss"},
-            "title_types": {1: (StatementType.INCOME,), **titles},
-            "cue_types": {n: (StatementType.INCOME,) for n in titles},
+            "located": located_titles(
+                {1: (StatementType.INCOME,), **titles}, {n: (StatementType.INCOME,) for n in titles}
+            ),
             "page_modes": {n: PageMode.TEXT for n in (1, *titles)},
         }
     )
