@@ -18,7 +18,7 @@ from PIL import Image
 from fra_core.periods import interpret_period, parse_period
 from fra_core.schemas import BBox, PeriodKind, Provenance, StatementType, TextSource
 from fra_core.schemas.statement import PeriodEvidence, PeriodObservation
-from fra_core.units import unit_marker_spans
+from fra_core.units import is_glyph_placeholder, unit_marker_spans
 from fra_ingest.config import IngestConfig
 from fra_ingest.docling_json import DlDocument, DlTable
 from fra_ingest.header import (
@@ -124,9 +124,11 @@ def _unavailable(grid: Grid, cols: list[int], reason: str) -> Grid:
 
 
 def _only_units(text: str) -> bool:
+    """Unit text is marker spans and punctuation, with a glyph placeholder beside a marker."""
     covered = {i for start, end in unit_marker_spans(text) for i in range(start, end)}
+    rest = "".join(" " if i in covered else c for i, c in enumerate(text))
     return bool(covered) and all(
-        i in covered or c.isspace() or c in "()[]'\".,:" for i, c in enumerate(text)
+        is_glyph_placeholder(token) or not token.strip("()[]'\".,:") for token in rest.split()
     )
 
 
