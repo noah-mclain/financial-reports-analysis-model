@@ -69,7 +69,7 @@ from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
 from fra_ingest.visual_order import repair_grid, repair_text, restore_word_order
 
-STRUCTURE_VERSION = "41"  # source guard, per-type ambiguity, split merged OCR amounts
+STRUCTURE_VERSION = "42"  # source guard, per-group ambiguity, split merged OCR amounts
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -226,14 +226,15 @@ class _Probe(NamedTuple):
 def _probe(layout: HeaderLayout, grid: Grid, part: PartialStatement, *, ocr: bool) -> _Probe:
     """``layout`` with the periods ``part`` lends it, the OCR-realigned grid (``None`` off OCR)
     and whether the columns line up with ``part``. On an OCR page the columns are compared after
-    merged amounts are split, so a wide merged rectangle cannot pull a column centre past the
-    tolerance."""
-    inherited = inherit_periods(layout, grid, part)
+    merged amounts are split, and cells still holding merged amounts are left out of the centres
+    used to inherit periods and to compare, so a wide merged rectangle cannot pull a column
+    centre past the tolerance."""
+    inherited = inherit_periods(layout, grid, part, ocr=ocr)
     aligned = _aligned(grid, inherited, ocr=True) if ocr else None
     return _Probe(
         inherited,
         aligned,
-        continues_part(inherited, grid if aligned is None else aligned.grid, part),
+        continues_part(inherited, grid if aligned is None else aligned.grid, part, ocr=ocr),
     )
 
 
@@ -381,19 +382,26 @@ def structure_document(
         }
 
     contexts = source_contexts()
-    # A tied block may be resolved only by two fully explicit, opposite local scopes.
-    if plan.ambiguous and len(plan.tied_spans) == 2:
-        block_scopes = []
-        for span_first, span_last in plan.tied_spans:
-            values = {
-                scopes[n]
-                for n, c in contexts.items()
-                if span_first <= c.page_no <= span_last and c.matching and local_titles[n]
-            }
-            block_scopes.append(next(iter(values)) if len(values) == 1 else None)
-        if set(block_scopes) == {True, False}:
-            plan = resolve_tied_blocks(plan)
-            contexts = source_contexts()
+    # Competing blocks may be resolved only as a pair with fully explicit, opposite local scopes.
+    # Each competing group is judged alone: blocks elsewhere in the tie do not matter.
+
+    def block_scope(span: tuple[int, int]) -> bool | None:
+        values = {
+            scopes[n]
+            for n, c in contexts.items()
+            if span[0] <= c.page_no <= span[1] and c.matching and local_titles[n]
+        }
+        return next(iter(values)) if len(values) == 1 else None
+
+    resolving = [
+        blocks
+        for blocks in plan.competing
+        if len(blocks.spans) == 2 and {block_scope(s) for s in blocks.spans} == {True, False}
+    ]
+    for blocks in resolving:
+        plan = resolve_tied_blocks(plan, blocks)
+    if resolving:
+        contexts = source_contexts()
     primary_scopes: dict[StatementType, bool | None] = {}
     for kind in config.enabled_types:
         heads = sorted(

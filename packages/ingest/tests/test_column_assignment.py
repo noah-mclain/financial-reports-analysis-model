@@ -835,3 +835,22 @@ def test_a_table_inheriting_its_right_period_is_bound_and_split() -> None:
     assert any("continuation_of:income" in e for d in tail for e in d.evidence)
     assert "inherited:3:FY2024" in income[0].flags
     assert _tail_amounts(result) == [(label, SPLIT) for label in INCOME_MERGED]
+
+
+@pytest.mark.parametrize("mode,continued", [(PageMode.IMAGE, True), (PageMode.TEXT, False)])
+def test_a_table_inheriting_its_left_period_ignores_merged_rows_in_that_columns_centre(
+    mode: PageMode, continued: bool
+) -> None:
+    undated = ["", "Notes", "", "2024 SAR '000"]
+    result, _ = structure_document(_income_tail(undated, mode), IngestConfig())
+    income = [s for s in result.statements if s.type is StatementType.INCOME]
+    assert len(income) == 1
+    if not continued:
+        assert income[0].source_pages == [1]
+        assert not any("inherited" in f for f in income[0].flags)
+        return
+    assert income[0].source_pages == [1, 2]
+    tail = [d for d in result.tables if d.page_no == 2]
+    assert any("continuation_of:income" in e for d in tail for e in d.evidence)
+    assert "inherited:2:FY2025" in income[0].flags
+    assert _tail_amounts(result) == [(label, SPLIT) for label in INCOME_MERGED]

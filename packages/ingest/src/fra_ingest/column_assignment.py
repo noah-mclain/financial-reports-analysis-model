@@ -16,6 +16,17 @@ _TOKEN = re.compile(r"[0-9]{1,3}(?:,[0-9]{3})+")
 SPLIT_FLAG = "numeric_columns_split"
 
 
+def is_merged_amount(text: str) -> bool:
+    """Whether a cell holds exactly two strictly comma-grouped amounts that do not parse as one
+    number: the shape of two value columns merged by table OCR."""
+    tokens = text.split()
+    return (
+        len(tokens) == 2
+        and all(_TOKEN.fullmatch(t) and parse_number(t).value is not None for t in tokens)
+        and parse_number(text).value is None
+    )
+
+
 def _box(cell: GridCell) -> BBox | None:
     box = cell.bbox
     if box is None or not all(math.isfinite(v) for v in (box.left, box.right, box.top, box.bottom)):
@@ -146,8 +157,7 @@ def split_numeric_columns(grid: Grid, layout: HeaderLayout) -> Grid:
         if len(index.covers(row, layout.label_col)) == 1
         and index.covers(row, layout.label_col)[0].text.strip()
         and len(index.covers(row, left)) == 1
-        and len(index.covers(row, left)[0].text.split()) == 2
-        and parse_number(index.covers(row, left)[0].text).value is None
+        and is_merged_amount(index.covers(row, left)[0].text)
     ]
     if not target_rows:
         return grid
@@ -180,13 +190,9 @@ def split_numeric_columns(grid: Grid, layout: HeaderLayout) -> Grid:
             destinations[0].text.strip() or not _unit(destinations[0], row, right, grid.page_no)
         ):
             continue
-        if parse_number(source.text).value is not None:
+        if not is_merged_amount(source.text):
             continue
         tokens = source.text.split()
-        if len(tokens) != 2 or not all(
-            _TOKEN.fullmatch(t) and parse_number(t).value is not None for t in tokens
-        ):
-            continue
         box, label_box = _box(source), _box(label)
         if box is None or label_box is None or label_box.right > box.left:
             continue

@@ -779,3 +779,71 @@ def test_a_generic_first_title_does_not_hide_an_explicit_scope_on_the_primary_ra
     by_page = {t.page_no: t for t in result.tables}
     assert "source_scope_unproven" not in by_page[40].evidence
     assert (False, [40]) in [(s.consolidated, s.source_pages) for s in result.statements]
+
+
+def test_unmarked_padding_skips_a_closed_latest_part_for_an_open_earlier_one() -> None:
+    closed = [*PAGE_1, ["Total equity and liabilities", "", "15", "12"]]
+    base = _placed_source(
+        [(5, PAGE_1, 0), (5, closed, 350), (6, PAGE_2, 0)],
+        [span(T.BALANCE, 5)],
+        [page(5, T.BALANCE), page(6)],
+        [(5, 50, CONSOLIDATED_BALANCE), (5, 350, STANDALONE_BALANCE)],
+    )
+    result, _ = structure_document(base, IngestConfig())
+    pages = {s.consolidated: s.source_pages for s in result.statements}
+    # The latest part is closed and fits the tail's columns, but only the open one takes it.
+    assert pages == {True: [5, 6], False: [5]}
+    assert "continuation_of:balance" in result.tables[2].evidence
+    assert "after_closed:balance" not in result.tables[2].evidence
+
+
+@pytest.mark.parametrize("explicit", [True, False])
+def test_a_competing_pair_resolves_on_its_own_beside_a_disjoint_block(explicit: bool) -> None:
+    from support import INCOME_1
+
+    comprehensive = [
+        [
+            "",
+            "Notes",
+            "For the year ended 31 December 2025 SAR thousands",
+            "For the year ended 31 December 2024 SAR thousands",
+        ],
+        ["Other comprehensive income", "", "1", "2"],
+        ["Will not be reclassified", "", "1", "2"],
+        ["May be reclassified", "", "0", "0"],
+        ["Total comprehensive income", "", "1", "2"],
+    ]
+    ranges, scores = _two_competing_blocks_and_a_disjoint_one()
+    full = [*PAGE_1, *PAGE_2[1:]]
+    consolidated, standalone = ("Consolidated ", "Standalone ") if explicit else ("", "")
+    base = structured_source(
+        [(5, full), (6, INCOME_1), (20, comprehensive), (40, full), (41, INCOME_1)],
+        ranges,
+        scores,
+        [
+            (5, 50, consolidated + "statement of financial position"),
+            (6, 50, consolidated + "statement of income"),
+            (40, 50, standalone + "statement of financial position"),
+            (41, 50, standalone + "statement of income"),
+        ],
+    )
+    config = IngestConfig(enabled_types=tuple(WITH_CASH_FLOW), optional_types=(T.EQUITY,))
+    result, _ = structure_document(base, config)
+    by_page = {t.page_no: t for t in result.tables}
+    assert "source_primary_ambiguous" not in by_page[20].evidence
+    found = [(s.type, s.consolidated, s.source_pages[0]) for s in result.statements]
+    # The disjoint block carries no scope title: it is a primary source whatever its scope.
+    disjoint = [f for f in found if f[0] is T.COMPREHENSIVE_INCOME]
+    assert [f[2] for f in disjoint] == [20]
+    rest = [f for f in found if f[0] is not T.COMPREHENSIVE_INCOME]
+    if explicit:
+        assert rest == [
+            (T.BALANCE, True, 5),
+            (T.BALANCE, False, 40),
+            (T.INCOME, True, 6),
+            (T.INCOME, False, 41),
+        ]
+        assert all("source_primary_ambiguous" not in t.evidence for t in result.tables)
+    else:
+        assert not rest
+        assert all("source_primary_ambiguous" in by_page[n].evidence for n in (5, 6, 40, 41))

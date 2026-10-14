@@ -134,6 +134,21 @@ def test_column_centre_is_the_mean_of_its_cells() -> None:
     assert column_centre(g, 2, [1]) is None
 
 
+def test_column_centre_leaves_merged_amounts_out_only_when_asked() -> None:
+    rows = [*ROWS, ["Other income", "", "1,200,300 4,500,600", ""]]
+    g = grid(rows)
+    merged_cell = g.cell(6, 2)
+    assert merged_cell is not None and merged_cell.bbox is not None
+    wide = merged_cell.model_copy(
+        update={"bbox": merged_cell.bbox.model_copy(update={"right": 390})}
+    )
+    g = g.model_copy(update={"cells": tuple(wide if c is merged_cell else c for c in g.cells)})
+    plain = column_centre(g, 2, [2, 3])
+    assert column_centre(g, 2, [2, 3], skip_merged=True) == plain
+    assert column_centre(g, 2, [2, 3, 6]) != plain
+    assert column_centre(g, 2, [2, 3, 6], skip_merged=True) == plain
+
+
 def test_a_spanning_value_stays_in_its_own_column() -> None:
     rows = [r[:] for r in ROWS[:3]]
     rows[2][3] = ""

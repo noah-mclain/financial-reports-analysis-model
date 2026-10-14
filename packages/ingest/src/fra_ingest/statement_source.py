@@ -11,6 +11,14 @@ from fra_ingest.results import PageScore, StatementRange
 
 
 @dataclass(frozen=True)
+class CompetingBlocks:
+    """Tied blocks that share statement types, directly or through another block."""
+
+    spans: tuple[tuple[int, int], ...]
+    types: tuple[StatementType, ...]
+
+
+@dataclass(frozen=True)
 class SourcePlan:
     ranges: tuple[StatementRange, ...]
     pages: tuple[PageScore, ...]
@@ -21,6 +29,7 @@ class SourcePlan:
     ambiguous: bool
     page_count: int
     ambiguous_types: tuple[StatementType, ...] = ()
+    competing: tuple[CompetingBlocks, ...] = ()
 
     def is_ambiguous(self, kind: StatementType) -> bool:
         """Whether ``kind`` has no single primary range. Without any candidate block every type
@@ -114,9 +123,14 @@ def source_plan(
     # A block sharing no type with another tied block is a primary source on its own; of
     # blocks that compete, only the first supplies the reserved ranges.
     primary_spans = tuple(g[0] for g in groups) if primary_span is not None else ()
-    ambiguous_types = sorted(
-        {t for g in groups if len(g) > 1 for s in g for t in types[s]}, key=lambda t: t.value
+    competing = tuple(
+        CompetingBlocks(
+            tuple(g), tuple(sorted({t for s in g for t in types[s]}, key=lambda t: t.value))
+        )
+        for g in groups
+        if len(g) > 1
     )
+    ambiguous_types = sorted({t for c in competing for t in c.types}, key=lambda t: t.value)
     return SourcePlan(
         selected,
         tuple(sorted(pages, key=lambda p: p.page_no)),
@@ -127,6 +141,7 @@ def source_plan(
         bool(ambiguous_types) or not best[1],
         page_count,
         tuple(ambiguous_types),
+        competing,
     )
 
 
@@ -154,21 +169,35 @@ def _lowest_ranked(
     )
 
 
-def resolve_tied_blocks(plan: SourcePlan) -> SourcePlan:
-    """The plan once two tied blocks are proved to be opposite scopes: nothing is ambiguous, and
-    the second block is a primary source for each type the first does not name. A type both
-    blocks name keeps the first block's range. A tie in which neither block was located as a
-    candidate has no primary block to extend, so it stays as it is."""
+def resolve_tied_blocks(plan: SourcePlan, blocks: CompetingBlocks | None = None) -> SourcePlan:
+    """The plan once two competing blocks are proved to be opposite scopes: their types are no
+    longer ambiguous, and the second block is a primary source for each type the first does not
+    name. A type both blocks name keeps the first block's range. Without ``blocks`` the plan's
+    two tied blocks are resolved. A tie in which neither block was located as a candidate has no
+    primary block to extend, so it stays as it is."""
     if plan.primary_span is None:
         return plan
-    if len(plan.tied_spans) != 2:
-        raise ValueError(f"only two tied source blocks can be resolved, got {len(plan.tied_spans)}")
+    if blocks is None:
+        if len(plan.tied_spans) != 2:
+            raise ValueError(
+                f"only two tied source blocks can be resolved, got {len(plan.tied_spans)}"
+            )
+        spans, resolved = plan.tied_spans, set(plan.ambiguous_types)
+    else:
+        if len(blocks.spans) != 2 or blocks not in plan.competing:
+            raise ValueError("only two competing source blocks of the plan can be resolved")
+        spans, resolved = blocks.spans, set(blocks.types)
     named = {r.type for r in plan.primary}
-    second = tuple(
-        r for r in _lowest_ranked(plan.ranges, plan.tied_spans[1:]) if r.type not in named
-    )
+    second = tuple(r for r in _lowest_ranked(plan.ranges, spans[1:]) if r.type not in named)
     primary = sorted((*plan.primary, *second), key=lambda r: r.type.value)
-    return replace(plan, primary=tuple(primary), ambiguous=False, ambiguous_types=())
+    ambiguous_types = tuple(t for t in plan.ambiguous_types if t not in resolved)
+    return replace(
+        plan,
+        primary=tuple(primary),
+        ambiguous=bool(ambiguous_types),
+        ambiguous_types=ambiguous_types,
+        competing=tuple(c for c in plan.competing if not set(c.types) <= resolved),
+    )
 
 
 def table_source(

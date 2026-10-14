@@ -20,7 +20,7 @@ from fra_core.numbers import parse_number
 from fra_core.schemas import BBox, Cell, LineItem, Period, Provenance, StatementType, TextSource
 from fra_core.schemas.statement import PeriodConflict
 from fra_ingest.classify import Classification
-from fra_ingest.column_assignment import SPLIT_FLAG
+from fra_ingest.column_assignment import SPLIT_FLAG, is_merged_amount
 from fra_ingest.header import HeaderLayout, split_note
 from fra_ingest.label_match import LabelIndex, has_subtotal_cue, squash
 from fra_ingest.table_grid import Grid
@@ -86,7 +86,12 @@ def _under_per_share_heading(label: str) -> bool:
     return any(cue in squash(label) for cue in _UNDER_HEADING)
 
 
-def column_centre(grid: Grid, col: int, rows: Sequence[int]) -> float | None:
+def column_centre(
+    grid: Grid, col: int, rows: Sequence[int], *, skip_merged: bool = False
+) -> float | None:
+    """The mean horizontal centre of the column's boxed cells over ``rows``. Split cells never
+    count; with ``skip_merged`` neither do cells still holding two merged amounts, whose
+    rectangle spans a neighbouring column too."""
     centres = []
     for row in rows:
         cell = grid.cell(row, col)
@@ -95,6 +100,7 @@ def column_centre(grid: Grid, col: int, rows: Sequence[int]) -> float | None:
             and cell.text
             and cell.bbox is not None
             and SPLIT_FLAG not in cell.flags
+            and not (skip_merged and is_merged_amount(cell.text))
         ):
             centres.append((cell.bbox.left + cell.bbox.right) / 2)
     return sum(centres) / len(centres) if centres else None

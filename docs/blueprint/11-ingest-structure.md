@@ -35,7 +35,9 @@ another tied span, compete; a span that shares no type with another tied span is
 source for its types whatever the others do. Every type the competing spans name is ambiguous
 and keeps no primary range, and the first competing span supplies the reserved ranges. Competing
 same-type spans stay ambiguous unless two locally titled blocks prove opposite
-standalone/consolidated scopes. Once they do, the second
+standalone/consolidated scopes. Each competing group is judged alone: a group of exactly two
+blocks with opposite explicit scopes is resolved whatever other blocks are tied beside it, and a
+group that is not proved stays ambiguous. Once a pair is proved, its second
 block is a primary source for every type it names that the first block does not, so such a
 type starts a statement on its own range; a type both blocks name keeps the first block's range
 as primary and the second block's tables start their own scope group. A tie that is not proved
@@ -340,7 +342,7 @@ class StructureResult(BaseModel):   # statements.raw.json
    supplies no comparison (`geometry_invalid` for each bound column) and does not stop the
    missing slots being read.
    `TableDecision.period_evidence` retains agreement and conflict observations.
-   Cache version 41 invalidates prior structure results, including versions 40 down to 20.
+   Cache version 42 invalidates prior structure results, including versions 41 down to 20.
 
    Each observation is parsed with the same statement kind and date context as its column,
    using core's typed `interpret_period` facts for all four-digit Gregorian calendar years.
@@ -428,10 +430,11 @@ class StructureResult(BaseModel):   # statements.raw.json
    merged row; it therefore does not assign mirrored right-to-left layouts. Digital grids do not use this rule.
    On a continuation page the split runs before the continuation check, so merged amounts do
    not displace the column centres it compares; a column whose period is inherited from the
-   previous page is bound first, since the split needs bound periods. Period inheritance still
-   measures the unsplit grid, so when the left column's period must be inherited, or both
-   columns are undated, a merged amount can shift that column's centre past the tolerance and
-   the page is not continued.
+   previous page is bound first, since the split needs bound periods. On an OCR page, cells
+   that hold a merged amount (two comma-grouped tokens in one cell that the split would
+   consider) are left out of the column centres used to inherit a period and to compare with
+   the previous page, so a wide merged rectangle cannot pull the left value column past the
+   tolerance. Digital grids, and tables without such cells, give the same centres as before.
    Signs, parentheses, decimals, percentages, note references and space-grouped numbers
    remain outside its scope. No period ordering, magnitude, expected value or check result
    chooses an assignment.

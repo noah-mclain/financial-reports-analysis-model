@@ -19,7 +19,11 @@ from fra_ingest.table_grid import Grid
 COLUMN_TOLERANCE = 0.05
 
 
-def inherit_periods(layout: HeaderLayout, grid: Grid, previous: PartialStatement) -> HeaderLayout:
+def inherit_periods(
+    layout: HeaderLayout, grid: Grid, previous: PartialStatement, *, ocr: bool = False
+) -> HeaderLayout:
+    """``layout`` with each unbound column that lines up with a period of ``previous`` bound to
+    it. On an OCR grid, cells holding two merged amounts are left out of the column centres."""
     if not layout.unbound_cols:
         return layout
     tolerance = COLUMN_TOLERANCE * grid.page_width
@@ -33,7 +37,7 @@ def inherit_periods(layout: HeaderLayout, grid: Grid, previous: PartialStatement
         if col in held:
             unbound.append(col)
             continue
-        centre = column_centre(grid, col, rows)
+        centre = column_centre(grid, col, rows, skip_merged=ocr)
         match = None
         if centre is not None:
             candidates = [
@@ -77,11 +81,14 @@ def is_closed(part: PartialStatement, index: LabelIndex) -> bool:
     return match is not None and match.id == CLOSING_TOTAL_ID
 
 
-def continues_part(layout: HeaderLayout, grid: Grid, previous: PartialStatement) -> bool:
+def continues_part(
+    layout: HeaderLayout, grid: Grid, previous: PartialStatement, *, ocr: bool = False
+) -> bool:
     """Whether a grid that classification found below confidence continues ``previous``: the
     part ends on the grid's page or the page before, the grid binds exactly the part's period
     keys, and each bound column lines up with the part's column for that period within
-    COLUMN_TOLERANCE of the page width. Whether ``previous`` is closed is for the caller."""
+    COLUMN_TOLERANCE of the page width, merged-amount cells of an OCR grid left out. Whether
+    ``previous`` is closed is for the caller."""
     if previous.last_page not in (grid.page_no, grid.page_no - 1):
         return False
     keys = {p.key for p in layout.value_cols.values()}
@@ -90,7 +97,7 @@ def continues_part(layout: HeaderLayout, grid: Grid, previous: PartialStatement)
     tolerance = COLUMN_TOLERANCE * grid.page_width
     rows = layout.data_rows(grid)
     for col, period in layout.value_cols.items():
-        centre = column_centre(grid, col, rows)
+        centre = column_centre(grid, col, rows, skip_merged=ocr)
         expected = previous.column_centres.get(period.key)
         if centre is None or expected is None or abs(expected - centre) > tolerance:
             return False
