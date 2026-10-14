@@ -33,7 +33,7 @@ from fra_ingest.converter import docling_version
 from fra_ingest.docling_json import DlDocument, load_docling_json
 from fra_ingest.errors import IngestError
 from fra_ingest.figure_checks import check_net_profit_tie
-from fra_ingest.header import parse_header
+from fra_ingest.header import HeaderLayout, parse_header
 from fra_ingest.header_recovery import recover_header
 from fra_ingest.hierarchy import RowInput, infer_hierarchy
 from fra_ingest.industry import industry_decision
@@ -54,7 +54,7 @@ from fra_ingest.results import (
     TableDecision,
 )
 from fra_ingest.review import StatementReview, hold_for_industry, review_statement
-from fra_ingest.row_alignment import realign_rows
+from fra_ingest.row_alignment import Realignment, realign_rows
 from fra_ingest.stage import load_or_locate, page_ocr_languages
 from fra_ingest.statement_source import (
     TableSourceContext,
@@ -68,7 +68,7 @@ from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
 from fra_ingest.visual_order import repair_grid, repair_text, restore_word_order
 
-STRUCTURE_VERSION = "36"  # source guard, split merged OCR amounts, stricter period readings
+STRUCTURE_VERSION = "38"  # source guard, split merged OCR amounts, stricter period readings
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -206,6 +206,14 @@ def _candidate_order(candidate: _Candidate) -> tuple[int, str, int]:
 def _only_below_confidence(result: Classification) -> bool:
     rejections = {"no_period_header", "note_heading"}
     return "below_confidence" in result.evidence and not rejections & set(result.evidence)
+
+
+def _aligned(grid: Grid, layout: HeaderLayout, *, ocr: bool) -> Realignment:
+    """The grid with its rows realigned and, on an OCR page, its merged amounts split."""
+    realigned = realign_rows(grid, layout)
+    if not ocr:
+        return realigned
+    return realigned.model_copy(update={"grid": split_numeric_columns(realigned.grid, layout)})
 
 
 def structure_document(
@@ -452,11 +460,16 @@ def structure_document(
         if layout.period_conflicts and not layout.value_cols:
             continue
         continued = None
+        ocr = inputs.page_modes.get(grid.page_no) is PageMode.IMAGE
+        aligned: Realignment | None = None
         if previous is not None and (result.type is not None or _only_below_confidence(result)):
             inherited = inherit_periods(layout, grid, previous)
             if eligibility.allowed and eligibility.group_key == previous.source_group:
                 layout = inherited
-            if continues_part(inherited, grid, previous):
+            # On an OCR page the columns are compared after merged amounts are split, so a wide
+            # merged rectangle cannot pull a column centre past the tolerance.
+            aligned = _aligned(grid, inherited, ocr=True) if ocr else None
+            if continues_part(inherited, grid if aligned is None else aligned.grid, previous):
                 if is_closed(previous, index):
                     candidate.decision.evidence.append(f"after_closed:{kind.value}")
                 else:
@@ -482,17 +495,14 @@ def structure_document(
             continue
         candidate.decision.type = kind
         candidate.decision.evidence.append(f"source_group:{group_key}")
-        source = (
-            TextSource.OCR
-            if inputs.page_modes.get(grid.page_no) is PageMode.IMAGE
-            else TextSource.TEXT
+        source = TextSource.OCR if ocr else TextSource.TEXT
+        realigned = (
+            aligned
+            if continued is not None and aligned is not None
+            else (_aligned(grid, layout, ocr=ocr))
         )
-        realigned = realign_rows(grid, layout)
-        assigned = realigned.grid
-        if source is TextSource.OCR:
-            assigned = split_numeric_columns(assigned, layout)
         part = build_part(
-            assigned,
+            realigned.grid,
             layout,
             result,
             source=source,

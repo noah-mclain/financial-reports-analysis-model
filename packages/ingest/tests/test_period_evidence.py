@@ -279,6 +279,33 @@ def test_invalid_or_ambiguous_geometry_is_rejected(box: dict[str, float]) -> Non
         structure_document(supplied(raw), IngestConfig())
 
 
+@pytest.mark.parametrize(
+    "box",
+    [
+        {"left": 360, "top": 95, "right": 480, "bottom": 109},
+        {"left": 360, "top": 103, "right": 480, "bottom": 117},
+        {"left": 355, "top": 100, "right": 475, "bottom": 112},
+        {"left": 365, "top": 100, "right": 485, "bottom": 112},
+    ],
+)
+def test_an_observation_must_lie_inside_the_source_cell(box: dict[str, float]) -> None:
+    raw = evidence()
+    observations = raw["observations"]
+    assert isinstance(observations, list)
+    observations[1]["provenance"]["bbox"] = box
+    with pytest.raises(ValueError, match="invalid header geometry"):
+        structure_document(supplied(raw), IngestConfig())
+
+
+def test_an_observation_inside_the_source_cell_is_accepted() -> None:
+    raw = evidence()
+    observations = raw["observations"]
+    assert isinstance(observations, list)
+    observations[1]["provenance"]["bbox"] = {"left": 365, "top": 101, "right": 475, "bottom": 111}
+    result, _ = structure_document(supplied(raw), IngestConfig())
+    assert len(result.tables[0].period_evidence[0].observations) == 2
+
+
 def test_duplicate_source_ids_cannot_pose_as_independent_observations() -> None:
     raw = evidence()
     observations = raw["observations"]

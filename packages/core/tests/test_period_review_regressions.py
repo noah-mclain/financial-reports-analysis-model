@@ -489,3 +489,30 @@ def test_one_dot_and_one_comma_between_month_and_year_are_a_complete_date(text: 
 @pytest.mark.parametrize("text", ["31 Dec 2025 يتألف", "31 Dec 2025 تألف"])
 def test_a_word_that_ends_in_a_scale_spelling_is_not_unit_text(text: str) -> None:
     assert interpret_period(text).calendar == "invalid"
+
+
+@pytest.mark.parametrize(
+    "text", ["31 December 2025 X", "31 December 2025 (X)", "X 31 December 2025"]
+)
+def test_a_printed_glyph_placeholder_without_a_unit_marker_is_residue(text: str) -> None:
+    assert interpret_period(text).calendar == "invalid"
+
+
+@pytest.mark.parametrize("text", ["31 December 2025 X '000", "31 December 2025 SAR X"])
+def test_a_printed_glyph_placeholder_beside_a_unit_marker_is_unit_text(text: str) -> None:
+    assert interpret_period(text).calendar == "complete"
+
+
+def test_an_x_left_by_masking_a_month_count_is_not_a_printed_placeholder() -> None:
+    facts = interpret_period(
+        "For the x2 months ended 30 June 2025", default_kind=PeriodKind.DURATION
+    )
+    assert facts.calendar == "complete"
+    assert facts.duration == "invalid"
+
+
+@pytest.mark.parametrize(
+    "text", ["2025 X", "Dec 2025 X", "x 6 months ended 30 June 2025", "31 December 2025 X audited"]
+)
+def test_a_printed_placeholder_without_a_marker_is_residue_in_every_date_shape(text: str) -> None:
+    assert interpret_period(text, default_kind=PeriodKind.DURATION).calendar == "invalid"
