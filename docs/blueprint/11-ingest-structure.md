@@ -277,7 +277,8 @@ class StructureResult(BaseModel):   # statements.raw.json
    supplies no comparison (`geometry_invalid` for each bound column) and does not stop the
    missing slots being read.
    `TableDecision.period_evidence` retains agreement and conflict observations.
-   Cache version 24 invalidates prior structure results, including versions 23, 22, 21 and 20.
+   Cache version 28 invalidates prior structure results, including versions 27, 26, 25, 24,
+   23, 22, 21 and 20.
 
    Each observation is parsed with the same statement kind and date context as its column,
    using core's typed `interpret_period` facts for all four-digit Gregorian calendar years.
@@ -287,7 +288,11 @@ class StructureResult(BaseModel):   # statements.raw.json
    Duration facts distinguish explicit supported lengths (3, 6, 9 or 12 months and existing
    annual/quarter cues), generic period wording, absent wording and invalid stated lengths.
    Unsupported, negated or contradictory lengths hold the column. `parse_period` retains
-   its existing permissive behavior for other callers. Candidate
+   its existing permissive behavior for other callers. Within strict facts the bare Arabic
+   noun "فترة" is generic period wording. Arabic duration cues accept the article ("ال").
+   A dash standing alone in a reading that carries a unit marker is a separator. A dotted month
+   abbreviation ("Dec. 31, 2025") is read in month-first dates. A reading that states both
+   audited and unaudited is unparseable. Candidate
    text uses the existing header repairs; Arabic digit runs are reversed only for `text`
    provenance on a page explicitly marked `visual_arabic`. Logical OCR readings are not
    reversed, and the observation's literal text, source ID and geometry remain unchanged.
@@ -308,6 +313,12 @@ class StructureResult(BaseModel):   # statements.raw.json
    that includes a collected crop reading cannot be cleared by caller evidence, because the
    merge keeps every collected observation; it stays held for review. There is no automatic
    resolution policy.
+   A recovered reading that gives only a year (any four-digit Gregorian year, read through
+   `interpret_period`, with or without unit or status text) and has no caption flags
+   `period_uncertain`; the printed uncertainty is kept and no binding is recovered.
+   A per-share qualifier ("except per share") beside a unit marker is unit text, not period
+   residue. A duplicate statement's review keeps its `period_conflict` reasons beside
+   `duplicate_statement`.
    A recovered caption fills missing duration information but never replaces an explicit
    observation duration or complete date. Generic period wording supplies no explicit
    length, so an explicit caption can fill it. Invalid facts cannot be healed by context.

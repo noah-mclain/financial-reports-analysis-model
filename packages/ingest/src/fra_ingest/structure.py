@@ -64,9 +64,7 @@ from fra_ingest.visual_order import (
     restore_word_order,
 )
 
-STRUCTURE_VERSION = (
-    "26"  # spaced Arabic letters split at the page's words; conversion/pages unchanged
-)
+STRUCTURE_VERSION = "29"  # spaced Arabic letters split at the page's words (28: stricter periods)
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 

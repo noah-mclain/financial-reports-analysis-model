@@ -58,6 +58,10 @@ _PER_SHARE_CUES: tuple[str, ...] = (
     "فيما عدا السهم",
 )
 
+_PER_SHARE_QUALIFIERS = tuple(
+    re.compile(rf"(?<!\w){re.escape(cue)}(?!\w)", re.IGNORECASE) for cue in _PER_SHARE_CUES
+)
+
 _CURRENCY_WORDS: dict[str, str] = {
     "saudi riyal": "SAR",
     "saudi riyals": "SAR",
@@ -152,12 +156,26 @@ def unit_marker_spans(text: str) -> tuple[tuple[int, int], ...]:
     Offsets refer to the original input; callers perform any text normalization first.
     Unlike the permissive detectors, a scale substring inside another word is not a
     complete marker. A currency next to a number covers only the currency characters.
+    When a marker is present, an "except per share" qualifier is returned as well, so that
+    it is not mistaken for residue.
     """
-    return tuple(
+    markers = [
         match.span()
         for match in _UNIT_MARKER.finditer(text)
         if match.group("arabic") is None or detect_currency(match.group()) is not None
+    ]
+    if not markers:
+        return ()
+    qualifiers = sorted(
+        match.span() for pattern in _PER_SHARE_QUALIFIERS for match in pattern.finditer(text)
     )
+    merged: list[tuple[int, int]] = []
+    for start, end in qualifiers:
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
+        else:
+            merged.append((start, end))
+    return tuple(sorted(markers + merged))
 
 
 @dataclass(frozen=True)
