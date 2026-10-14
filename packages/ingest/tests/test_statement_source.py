@@ -674,3 +674,108 @@ def test_a_tie_without_any_candidate_block_is_not_resolved() -> None:
     )
     assert p.ambiguous and p.primary_span is None and len(p.tied_spans) == 2
     assert resolve_tied_blocks(p) == p
+
+
+WITH_CASH_FLOW = [T.BALANCE, T.INCOME, T.COMPREHENSIVE_INCOME, T.CASH_FLOW]
+
+
+def _two_competing_blocks_and_a_disjoint_one() -> tuple[list[StatementRange], list[PageScore]]:
+    ranges = [
+        span(T.BALANCE, 5),
+        span(T.INCOME, 6, rank=2),
+        span(T.COMPREHENSIVE_INCOME, 20),
+        span(T.CASH_FLOW, 21, rank=2),
+        span(T.BALANCE, 40, rank=2),
+        span(T.INCOME, 41),
+    ]
+    scores = [
+        page(5, T.BALANCE),
+        page(6, T.INCOME),
+        page(20, T.COMPREHENSIVE_INCOME),
+        page(21, T.CASH_FLOW),
+        page(40, T.BALANCE),
+        page(41, T.INCOME),
+    ]
+    return ranges, scores
+
+
+def test_a_span_sharing_no_type_with_the_tie_stays_primary() -> None:
+    ranges, scores = _two_competing_blocks_and_a_disjoint_one()
+    p = source_plan(ranges, scores, WITH_CASH_FLOW, 65, 1)
+    assert len(p.tied_spans) == 3 and p.ambiguous
+    for n, kind in [(20, T.COMPREHENSIVE_INCOME), (21, T.CASH_FLOW)]:
+        context = table_source(p, n, kind, 4)
+        decision = start_decision(context, None, None, False)
+        assert not context.ambiguous
+        assert decision.allowed and decision.reason == "source_primary"
+    for n, kind in [(5, T.BALANCE), (6, T.INCOME), (40, T.BALANCE), (41, T.INCOME)]:
+        context = table_source(p, n, kind, 4)
+        assert context.ambiguous
+        assert start_decision(context, None, None, False).reason == "source_primary_ambiguous"
+
+
+def test_only_the_competing_types_are_rejected_beside_a_disjoint_span() -> None:
+    comprehensive = [
+        [
+            "",
+            "Notes",
+            "For the year ended 31 December 2025 SAR thousands",
+            "For the year ended 31 December 2024 SAR thousands",
+        ],
+        ["Other comprehensive income", "", "1", "2"],
+        ["Will not be reclassified", "", "1", "2"],
+        ["May be reclassified", "", "0", "0"],
+        ["Total comprehensive income", "", "1", "2"],
+    ]
+    ranges, scores = _two_competing_blocks_and_a_disjoint_one()
+    full = [*PAGE_1, *PAGE_2[1:]]
+    base = structured_source([(5, full), (20, comprehensive), (40, full)], ranges, scores)
+    config = IngestConfig(enabled_types=tuple(WITH_CASH_FLOW), optional_types=(T.EQUITY,))
+    result, _ = structure_document(base, config)
+    assert [(s.type, s.source_pages) for s in result.statements] == [(T.COMPREHENSIVE_INCOME, [20])]
+    by_page = {t.page_no: t for t in result.tables}
+    assert "source_primary_ambiguous" not in by_page[20].evidence
+    assert all("source_primary_ambiguous" in by_page[n].evidence for n in (5, 40))
+
+
+@pytest.mark.parametrize("latest_has_the_periods", [False, True])
+def test_unmarked_padding_continues_the_part_that_admits_it(latest_has_the_periods: bool) -> None:
+    earlier_year = [
+        ["", "Notes", "31 December 2023 SAR '000", "31 December 2022 SAR '000"],
+        *PAGE_1[1:],
+    ]
+    base = _placed_source(
+        [
+            (5, PAGE_1, 0),
+            (5, PAGE_1 if latest_has_the_periods else earlier_year, 350),
+            (6, PAGE_2, 0),
+        ],
+        [span(T.BALANCE, 5)],
+        [page(5, T.BALANCE), page(6)],
+        [(5, 50, CONSOLIDATED_BALANCE), (5, 350, STANDALONE_BALANCE)],
+    )
+    result, _ = structure_document(base, IngestConfig())
+    pages = {s.consolidated: s.source_pages for s in result.statements}
+    # With both parts admitting the tail, the latest keeps it; otherwise only the earlier does.
+    assert pages == (
+        {True: [5], False: [5, 6]} if latest_has_the_periods else {True: [5, 6], False: [5]}
+    )
+    assert "continuation_of:balance" in result.tables[2].evidence
+
+
+def test_a_generic_first_title_does_not_hide_an_explicit_scope_on_the_primary_range() -> None:
+    full = [*PAGE_1, *PAGE_2[1:]]
+    base = structured_source(
+        [(5, full), (7, full), (40, full)],
+        [span(T.BALANCE, 5, 7), span(T.BALANCE, 40, rank=2)],
+        [page(5, T.BALANCE), page(6), page(7, T.BALANCE), page(40, T.BALANCE)],
+        [
+            (5, 50, "Statement of financial position"),
+            (7, 50, CONSOLIDATED_BALANCE),
+            (40, 50, STANDALONE_BALANCE),
+        ],
+    )
+    result, _ = structure_document(base, IngestConfig())
+    by_page = {t.page_no: t for t in result.tables}
+    assert "source_scope_unproven" not in by_page[40].evidence
+    assert (False, [40]) in [(s.consolidated, s.source_pages) for s in result.statements]

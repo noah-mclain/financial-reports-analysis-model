@@ -30,12 +30,18 @@ rank-1, named, non-negative candidate page is the primary block. Within it the l
 range of each type is reserved, including when its table fails extraction. Support ties are
 broken by the number of distinct enabled types with named, non-negative candidate pages at
 any rank, then by the lowest sum of their locator ranks. Remaining tied spans with disjoint
-types are complementary primary sources. Competing same-type spans stay ambiguous unless two
-locally titled blocks prove opposite standalone/consolidated scopes. Once they do, the second
+types are complementary primary sources. Tied spans that share a statement type, directly or through
+another tied span, compete; a span that shares no type with another tied span is a primary
+source for its types whatever the others do. Every type the competing spans name is ambiguous
+and keeps no primary range, and the first competing span supplies the reserved ranges. Competing
+same-type spans stay ambiguous unless two locally titled blocks prove opposite
+standalone/consolidated scopes. Once they do, the second
 block is a primary source for every type it names that the first block does not, so such a
 type starts a statement on its own range; a type both blocks name keeps the first block's range
 as primary and the second block's tables start their own scope group. A tie that is not proved
-stays ambiguous.
+stays ambiguous. The scope of a type's primary range is the first explicit scope among its
+locally titled tables, in page and table order; a generic title names none, so a later explicit
+title on the same range decides it, and a range with no explicit title has none.
 
 A start must lie on its type's primary range. Page negatives and exclusive other-type titles
 veto it. Secondary ranges, unrelated padding and outside pages cannot replace a failed
@@ -46,8 +52,12 @@ column-geometry and closed-balance rules remain in effect. An adjacent compatibl
 continue an authorized part even in padding, but padding cannot authorize a start. Only two
 known, different title scopes veto continuation; an unmarked repeated title does not. A table
 continues the latest nearby part of its own type, title scope and source group, so interleaved
-tables of two scopes each continue their own scope, and parts are merged into the latest part
-of the same type and source group rather than the part that precedes them. Primary
+tables of two scopes each continue their own scope. A table with no scope marker in padding
+belongs to no scope or group, so it continues the latest nearby part of its type that is open and
+whose periods and columns line up with it; when no part does, it is tested against the latest
+alone, and when several parts admit it the latest keeps it, whichever group they belong to.
+Parts are merged into the latest part of the same type and source group rather than the part
+that precedes them. Primary
 metadata keeps `detect_metadata` precedence; a title-scope override applies only to a separately
 authorized second-scope group. Optional cash-flow and equity types are not extracted while
 they are excluded from the enabled source types.
@@ -330,7 +340,7 @@ class StructureResult(BaseModel):   # statements.raw.json
    supplies no comparison (`geometry_invalid` for each bound column) and does not stop the
    missing slots being read.
    `TableDecision.period_evidence` retains agreement and conflict observations.
-   Cache version 38 invalidates prior structure results, including versions 37 down to 20.
+   Cache version 41 invalidates prior structure results, including versions 40 down to 20.
 
    Each observation is parsed with the same statement kind and date context as its column,
    using core's typed `interpret_period` facts for all four-digit Gregorian calendar years.

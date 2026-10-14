@@ -15,6 +15,7 @@ from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -68,7 +69,7 @@ from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
 from fra_ingest.visual_order import repair_grid, repair_text, restore_word_order
 
-STRUCTURE_VERSION = "38"  # source guard, split merged OCR amounts, stricter period readings
+STRUCTURE_VERSION = "41"  # source guard, per-type ambiguity, split merged OCR amounts
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -214,6 +215,26 @@ def _aligned(grid: Grid, layout: HeaderLayout, *, ocr: bool) -> Realignment:
     if not ocr:
         return realigned
     return realigned.model_copy(update={"grid": split_numeric_columns(realigned.grid, layout)})
+
+
+class _Probe(NamedTuple):
+    layout: HeaderLayout
+    aligned: Realignment | None
+    fits: bool
+
+
+def _probe(layout: HeaderLayout, grid: Grid, part: PartialStatement, *, ocr: bool) -> _Probe:
+    """``layout`` with the periods ``part`` lends it, the OCR-realigned grid (``None`` off OCR)
+    and whether the columns line up with ``part``. On an OCR page the columns are compared after
+    merged amounts are split, so a wide merged rectangle cannot pull a column centre past the
+    tolerance."""
+    inherited = inherit_periods(layout, grid, part)
+    aligned = _aligned(grid, inherited, ocr=True) if ocr else None
+    return _Probe(
+        inherited,
+        aligned,
+        continues_part(inherited, grid if aligned is None else aligned.grid, part),
+    )
 
 
 def structure_document(
@@ -383,7 +404,8 @@ def structure_document(
             ),
             key=lambda n: _candidate_order(candidates[n]),
         )
-        primary_scopes[kind] = scopes[heads[0]] if heads else None
+        # The first explicit scope on the range, not the first title: a generic title carries none.
+        primary_scopes[kind] = next((scopes[n] for n in heads if scopes[n] is not None), None)
 
     part_scopes: dict[str, bool | None] = {}
     part_order: dict[str, tuple[int, int, int]] = {}
@@ -417,26 +439,28 @@ def structure_document(
         )
         candidate.decision.type = None
         candidate.decision.evidence = [*candidate.decision.evidence, *eligibility.evidence]
+        alternatives: list[PartialStatement] = []
         if source_context.negatives or (
             source_context.titles and kind not in source_context.titles
         ):
             previous = None
         else:
             # The latest nearby part of the candidate's own kind, scope and source group.
-            previous = next(
-                (
-                    p
-                    for p in nearby
-                    if p.type is kind
-                    and not (
-                        scopes[n] is not None
-                        and part_scopes[p.table_refs[0]] is not None
-                        and scopes[n] is not part_scopes[p.table_refs[0]]
-                    )
-                    and not (eligibility.allowed and eligibility.group_key != p.source_group)
-                ),
-                None,
-            )
+            fitting = [
+                p
+                for p in nearby
+                if p.type is kind
+                and not (
+                    scopes[n] is not None
+                    and part_scopes[p.table_refs[0]] is not None
+                    and scopes[n] is not part_scopes[p.table_refs[0]]
+                )
+                and not (eligibility.allowed and eligibility.group_key != p.source_group)
+            ]
+            previous = fitting[0] if fitting else None
+            # An unmarked table in padding names neither scope nor group, so every nearby part
+            # of its kind is a candidate, latest first.
+            alternatives = fitting[1:] if scopes[n] is None and not eligibility.allowed else []
         layout = parse_header(
             grid,
             kind,
@@ -463,13 +487,21 @@ def structure_document(
         ocr = inputs.page_modes.get(grid.page_no) is PageMode.IMAGE
         aligned: Realignment | None = None
         if previous is not None and (result.type is not None or _only_below_confidence(result)):
-            inherited = inherit_periods(layout, grid, previous)
+            # The latest candidate part that is open and lines up with the table keeps it; when
+            # none does, the latest is probed alone, as it is when there is one candidate.
+            if alternatives:
+                previous = next(
+                    (
+                        p
+                        for p in (previous, *alternatives)
+                        if _probe(layout, grid, p, ocr=ocr).fits and not is_closed(p, index)
+                    ),
+                    previous,
+                )
+            inherited, aligned, fits = _probe(layout, grid, previous, ocr=ocr)
             if eligibility.allowed and eligibility.group_key == previous.source_group:
                 layout = inherited
-            # On an OCR page the columns are compared after merged amounts are split, so a wide
-            # merged rectangle cannot pull a column centre past the tolerance.
-            aligned = _aligned(grid, inherited, ocr=True) if ocr else None
-            if continues_part(inherited, grid if aligned is None else aligned.grid, previous):
+            if fits:
                 if is_closed(previous, index):
                     candidate.decision.evidence.append(f"after_closed:{kind.value}")
                 else:

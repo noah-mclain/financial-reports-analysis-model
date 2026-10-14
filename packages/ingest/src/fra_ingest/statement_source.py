@@ -20,6 +20,14 @@ class SourcePlan:
     tied_spans: tuple[tuple[int, int], ...]
     ambiguous: bool
     page_count: int
+    ambiguous_types: tuple[StatementType, ...] = ()
+
+    def is_ambiguous(self, kind: StatementType) -> bool:
+        """Whether ``kind`` has no single primary range. Without any candidate block every type
+        is ambiguous; otherwise only the types of competing tied blocks are."""
+        if self.primary_span is None:
+            return self.ambiguous
+        return kind in self.ambiguous_types
 
 
 @dataclass(frozen=True)
@@ -101,20 +109,38 @@ def source_plan(
     }
     best = max(support.values())
     tied = tuple(s for s in spans if support[s] == best)
-    competing = any(types[a] & types[b] for i, a in enumerate(tied) for b in tied[i + 1 :])
     primary_span = tied[0] if best[1] else None
-    primary_spans = tied[:1] if competing else tied
-    primary = _lowest_ranked(selected, primary_spans if primary_span is not None else ())
+    groups = _competing_groups(tied, types)
+    # A block sharing no type with another tied block is a primary source on its own; of
+    # blocks that compete, only the first supplies the reserved ranges.
+    primary_spans = tuple(g[0] for g in groups) if primary_span is not None else ()
+    ambiguous_types = sorted(
+        {t for g in groups if len(g) > 1 for s in g for t in types[s]}, key=lambda t: t.value
+    )
     return SourcePlan(
         selected,
         tuple(sorted(pages, key=lambda p: p.page_no)),
         spans,
-        primary,
+        _lowest_ranked(selected, primary_spans),
         primary_span,
         tied,
-        competing or not best[1],
+        bool(ambiguous_types) or not best[1],
         page_count,
+        tuple(ambiguous_types),
     )
+
+
+def _competing_groups(
+    tied: Sequence[tuple[int, int]], types: dict[tuple[int, int], set[StatementType]]
+) -> list[list[tuple[int, int]]]:
+    """The tied blocks grouped by shared statement types, directly or through another block;
+    each group keeps the order of ``tied``."""
+    groups: list[list[tuple[int, int]]] = []
+    for s in tied:
+        joined = [g for g in groups if any(types[s] & types[o] for o in g)]
+        merged = sorted([s, *(o for g in joined for o in g)], key=tied.index)
+        groups = [g for g in groups if g not in joined] + [merged]
+    return sorted(groups, key=lambda g: tied.index(g[0]))
 
 
 def _lowest_ranked(
@@ -142,7 +168,7 @@ def resolve_tied_blocks(plan: SourcePlan) -> SourcePlan:
         r for r in _lowest_ranked(plan.ranges, plan.tied_spans[1:]) if r.type not in named
     )
     primary = sorted((*plan.primary, *second), key=lambda r: r.type.value)
-    return replace(plan, primary=tuple(primary), ambiguous=False)
+    return replace(plan, primary=tuple(primary), ambiguous=False, ambiguous_types=())
 
 
 def table_source(
@@ -177,7 +203,7 @@ def table_source(
         distance,
         tuple(page.title_types),
         tuple(page.negatives),
-        plan.ambiguous,
+        plan.is_ambiguous(proposed_type),
         data_rows,
     )
 
