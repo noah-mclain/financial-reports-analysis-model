@@ -435,3 +435,84 @@ def test_negated_arabic_duration_stays_invalid_with_the_article(text: str) -> No
     facts = interpret_period(text, default_kind=PeriodKind.DURATION)
     assert facts.duration == "invalid"
     assert facts.period is None
+
+
+@pytest.mark.parametrize("text", ["31 Dec 2025", "31 Dec. 2025", "31 December, 2025"])
+def test_day_first_dates_with_one_separator_form_are_complete(text: str) -> None:
+    facts = interpret_period(text)
+    assert facts.calendar == "complete"
+    assert facts.end_date == date(2025, 12, 31)
+    assert facts.date_text == text
+
+
+@pytest.mark.parametrize("text", ["31 Dec2025", "31 Dec.. 2025", "31 December,,2025"])
+def test_day_first_dates_with_a_malformed_separator_are_not_complete(text: str) -> None:
+    facts = interpret_period(text)
+    assert facts.calendar != "complete"
+
+
+@pytest.mark.parametrize(
+    "text,key,months",
+    [
+        ("31 Dec2025", "2025-12-31", None),
+        ("31 Dec.. 2025", "2025-12-31", None),
+        ("31 December,,2025", "2025-12-31", None),
+        ("31 Dec 2025", "2025-12-31", None),
+        ("31 Dec. 2025", "2025-12-31", None),
+        ("31 December, 2025", "2025-12-31", None),
+        ("30 June 2024", "2024-06-30", None),
+        ("1 March 2023", "2023-03-01", None),
+        ("December 31, 2025", "2025-12-31", None),
+    ],
+)
+def test_the_permissive_parser_keeps_reading_day_first_separators(
+    text: str, key: str, months: int | None
+) -> None:
+    period = parse_period(text)
+    assert period is not None
+    assert (period.key, period.end_date.isoformat(), period.months) == (key, key, months)
+    assert period.kind is PeriodKind.INSTANT
+
+
+def test_a_lone_period_before_the_year_stays_a_complete_date() -> None:
+    facts = interpret_period("31 Dec.2025")
+    assert facts.calendar == "complete" and facts.end_date == date(2025, 12, 31)
+
+
+@pytest.mark.parametrize(
+    "text", ["31 Dec., 2025", "31 Dec,2025", "31 ديسمبر,2025", "31 Dec , 2025", "31 December, 2025"]
+)
+def test_one_dot_and_one_comma_between_month_and_year_are_a_complete_date(text: str) -> None:
+    assert interpret_period(text).calendar == "complete"
+
+
+@pytest.mark.parametrize("text", ["31 Dec 2025 يتألف", "31 Dec 2025 تألف"])
+def test_a_word_that_ends_in_a_scale_spelling_is_not_unit_text(text: str) -> None:
+    assert interpret_period(text).calendar == "invalid"
+
+
+@pytest.mark.parametrize(
+    "text", ["31 December 2025 X", "31 December 2025 (X)", "X 31 December 2025"]
+)
+def test_a_printed_glyph_placeholder_without_a_unit_marker_is_residue(text: str) -> None:
+    assert interpret_period(text).calendar == "invalid"
+
+
+@pytest.mark.parametrize("text", ["31 December 2025 X '000", "31 December 2025 SAR X"])
+def test_a_printed_glyph_placeholder_beside_a_unit_marker_is_unit_text(text: str) -> None:
+    assert interpret_period(text).calendar == "complete"
+
+
+def test_an_x_left_by_masking_a_month_count_is_not_a_printed_placeholder() -> None:
+    facts = interpret_period(
+        "For the x2 months ended 30 June 2025", default_kind=PeriodKind.DURATION
+    )
+    assert facts.calendar == "complete"
+    assert facts.duration == "invalid"
+
+
+@pytest.mark.parametrize(
+    "text", ["2025 X", "Dec 2025 X", "x 6 months ended 30 June 2025", "31 December 2025 X audited"]
+)
+def test_a_printed_placeholder_without_a_marker_is_residue_in_every_date_shape(text: str) -> None:
+    assert interpret_period(text, default_kind=PeriodKind.DURATION).calendar == "invalid"

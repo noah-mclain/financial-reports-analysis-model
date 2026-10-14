@@ -274,8 +274,10 @@ class StructureResult(BaseModel):   # statements.raw.json
    Caller and collected groups merge by real column, retaining all distinct identities.
    Identical observations deduplicate; a reused per-column ID with different facts fails loudly.
    Scope, source spans, header row, column identity and geometry are validated against the
-   original grid, source cells and page height before binding. A caller's group is validated
-   before any crop is read, and unmatched or ambiguous caller evidence fails loudly. A collected
+   original grid, source cells and page height before binding. A caller's observation rectangle
+   must lie wholly inside the original source cell's rectangle, the same rule collected
+   alternates meet; one that extends beyond it is rejected as an input error. A caller's group
+   is validated before any crop is read, and unmatched or ambiguous caller evidence fails loudly. A collected
    group the original grid cannot carry is dropped with
    `period_evidence_unavailable:<col>:raw_source_mismatch`; it never fails the document.
    Agreeing collected readings that omit the bound header's own interpretation hold the column
@@ -284,8 +286,7 @@ class StructureResult(BaseModel):   # statements.raw.json
    supplies no comparison (`geometry_invalid` for each bound column) and does not stop the
    missing slots being read.
    `TableDecision.period_evidence` retains agreement and conflict observations.
-   Cache version 28 invalidates prior structure results, including versions 27, 26, 25, 24,
-   23, 22, 21 and 20.
+   Cache version 39 invalidates prior structure results, including versions 38 down to 20.
 
    Each observation is parsed with the same statement kind and date context as its column,
    using core's typed `interpret_period` facts for all four-digit Gregorian calendar years.
@@ -298,7 +299,21 @@ class StructureResult(BaseModel):   # statements.raw.json
    its existing permissive behavior for other callers. Within strict facts the bare Arabic
    noun "فترة" is generic period wording. Arabic duration cues accept the article ("ال").
    A dash standing alone in a reading that carries a unit marker is a separator. A dotted month
-   abbreviation ("Dec. 31, 2025") is read in month-first dates. A reading that states both
+   abbreviation ("Dec. 31, 2025") is read in month-first dates. A day-first date
+   separates month and year by at most one "." and one ",", in that order, with any
+   whitespace ("31 Dec., 2025", "31 Dec.2025"); "31 Dec2025" and "31 Dec.. 2025" are not
+   complete dates. A month-first date is the month, at most one ".", whitespace, the day, at
+   most one "," with any whitespace, then the year ("Dec 31, 2025", "Dec. 31, 2025",
+   "December 31 2025"); "Dec 31,,2025" and "Dec.. 31, 2025" are not complete dates. A month
+   and year are separated by at most one "." with any whitespace and at least one separator
+   ("Dec 2025", "Dec. 2025", "Dec.2025"); "Dec.. 2025" is not a date. An Arabic scale
+   spelling that `detect_scale` accepts is a unit marker with up to three attached particles
+   or the article before it ("مبآلاف", "وبالملايين"), but not inside another word ("يتألف").
+   The "X" that stands for a currency glyph is unit text in a reading or a header row only
+   when a scale or currency marker is in the same text, so a second header row such as
+   `X '000` does not discard the date anchor above it, and "31 December 2025 X" is not a
+   complete date. An "x" left behind by masking a stated month count ("x2 months") is not a
+   printed placeholder, so the date beside it stays readable. A reading that states both
    audited and unaudited is unparseable. Candidate
    text uses the existing header repairs; Arabic digit runs are reversed only for `text`
    provenance on a page explicitly marked `visual_arabic`. Logical OCR readings are not

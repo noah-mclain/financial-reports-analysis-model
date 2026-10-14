@@ -1,5 +1,7 @@
 """Scale and currency strings taken from the golden set documents."""
 
+import re
+
 import pytest
 
 from fra_core.units import detect_currency, detect_scale, unit_marker_spans
@@ -200,3 +202,32 @@ def test_per_share_qualifier_does_not_change_the_scale_reading() -> None:
     signal = detect_scale("in millions, except per share data")
     assert signal is not None
     assert signal.scale == 1_000_000 and signal.per_share_exempt
+
+
+def _arabic_scale_spellings() -> list[str]:
+    from fra_core import units
+
+    return [
+        cue.strip()
+        for cue in (*units._THOUSAND_CUES, *units._MILLION_CUES, *units._BILLION_CUES)
+        if re.search(r"[\u0621-\u064a]", cue)
+    ]
+
+
+@pytest.mark.parametrize("prefix", ["", "م", "و"])
+@pytest.mark.parametrize("cue", _arabic_scale_spellings())
+def test_every_arabic_scale_spelling_is_a_marker_span(cue: str, prefix: str) -> None:
+    text = prefix + cue
+    assert detect_scale(text) is not None
+    assert unit_marker_spans(text) == ((0, len(text)),)
+
+
+def test_an_attached_arabic_scale_is_a_marker_in_a_dated_header() -> None:
+    text = "31 ديسمبر 2025 مبآلاف X"
+    spans = unit_marker_spans(text)
+    assert [text[start:end] for start, end in spans] == ["مبآلاف"]
+
+
+@pytest.mark.parametrize("text", ["آلافx", "آلاف1", "ألف7", "مبآلاف30/06"])
+def test_arabic_scale_spellings_still_need_a_word_end(text: str) -> None:
+    assert unit_marker_spans(text) == ()
