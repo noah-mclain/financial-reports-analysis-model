@@ -20,7 +20,7 @@ from typing import Literal
 
 from fra_core.numbers import normalize_digits, strip_bidi
 from fra_core.schemas.statement import Period, PeriodKind
-from fra_core.units import unit_marker_spans
+from fra_core.units import is_glyph_placeholder, unit_marker_spans
 
 __all__ = ["PeriodInterpretation", "interpret_period", "parse_period"]
 
@@ -259,8 +259,12 @@ class PeriodInterpretation:
 
 
 _MONTH_NAME = "(?:" + "|".join(re.escape(n) for n in _MONTH_NAMES_BY_LENGTH) + ")"
+# A day-first date separates month and year by at most one "." and one ",", in that order, with
+# any whitespace ("31 Dec 2025", "31 Dec., 2025", "31 Dec.2025" as Juhayna prints it); a doubled
+# mark or no separator is malformed. Only the compatibility parser, which does not use this
+# pattern, tolerates more.
 _TEXT_DATE = re.compile(
-    rf"(?<!\w)(?:\d{{1,2}}\s+{_MONTH_NAME}[\s.,]*\d{{4}}|"
+    rf"(?<!\w)(?:\d{{1,2}}\s+{_MONTH_NAME}(?=[\s.,])\.?\s*,?\s*\d{{4}}|"
     rf"{_MONTH_NAME}\.?\s+\d{{1,2}}[,\s]+\d{{4}}|{_MONTH_NAME}[\s.]+\d{{4}})(?!\d)",
     re.I,
 )
@@ -402,10 +406,8 @@ def _calendar_remainder(text: str, date_span: tuple[int, int]) -> str:
     text = _GLUE.sub(" ", text)
     tokens = []
     for token in text.split():
-        bare = token.strip("()[].,:;،؛'\"")
-        if bare.casefold() == "x":
-            continue
-        tokens.append(token)
+        if not is_glyph_placeholder(token):
+            tokens.append(token)
     return " ".join(tokens).strip(" ()[].,:;،؛…")
 
 
