@@ -10,6 +10,8 @@ from harness.independent_gold import FrozenGold, Reading, aggregate_gold, counts
 from pydantic import ValidationError
 from tests.eval.test_expected import SHA, item, result, statement
 
+from fra_core.schemas import StatementType
+
 
 def reading(reader: str = "reader-a") -> dict[str, Any]:
     return {
@@ -126,6 +128,63 @@ def test_missing_blank_row_is_not_a_correct_cell() -> None:
         data["statements"][0]["rows"][0]["values"]["2025-12-31"] = None
     frozen = FrozenGold(readings=(Reading.model_validate(first), Reading.model_validate(second)))
     assert counts(frozen, result([statement(1, [])]))[0]["right"] == 0
+
+
+@pytest.mark.parametrize("missing", [None, "row", "cell", "period", "cell_period"])
+def test_aligned_blank_requires_explicit_evidence(missing: str | None) -> None:
+    first, second = reading(), reading("reader-b")
+    for data in (first, second):
+        data["statements"][0]["rows"][0]["values"]["2025-12-31"] = None
+    frozen = FrozenGold(readings=(Reading.model_validate(first), Reading.model_validate(second)))
+    blank = item(1, "Total assets", "")
+    actual = statement(1, [blank])
+    if missing == "row":
+        actual.line_items = []
+    elif missing == "cell":
+        blank.cells = []
+    elif missing == "period":
+        actual.periods = [actual.periods[0].model_copy(update={"key": "another-period"})]
+        blank.cells[0].period_key = "another-period"
+    elif missing == "cell_period":
+        actual.periods.append(actual.periods[0].model_copy(update={"key": "another-period"}))
+        blank.cells[0].period_key = "another-period"
+    scored = counts(frozen, result([actual]))[0]
+    assert (scored["cells"], scored["right"]) == (1, int(missing is None))
+
+
+@pytest.mark.parametrize("balances,incomes", [(1, 0), (2, 0), (0, 1), (1, 1), (2, 2), (0, 0)])
+def test_all_output_predictions_count_without_choosing_duplicate_statements(
+    balances: int,
+    incomes: int,
+) -> None:
+    statements = []
+    for n in range(balances + incomes):
+        kind = StatementType.BALANCE if n < balances else StatementType.INCOME
+        mapped = item(1, "Total assets", "5")
+        mapped.canonical_id = "total_assets"
+        extra = item(2, "Extra output", "9")
+        extra.canonical_id = "total_equity"
+        heading = item(3, "Heading", None)
+        heading.canonical_id = "total_assets"
+        statements.append(statement(n, [mapped, extra, heading], kind))
+    scored = counts(gold(), result(statements))
+    unique = int(balances == 1)
+    assert sum(s["right"] for s in scored) == unique
+    assert sum(s["cells"] for s in scored) == 1
+    assert sum(s["statements"] for s in scored) == 1
+    assert sum(s["statements_found"] for s in scored) == unique
+    assert sum(s["mapping_rows"] for s in scored) == 1
+    assert sum(s["mapping_right"] for s in scored) == unique
+    assert sum(s["mapping_predictions"] for s in scored) == 3 * (balances + incomes)
+    assert sum(s["extra_rows"] for s in scored) == 2 * (balances + incomes) - unique
+    report = aggregate_gold([{"period": "annual", "gold": scored, "gold_method": "double_pdf"}])
+    precision = report["strata"]["total"]["measures"]["mapping_predictions"]
+    assert precision["total"] == 3 * (balances + incomes)
+    assert precision["right"] == unique
+    assert not any(
+        value in json.dumps(scored)
+        for value in ("Total assets", "total_assets", "Extra output", "2025-12-31")
+    )
 
 
 def call_run(setup: Any, directory: Path, stages: Any) -> dict[str, Any]:

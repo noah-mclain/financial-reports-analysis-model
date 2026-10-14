@@ -432,6 +432,15 @@ def _period(period: Period) -> tuple[object, ...]:
     return (period.key, period.end_date, period.kind, period.months)
 
 
+def unmatched_numeric_rows(items: Sequence[LineItem], aligned: Sequence[int | None] = ()) -> int:
+    used = {p for p in aligned if p is not None}
+    return sum(
+        1
+        for position, item in enumerate(items)
+        if position not in used and any(c.reported is not None for c in item.cells)
+    )
+
+
 def score_statement(expected: ExpectedStatement, statement: Statement | None) -> Score:
     score = Score(
         periods=len(expected.periods),
@@ -440,6 +449,7 @@ def score_statement(expected: ExpectedStatement, statement: Statement | None) ->
         statements_found=int(statement is not None),
     )
     items = statement.line_items if statement is not None else []
+    period_keys = {p.key for p in statement.periods} if statement is not None else set()
     if statement is not None:
         found = {_period(p) for p in statement.periods}
         score.periods_right = sum(1 for p in expected.periods if _period(p) in found)
@@ -457,8 +467,15 @@ def score_statement(expected: ExpectedStatement, statement: Statement | None) ->
             read = item.value_for(key) if item is not None else None
             score.cells += 1
             score.cells_missing += int(statement is None)
-            # Nothing printed must read as nothing; a figure must be read, on its own label.
-            same = statement is not None and read == value
+            # A blank needs an actual aligned cell in a represented period, not absent output.
+            same = item is not None and read == value
+            if value is None:
+                same = (
+                    same
+                    and item is not None
+                    and key in period_keys
+                    and any(c.period_key == key for c in item.cells)
+                )
             if same and (value is None or labelled):
                 score.right += 1
             else:
@@ -476,12 +493,7 @@ def score_statement(expected: ExpectedStatement, statement: Statement | None) ->
             if value is not None and read is not None and abs(read) == abs(value):
                 score.sign_cells += 1
                 score.sign_right += read == value
-    used = {p for p in aligned if p is not None}
-    score.extra_rows = sum(
-        1
-        for position, item in enumerate(items)
-        if position not in used and any(c.reported is not None for c in item.cells)
-    )
+    score.extra_rows = unmatched_numeric_rows(items, aligned)
     return score
 
 

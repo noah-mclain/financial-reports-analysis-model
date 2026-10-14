@@ -985,6 +985,8 @@ def run(
                 identity = gold.document.id
                 if identity not in entries or path.stem != identity or identity in gold_files:
                     raise ValueError("gold id must uniquely name a train document and its file")
+                if _is_control(entries[identity]):
+                    raise ValueError("negative control gold is out of scope for label accuracy")
                 if sha256_file(pdf_of(entries[identity])) != gold.document.sha256:
                     raise ValueError("gold source PDF hash does not match")
                 gold_files[identity] = gold
@@ -1071,7 +1073,10 @@ def run(
             "rows": rows,
             "aggregates": aggregate(rows),
             "gold_accuracy": (
-                aggregate_gold(rows, complete=len(rows) == len(holdout))
+                aggregate_gold(
+                    [row for row in rows if not _is_control(row)],
+                    complete=len(rows) == len(holdout),
+                )
                 if gold_dir is not None
                 else None
             ),

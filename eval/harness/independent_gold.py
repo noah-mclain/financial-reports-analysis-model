@@ -8,21 +8,25 @@ not proof that a reader was independent; the annotation procedure supplies that 
 from __future__ import annotations
 
 import argparse
+from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from fra_core.schemas import Statement, StatementType
 from fra_core.taxonomy.loader import load_taxonomy
 from fra_ingest.results import StructureResult
 from harness.expected import ExpectedRow, ExpectedStatement
 from harness.extraction import (
     DIGITAL,
     SCANNED,
+    Score,
     align_rows,
     mislabelled,
     score_statement,
+    unmatched_numeric_rows,
     wilson_interval,
 )
 from harness.paths import STRATA
@@ -122,22 +126,27 @@ def counts(gold: FrozenGold, result: StructureResult | None) -> list[dict[str, A
     """Counts only: no expected labels, values, row indices or disagreement details escape."""
     if result is not None and result.sha256 != gold.document.sha256:
         raise ValueError("candidate document hash differs from gold")
-    found = {s.type: s for s in result.statements} if result is not None else {}
-    duplicate = {t for t in found if result and sum(s.type == t for s in result.statements) > 1}
+    found: dict[StatementType, list[Statement]] = defaultdict(list)
+    if result is not None:
+        for candidate in result.statements:
+            found[candidate.type].append(candidate)
+    references = {s.type: s for s in gold.document.statements}
     figures: list[dict[str, Any]] = []
-    for expected in gold.document.statements:
+    for kind in dict.fromkeys([*references, *found]):
+        expected = references.get(kind)
+        candidates = found.get(kind, [])
         # Ambiguous duplicate statements cannot select whichever scores best.
-        statement = None if expected.type in duplicate else found.get(expected.type)
-        scored = score_statement(expected, statement)
+        statement = candidates[0] if expected is not None and len(candidates) == 1 else None
+        scored = score_statement(expected, statement) if expected is not None else Score()
         items = statement.line_items if statement else []
-        aligned = align_rows(expected.rows, items)
-        # A missing expected blank row is still missing evidence, rather than a correct blank.
-        for row, position in zip(expected.rows, aligned, strict=True):
-            if statement is not None and position is None:
-                scored.right -= sum(value is None for value in row.values.values())
-        predictions = sum(item.canonical_id is not None for item in items)
+        rows = expected.rows if expected is not None else []
+        aligned = align_rows(rows, items)
+        emitted = [item for candidate in candidates for item in candidate.line_items]
+        predictions = sum(item.canonical_id is not None for item in emitted)
+        if statement is None:
+            scored.extra_rows = unmatched_numeric_rows(emitted)
         mapped = right = 0
-        for row, position in zip(expected.rows, aligned, strict=True):
+        for row, position in zip(rows, aligned, strict=True):
             if row.canonical_id is None:
                 continue
             mapped += 1
@@ -145,18 +154,19 @@ def counts(gold: FrozenGold, result: StructureResult | None) -> list[dict[str, A
                 item = items[position]
                 right += int(
                     item.canonical_id == row.canonical_id
-                    and not mislabelled(row, item.raw_label, expected.rows)
+                    and not mislabelled(row, item.raw_label, rows)
                 )
         figures.append(
             {
-                "page_mode": expected.page_mode,
+                # Unreferenced output adds precision penalties, without a figure stratum.
+                "page_mode": expected.page_mode if expected is not None else None,
                 "cells": scored.cells,
                 "right": scored.right,
                 "periods": scored.periods,
                 "periods_right": scored.periods_right,
                 "metadata": scored.metadata,
                 "metadata_right": scored.metadata_right,
-                "statements": 1,
+                "statements": scored.statements,
                 "statements_found": scored.statements_found,
                 "extra_rows": scored.extra_rows,
                 "mapping_predictions": predictions,
