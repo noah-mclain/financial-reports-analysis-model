@@ -249,3 +249,28 @@ def test_a_second_worker_is_refused_while_the_first_holds_the_store(tmp_path: Pa
         pass
     with JobStore(tmp_path / "jobs").worker_lock():  # released when the first stopped
         pass
+
+
+def test_an_analysis_file_counts_only_for_a_job_recorded_as_finished(tmp_path: Path) -> None:
+    store = store_at(tmp_path)
+    upload = store.add_upload(PDF, "r.pdf", SETTINGS)
+    job = store.enqueue(upload.sha256)
+    store.claim()
+    # A worker killed after writing the file and before committing the job's end leaves this.
+    analysis = analysis_for(job.id, upload.sha256, "passed")
+    store.analysis_path(job.id).write_text(analysis.model_dump_json(), encoding="utf-8")
+    assert store.load_analysis(job.id) is None  # still running
+    store.fail(job.id, "the worker stopped while this job was running")
+    assert store.load_analysis(job.id) is None  # failed: the file does not stand
+    assert store.load_analysis("f" * 32) is None
+
+
+def test_a_finished_job_whose_analysis_file_is_missing_is_an_error(tmp_path: Path) -> None:
+    store = store_at(tmp_path)
+    upload = store.add_upload(PDF, "r.pdf", SETTINGS)
+    job = store.enqueue(upload.sha256)
+    store.claim()
+    store.finish(analysis_for(job.id, upload.sha256, "passed"))
+    store.analysis_path(job.id).unlink()
+    with pytest.raises(FileNotFoundError, match="is completed but"):
+        store.load_analysis(job.id)

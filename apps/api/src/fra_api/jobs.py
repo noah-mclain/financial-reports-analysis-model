@@ -11,12 +11,13 @@ leaves a request waiting.
 
 from __future__ import annotations
 
-import time
-from collections.abc import Iterator
+import asyncio
+from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
+from starlette.concurrency import run_in_threadpool
 
 from fra_core.jobs import JobSettings, JobStore, UploadRejected
 from fra_core.schemas import FINISHED, Analysis, Job, JobEvent, Upload
@@ -97,28 +98,30 @@ def add_job_routes(routes: FastAPI) -> None:
         return _job(store_of(request), job_id)
 
     @routes.get("/jobs/{job_id}/events")
-    def events(
+    async def events(
         request: Request,
         job_id: str,
         last_event_id: Annotated[int, Header(ge=0)] = 0,
     ) -> StreamingResponse:
         store = store_of(request)
-        _job(store, job_id)
+        await run_in_threadpool(_job, store, job_id)
         poll = settings_of(request).poll_seconds
 
-        def stream() -> Iterator[str]:
+        async def stream() -> AsyncIterator[str]:
+            # Asynchronous, so a client that goes away is noticed between polls and its stream
+            # ends, rather than a thread polling for it until the job finishes.
             after = last_event_id
-            while True:
-                finished = _job(store, job_id).status in FINISHED
-                new = store.events(job_id, after)
+            while not await request.is_disconnected():
+                job = await run_in_threadpool(_job, store, job_id)
+                new = await run_in_threadpool(store.events, job_id, after)
                 for event in new:
                     yield sse(event)
                     after = event.seq
                     if event.kind in _FINAL_EVENTS:
                         return
-                if finished:  # read before the events, so none written in between is missed
+                if job.status in FINISHED:  # read before the events, so none is missed
                     return
-                time.sleep(poll)
+                await asyncio.sleep(poll)
 
         return StreamingResponse(stream(), media_type="text/event-stream")
 

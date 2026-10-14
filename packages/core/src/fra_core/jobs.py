@@ -304,9 +304,15 @@ class JobStore:
         return ids
 
     def load_analysis(self, job_id: str) -> Analysis | None:
+        """The analysis of a job recorded as completed or needs_review; None otherwise. The file
+        is written before the job's end is committed, so a worker killed in between leaves a
+        file for a job that later fails: only the recorded status says the analysis stands."""
+        job = self.get_job(job_id)
+        if job is None or job.status not in (JobStatus.COMPLETED, JobStatus.NEEDS_REVIEW):
+            return None
         path = self.analysis_path(job_id)
         if not path.is_file():
-            return None
+            raise FileNotFoundError(f"job {job_id} is {job.status.value} but {path} is missing")
         return Analysis.model_validate_json(path.read_text(encoding="utf-8"))
 
     # ---- internals -----------------------------------------------------------------------
