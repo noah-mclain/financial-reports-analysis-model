@@ -321,7 +321,8 @@ class StructureResult(BaseModel):   # statements.raw.json
    supplies no comparison (`geometry_invalid` for each bound column) and does not stop the
    missing slots being read.
    `TableDecision.period_evidence` retains agreement and conflict observations.
-   Cache version 24 invalidates prior structure results, including versions 23, 22, 21 and 20.
+   Cache version 30 invalidates prior structure results, including versions 29, 28, 27, 26,
+   25, 24, 23, 22, 21 and 20.
 
    Each observation is parsed with the same statement kind and date context as its column,
    using core's typed `interpret_period` facts for all four-digit Gregorian calendar years.
@@ -331,7 +332,11 @@ class StructureResult(BaseModel):   # statements.raw.json
    Duration facts distinguish explicit supported lengths (3, 6, 9 or 12 months and existing
    annual/quarter cues), generic period wording, absent wording and invalid stated lengths.
    Unsupported, negated or contradictory lengths hold the column. `parse_period` retains
-   its existing permissive behavior for other callers. Candidate
+   its existing permissive behavior for other callers. Within strict facts the bare Arabic
+   noun "فترة" is generic period wording. Arabic duration cues accept the article ("ال").
+   A dash standing alone in a reading that carries a unit marker is a separator. A dotted month
+   abbreviation ("Dec. 31, 2025") is read in month-first dates. A reading that states both
+   audited and unaudited is unparseable. Candidate
    text uses the existing header repairs; Arabic digit runs are reversed only for `text`
    provenance on a page explicitly marked `visual_arabic`. Logical OCR readings are not
    reversed, and the observation's literal text, source ID and geometry remain unchanged.
@@ -352,6 +357,12 @@ class StructureResult(BaseModel):   # statements.raw.json
    that includes a collected crop reading cannot be cleared by caller evidence, because the
    merge keeps every collected observation; it stays held for review. There is no automatic
    resolution policy.
+   A recovered reading that gives only a year (any four-digit Gregorian year, read through
+   `interpret_period`, with or without unit or status text) and has no caption flags
+   `period_uncertain`; the printed uncertainty is kept and no binding is recovered.
+   A per-share qualifier ("except per share") beside a unit marker is unit text, not period
+   residue. A duplicate statement's review keeps its `period_conflict` reasons beside
+   `duplicate_statement`.
    A recovered caption fills missing duration information but never replaces an explicit
    observation duration or complete date. Generic period wording supplies no explicit
    length, so an explicit caption can fill it. Invalid facts cannot be healed by context.
@@ -373,13 +384,16 @@ class StructureResult(BaseModel):   # statements.raw.json
    literal fails number parsing. The right position must be absent or empty and unspanned.
    At least two independent rows on the same page and in the same table section as the
    merged amount must supply parseable, boxed unit-span amounts in both columns, with
-   disjoint horizontal bands. Continuation pages need their own witnesses. Their median
+   disjoint horizontal bands. The witness rows must be physically distinct: rows whose
+   vertical bands overlap or touch count once, so a duplicated OCR row is one witness. Each
+   witness needs one boxed label cell lying left of its amounts; a witness without one is
+   ignored. Continuation pages need their own witnesses. Their median
    horizontal centres establish physical order. The merged source rectangle must contain
    both centres and the label's vertical centre. Missing, non-finite, overlapping or ambiguous
    geometry and unresolved
-   row alignment prevent assignment. The rule refuses a layout unless its label column is
-   physically left of both value columns; it therefore does not assign mirrored right-to-left
-   layouts. Digital grids do not use this rule.
+   row alignment prevent assignment. The rule refuses a layout unless its label lies left of
+   both value columns by column number and by box position, for the table and for the
+   merged row; it therefore does not assign mirrored right-to-left layouts. Digital grids do not use this rule.
    Signs, parentheses, decimals, percentages, note references and space-grouped numbers
    remain outside its scope. No period ordering, magnitude, expected value or check result
    chooses an assignment.
@@ -389,10 +403,12 @@ class StructureResult(BaseModel):   # statements.raw.json
    combined literal stays accessible through the Docling table reference and source position.
    Each cell carries `numeric_columns_split`, shown as a review warning and a reason to hold
    the statement even when its numerical checks pass. This intentional hold keeps the split
-   visible for review until its provenance is checked. Assignment is pure and idempotent;
-   unsuccessful eligibility returns the original grid. The structure cache version changes
-   so statements, checks and reviews regenerate; conversion, pages and locate caches retain
-   their existing contracts.
+   visible for review until its provenance is checked. Because the shared rectangle spans
+   both columns, split cells are left out of per-column geometry: column centres and the
+   horizontal band used for a synthesised missing-cell box ignore them. Assignment is pure
+   and idempotent; unsuccessful eligibility returns the original grid. Structure cache
+   version 29 makes statements, checks and reviews regenerate; conversion, pages and locate
+   caches retain their existing contracts.
 6. **Metadata.** Scale from the header text, then the caption, then the page text; per-share
    rows are exempt. Currency the same way; when none of those name one (Almarai's glyph), the
    country of incorporation decides: the earliest page with a phrase such as "a Saudi Joint

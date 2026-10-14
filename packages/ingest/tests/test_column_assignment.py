@@ -1,5 +1,6 @@
 """Conservative horizontal assignment of two merged OCR amounts."""
 
+from collections.abc import Iterator
 from decimal import Decimal
 
 import pytest
@@ -557,3 +558,181 @@ def test_structure_does_not_split_image_grid_with_rightmost_label() -> None:
     amounts = result.statements[0].line_items[-1].cells
     assert [c.reported for c in amounts] == [None, None]
     assert all("numeric_columns_split" not in c.flags for c in amounts)
+
+
+def section_cell(g: Grid, row: int) -> GridCell:
+    return GridCell(
+        text=f"SECTION {row}", row=row, col=0, bbox=None, page_no=g.page_no, is_row_section=True
+    )
+
+
+def amount_cells(g: Grid, row: int, label: str, left: str, right: str) -> list[GridCell]:
+    top = 100 + 20 * row
+    return [
+        GridCell(
+            text=text,
+            row=row,
+            col=col,
+            bbox=BBox(left=x0, right=x1, top=top, bottom=top + 10),
+            page_no=g.page_no,
+        )
+        for col, text, x0, x1 in (
+            (0, label, 10, 180),
+            (2, left, 210, 290 if right else 390),
+            (3, right, 310, 390),
+        )
+        if text
+    ] + ([] if right else [GridCell(text="", row=row, col=3, bbox=None, page_no=g.page_no)])
+
+
+def sectioned_grid() -> Grid:
+    base = grid([["", "Notes", "2025 EGP", "2024 EGP"]])
+    cells = list(base.cells)
+    row = 1
+    for section in range(3):
+        cells.append(section_cell(base, row))
+        row += 1
+        for _ in range(2):
+            cells.extend(amount_cells(base, row, f"Line {row}", "1,234,567", "2,345,678"))
+            row += 1
+        if section != 1:
+            cells.extend(
+                amount_cells(base, row, LABEL, f"{section + 1},505,304,778 1,345,663,827", "")
+            )
+            row += 1
+    return base.model_copy(update={"cells": tuple(cells), "num_rows": row})
+
+
+def test_each_of_three_sections_splits_only_its_own_merged_row() -> None:
+    g = sectioned_grid()
+    header = layout(g)
+    repaired = split_numeric_columns(g, header)
+    changed = [c for c in repaired.cells if "numeric_columns_split" in c.flags]
+    assert [(c.row, c.col, c.text, c.source_row, c.source_col) for c in changed] == [
+        (4, 2, "1,505,304,778", 4, 2),
+        (4, 3, "1,345,663,827", 4, 2),
+        (11, 2, "3,505,304,778", 11, 2),
+        (11, 3, "1,345,663,827", 11, 2),
+    ]
+    assert all(c.flags == ("numeric_columns_split",) for c in changed)
+    assert repaired.text(6, 2) == "1,234,567"
+    untouched = [c for c in repaired.cells if c.row not in (4, 11)]
+    assert untouched == [c for c in g.cells if c.row not in (4, 11)]
+
+
+def test_split_scans_grid_cells_a_bounded_number_of_times() -> None:
+    class Counting(tuple[GridCell, ...]):
+        scans = 0
+
+        def __iter__(self) -> Iterator[GridCell]:
+            Counting.scans += 1
+            return super().__iter__()
+
+    base = grid([["", "Notes", "2025 EGP", "2024 EGP"]])
+    cells = list(base.cells)
+    row = 1
+    for _ in range(30):
+        cells.append(section_cell(base, row))
+        row += 1
+        for _ in range(8):
+            cells.extend(amount_cells(base, row, f"Line {row}", "1,234,567", "2,345,678"))
+            row += 1
+        cells.extend(amount_cells(base, row, LABEL, "2,505,304,778 1,345,663,827", ""))
+        row += 1
+    g = base.model_copy(update={"cells": tuple(cells), "num_rows": row})
+    header = layout(g)
+    counted = Grid.model_construct(**{**dict(g), "cells": Counting(g.cells)})
+    Counting.scans = 0
+    repaired = split_numeric_columns(counted, header)
+    assert Counting.scans <= 10
+    assert sum("numeric_columns_split" in c.flags for c in repaired.cells) == 60
+
+
+def only_witnesses(g: Grid, keep: tuple[int, ...]) -> Grid:
+    return g.model_copy(
+        update={
+            "cells": tuple(
+                c.model_copy(update={"text": ""})
+                if c.row in WITNESSES and c.row not in keep and c.col in (2, 3)
+                else c
+                for c in g.cells
+            )
+        }
+    )
+
+
+def move_witness(g: Grid, row: int, top: float, bottom: float) -> Grid:
+    for col, left, right in ((2, 210, 290), (3, 310, 390)):
+        g = replace_cell(g, row, col, bbox=BBox(left=left, right=right, top=top, bottom=bottom))
+    return g
+
+
+def test_two_witness_rows_with_identical_rectangles_are_one_observation() -> None:
+    g = only_witnesses(merged_grid(), (1, 3))
+    g = move_witness(g, 1, 25, 35)
+    g = move_witness(g, 3, 25, 35)
+    assert split_numeric_columns(g, layout(g)) is g
+
+
+def test_witness_rows_whose_bands_overlap_by_one_point_are_not_distinct() -> None:
+    g = only_witnesses(merged_grid(), (1, 3))
+    g = move_witness(g, 1, 25, 35)
+    g = move_witness(g, 3, 35, 45)
+    assert split_numeric_columns(g, layout(g)) is g
+
+
+def test_two_identical_witness_rows_and_one_distinct_row_split() -> None:
+    g = only_witnesses(merged_grid(), (1, 3, 5))
+    g = move_witness(g, 1, 25, 35)
+    g = move_witness(g, 3, 25, 35)
+    repaired = split_numeric_columns(g, layout(g))
+    assert repaired.text(7, 2) == "2,505,304,778"
+    assert repaired.text(7, 3) == "1,345,663,827"
+
+
+def test_two_distinct_witness_rows_still_split() -> None:
+    g = only_witnesses(merged_grid(), (1, 3))
+    repaired = split_numeric_columns(g, layout(g))
+    assert repaired.text(7, 2) == "2,505,304,778"
+    assert repaired.text(7, 3) == "1,345,663,827"
+
+
+def move_label(g: Grid, row: int, left: float, right: float) -> Grid:
+    cell = g.cell(row, 0)
+    assert cell is not None and cell.bbox is not None
+    return replace_cell(
+        g, row, 0, bbox=BBox(left=left, right=right, top=cell.bbox.top, bottom=cell.bbox.bottom)
+    )
+
+
+def test_a_label_physically_right_of_the_amounts_is_not_split_despite_its_column_number() -> None:
+    g = merged_grid()
+    for row in (*WITNESSES, 7):
+        g = move_label(g, row, 410, 580)
+    header = layout(g)
+    assert header.label_col == 0
+    assert split_numeric_columns(g, header) is g
+
+
+def test_witnesses_with_labels_physically_right_of_their_amounts_are_not_counted() -> None:
+    g = only_witnesses(merged_grid(), (1, 3))
+    for row in (1, 3):
+        g = move_label(g, row, 410, 580)
+    assert split_numeric_columns(g, layout(g)) is g
+
+
+def test_witnesses_and_merged_row_with_physically_left_labels_still_split_left_to_right() -> None:
+    g = only_witnesses(merged_grid(), (1, 3))
+    for row in (1, 3, 7):
+        label, amount = g.cell(row, 0), g.cell(row, 2)
+        assert label is not None and label.bbox is not None
+        assert amount is not None and amount.bbox is not None
+        assert label.bbox.right <= amount.bbox.left
+    repaired = split_numeric_columns(g, layout(g))
+    assert repaired.text(7, 2) == "2,505,304,778"
+    assert repaired.text(7, 3) == "1,345,663,827"
+
+
+def test_a_merged_row_whose_own_label_is_physically_right_is_not_split() -> None:
+    g = move_label(only_witnesses(merged_grid(), (1, 3)), 7, 410, 580)
+    assert split_numeric_columns(g, layout(g)) is g
