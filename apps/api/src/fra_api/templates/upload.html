@@ -5,7 +5,8 @@
 Arabic, digital or scanned. Up to {{ max_mb }} MB and {{ max_pages }} pages. Banks and insurers are
 declined with the reason.</p>
 <form class="panel" id="upload">
-  <input type="file" id="file" accept="application/pdf,.pdf" required>
+  <label for="file">Financial report (PDF)</label>
+  <input type="file" id="file" name="file" accept="application/pdf,.pdf" required>
   <button type="submit" id="send">Upload and analyse</button>
   <p id="status" class="muted" role="status"></p>
 </form>

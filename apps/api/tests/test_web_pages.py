@@ -21,6 +21,7 @@ from fra_core.schemas import (
     Analysis,
     BBox,
     Cell,
+    Claim,
     Decline,
     LineItem,
     MetricInput,
@@ -329,3 +330,102 @@ def test_a_page_renders_as_a_png_and_the_viewer_places_the_box_by_page_share(
             client.get(f"/documents/{sha256}/pages/1", params={"box": "9,9,1,1"}).status_code == 400
         )
         assert client.get(f"/documents/{'0' * 64}/pages/1").status_code == 404
+
+
+# ---- review fixes: concurrent renders, clipped boxes, claim links, the upload label -------------
+
+
+def test_two_renders_of_one_page_at_once_both_succeed(tmp_path: Path) -> None:
+    import threading
+
+    from fra_api.pages import render_page
+
+    pdf = tmp_path / "one.pdf"
+    pdf.write_bytes(PDF)
+    target = tmp_path / "pages" / "1.png"
+    errors: list[BaseException] = []
+
+    def render() -> None:
+        try:
+            render_page(pdf, 1, target)
+        except BaseException as exc:  # collected for the assertion below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=render) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    assert target.read_bytes().startswith(b"\x89PNG")
+    assert sorted(p.name for p in target.parent.iterdir()) == ["1.png"]  # no temporary left
+
+
+def test_a_box_past_the_page_edge_is_cut_to_the_page_and_one_off_it_is_not_drawn(
+    tmp_path: Path,
+) -> None:
+    from fra_api.pages import place_box
+
+    inside = place_box((60, 80, 180, 100), PAGE_W, PAGE_H)
+    assert inside is not None and inside["clipped"] is False
+    past = place_box((540, 780, 700, 820), PAGE_W, PAGE_H)
+    assert past is not None and past["clipped"] is True
+    assert float(past["left"]) + float(past["width"]) == pytest.approx(100.0)
+    assert float(past["top"]) + float(past["height"]) == pytest.approx(100.0)
+    assert place_box((700, 900, 800, 950), PAGE_W, PAGE_H) is None
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        sha256 = client.post(
+            "/documents",
+            content=PDF,
+            headers={"Content-Type": "application/pdf", "X-Filename": "r.pdf"},
+        ).json()["sha256"]
+        cut = client.get(f"/documents/{sha256}/pages/1", params={"box": "540,780,700,820"})
+        assert "cut to the page" in cut.text
+        off = client.get(f"/documents/{sha256}/pages/1", params={"box": "700,900,800,950"})
+        assert "outside this page" in off.text and 'id="region"' not in off.text
+
+
+def claimed(text: str, span: str, metric_id: str = "current_ratio") -> Narrative:
+    return Narrative(
+        language="en",
+        model_id="m",
+        sections=[
+            NarrativeSection(
+                heading=SectionHeading.LIQUIDITY,
+                sentences=[
+                    Sentence(
+                        text=text,
+                        claims=[Claim(metric_id=metric_id, period_key=PERIOD.key, text_span=span)],
+                    )
+                ],
+            )
+        ],
+    )
+
+
+def test_a_claimed_figure_in_the_summary_links_to_its_metric_row(tmp_path: Path) -> None:
+    settings = settings_at(tmp_path)
+    narrative = claimed("The current ratio is 1.50 at year end.", "1.50")
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(settings, client, narrative=narrative)
+        page = client.get(f"/analyses/{job_id}/view").text
+    assert 'href="#metric-current_ratio-2025-12-31"' in page and ">1.50</a>" in page
+    assert '<tr id="metric-current_ratio-2025-12-31">' in page
+    assert "The current ratio is " in page and " at year end." in page
+
+
+def test_a_claim_without_its_span_or_its_metric_is_an_error() -> None:
+    from fra_api.views import narrative_view
+
+    anchors = frozenset({"metric-current_ratio-2025-12-31"})
+    with pytest.raises(ValueError, match="is not in"):
+        narrative_view(claimed("The ratio rose.", "1.50"), anchors)
+    with pytest.raises(ValueError, match="names no computed metric"):
+        narrative_view(claimed("ROE is 12%.", "12%", metric_id="roe"), anchors)
+
+
+def test_the_upload_field_has_a_label(tmp_path: Path) -> None:
+    with TestClient(create_app(Profile.NATIVE, settings_at(tmp_path))) as client:
+        page = client.get("/").text
+    assert '<label for="file">' in page and 'id="file"' in page

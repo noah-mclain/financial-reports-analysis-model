@@ -48,9 +48,9 @@
 <h2>Summary</h2>
 {% if analysis.narrative %}
 <div class="panel" dir="{{ 'rtl' if analysis.narrative.language == 'ar' else 'ltr' }}" lang="{{ analysis.narrative.language }}">
-  {% for section in analysis.narrative.sections %}
-    <h3>{{ section.heading.value | replace('_', ' ') }}</h3>
-    {% for sentence in section.sentences %}<p>{{ sentence.text }}</p>{% endfor %}
+  {% for section in view.narrative %}
+    <h3>{{ section.heading }}</h3>
+    {% for parts in section.sentences %}<p>{% for part in parts %}{% if part.href %}<a href="{{ part.href }}" title="the computed metric and its inputs">{{ part.text }}</a>{% else %}{{ part.text }}{% endif %}{% endfor %}</p>{% endfor %}
   {% endfor %}
   <p class="muted" dir="ltr" lang="en">{{ 'Written by the model and checked against the computed metrics.' if analysis.narrative.grounding.value == 'passed' else 'Template sentences: the generated text failed the check against the computed metrics.' }}</p>
 </div>
@@ -79,7 +79,7 @@
   <thead><tr><th>Metric</th><th>Period</th><th class="num">Value</th><th>Formula</th><th>Inputs</th><th>Flags</th></tr></thead>
   <tbody>
   {% for m in view.metrics %}
-    <tr>
+    <tr id="{{ m.anchor }}">
       <td>{{ m.name }}</td><td>{{ m.period }}</td>
       <td class="num">{% if m.value is none %}<span class="muted">not computed</span>{% else %}{{ m.value }}{% endif %}</td>
       <td><code>{{ m.formula }}</code></td>

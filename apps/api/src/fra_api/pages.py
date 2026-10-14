@@ -8,6 +8,7 @@ points with a top-left origin (``fra_core.schemas.BBox``), placed as shares of t
 from __future__ import annotations
 
 import io
+import uuid
 from pathlib import Path
 from typing import Annotated
 
@@ -57,7 +58,8 @@ def render_page(pdf: Path, page_no: int, target: Path) -> None:
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
     target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_suffix(".tmp")
+    # A name of its own, so two requests rendering the same page never share a temporary file.
+    tmp = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
     tmp.write_bytes(buffer.getvalue())
     tmp.replace(target)
 
@@ -70,6 +72,26 @@ def parse_box(text: str) -> tuple[float, float, float, float]:
     if right <= left or bottom <= top:
         raise HTTPException(status_code=400, detail="box is not ordered")
     return left, top, right, bottom
+
+
+def place_box(
+    box: tuple[float, float, float, float], width: float, height: float
+) -> dict[str, float | bool] | None:
+    """The box as shares of the page, clipped to it, with whether it was clipped; None when no
+    part of it lies on the page. A box past the edge is a fact of the extraction, so the viewer
+    shows what lies on the page and says the rest was cut, rather than drawing off the image."""
+    left, top, right, bottom = box
+    x0, y0 = max(left, 0.0), max(top, 0.0)
+    x1, y1 = min(right, width), min(bottom, height)
+    if x1 <= x0 or y1 <= y0:
+        return None
+    return {
+        "left": 100 * x0 / width,
+        "top": 100 * y0 / height,
+        "width": 100 * (x1 - x0) / width,
+        "height": 100 * (y1 - y0) / height,
+        "clipped": (x0, y0, x1, y1) != (left, top, right, bottom),
+    }
 
 
 def add_page_routes(app: FastAPI, profile: Profile) -> None:
@@ -136,15 +158,7 @@ def add_page_routes(app: FastAPI, profile: Profile) -> None:
         store = store_of(request)
         pdf = _pdf(store, sha256)
         width, height = page_size(pdf, page_no)
-        overlay = None
-        if box is not None:
-            left, top, right, bottom = parse_box(box)
-            overlay = {
-                "left": 100 * left / width,
-                "top": 100 * top / height,
-                "width": 100 * (right - left) / width,
-                "height": 100 * (bottom - top) / height,
-            }
+        overlay = place_box(parse_box(box), width, height) if box is not None else None
         upload = store.get_upload(sha256)
         return _page(
             "source.html",
@@ -152,5 +166,6 @@ def add_page_routes(app: FastAPI, profile: Profile) -> None:
             sha256=sha256,
             filename=upload.filename if upload else sha256,
             page_no=page_no,
+            box_given=box is not None,
             overlay=overlay,
         )

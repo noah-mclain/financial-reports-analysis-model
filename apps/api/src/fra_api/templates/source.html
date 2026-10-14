@@ -2,7 +2,7 @@
 {% block title %}{{ filename }}: page {{ page_no }}{% endblock %}
 {% block main %}
 <h1>{{ filename }}, page {{ page_no }}</h1>
-<p class="muted">{% if overlay %}The outlined region is where the figure was read.{% else %}No region selected.{% endif %}
+<p class="muted">{% if overlay %}The outlined region is where the figure was read{% if overlay.clipped %}; it ran past the page edge and is cut to the page{% endif %}.{% elif box_given %}The recorded region lies outside this page, so nothing can be outlined.{% else %}No region selected.{% endif %}
   <a href="javascript:history.back()">Back</a></p>
 <div class="panel" style="padding:0">
   <div style="position:relative">

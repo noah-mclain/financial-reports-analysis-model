@@ -8,6 +8,7 @@ ratio as a percentage, times and days to the precision a reader uses.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from decimal import Decimal
 from urllib.parse import urlencode
@@ -18,7 +19,9 @@ from fra_core.schemas import (
     MetricInput,
     MetricUnit,
     MetricValue,
+    Narrative,
     Provenance,
+    Sentence,
     Statement,
     StatementReview,
     StatementType,
@@ -92,6 +95,7 @@ class InputView:
 @dataclass(frozen=True)
 class MetricView:
     name: str
+    anchor: str
     period: str
     value: str | None
     formula: str
@@ -175,9 +179,64 @@ def _input_view(sha256: str, cell: MetricInput) -> InputView:
     )
 
 
+def metric_anchor(metric_id: str, period_key: str) -> str:
+    """The id of a metric's row, which a summary's claim links to."""
+    return re.sub(r"[^A-Za-z0-9_-]", "-", f"metric-{metric_id}-{period_key}")
+
+
+@dataclass(frozen=True)
+class SentencePart:
+    text: str
+    href: str | None
+
+
+@dataclass(frozen=True)
+class SectionView:
+    heading: str
+    sentences: tuple[tuple[SentencePart, ...], ...]
+
+
+def sentence_parts(sentence: Sentence, anchors: frozenset[str]) -> tuple[SentencePart, ...]:
+    """The sentence with each claimed span a link to the metric it states. A span missing
+    from the sentence, overlapping another, or naming a metric the analysis did not compute
+    is an error: a figure in the summary is shown only with its trace."""
+    placed = []
+    for claim in sentence.claims:
+        at = sentence.text.find(claim.text_span)
+        anchor = metric_anchor(claim.metric_id, claim.period_key)
+        if at < 0:
+            raise ValueError(f"claim {claim.text_span!r} is not in {sentence.text!r}")
+        if anchor not in anchors:
+            raise ValueError(f"claim {claim.text_span!r} names no computed metric ({anchor})")
+        placed.append((at, at + len(claim.text_span), anchor))
+    parts: list[SentencePart] = []
+    cursor = 0
+    for start, end, anchor in sorted(placed):
+        if start < cursor:
+            raise ValueError(f"claims overlap in {sentence.text!r}")
+        if start > cursor:
+            parts.append(SentencePart(sentence.text[cursor:start], None))
+        parts.append(SentencePart(sentence.text[start:end], f"#{anchor}"))
+        cursor = end
+    if cursor < len(sentence.text):
+        parts.append(SentencePart(sentence.text[cursor:], None))
+    return tuple(parts)
+
+
+def narrative_view(narrative: Narrative, anchors: frozenset[str]) -> tuple[SectionView, ...]:
+    return tuple(
+        SectionView(
+            heading=section.heading.value.replace("_", " "),
+            sentences=tuple(sentence_parts(s, anchors) for s in section.sentences),
+        )
+        for section in narrative.sections
+    )
+
+
 def metric_view(sha256: str, metric: MetricValue) -> MetricView:
     return MetricView(
         name=metric.metric_id.replace("_", " "),
+        anchor=metric_anchor(metric.metric_id, metric.period_key),
         period=metric.period_key,
         value=metric_text(metric),
         formula=metric.formula,
@@ -194,6 +253,7 @@ class AnalysisView:
     statements: tuple[StatementView, ...]
     metrics: tuple[MetricView, ...]
     computed: int
+    narrative: tuple[SectionView, ...] | None
 
 
 def analysis_view(analysis: Analysis) -> AnalysisView:
@@ -210,4 +270,12 @@ def analysis_view(analysis: Analysis) -> AnalysisView:
             [m for m in metrics if m.value is not None] + [m for m in metrics if m.value is None]
         ),
         computed=sum(1 for m in metrics if m.value is not None),
+        narrative=(
+            narrative_view(
+                analysis.narrative,
+                frozenset(m.anchor for m in metrics if m.value is not None),
+            )
+            if analysis.narrative is not None
+            else None
+        ),
     )
