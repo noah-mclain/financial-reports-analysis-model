@@ -4,7 +4,9 @@
 its file name in the ``X-Filename`` header, so no multipart parser is needed. The page limit
 needs the PDF read, which the API never does: the worker checks it and fails the job.
 ``GET /jobs/{id}/events`` is a server-sent event stream that ends after the job's last event;
-a client that reconnects sends ``Last-Event-ID`` and receives only what it missed.
+a client that reconnects sends ``Last-Event-ID`` and receives only what it missed, and the
+stream of a job already finished closes at once, so a browser's automatic reconnect never
+leaves a request waiting.
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from fra_core.jobs import JobSettings, JobStore, UploadRejected
-from fra_core.schemas import Analysis, Job, JobEvent, Upload
+from fra_core.schemas import FINISHED, Analysis, Job, JobEvent, Upload
 
 PDF_TYPE = "application/pdf"
 _FINAL_EVENTS = frozenset({"completed", "needs_review", "failed"})
@@ -107,12 +109,15 @@ def add_job_routes(routes: FastAPI) -> None:
         def stream() -> Iterator[str]:
             after = last_event_id
             while True:
+                finished = _job(store, job_id).status in FINISHED
                 new = store.events(job_id, after)
                 for event in new:
                     yield sse(event)
                     after = event.seq
                     if event.kind in _FINAL_EVENTS:
                         return
+                if finished:  # read before the events, so none written in between is missed
+                    return
                 time.sleep(poll)
 
         return StreamingResponse(stream(), media_type="text/event-stream")

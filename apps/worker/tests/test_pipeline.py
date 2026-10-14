@@ -183,7 +183,13 @@ def pipeline_for(
         step("metrics")
         return [metric(1.5), metric(None)]
 
-    return Pipeline(locate=locate, convert=convert, structure=structure, metrics=metrics)
+    def count(pdf: Path) -> int:
+        assert pdf.read_bytes() == PDF
+        return pages
+
+    return Pipeline(
+        page_count=count, locate=locate, convert=convert, structure=structure, metrics=metrics
+    )
 
 
 def queued(tmp_path: Path) -> tuple[JobStore, str]:
@@ -246,13 +252,13 @@ def test_a_bank_is_declined_without_convert_or_metrics_and_says_why(tmp_path: Pa
     assert analysis.decline.code == "bank" and "total deposits" in analysis.decline.reason
 
 
-def test_a_pdf_over_the_page_limit_fails_at_locate_before_convert(tmp_path: Path) -> None:
+def test_a_pdf_over_the_page_limit_fails_before_any_page_is_read(tmp_path: Path) -> None:
     store, sha = queued(tmp_path)
     calls = Calls()
     job = run_one(store, pipeline_for(sha, calls, pages=51), max_pages=50)
     assert job.status is JobStatus.FAILED and job.stage is JobStage.LOCATE
     assert job.error == "PageLimitExceeded: the PDF has 51 pages; the limit is 50"
-    assert calls.names == ["locate"]
+    assert calls.names == []  # refused before locate read a single page
     assert store.load_analysis(job.id) is None
 
 

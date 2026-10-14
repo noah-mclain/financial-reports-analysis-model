@@ -121,6 +121,8 @@ def test_the_event_stream_sends_every_event_and_ends_after_the_last(
         resumed = client.get(f"/jobs/{job_id}/events", headers={"Last-Event-ID": "2"})
         assert [b.splitlines()[0] for b in resumed.text.split("\n\n") if b] == ["id: 3", "id: 4"]
         assert client.get(f"/jobs/{'0' * 32}/events").status_code == 404
+        # A browser reconnects after the stream ends: nothing is left, and it closes at once.
+        assert client.get(f"/jobs/{job_id}/events", headers={"Last-Event-ID": "4"}).text == ""
 
 
 def test_the_api_never_imports_ingest_or_docling() -> None:

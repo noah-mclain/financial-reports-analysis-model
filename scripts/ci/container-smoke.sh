@@ -36,7 +36,7 @@ cleanup() {
   if [[ "$owned" == true ]]; then
     bounded_cleanup "${compose[@]}" logs --no-color --tail 200 || cleanup_failed=1
     bounded_cleanup "${compose[@]}" stop --timeout 10 api worker || cleanup_failed=1
-    bounded_cleanup "${compose[@]}" down --timeout 10 --remove-orphans || cleanup_failed=1
+    bounded_cleanup "${compose[@]}" down --timeout 10 --remove-orphans --volumes || cleanup_failed=1
   fi
   rm -rf "$temp_dir" || cleanup_failed=1
   if (( cleanup_failed != 0 )); then

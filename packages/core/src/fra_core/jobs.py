@@ -8,6 +8,7 @@ Uploaded PDFs and analyses are files beside the database, named by sha256 and jo
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import os
 import sqlite3
@@ -98,6 +99,10 @@ def load_job_settings(path: Path, repo_root: Path) -> JobSettings:
     root = Path(values["root"])
     values["root"] = root if root.is_absolute() else repo_root / root
     return JobSettings.model_validate(values)
+
+
+class WorkerAlreadyRunning(RuntimeError):
+    """Another worker holds this store's worker lock."""
 
 
 class UploadRejected(ValueError):
@@ -272,8 +277,23 @@ class JobStore:
             self._event(conn, job_id, "failed", stage, error)
         return self._require(job_id)
 
+    @contextmanager
+    def worker_lock(self) -> Iterator[None]:
+        """The store's one worker slot, held for as long as the block runs. A second worker
+        is refused at once (``WorkerAlreadyRunning``), so a job left running belongs to a
+        worker that stopped, never to a live one. The operating system releases the lock when
+        the holder exits, however it exits."""
+        path = self.root / "worker.lock"
+        with path.open("a+") as handle:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                raise WorkerAlreadyRunning(f"another worker holds {path}") from None
+            yield
+
     def fail_interrupted(self) -> list[str]:
-        """Fail every job left running, for a worker starting after one stopped mid-job."""
+        """Fail every job left running, for a worker starting after one stopped mid-job. Call
+        it only inside ``worker_lock``: outside it, a running job may belong to a live worker."""
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT id FROM jobs WHERE status = ?", (JobStatus.RUNNING.value,)

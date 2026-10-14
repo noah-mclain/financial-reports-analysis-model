@@ -29,6 +29,7 @@ from fra_ingest.child import convert_in_child
 from fra_ingest.config import IngestConfig
 from fra_ingest.industry import industry_decision
 from fra_ingest.ocr import make_engine
+from fra_ingest.pages import page_count
 from fra_ingest.results import ConvertResult, LocateResult, StructureResult
 from fra_ingest.stage import load_or_locate
 from fra_ingest.structure import current_convert, structure_pdf
@@ -36,8 +37,10 @@ from fra_ingest.structure import current_convert, structure_pdf
 
 @dataclass(frozen=True)
 class Pipeline:
-    """The stages a job runs, as callables so tests can stand in for them."""
+    """The stages a job runs, as callables so tests can stand in for them. ``page_count`` reads
+    no page, so the page limit is checked before locate reads (and may OCR) every one."""
 
+    page_count: Callable[[Path], int]
     locate: Callable[[Path], LocateResult]
     convert: Callable[[Path, LocateResult], ConvertResult]
     structure: Callable[[Path], StructureResult]
@@ -48,6 +51,7 @@ def real_pipeline(config: IngestConfig, policy: Policy) -> Pipeline:
     """Today's stages, as the dry run calls them: convert in a child process per document."""
     ocr = make_engine(config)
     return Pipeline(
+        page_count=page_count,
         locate=lambda pdf: load_or_locate(pdf, config, ocr),
         convert=lambda pdf, located: current_convert(pdf, config, ocr, located, convert_in_child),
         structure=lambda pdf: structure_pdf(pdf, config, ocr, convert=convert_in_child),
@@ -88,12 +92,11 @@ def run_job(store: JobStore, job: Job, pipeline: Pipeline, max_pages: int) -> Jo
     pdf = store.upload_path(job.upload_sha256)
     try:
         store.start_stage(job.id, JobStage.LOCATE)
+        pages = pipeline.page_count(pdf)
+        if pages > max_pages:
+            raise PageLimitExceeded(f"the PDF has {pages} pages; the limit is {max_pages}")
         located = pipeline.locate(pdf)
         document = located.document
-        if document.page_count > max_pages:
-            raise PageLimitExceeded(
-                f"the PDF has {document.page_count} pages; the limit is {max_pages}"
-            )
         store.finish_stage(
             job.id,
             JobStage.LOCATE,

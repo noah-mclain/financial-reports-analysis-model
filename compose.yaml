@@ -15,6 +15,9 @@ services:
       FRA_API_PORT: "${FRA_API_PORT:?set FRA_API_PORT in .env}"
     ports:
       - "127.0.0.1:${FRA_API_PORT:?set FRA_API_PORT in .env}:${FRA_API_PORT}"
+    # The job store and its files, shared with the worker (configs/jobs.toml, storage.root).
+    volumes:
+      - fra-var:/app/var
     healthcheck:
       test: ["CMD", "python", "-m", "fra_api.healthcheck", "${FRA_API_PORT}", "--profile", "docker"]
       interval: 5s
@@ -31,6 +34,8 @@ services:
     image: fra-app
     pull_policy: never  # built by api; there is nothing to pull
     init: true
+    volumes:
+      - fra-var:/app/var
     command:
       - sh
       - -c
@@ -47,3 +52,7 @@ services:
       - "127.0.0.1:${FRA_LLM_PORT:?set FRA_LLM_PORT in .env}:${FRA_LLM_PORT}"
     volumes:
       - ./var/models:/models:ro
+
+volumes:
+  # Created from the image's /app/var, so it starts owned by the app user.
+  fra-var: {}

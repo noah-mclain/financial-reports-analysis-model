@@ -10,6 +10,7 @@ from fra_core.jobs import (
     JobSettings,
     JobStore,
     UploadRejected,
+    WorkerAlreadyRunning,
     check_upload,
     load_job_settings,
 )
@@ -235,3 +236,16 @@ def test_a_decline_or_a_hold_needs_review_even_when_every_statement_passed() -> 
     assert passed.model_copy(update={"hold": "industry_uncertain"}).status() is (
         JobStatus.NEEDS_REVIEW
     )
+
+
+def test_a_second_worker_is_refused_while_the_first_holds_the_store(tmp_path: Path) -> None:
+    first = JobStore(tmp_path / "jobs")
+    second = JobStore(tmp_path / "jobs")
+    with (
+        first.worker_lock(),
+        pytest.raises(WorkerAlreadyRunning, match=r"worker\.lock"),
+        second.worker_lock(),
+    ):
+        pass
+    with JobStore(tmp_path / "jobs").worker_lock():  # released when the first stopped
+        pass

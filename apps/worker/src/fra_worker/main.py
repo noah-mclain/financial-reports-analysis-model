@@ -39,15 +39,16 @@ def main(argv: list[str] | None = None) -> int:
     profile = read_profile(os.environ)
     settings = load_job_settings(JOB_SETTINGS, REPO_ROOT)
     store = JobStore(settings.root)
-    for job_id in store.fail_interrupted():
-        print(f"job {job_id}: failed, left running by a stopped worker", file=sys.stderr)
-    pipeline = real_pipeline(load_config(), load_policy(ANALYTICS_POLICY))
-    print(f"worker ready: profile {profile.value}, jobs in {settings.root}", file=sys.stderr)
-    while True:
-        drain(store, pipeline, settings.max_pages)
-        if args.once:
-            return 0
-        time.sleep(settings.poll_seconds)
+    with store.worker_lock():
+        for job_id in store.fail_interrupted():
+            print(f"job {job_id}: failed, left running by a stopped worker", file=sys.stderr)
+        pipeline = real_pipeline(load_config(), load_policy(ANALYTICS_POLICY))
+        print(f"worker ready: profile {profile.value}, jobs in {settings.root}", file=sys.stderr)
+        while True:
+            drain(store, pipeline, settings.max_pages)
+            if args.once:
+                return 0
+            time.sleep(settings.poll_seconds)
 
 
 if __name__ == "__main__":
