@@ -9,7 +9,7 @@ ratio as a percentage, times and days to the precision a reader uses.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
 from urllib.parse import urlencode
 
@@ -36,6 +36,7 @@ STATEMENT_TITLES = {
 }
 SCALE_WORDS = {1: "", 1_000: "thousands", 1_000_000: "millions", 1_000_000_000: "billions"}
 RTL_LANGUAGES = frozenset({"ar"})
+DUPLICATE_CELL = "duplicate_cell"
 
 
 def source_url(sha256: str, provenance: Provenance) -> str:
@@ -65,7 +66,7 @@ class RowView:
     subtotal: bool
     mapped_to: str | None
     mapping_flag: str | None
-    cells: tuple[CellView | None, ...]
+    cells: tuple[tuple[CellView, ...], ...]  # per period, newest first; () when none was read
 
 
 @dataclass(frozen=True)
@@ -112,14 +113,9 @@ def statement_view(statement: Statement, review: StatementReview) -> StatementVi
     keys = [p.key for p in ordered]
     rows = []
     for item in statement.line_items:
-        by_period = {c.period_key: c for c in item.cells}
-        cells: list[CellView | None] = []
-        for key in keys:
-            cell = by_period.get(key)
-            if cell is None:
-                cells.append(None)
-                continue
-            cells.append(
+        by_period: dict[str, list[CellView]] = {}
+        for cell in item.cells:
+            by_period.setdefault(cell.period_key, []).append(
                 CellView(
                     text="" if cell.reported is None else amount(cell.reported),
                     printed=cell.raw_text,
@@ -127,6 +123,13 @@ def statement_view(statement: Statement, review: StatementReview) -> StatementVi
                     source=source_url(statement.document_sha256, cell.provenance),
                 )
             )
+        # Two cells read for one period are both shown and flagged, never one silently kept.
+        cells = tuple(
+            tuple(
+                replace(c, flags=(*c.flags, DUPLICATE_CELL)) if len(found) > 1 else c for c in found
+            )
+            for found in (by_period.get(key, []) for key in keys)
+        )
         rows.append(
             RowView(
                 label=item.raw_label,
@@ -134,7 +137,7 @@ def statement_view(statement: Statement, review: StatementReview) -> StatementVi
                 subtotal=item.is_subtotal,
                 mapped_to=item.canonical_id,
                 mapping_flag=item.mapping_flag,
-                cells=tuple(cells),
+                cells=cells,
             )
         )
     scale = SCALE_WORDS[statement.scale]
@@ -201,14 +204,16 @@ def sentence_parts(sentence: Sentence, anchors: frozenset[str]) -> tuple[Sentenc
     from the sentence, overlapping another, or naming a metric the analysis did not compute
     is an error: a figure in the summary is shown only with its trace."""
     placed = []
+    taken: dict[str, int] = {}  # the same text claimed twice is its next occurrence
     for claim in sentence.claims:
-        at = sentence.text.find(claim.text_span)
+        at = sentence.text.find(claim.text_span, taken.get(claim.text_span, 0))
         anchor = metric_anchor(claim.metric_id, claim.period_key)
         if at < 0:
             raise ValueError(f"claim {claim.text_span!r} is not in {sentence.text!r}")
         if anchor not in anchors:
             raise ValueError(f"claim {claim.text_span!r} names no computed metric ({anchor})")
         placed.append((at, at + len(claim.text_span), anchor))
+        taken[claim.text_span] = at + len(claim.text_span)
     parts: list[SentencePart] = []
     cursor = 0
     for start, end, anchor in sorted(placed):

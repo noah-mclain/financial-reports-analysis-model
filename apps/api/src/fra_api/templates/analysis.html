@@ -16,12 +16,12 @@
       <tr class="{{ 'subtotal' if row.subtotal }}">
         <td style="padding-inline-start: {{ 10 + 16 * row.depth }}px">{{ row.label }}
           {% if row.mapping_flag %}<span class="badge needs_review" dir="ltr" title="not mapped to a canonical item">{{ row.mapping_flag }}</span>{% endif %}</td>
-        {% for c in row.cells %}
-          {% if c is none %}<td class="num"></td>
-          {% else %}<td class="num{{ ' flagged' if c.flags }}" dir="ltr"
-               title="printed: {{ c.printed }}{% if c.flags %} · flags: {{ c.flags | join(', ') }}{% endif %}">
-            {% if c.source %}<a href="{{ c.source }}">{{ c.text or '—' }}</a>{% else %}{{ c.text }}{% endif %}</td>
-          {% endif %}
+        {% for found in row.cells %}
+          <td class="num{{ ' flagged' if found | selectattr('flags') | list }}" dir="ltr">
+          {% for c in found %}<div title="printed: {{ c.printed }}">
+            {% if c.source %}<a href="{{ c.source }}">{{ c.text or '—' }}</a>{% else %}{{ c.text }}{% endif %}
+            {% if c.flags %}<div class="flag-names"><span aria-hidden="true">⚑</span> flags: {{ c.flags | join(', ') }}</div>{% endif %}</div>
+          {% endfor %}</td>
         {% endfor %}
       </tr>
     {% endfor %}
@@ -63,7 +63,7 @@
 {% set duplicates = view.statements | selectattr('duplicate') | list %}
 <h2>Statements</h2>
 {% if not primary %}<p class="muted">No statement was extracted.</p>{% endif %}
-<p class="muted" style="font-size:13px">Click a figure to see where it was read on the page. Highlighted cells carry a flag; hover for it.</p>
+<p class="muted" style="font-size:13px">Click a figure to see where it was read on the page. Highlighted cells carry a flag, named under the figure.</p>
 {% for s in primary %}{{ statement_table(s) }}{% endfor %}
 {% if duplicates %}
 <details><summary class="muted">{{ duplicates | length }} more table{{ 's' if duplicates | length > 1 }} of a type already shown</summary>

@@ -14,7 +14,15 @@ from api_support import settings_at
 from fastapi.testclient import TestClient
 
 from fra_api.app import create_app
-from fra_api.views import amount, analysis_view, metric_text, source_url, statement_view
+from fra_api.views import (
+    amount,
+    analysis_view,
+    metric_anchor,
+    metric_text,
+    sentence_parts,
+    source_url,
+    statement_view,
+)
 from fra_core.jobs import JobSettings, JobStore
 from fra_core.profile import Profile
 from fra_core.schemas import (
@@ -164,8 +172,8 @@ def test_an_arabic_statement_is_right_to_left_and_keeps_its_printed_labels() -> 
     assert view.rtl and view.units == "SAR thousands"
     row = view.rows[0]
     assert row.label == "إجمالي الموجودات" and row.subtotal
-    cell = row.cells[0]
-    assert cell is not None and cell.text == "(1,234,567)" and cell.printed == "(1,234,567)"
+    (cell,) = row.cells[0]
+    assert cell.text == "(1,234,567)" and cell.printed == "(1,234,567)"
     assert cell.flags == ("digit_suspect",)
 
 
@@ -175,8 +183,40 @@ def test_periods_are_shown_newest_first_whatever_order_they_were_printed_in() ->
     view = statement_view(printed, review())
     assert view.periods == ("2025-12-31", "2024-12-31")
     cells = view.rows[0].cells
-    assert cells[0] is not None and cells[0].text == "(1,234,567)"  # the 2025 cell
-    assert cells[1] is None  # nothing was read for 2024
+    assert [c.text for c in cells[0]] == ["(1,234,567)"]  # the 2025 cell
+    assert cells[1] == ()  # nothing was read for 2024
+
+
+def test_two_cells_read_for_one_period_are_both_shown_and_flagged() -> None:
+    printed = statement("a" * 64)
+    item = printed.line_items[0]
+    second = item.cells[0].model_copy(
+        update={"reported": Decimal("7"), "raw_text": "7", "flags": []}
+    )
+    item = item.model_copy(update={"cells": [*item.cells, second]})
+    view = statement_view(printed.model_copy(update={"line_items": [item]}), review())
+    found = view.rows[0].cells[0]
+    assert [c.text for c in found] == ["(1,234,567)", "7"]
+    assert [c.flags for c in found] == [("digit_suspect", "duplicate_cell"), ("duplicate_cell",)]
+
+
+def test_the_same_figure_claimed_twice_links_each_occurrence_to_its_own_metric() -> None:
+    text = "The current ratio is 1.50 and the quick ratio is 1.50."
+    claims = [
+        Claim(metric_id="current_ratio", period_key=PERIOD.key, text_span="1.50"),
+        Claim(metric_id="quick_ratio", period_key=PERIOD.key, text_span="1.50"),
+    ]
+    anchors = frozenset(metric_anchor(c.metric_id, c.period_key) for c in claims)
+    parts = sentence_parts(Sentence(text=text, claims=claims), anchors)
+    links = [(p.text, p.href) for p in parts if p.href]
+    assert links == [
+        ("1.50", f"#{metric_anchor('current_ratio', PERIOD.key)}"),
+        ("1.50", f"#{metric_anchor('quick_ratio', PERIOD.key)}"),
+    ]
+    assert "".join(p.text for p in parts) == text
+    third = [*claims, Claim(metric_id="current_ratio", period_key=PERIOD.key, text_span="1.50")]
+    with pytest.raises(ValueError, match="is not in"):
+        sentence_parts(Sentence(text=text, claims=third), anchors)
 
 
 def test_the_analysis_lists_computed_metrics_first_and_refuses_an_unreviewed_statement() -> None:
@@ -239,7 +279,7 @@ def test_the_results_show_statements_metrics_and_say_there_is_no_summary(tmp_pat
         page = client.get(f"/analyses/{job_id}/view").text
     assert "Statement of financial position" in page and "SAR thousands" in page
     assert "(1,234,567)" in page and "/pages/1?box=60.0%2C80.0%2C180.0%2C100.0" in page
-    assert "flags: digit_suspect" in page
+    assert "flags: digit_suspect</div>" in page  # named under the figure, not only on hover
     assert "1.50×" in page and "total_current_assets / total_current_liabilities" in page
     assert "No written summary yet" in page
 
