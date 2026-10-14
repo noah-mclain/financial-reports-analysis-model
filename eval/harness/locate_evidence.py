@@ -17,7 +17,7 @@ from pydantic import (
 )
 
 from fra_ingest.pages import PAGES_STAGE_VERSION
-from fra_ingest.results import PageText, RangePlan
+from fra_ingest.results import PageText, RangeOcr, RangePlan, RangeRenderer
 from harness.reproducibility import record_hash
 
 PageNumber = Annotated[int, Field(ge=1)]
@@ -53,10 +53,10 @@ class LocatedRange(_PageSpan):
 
 
 class ConversionSpan(_PageSpan):
-    ocr: str
+    ocr: RangeOcr
     ocr_language: str | None
     image_pages: tuple[PageNumber, ...]
-    renderer: str
+    renderer: RangeRenderer
 
 
 class DocumentEvidence(_Evidence):

@@ -2,6 +2,7 @@ import copy
 import hashlib
 import json
 from pathlib import Path
+from typing import get_args
 
 import pytest
 from harness.locate_evidence import (
@@ -12,7 +13,7 @@ from harness.locate_evidence import (
 )
 from harness.reproducibility import record_hash
 
-from fra_ingest.results import PageText
+from fra_ingest.results import PageText, RangeOcr, RangeRenderer
 
 
 def page(**changes: object) -> PageText:
@@ -367,6 +368,20 @@ def _mutated(path: tuple[object, ...], value: object) -> dict[str, object]:
     return document
 
 
+@pytest.mark.parametrize("ocr", get_args(RangeOcr))
+@pytest.mark.parametrize("renderer", get_args(RangeRenderer))
+def test_every_ocr_mode_and_renderer_a_plan_can_carry_is_accepted(
+    ocr: str, renderer: str, tmp_path: Path
+) -> None:
+    root = tmp_path / "doc"
+    _artifacts(root, plans=[_plan(ocr=ocr, renderer=renderer)], page_total=5)
+    read = document_evidence(root, converted=True)
+    assert read.status == "complete"
+    saved = evidence_from_dict(read.as_dict())
+    assert saved is not None and saved.status == "complete"
+    assert (saved.conversion_spans[0].ocr, saved.conversion_spans[0].renderer) == (ocr, renderer)
+
+
 def test_valid_evidence_dict_is_accepted_and_int_score_is_stored_as_float() -> None:
     assert evidence_from_dict(_valid_dict()).status == "complete"  # type: ignore[union-attr]
     integral = evidence_from_dict(_mutated(("ranges", 0, "score"), 5))
@@ -409,6 +424,9 @@ def _without(key: str) -> dict[str, object]:
         (_mutated(("ranges", 0, "extra"), 1), "extra"),
         (_mutated(("conversion_spans", 0, "image_pages"), [0]), "image_pages"),
         (_mutated(("conversion_spans", 0, "ocr"), None), "ocr"),
+        (_mutated(("conversion_spans", 0, "ocr"), "partial"), "ocr"),
+        (_mutated(("conversion_spans", 0, "renderer"), "ghost"), "renderer"),
+        (_mutated(("conversion_spans", 0, "renderer"), None), "renderer"),
         (_mutated(("pages",), "not pages"), "pages"),
         (_mutated(("extra",), 1), "extra"),
         (_without("conversion_spans"), "conversion_spans"),

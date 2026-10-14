@@ -402,6 +402,34 @@ def lines(report: Mapping[str, Any]) -> list[str]:
     return out
 
 
+def earlier_records(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Index the documents and errored records of an earlier report by id.
+
+    An errored record without ``locate_evidence`` (written before errored records carried it)
+    gets incomplete evidence. An id that appears twice is a malformed report.
+    """
+    records: dict[str, dict[str, Any]] = {}
+    # Reports written before errored records existed have no "errored" key.
+    sections = (("documents", report["documents"]), ("errored", report.get("errored", [])))
+    for key, items in sections:
+        if not isinstance(items, list):
+            raise ValueError(f"'{key}' must be a list")
+        for item in items:
+            if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+                raise ValueError(f"each {key} entry must be an object with a string 'id'")
+            if item["id"] in records:
+                raise ValueError(f"duplicate document id {item['id']!r}")
+            if key == "errored" and item.get("locate_evidence") is None:
+                item = {
+                    **item,
+                    "locate_evidence": incomplete_evidence(
+                        "document failed in the earlier report; no locate_evidence recorded", None
+                    ).as_dict(),
+                }
+            records[item["id"]] = item
+    return records
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m harness.gates", description=__doc__)
     parser.add_argument("--compare-with", type=Path, help="earlier gates-dev.json report")
@@ -412,14 +440,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.compare_with is not None:
         try:
             earlier_report = json.loads(args.compare_with.read_text(encoding="utf-8"))
-            earlier_documents = earlier_report["documents"]
-            if not isinstance(earlier_documents, list):
-                raise ValueError("'documents' must be a list")
-            previous = {}
-            for item in earlier_documents:
-                if not isinstance(item, dict) or not isinstance(item.get("id"), str):
-                    raise ValueError("each document must be an object with a string 'id'")
-                previous[item["id"]] = item
+            previous = earlier_records(earlier_report)
             if "evidence_schema_version" in earlier_report:
                 found = earlier_report["evidence_schema_version"]
                 if type(found) is not int or found != EVIDENCE_SCHEMA_VERSION:

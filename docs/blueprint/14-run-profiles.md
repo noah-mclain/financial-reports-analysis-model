@@ -660,7 +660,9 @@ Gate reports (`var/eval/gates-dev.json`) use `evidence_schema_version: 2` and in
 `locate_evidence` record per structured document. It fingerprints each saved page-text record
 (excluding OCR timings), the locate version, `ocr_key`, ranges, conversion spans and settings
 hash. Each conversion span records its page range, OCR mode, OCR language, image pages and
-renderer, so a change of OCR mode or image pages makes the span count as changed.
+renderer, so a change of OCR mode or image pages makes the span count as changed. The OCR mode
+and renderer must be values that a conversion plan allows (the `RangeOcr` and `RangeRenderer`
+types of the ingest package); a span with any other value makes the evidence incomplete.
 
 The record's `conversion` field is `read` when this run converted the document. A bank or
 insurer that is declined before conversion is recorded as `not_run`, with no spans and no
@@ -676,13 +678,20 @@ fails to read is listed under `errored`, with incomplete evidence whose reason s
 `document failed`. An incomplete or errored document makes the gate command exit 1.
 
 Compare a later run with `python -m harness.gates --compare-with
-<earlier-gates-dev.json> --output <report.json>`. Per-document comparisons report changed
+<earlier-gates-dev.json> --output <report.json>`. The earlier report's `documents` and
+`errored` lists are both indexed by document id. An id that appears twice, within one list or
+in both, makes the report unreadable and the command exits before any document runs, as for
+any other unreadable comparison report. A report written before errored records carried
+`locate_evidence` is still read: such a record counts as incomplete evidence, and a report
+without an errored list is read as having none. Per-document comparisons report changed
 input pages, gained or lost ranges, a conversion that was read in one run and not_run in the
 other (`conversion run changed`), changed conversion spans, a settings-hash-only difference,
 locate-version or `ocr_key` changes, or unchanged inputs. A settings hash can change when the
 locate version changes even if conversion spans do not; that is reported as a settings-hash
-difference, not as a changed conversion plan. Documents in the earlier report that are absent
-from the current run are listed under `removed_documents`, each as not comparable. An earlier
+difference, not as a changed conversion plan. A document that errored in the
+earlier report and reads now is not comparable, because the earlier evidence is incomplete.
+Documents in the earlier report, errored or not, that are absent from the current run are
+listed under `removed_documents`, each as not comparable. An earlier
 report that uses another evidence schema version is not compared field by field: every document
 is not comparable, with the reason `earlier report uses evidence schema <n>`. Reports without
 earlier evidence, incomplete evidence and malformed evidence are not comparable with a stated

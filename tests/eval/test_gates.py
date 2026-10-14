@@ -19,7 +19,7 @@ from harness.gates import (
     lines,
     pair_records,
 )
-from harness.locate_evidence import DocumentEvidence, PageFingerprint
+from harness.locate_evidence import DocumentEvidence, PageFingerprint, incomplete_evidence
 from harness.reproducibility import record_hash
 from test_mapping_harness import INDEX, TAXONOMY, P, item, statement
 
@@ -834,3 +834,100 @@ def test_an_earlier_report_on_evidence_schema_2_is_compared_field_by_field(
     assert gates_module.main(["--compare-with", str(earlier), "--output", str(output)]) == 0
     report = json.loads(output.read_text(encoding="utf-8"))
     assert report["documents"][0]["comparison"]["status"] == "unchanged"
+
+
+def test_an_earlier_report_with_a_duplicate_document_id_is_unreadable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    complete = _complete_evidence().as_dict()
+    earlier = tmp_path / "earlier.json"
+    earlier.write_text(
+        json.dumps(
+            {
+                "documents": [
+                    {"id": "a", "locate_evidence": complete},
+                    {"id": "a", "locate_evidence": complete},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(gates_module, "load_config", lambda: pytest.fail("work started"))
+    with pytest.raises(SystemExit, match=f"cannot read comparison report {earlier}.*duplicate"):
+        gates_module.main(["--compare-with", str(earlier)])
+
+
+def test_an_id_in_both_documents_and_errored_of_the_earlier_report_is_a_duplicate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    complete = _complete_evidence().as_dict()
+    earlier = tmp_path / "earlier.json"
+    earlier.write_text(
+        json.dumps(
+            {
+                "documents": [{"id": "a", "locate_evidence": complete}],
+                "errored": [{"id": "a", "locate_evidence": complete}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(gates_module, "load_config", lambda: pytest.fail("work started"))
+    with pytest.raises(SystemExit, match=f"cannot read comparison report {earlier}.*duplicate"):
+        gates_module.main(["--compare-with", str(earlier)])
+
+
+def test_a_malformed_errored_list_in_the_earlier_report_is_unreadable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    earlier = tmp_path / "earlier.json"
+    earlier.write_text(json.dumps({"documents": [], "errored": {"id": "a"}}), encoding="utf-8")
+    monkeypatch.setattr(gates_module, "load_config", lambda: pytest.fail("work started"))
+    with pytest.raises(SystemExit, match=f"cannot read comparison report {earlier}"):
+        gates_module.main(["--compare-with", str(earlier)])
+
+
+def test_a_document_that_errored_earlier_is_not_comparable_because_its_evidence_is_incomplete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    earlier_evidence = incomplete_evidence("document failed: unreadable_pdf", None).as_dict()
+    earlier = tmp_path / "earlier.json"
+    earlier.write_text(
+        json.dumps(
+            {
+                "documents": [],
+                "errored": [
+                    {"id": "recorded", "locate_evidence": earlier_evidence},
+                    {"id": "legacy"},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    output = _stub_gate_run(tmp_path, monkeypatch, ("recorded", "legacy"))
+
+    assert gates_module.main(["--compare-with", str(earlier), "--output", str(output)]) == 0
+    report = json.loads(output.read_text(encoding="utf-8"))
+    comparisons = {item["id"]: item["comparison"] for item in report["documents"]}
+    assert comparisons["recorded"] == {
+        "status": "not comparable",
+        "reason": "earlier evidence incomplete: document failed: unreadable_pdf",
+    }
+    assert comparisons["legacy"]["status"] == "not comparable"
+    assert comparisons["legacy"]["reason"] == (
+        "earlier evidence incomplete: document failed in the earlier report; "
+        "no locate_evidence recorded"
+    )
+
+
+def test_a_document_that_errored_earlier_and_is_gone_now_is_listed_as_removed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    earlier = tmp_path / "earlier.json"
+    earlier.write_text(
+        json.dumps({"documents": [{"id": "a"}], "errored": [{"id": "broken"}]}), encoding="utf-8"
+    )
+    output = _stub_gate_run(tmp_path, monkeypatch, ("a",))
+
+    assert gates_module.main(["--compare-with", str(earlier), "--output", str(output)]) == 0
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert [item["id"] for item in report["removed_documents"]] == ["broken"]
