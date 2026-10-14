@@ -5,17 +5,19 @@ from decimal import Decimal
 
 import pytest
 from test_parts import grid
-from test_structure import cells, document, inputs
+from test_structure import INCOME_1, INCOME_HEADER, cells, document, inputs, table
 
 from fra_core.numbers import parse_number
 from fra_core.schemas import BBox, PageMode, StatementType, TextSource
 from fra_ingest.classify import Classification
 from fra_ingest.column_assignment import split_numeric_columns
 from fra_ingest.config import IngestConfig
+from fra_ingest.docling_json import DlDocument
 from fra_ingest.header import HeaderLayout, parse_header
 from fra_ingest.parts import PartialStatement, build_part
+from fra_ingest.results import StructureResult
 from fra_ingest.row_alignment import realign_rows
-from fra_ingest.structure import structure_document
+from fra_ingest.structure import StructureInputs, structure_document
 from fra_ingest.table_grid import Grid, GridCell
 
 LITERAL = "2,505,304,778 1,345,663,827"
@@ -736,3 +738,91 @@ def test_witnesses_and_merged_row_with_physically_left_labels_still_split_left_t
 def test_a_merged_row_whose_own_label_is_physically_right_is_not_split() -> None:
     g = move_label(only_witnesses(merged_grid(), (1, 3)), 7, 410, 580)
     assert split_numeric_columns(g, layout(g)) is g
+
+
+INCOME_MERGED = ("Total comprehensive income", "Other income", "Finance cost")
+
+
+def _income_tail(header: list[str], mode: PageMode, *, titled: bool = False) -> StructureInputs:
+    """Page 1 income rows, then a low-confidence OCR tail whose merged rows pull the centre of
+    the left value column past the continuation tolerance."""
+    tail = [
+        header,
+        ["Profit for the year", "", "40", "35"],
+        ["Basic earnings per share", "", "4", "3"],
+        *([label, "", LITERAL, ""] for label in INCOME_MERGED),
+    ]
+    data = type(document().tables[0].data).model_validate(
+        {"num_rows": len(tail), "num_cols": 4, "table_cells": cells(tail)}
+    )
+    widened = [
+        c.model_copy(update={"bbox": c.bbox.model_copy(update={"right": 630})})
+        if c.text == LITERAL and c.bbox is not None
+        else c
+        for c in data.table_cells
+    ]
+    data = data.model_copy(update={"table_cells": widened})
+    doc = DlDocument.model_validate(
+        {
+            "tables": [table(0, 1, INCOME_1), table(1, 2, tail)],
+            "texts": [],
+            "pages": {
+                str(n): {"page_no": n, "size": {"width": 800, "height": 1000}} for n in (1, 2)
+            },
+        }
+    )
+    doc = doc.model_copy(
+        update={"tables": [doc.tables[0], doc.tables[1].model_copy(update={"data": data})]}
+    )
+    base = inputs([("docling/p1-2.json", doc)])
+    return base.model_copy(
+        update={
+            "page_texts": {1: "Statement of profit or loss"},
+            "title_types": {
+                1: (StatementType.INCOME,),
+                2: (StatementType.INCOME,) if titled else (),
+            },
+            "cue_types": {2: (StatementType.INCOME,)},
+            "page_modes": {1: PageMode.TEXT, 2: mode},
+            "visual_pages": set(),
+        }
+    )
+
+
+def _tail_amounts(result: StructureResult) -> list[tuple[str, list[Decimal | None]]]:
+    income = [s for s in result.statements if s.type is StatementType.INCOME]
+    assert len(income) == 1
+    return [
+        (i.raw_label, [c.reported for c in i.cells])
+        for i in income[0].line_items
+        if i.raw_label in INCOME_MERGED
+    ]
+
+
+SPLIT = [Decimal("2505304778"), Decimal("1345663827")]
+
+
+def test_a_low_confidence_ocr_tail_whose_merged_rows_skew_its_centre_still_continues() -> None:
+    result, _ = structure_document(_income_tail(INCOME_HEADER, PageMode.IMAGE), IngestConfig())
+    income = [s for s in result.statements if s.type is StatementType.INCOME]
+    assert len(income) == 1 and income[0].source_pages == [1, 2]
+    assert _tail_amounts(result) == [(label, SPLIT) for label in INCOME_MERGED]
+
+
+def test_a_digital_tail_is_not_split_and_its_skewed_centre_is_unchanged() -> None:
+    result, _ = structure_document(_income_tail(INCOME_HEADER, PageMode.TEXT), IngestConfig())
+    income = [s for s in result.statements if s.type is StatementType.INCOME]
+    assert len(income) == 1 and income[0].source_pages == [1]
+    assert not any(t.statement_id for t in result.tables if t.table_ref == "#/tables/1")
+
+
+def test_a_table_inheriting_its_right_period_is_bound_and_split() -> None:
+    undated = ["", "Notes", "2025 SAR '000", ""]
+    supplied = _income_tail(undated, PageMode.IMAGE)
+    result, _ = structure_document(supplied, IngestConfig())
+    income = [s for s in result.statements if s.type is StatementType.INCOME]
+    assert len(income) == 1 and income[0].source_pages == [1, 2]
+    tail = [d for d in result.tables if d.page_no == 2]
+    assert any("continuation_of:income" in e for d in tail for e in d.evidence)
+    assert "inherited:3:FY2024" in income[0].flags
+    assert _tail_amounts(result) == [(label, SPLIT) for label in INCOME_MERGED]

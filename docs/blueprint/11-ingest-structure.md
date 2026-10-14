@@ -277,8 +277,8 @@ class StructureResult(BaseModel):   # statements.raw.json
    supplies no comparison (`geometry_invalid` for each bound column) and does not stop the
    missing slots being read.
    `TableDecision.period_evidence` retains agreement and conflict observations.
-   Cache version 32 invalidates prior structure results, including versions 31, 30, 29, 28,
-   27, 26, 25, 24, 23, 22, 21 and 20.
+   Cache version 35 invalidates prior structure results, including versions 34, 33, 32, 31, 30,
+   29, 28, 27, 26, 25, 24, 23, 22, 21 and 20.
 
    Each observation is parsed with the same statement kind and date context as its column,
    using core's typed `interpret_period` facts for all four-digit Gregorian calendar years.
@@ -357,6 +357,12 @@ class StructureResult(BaseModel):   # statements.raw.json
    row alignment prevent assignment. The rule refuses a layout unless its label lies left of
    both value columns by column number and by box position, for the table and for the
    merged row; it therefore does not assign mirrored right-to-left layouts. Digital grids do not use this rule.
+   On a continuation page the split runs before the continuation check, so merged amounts do
+   not displace the column centres it compares; a column whose period is inherited from the
+   previous page is bound first, since the split needs bound periods. Period inheritance still
+   measures the unsplit grid, so when the left column's period must be inherited, or both
+   columns are undated, a merged amount can shift that column's centre past the tolerance and
+   the page is not continued.
    Signs, parentheses, decimals, percentages, note references and space-grouped numbers
    remain outside its scope. No period ordering, magnitude, expected value or check result
    chooses an assignment.
