@@ -2,6 +2,7 @@
 
 import hashlib
 import inspect
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -220,6 +221,66 @@ def test_a_move_of_an_issuer_not_in_train_is_refused() -> None:
 def test_an_issuer_moved_twice_is_refused() -> None:
     with pytest.raises(SplitError, match="more than once"):
         check_moves([mv(), mv()], [])
+
+
+@pytest.mark.parametrize("kind", ["override", "spent_look"])
+@pytest.mark.parametrize("cik_backed", [False, True])
+def test_mismatched_move_cannot_release_another_holdout_issuer(kind: str, cik_backed: bool) -> None:
+    cik = next(c for c in range(1, 1000) if hashed_part(cik_key(c)) is Part.HOLDOUT)
+    documents = [doc(AL_DAWAA, cik=cik if cik_backed else None)]
+    move = replace(mv(kind=kind, looks_before=int(kind == "spent_look")), issuer="Unrelated Issuer")
+    looks = [a_look("2026-10-01")] if kind == "spent_look" else [a_look()]
+    assert development_documents(documents, [], {Part.FIT}) == []
+    with pytest.raises(SplitError, match="normalized issuer"):
+        check_moves([move], looks)
+    with pytest.raises(SplitError, match="normalized issuer"):
+        development_documents(documents, [move], {Part.FIT})
+
+
+@pytest.mark.parametrize(
+    ("issuer", "key"),
+    [
+        (AL_DAWAA, ""),
+        (AL_DAWAA, " "),
+        (AL_DAWAA, issuer_key(AL_DAWAA).upper()),
+        (AL_DAWAA, issuer_key(AL_DAWAA) + " co"),
+        (AL_DAWAA, "cik:1"),
+        ("", ""),
+        ("Company Co. PLC", ""),
+        ("...", ""),
+        (None, issuer_key(AL_DAWAA)),
+        (AL_DAWAA, None),
+    ],
+)
+def test_move_identity_must_have_a_nonempty_normalized_name_key(
+    issuer: object, key: object
+) -> None:
+    move = replace(mv(), issuer=issuer, key=key)  # type: ignore[arg-type]
+    with pytest.raises(SplitError, match="normalized issuer"):
+        check_moves([move], [])
+    with pytest.raises(SplitError, match="normalized issuer"):
+        development_documents([doc(AL_DAWAA)], [move], {Part.FIT})
+
+
+@pytest.mark.parametrize("kind", ["override", "spent_look"])
+@pytest.mark.parametrize("cik_backed", [False, True])
+def test_normalized_name_moves_preserve_cik_aliases_and_chronology_boundaries(
+    kind: str, cik_backed: bool
+) -> None:
+    cik = next(c for c in range(1, 1000) if hashed_part(cik_key(c)) is Part.HOLDOUT)
+    documents = [doc(AL_DAWAA, cik=cik if cik_backed else None)]
+    if cik_backed:
+        documents.append(doc("Historical Rename", cik=cik))
+    move = mv(
+        issuer="AL DAWAA MEDICAL SERVICES CO. PJSC",
+        kind=kind,
+        looks_before=int(kind == "spent_look"),
+        date="2026-10-05" if kind == "spent_look" else "2026-10-04",
+    )
+    assert move.key == issuer_key(AL_DAWAA)
+    assert development_documents(documents, [], {Part.FIT}) == []
+    check_moves([move], [a_look()])
+    assert development_documents(documents, [move], {Part.FIT}) == documents
 
 
 def test_a_move_needs_its_reason_and_a_real_date() -> None:

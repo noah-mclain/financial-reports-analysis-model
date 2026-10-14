@@ -18,14 +18,18 @@ the caller must compute them from the retained source and exact configuration.
 label, explicit canonical id or `None`, role, column duration, source locator and verification.
 Balance-sheet instants have no duration; flow statements require months. Period stratum and
 duration remain distinct. Canonical ids are validated against the injected core taxonomy and
-must belong to the example's statement. A null target needs a nonempty abstention reason;
-positive targets cannot carry that reason. Negative controls must abstain.
+must belong to the example's statement. Targets are looked up in the taxonomy's items, the
+same items the manifest fingerprints, and a taxonomy with a duplicate id is refused. A null
+target needs a nonempty abstention reason; positive targets cannot carry that reason.
+Negative controls must abstain.
 
 PDF examples require the existing core page/cell `Provenance`, with finite ordered coordinates
 and a table reference. SEC examples require a tag and a source locator identifying the
 retained presentation row; they cannot claim PDF provenance. SEC labels are English. The
 contract carries no numeric values, invented context, siblings, parents or narrative targets.
 Extra fields are refused, including numeric extraction payloads.
+A provenance value that differs from its validated form, for example a copied or
+constructed instance holding a string coordinate, is refused rather than normalized.
 
 `Verification` distinguishes an `extraction_draft`, a `reviewed_crosswalk` and an
 `independent_review`. Evidence has an id/hash and identifies preparer and reviewer. Reviewed

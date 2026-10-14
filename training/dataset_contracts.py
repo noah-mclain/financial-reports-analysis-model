@@ -14,7 +14,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from fra_core.pools import Identity, Pool, PoolRegistry, Source
-from fra_core.schemas.statement import Provenance, StatementType
+from fra_core.schemas.statement import BBox, Provenance, StatementType
 from fra_core.split import (
     Look,
     Move,
@@ -24,7 +24,7 @@ from fra_core.split import (
     cik_key,
     development_documents,
 )
-from fra_core.taxonomy import Taxonomy
+from fra_core.taxonomy import CanonicalItem, Taxonomy
 
 Text = Annotated[str, StringConstraints(min_length=1, pattern=r"\S")]
 Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
@@ -116,11 +116,21 @@ class NormalizationExample(_Contract):
         elif self.provenance is None or self.tag is not None:
             raise ValueError(f"{self.example_id}: PDF needs provenance and cannot claim an SEC tag")
         if self.provenance is not None:
-            checked = Provenance.model_validate(self.provenance.model_dump())
+            # model_copy/model_construct can leave an unvalidated nested value behind: refuse
+            # any provenance whose strict representation differs from what is stored and hashed.
+            stored = self.provenance.model_dump(mode="json", warnings=False)
+            try:
+                checked = Provenance.model_validate(self.provenance.model_dump(warnings=False))
+            except ValueError as exc:
+                raise ValueError(f"{self.example_id}: provenance is not valid: {exc}") from exc
             bbox = checked.bbox
             if not all(math.isfinite(v) for v in (bbox.left, bbox.top, bbox.right, bbox.bottom)):
                 raise ValueError(f"{self.example_id}: provenance coordinates must be finite")
-            if not self.provenance.table_ref.strip():
+            if not isinstance(self.provenance.bbox, BBox) or _json(
+                checked.model_dump(mode="json")
+            ) != _json(stored):
+                raise ValueError(f"{self.example_id}: provenance differs from its validated form")
+            if not checked.table_ref.strip():
                 raise ValueError(f"{self.example_id}: provenance needs a table reference")
         if (
             self.verification.method == "reviewed_crosswalk"
@@ -168,6 +178,14 @@ def _json(value: object) -> str:
 
 def _digest(value: object) -> str:
     return hashlib.sha256(_json(value).encode("utf-8")).hexdigest()
+
+
+def _target_items(taxonomy: Taxonomy) -> dict[str, CanonicalItem]:
+    # Targets resolve against the same items the manifest fingerprints, never the derived index.
+    targets = {item.id: item for item in taxonomy.items}
+    if len(targets) != len(taxonomy.items):
+        raise DatasetError("canonical taxonomy has duplicate ids")
+    return targets
 
 
 def _example_digest(examples: Sequence[NormalizationExample]) -> str:
@@ -219,6 +237,7 @@ def partition_examples(
     examples = tuple(NormalizationExample.model_validate(e) for e in examples)
     check_looks(looks)
     check_moves(moves, looks)
+    targets = _target_items(taxonomy)
     metadata = registry.metadata()
     by_source: dict[str, SourceRecord] = {}
     documents: list[dict[str, object]] = []
@@ -266,7 +285,7 @@ def partition_examples(
         if row.content_sha256() not in config.approved_example_sha256:
             raise DatasetError(f"{row.example_id}: exact example content has not been approved")
         if row.canonical_id is not None:
-            item = taxonomy.by_id(row.canonical_id)
+            item = targets.get(row.canonical_id)
             if item is None or item.statement != row.statement:
                 raise DatasetError(
                     f"{row.example_id}: invalid canonical target for {row.statement}"
