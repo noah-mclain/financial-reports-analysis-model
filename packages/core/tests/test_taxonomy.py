@@ -290,3 +290,19 @@ def test_the_balance_sheet_prints_statement_headings_in_both_languages(
 ) -> None:
     headings = taxonomy.statement_headings[StatementType.BALANCE]
     assert "assets" in headings and "الموجودات" in headings
+
+
+@pytest.mark.parametrize(
+    "english", ["assets", ["assets", ""], ["assets", 3]], ids=["string", "empty", "number"]
+)
+def test_statement_headings_must_be_lists_of_text(tmp_path: Path, english: object) -> None:
+    path = _write_taxonomy(
+        tmp_path,
+        {
+            "version": 1,
+            "statement_headings": {"balance": {"en": english, "ar": ["الموجودات"]}},
+            "items": [_section_total("current_total")],
+        },
+    )
+    with pytest.raises(ValueError, match=r"statement_headings\.balance: needs a list"):
+        load_taxonomy(path)

@@ -273,11 +273,16 @@ def _build_statement_headings(raw: Any) -> Mapping[StatementType, tuple[str, ...
         raise ValueError(msg)
     built: dict[StatementType, tuple[str, ...]] = {}
     for statement, languages in raw.items():
+        need = f"statement_headings.{statement}: needs a list for each of {_REQUIRED_LANGUAGES}"
         if not isinstance(languages, dict) or set(languages) != set(_REQUIRED_LANGUAGES):
-            msg = f"statement_headings.{statement}: needs a list for each of {_REQUIRED_LANGUAGES}"
-            raise ValueError(msg)
+            raise ValueError(need)
+        for language in _REQUIRED_LANGUAGES:
+            values = languages[language]
+            # A bare string would iterate as one-letter headings and load without complaint.
+            if not isinstance(values, list) or not all(isinstance(v, str) and v for v in values):
+                raise ValueError(f"{need}; {language} is {values!r}")
         built[StatementType(statement)] = tuple(
-            str(v) for language in _REQUIRED_LANGUAGES for v in languages[language]
+            v for language in _REQUIRED_LANGUAGES for v in languages[language]
         )
     return MappingProxyType(built)
 
