@@ -104,10 +104,9 @@ def _observation_error(
         and 0 <= anchor.bbox.left < anchor.bbox.right <= grid.page_width
         and 0 <= anchor.bbox.top < anchor.bbox.bottom
         and (page_height is None or max(box.bottom, anchor.bbox.bottom) <= page_height)
-        and _overlap(box, anchor.bbox)
-        and anchor.bbox.left <= (box.left + box.right) / 2 <= anchor.bbox.right
-        and anchor.bbox.top <= (box.top + box.bottom) / 2 <= anchor.bbox.bottom
     ):
+        return "invalid header geometry"
+    if not contained(box, anchor.bbox):
         return "invalid header geometry"
     if any(
         c != anchor and c.row in header_rows and c.bbox is not None and _overlap(box, c.bbox)
@@ -160,6 +159,14 @@ def supported_evidence(
         else:
             kept.append(group)
     return tuple(kept), tuple(flags)
+
+
+def contained(box: BBox, outer: BBox) -> bool:
+    """A reading belongs to a cell only when its whole rectangle lies inside the cell's."""
+    return (
+        outer.left <= box.left < box.right <= outer.right
+        and outer.top <= box.top < box.bottom <= outer.bottom
+    )
 
 
 def _overlap(a: BBox, b: BBox) -> bool:

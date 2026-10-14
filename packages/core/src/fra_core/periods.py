@@ -259,13 +259,14 @@ class PeriodInterpretation:
 
 
 _MONTH_NAME = "(?:" + "|".join(re.escape(n) for n in _MONTH_NAMES_BY_LENGTH) + ")"
-# A day-first date separates month and year by at most one "." and one ",", in that order, with
-# any whitespace ("31 Dec 2025", "31 Dec., 2025", "31 Dec.2025" as Juhayna prints it); a doubled
-# mark or no separator is malformed. Only the compatibility parser, which does not use this
-# pattern, tolerates more.
+# A text date separates its parts by at most one "." and one ",", in that order, with any
+# whitespace: "31 Dec 2025", "31 Dec., 2025", "31 Dec.2025" as Juhayna prints it, "Dec. 31, 2025",
+# "Dec. 2025". A doubled mark or no separator is malformed. Only the compatibility parser, which
+# does not use this pattern, tolerates more.
 _TEXT_DATE = re.compile(
     rf"(?<!\w)(?:\d{{1,2}}\s+{_MONTH_NAME}(?=[\s.,])\.?\s*,?\s*\d{{4}}|"
-    rf"{_MONTH_NAME}\.?\s+\d{{1,2}}[,\s]+\d{{4}}|{_MONTH_NAME}[\s.]+\d{{4}})(?!\d)",
+    rf"{_MONTH_NAME}\.?\s+\d{{1,2}}(?:\s*,\s*|\s+)\d{{4}}|"
+    rf"{_MONTH_NAME}(?=[\s.])\.?\s*\d{{4}})(?!\d)",
     re.I,
 )
 _TEXT_DATE_TAIL = re.compile(rf"(?<!\w)\d{{1,2}}\s+{_MONTH_NAME}(?!\w)", re.I)
@@ -383,7 +384,9 @@ def _duration_description(
     return ("generic" if generic else "none"), None, remainder
 
 
-def _calendar_remainder(text: str, date_span: tuple[int, int]) -> str:
+def _calendar_remainder(text: str, date_span: tuple[int, int], *, printed_placeholder: bool) -> str:
+    """Residue around the date. A placeholder "X" the reading printed is unit text only beside
+    a unit marker; an "x" left behind by masking a stated month count is not printed."""
     covered = bytearray(len(text))
     has_unit_marker = False
     for start, end in unit_marker_spans(text):
@@ -405,8 +408,9 @@ def _calendar_remainder(text: str, date_span: tuple[int, int]) -> str:
     text = _masked_text(text, covered)
     text = _GLUE.sub(" ", text)
     tokens = []
+    keep_placeholder = printed_placeholder and not has_unit_marker
     for token in text.split():
-        if not is_glyph_placeholder(token):
+        if keep_placeholder or not is_glyph_placeholder(token):
             tokens.append(token)
     return " ".join(tokens).strip(" ()[].,:;،؛…")
 
@@ -426,6 +430,7 @@ def interpret_period(
     cleaned = unicodedata.normalize("NFKC", strip_bidi(text)).strip()
     cleaned, _ = normalize_digits(cleaned)
     duration, months, calendar_text = _duration_description(cleaned)
+    printed_placeholder = any(is_glyph_placeholder(token) for token in cleaned.split())
     calendar_fact: Literal["complete", "month_year", "year_only", "missing", "invalid"]
     end: date | None = None
     date_text: str | None = None
@@ -444,7 +449,13 @@ def interpret_period(
             year_match = _YEAR.search(match.group())
             if year_match is not None and _find_day(match.group(), year_match.span()) is None:
                 calendar_fact = "month_year"
-        if len(matches) != 1 or _calendar_remainder(calendar_text, match.span()) or end is None:
+        if (
+            len(matches) != 1
+            or _calendar_remainder(
+                calendar_text, match.span(), printed_placeholder=printed_placeholder
+            )
+            or end is None
+        ):
             calendar_fact = "invalid"
     else:
         year = _YEAR.search(calendar_text)
@@ -458,7 +469,10 @@ def interpret_period(
                 )
             calendar_fact = (
                 "complete"
-                if end and not _calendar_remainder(calendar_text, tail.span())
+                if end
+                and not _calendar_remainder(
+                    calendar_text, tail.span(), printed_placeholder=printed_placeholder
+                )
                 else "invalid"
             )
         elif year:
@@ -466,7 +480,10 @@ def interpret_period(
             end = _safe_date(int(year.group()), 12, 31)
             calendar_fact = (
                 "year_only"
-                if end and not _calendar_remainder(calendar_text, year.span())
+                if end
+                and not _calendar_remainder(
+                    calendar_text, year.span(), printed_placeholder=printed_placeholder
+                )
                 else "invalid"
             )
         elif re.search(r"\d", calendar_text) or shape:
