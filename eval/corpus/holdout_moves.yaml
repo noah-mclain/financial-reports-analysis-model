@@ -9,6 +9,9 @@
 # looks_before: the number of rows in the scoring log when the move was recorded: 0 for an
 #               override, at least 1 for a spent look.
 # issuer:       as written in candidates.yaml.
+#
+# List moves in the order they were decided: dates and looks_before never decrease down the
+# list, and a spent look is dated no later than the look that followed it.
 
 moves:
   - issuer: Al Dawaa Medical Services

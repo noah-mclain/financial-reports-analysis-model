@@ -16,6 +16,7 @@ from sec_source_access import (
     SourceAccessError,
     SourceManifest,
     authorize_payloads,
+    iter_payloads,
     read_payloads,
     registry_sha256,
     split_records_sha256,
@@ -618,3 +619,154 @@ def test_schema_versions_require_the_exact_integer(version: object) -> None:
     for contract in (case.index, case.manifest):
         with pytest.raises(ValidationError, match="version"):
             type(contract).model_validate(contract.model_copy(update={"version": version}))
+
+
+@pytest.mark.parametrize("kind", ["override", "spent_look"])
+@pytest.mark.parametrize("borrowed", ["name", "cik"])
+def test_move_naming_a_fit_issuer_with_a_holdout_key_never_releases_the_holdout(
+    kind: str, borrowed: str
+) -> None:
+    fit = filing(cik_in(Part.FIT), name="Fit Issuer X")
+    holdout = filing(cik_in(Part.HOLDOUT), name="Holdout Issuer Y")
+    key = (
+        issuer_key("Holdout Issuer Y")
+        if borrowed == "name"
+        else cik_key(holdout.source_record.issuer.cik or 0)
+    )
+    look = Look("2026-10-01", "dry_run", ("holdout",), ("sec",), "synthetic")
+    move = Move(
+        "Fit Issuer X",
+        key,
+        kind,
+        "holdout",
+        "fit",
+        "2026-10-02",
+        int(kind == "spent_look"),
+        "Reviewed synthetic move",
+    )
+    case = fixture(fit, holdout, moves=(move,), looks=(look,) if kind == "spent_look" else ())
+    spy = Spy()
+    with pytest.raises(SplitError, match="normalized issuer"):
+        case.read((selected(holdout),), spy)
+    with pytest.raises(SplitError, match="normalized issuer"):
+        case.read((), spy)
+    assert spy.calls == []
+
+
+def test_moves_out_of_order_with_their_recorded_chronology_never_open_content() -> None:
+    first = filing(cik_in(Part.HOLDOUT), name="First Moved")
+    other = next(c for c in range(1, 1000) if hashed_part(cik_key(c)) == Part.HOLDOUT)
+    second = filing(
+        next(c for c in range(other + 1, 2000) if hashed_part(cik_key(c)) == Part.HOLDOUT),
+        name="Second Moved",
+    )
+    looks = (
+        Look("2026-10-01", "dry_run", ("holdout",), ("sec",), "synthetic"),
+        Look("2026-10-03", "dry_run", ("holdout",), ("sec",), "synthetic"),
+    )
+
+    def spent(name: str, looks_before: int, day: str) -> Move:
+        return Move(
+            name, issuer_key(name), "spent_look", "holdout", "fit", day, looks_before, "Reviewed"
+        )
+
+    later = spent("First Moved", 2, "2026-10-04")
+    earlier = spent("Second Moved", 1, "2026-10-02")
+    fixture(first, second, moves=(earlier, later), looks=looks).authorize(())
+    case = fixture(first, second, moves=(later, earlier), looks=looks)
+    spy = Spy()
+    with pytest.raises(SplitError, match="out of order"):
+        case.read((selected(first),), spy)
+    assert spy.calls == []
+
+
+def test_authorization_builds_one_registry_probe_per_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = [filing(cik_in(Part.FIT))]
+    records.append(filing(cik_in(Part.VALIDATION)))
+    records.append(filing(cik_in(Part.HOLDOUT)))
+    records.append(filing(cik_in(Part.FIT), suffix="-second-year"))
+    case = fixture(*records)
+    original = PoolRegistry.from_metadata
+    labels: list[str] = []
+
+    def counting(metadata: dict[str, object], label: str) -> PoolRegistry:
+        labels.append(label)
+        return original(metadata, label)
+
+    monkeypatch.setattr(PoolRegistry, "from_metadata", staticmethod(counting))
+    expected = case.authorize((selected(records[0]), selected(records[1])))
+    assert len(labels) == 1
+    assert {d.part for d in expected} == {Part.FIT, Part.VALIDATION}
+
+
+def test_iter_payloads_authorizes_up_front_and_retrieves_one_payload_at_a_time() -> None:
+    fit, valid = filing(cik_in(Part.FIT)), filing(cik_in(Part.VALIDATION))
+    case = fixture(fit, valid)
+    spy = Spy()
+    stream = iter_payloads(
+        (selected(valid), selected(fit)),
+        index=case.index,
+        manifest=case.manifest,
+        registry=case.registry,
+        context=case.context,
+        moves=(),
+        looks=(),
+        opener=spy,
+    )
+    assert spy.calls == []
+    first = next(stream)
+    assert len(spy.calls) == 1
+    assert first.payload == first.descriptor.artifact.source_id.encode()
+    second = next(stream)
+    assert len(spy.calls) == 2
+    assert {first.descriptor.artifact.artifact_id, second.descriptor.artifact.artifact_id} == {
+        selected(fit),
+        selected(valid),
+    }
+    with pytest.raises(StopIteration):
+        next(stream)
+
+
+def test_iter_payloads_refuses_a_forbidden_selection_before_iteration() -> None:
+    fit, holdout = filing(cik_in(Part.FIT)), filing(cik_in(Part.HOLDOUT))
+    case = fixture(fit, holdout)
+    spy = Spy()
+    with pytest.raises(SourceAccessError, match="holdout"):
+        iter_payloads(
+            (selected(fit), selected(holdout)),
+            index=case.index,
+            manifest=case.manifest,
+            registry=case.registry,
+            context=case.context,
+            moves=(),
+            looks=(),
+            opener=spy,
+        )
+    assert spy.calls == []
+
+
+def test_iter_payloads_verifies_each_payload_when_it_is_reached() -> None:
+    fit, valid = filing(cik_in(Part.FIT)), filing(cik_in(Part.VALIDATION))
+    case = fixture(fit, valid)
+    calls: list[AuthorizedPayload] = []
+
+    def corrupt_second(descriptor: AuthorizedPayload) -> bytes:
+        calls.append(descriptor)
+        good = descriptor.artifact.source_id.encode()
+        return good if len(calls) == 1 else b"changed bytes"
+
+    stream = iter_payloads(
+        (selected(fit), selected(valid)),
+        index=case.index,
+        manifest=case.manifest,
+        registry=case.registry,
+        context=case.context,
+        moves=(),
+        looks=(),
+        opener=corrupt_second,
+    )
+    next(stream)
+    with pytest.raises(SourceAccessError, match="payload_sha256"):
+        next(stream)

@@ -205,7 +205,8 @@ def check_looks(looks: Sequence[Look]) -> None:
 
 def check_moves(moves: Sequence[Move], looks: Sequence[Look]) -> None:
     """The moves record against the scoring log: an override is dated before the first look and
-    made with no look in the log; a spent look comes after a logged look."""
+    made with no look in the log; a spent look comes after a logged look. The moves, in the order
+    recorded, never go back in date or in the number of looks they follow."""
     for m in moves:
         _check_move_identity(m)
         _iso_date(m.date, m.issuer)
@@ -231,6 +232,25 @@ def check_moves(moves: Sequence[Move], looks: Sequence[Look]) -> None:
     for m in moves:
         if keys.count(m.key) > 1:
             raise SplitError(f"{m.issuer}: moved more than once")
+    _check_move_order(moves, looks)
+
+
+def _check_move_order(moves: Sequence[Move], looks: Sequence[Look]) -> None:
+    """The moves, in the order recorded, follow the log's chronology: neither the date nor the
+    number of looks recorded falls from one move to the next, and a move is dated no later than
+    the look that followed it. Each move is assumed valid on its own (see `check_moves`)."""
+    for n, m in enumerate(moves):
+        if n and (m.looks_before < moves[n - 1].looks_before or m.date < moves[n - 1].date):
+            raise SplitError(
+                f"{m.issuer}: recorded out of order, after {moves[n - 1].issuer} "
+                f"({moves[n - 1].date}, {moves[n - 1].looks_before} looks) but "
+                f"dated {m.date} with {m.looks_before} looks"
+            )
+        if m.looks_before < len(looks) and m.date > looks[m.looks_before].date:
+            raise SplitError(
+                f"{m.issuer}: recorded after {m.looks_before} looks but dated after the look "
+                "that followed it"
+            )
 
 
 @dataclass(frozen=True)

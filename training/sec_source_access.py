@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import asdict
 from typing import Literal
 
@@ -222,6 +222,9 @@ def authorize_payloads(
         "split records",
     )
 
+    # One disposable probe serves every filing: any assignment or alias it would add is
+    # refused below, so it never drifts from the reviewed snapshot between filings.
+    probe = PoolRegistry.from_metadata(metadata, "injected reviewed registry")
     by_source: dict[str, SecFiling] = {}
     locators: set[str] = set()
     documents: list[dict[str, object]] = []
@@ -235,8 +238,7 @@ def authorize_payloads(
         locators.add(filing.raw_locator)
         for field in ("source_sha256", "config_sha256"):
             _require_hash(getattr(source, field), getattr(index, field), field, source.source_id)
-        # Public register validates conflicts on a disposable probe, never the authority.
-        probe = PoolRegistry.from_metadata(metadata, "injected reviewed registry")
+        # Public register validates conflicts on the probe, never the authority.
         probe.register(source.issuer, source.pool)
         if probe.metadata() != metadata:
             raise SourceAccessError(
@@ -301,7 +303,7 @@ def authorize_payloads(
     return tuple(sorted(selected, key=lambda d: d.artifact.artifact_id))
 
 
-def read_payloads(
+def iter_payloads(
     artifact_ids: Sequence[str],
     *,
     index: SecIndex,
@@ -311,11 +313,16 @@ def read_payloads(
     moves: Sequence[Move],
     looks: Sequence[Look],
     opener: Callable[[AuthorizedPayload], bytes],
-) -> tuple[VerifiedPayload, ...]:
-    """Authorize all selections, then retrieve/hash permitted bytes; never return partials.
+) -> Iterator[VerifiedPayload]:
+    """Authorize all selections now, then retrieve and hash one payload per step.
 
-    The opener enforces the production filesystem boundary. Bytes are not decoded, so
-    their source identity, row count and absence of mixed-source content remain unchecked.
+    Authorization runs before this function returns, so a forbidden selection or a metadata
+    failure raises here and the opener is not called. Each step opens exactly one payload and
+    holds no earlier one, which keeps memory to the largest single payload. A retrieval or
+    hash failure surfaces at its own step, after earlier payloads were already yielded; a
+    caller that needs all-or-nothing must treat any failure as invalidating what it consumed.
+    The opener enforces the production filesystem boundary. Bytes are not decoded, so their
+    source identity, row count and absence of mixed-source content remain unchecked.
     Descriptors supplied by callers are deliberately not accepted as access capabilities.
     """
     descriptors = authorize_payloads(
@@ -327,7 +334,12 @@ def read_payloads(
         moves=moves,
         looks=looks,
     )
-    verified: list[VerifiedPayload] = []
+    return _retrieve(descriptors, opener)
+
+
+def _retrieve(
+    descriptors: Sequence[AuthorizedPayload], opener: Callable[[AuthorizedPayload], bytes]
+) -> Iterator[VerifiedPayload]:
     for descriptor in descriptors:
         artifact = descriptor.artifact
         try:
@@ -344,5 +356,39 @@ def read_payloads(
             "payload_sha256",
             artifact.artifact_id,
         )
-        verified.append(VerifiedPayload(descriptor=descriptor, payload=payload))
-    return tuple(verified)
+        verified = VerifiedPayload(descriptor=descriptor, payload=payload)
+        # Drop the local name so a caller that releases a payload holds only the next one.
+        del payload
+        yield verified
+        del verified
+
+
+def read_payloads(
+    artifact_ids: Sequence[str],
+    *,
+    index: SecIndex,
+    manifest: SourceManifest,
+    registry: PoolRegistry,
+    context: AccessContext,
+    moves: Sequence[Move],
+    looks: Sequence[Look],
+    opener: Callable[[AuthorizedPayload], bytes],
+) -> tuple[VerifiedPayload, ...]:
+    """`iter_payloads` collected: every selected payload is held in memory until it returns.
+
+    Authorizes all selections, then retrieves and hashes the permitted bytes; never returns
+    a partial tuple. Manifests record no payload size, so no byte limit can be checked
+    before opening; use `iter_payloads` when the selection may not fit in memory.
+    """
+    return tuple(
+        iter_payloads(
+            artifact_ids,
+            index=index,
+            manifest=manifest,
+            registry=registry,
+            context=context,
+            moves=moves,
+            looks=looks,
+            opener=opener,
+        )
+    )

@@ -318,6 +318,41 @@ def test_unknown_move_kind_is_refused() -> None:
         check_moves([mv(kind="exception")], [])
 
 
+def test_moves_recorded_in_chronological_order_are_accepted() -> None:
+    looks = [a_look("2026-10-05"), a_look("2026-10-07")]
+    moves = [
+        mv("Alpha Issuer", date="2026-10-02"),
+        mv("Beta Issuer", date="2026-10-02"),
+        mv("Gamma Issuer", kind="spent_look", looks_before=1, date="2026-10-06"),
+        mv("Delta Issuer", kind="spent_look", looks_before=2, date="2026-10-08"),
+    ]
+    check_moves(moves, looks)
+
+
+def test_moves_out_of_order_by_look_count_are_refused() -> None:
+    looks = [a_look("2026-10-01"), a_look("2026-10-03")]
+    later = mv("Alpha Issuer", kind="spent_look", looks_before=2, date="2026-10-03")
+    earlier = mv("Beta Issuer", kind="spent_look", looks_before=1, date="2026-10-03")
+    check_moves([earlier, later], looks)
+    with pytest.raises(SplitError, match="out of order"):
+        check_moves([later, earlier], looks)
+
+
+def test_moves_out_of_order_by_date_are_refused() -> None:
+    first = mv("Alpha Issuer", date="2026-10-02")
+    second = mv("Beta Issuer", date="2026-10-03")
+    check_moves([first, second], [])
+    with pytest.raises(SplitError, match="out of order"):
+        check_moves([second, first], [])
+
+
+def test_a_spent_look_dated_after_the_look_that_followed_it_is_refused() -> None:
+    looks = [a_look("2026-10-05"), a_look("2026-10-07")]
+    check_moves([mv(kind="spent_look", looks_before=1, date="2026-10-07")], looks)
+    with pytest.raises(SplitError, match="dated after the look that followed it"):
+        check_moves([mv(kind="spent_look", looks_before=1, date="2026-10-08")], looks)
+
+
 # ---- the scoring log's rules ----------------------------------------------------------------
 
 

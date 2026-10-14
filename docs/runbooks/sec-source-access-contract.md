@@ -36,10 +36,11 @@ syntax, belongs to a future reviewed source-preparation contract. No hierarchy, 
 taxonomy version, label meaning or column duration is inferred from it.
 
 `authorize_payloads(artifact_ids, *, index, manifest, registry, context, moves, looks)`
-returns descriptors only. `read_payloads` accepts the same arguments plus an injected
-`opener: Callable[[AuthorizedPayload], bytes]` and returns a tuple of verified payloads.
-It always performs fresh metadata authorization before invoking the opener. It does not
-accept caller-created descriptors as authority to open a file.
+returns descriptors only. `iter_payloads` accepts the same arguments plus an injected
+`opener: Callable[[AuthorizedPayload], bytes]` and returns an iterator of verified payloads.
+`read_payloads` takes the same arguments and returns the whole iterator as a tuple. Both
+perform fresh metadata authorization before invoking the opener. Neither accepts
+caller-created descriptors as authority to open a file.
 
 ## Trust prerequisites
 
@@ -67,13 +68,17 @@ reviewed integration boundary; it must not be represented by fabricated archive 
 ## Checks before any payload opens
 
 1. Revalidate typed inputs and the injected Move/Look records. Apply the core chronology
-   checks before relying on a split fingerprint.
+   checks before relying on a split fingerprint. Besides the checks on each move, the core
+   rejects a move sequence whose dates or recorded look counts fall from one move to the
+   next, and a move dated later than the look that followed it. A move whose key is not the
+   normalized name of its issuer is refused, so it cannot release another issuer.
 2. Match actual index, manifest, registry and split fingerprints to the expected context;
    match the source/configuration hashes across the index, manifest and filing records.
 3. Validate every filing identity and pool, including unselected nontrain and holdout
    metadata. Public registry validation runs on disposable probes reconstructed from the
-   authoritative snapshot. A probe that adds an assignment or alias is rejected; the
-   injected registry is never changed. Conflicts fail through the core registry contract.
+   authoritative snapshot. One probe is built per call and checked against every filing;
+   a filing that would add an assignment or alias is rejected, so the probe never differs
+   from the snapshot. The injected registry is never changed. Conflicts fail through the core registry contract.
 4. Recompute eligible ids with `fra_core.split.development_documents` over the entire
    train metadata roster. Validate all recorded move targets with the shared rules.
    Splitting uses the CIK contract; a name hash or cached part cannot replace it.
@@ -101,10 +106,14 @@ After all metadata and selections pass, the opener receives only eligible descri
 The returned value must be bytes with exactly the declared payload SHA-256. Missing files,
 permission errors and other `OSError` failures raise `SourceAccessError` with the artifact id
 and original cause. Other opener exceptions propagate loudly. A hash mismatch also raises.
-The function returns only after every selected retrieval succeeds; it does not yield or
-return a trusted partial tuple after a later failure. It cannot undo an opener's external
-side effects. Retrieval is in memory and requires a measured capacity boundary before a
-production-scale reader is introduced.
+`read_payloads` returns only after every selected retrieval succeeds; it never returns a
+trusted partial tuple after a later failure. It holds every selected payload in memory until
+it returns. The manifest records no payload size, so no total byte limit can be checked
+before opening. `iter_payloads` instead opens and hashes one payload per step and holds no
+earlier one, so memory is bounded by the largest single payload. Its authorization still
+happens before it returns, but a retrieval or hash failure surfaces at its own step, after
+earlier payloads were yielded; a caller that needs all-or-nothing treats any failure as
+invalidating what it consumed. Neither can undo an opener's external side effects.
 
 There is no decoding here. The future decoder must validate the payload schema, every row's
 filing/source identity and locator, declared row count, and absence of mixed-source content
@@ -139,7 +148,9 @@ The focused tests are `tests/training/test_sec_source_access.py`. They use only 
 synthetic metadata and payload bytes. Opener spies verify zero calls for forbidden mixed
 selections and metadata failures, including unrecorded identities, missing move targets,
 stale bindings, invalid paths and incomplete state. Retrieval regressions cover missing
-bytes, hash conflicts and failure after an earlier successful retrieval.
+bytes, hash conflicts and failure after an earlier successful retrieval, and that the
+iterator opens one payload per step. Further cases cover a move that carries another
+issuer's key, moves recorded out of chronological order, and a single registry probe per call.
 
 Run from the assigned checkout with the installed offline environment:
 
