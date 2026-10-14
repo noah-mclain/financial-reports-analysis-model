@@ -500,8 +500,8 @@ def test_compare_with_reports_legacy_missing_and_absent_evidence(
         ranges=(),
         conversion="read",
         conversion_spans=(),
-        conversion_settings_hash="hash",
-        ocr_key="pages-key",
+        conversion_settings_hash="b" * 64,
+        ocr_key="c" * 64,
     )
     earlier = tmp_path / "earlier.json"
     earlier.write_text(
@@ -621,8 +621,8 @@ def test_a_declined_document_is_recorded_without_conversion_evidence(
             ranges=(),
             conversion="read" if converted else "not_run",
             conversion_spans=(),
-            conversion_settings_hash="hash" if converted else None,
-            ocr_key="pages-key",
+            conversion_settings_hash="b" * 64 if converted else None,
+            ocr_key="c" * 64,
         )
 
     output = tmp_path / "report.json"
@@ -655,8 +655,8 @@ def _complete_evidence() -> DocumentEvidence:
         ranges=(),
         conversion="read",
         conversion_spans=(),
-        conversion_settings_hash="hash",
-        ocr_key="pages-key",
+        conversion_settings_hash="b" * 64,
+        ocr_key="c" * 64,
     )
 
 

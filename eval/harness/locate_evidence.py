@@ -16,6 +16,7 @@ from pydantic import (
     model_validator,
 )
 
+from fra_core.schemas import StatementType
 from fra_ingest.pages import PAGES_STAGE_VERSION
 from fra_ingest.results import PageText, RangeOcr, RangePlan, RangeRenderer
 from harness.reproducibility import record_hash
@@ -27,6 +28,12 @@ Score = Annotated[float, Field(allow_inf_nan=False)]
 
 class _Evidence(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+
+class _Saved(BaseModel):
+    """The fields read from an artifact another stage wrote; its other fields are not ours."""
+
+    model_config = ConfigDict(extra="ignore", frozen=True, strict=True)
 
 
 class _PageSpan(_Evidence):
@@ -47,7 +54,7 @@ class PageFingerprint(_Evidence):
 
 
 class LocatedRange(_PageSpan):
-    type: str
+    type: StatementType
     score: Score
     rank: PageNumber
 
@@ -69,13 +76,33 @@ class DocumentEvidence(_Evidence):
     ranges: tuple[LocatedRange, ...]
     conversion: Literal["read", "not_run"] | None
     conversion_spans: tuple[ConversionSpan, ...]
-    conversion_settings_hash: str | None
-    ocr_key: str | None
+    conversion_settings_hash: Sha256 | None
+    ocr_key: Sha256 | None
 
     @model_validator(mode="after")
     def _complete_is_consistent(self) -> DocumentEvidence:
         if self.status != "complete":
+            if not self.reason:
+                raise ValueError("incomplete evidence must give a reason")
+            carried = [
+                name
+                for name in (
+                    "page_count",
+                    "pages_sha256",
+                    "pages",
+                    "locate_version",
+                    "ranges",
+                    "conversion_spans",
+                    "conversion_settings_hash",
+                    "ocr_key",
+                )
+                if getattr(self, name)
+            ]
+            if carried:
+                raise ValueError(f"incomplete evidence cannot carry {', '.join(carried)}")
             return self
+        if self.reason is not None:
+            raise ValueError("complete evidence cannot carry a reason")
         if self.page_count != len(self.pages):
             msg = f"page_count {self.page_count!r} does not match {len(self.pages)} page records"
             raise ValueError(msg)
@@ -86,6 +113,12 @@ class DocumentEvidence(_Evidence):
         for name in ("locate_version", "ocr_key"):
             if not getattr(self, name):
                 raise ValueError(f"{name} must be a non-empty string")
+        numbers = {number for item in self.ranges for number in (item.first_page, item.last_page)}
+        for span in self.conversion_spans:
+            numbers.update((span.first_page, span.last_page, *span.image_pages))
+        beyond = sorted(number for number in numbers if number > len(self.pages))
+        if beyond:
+            raise ValueError(f"pages {beyond} lie beyond page_count {self.page_count}")
         if self.conversion == "read":
             if not self.conversion_settings_hash:
                 raise ValueError("conversion_settings_hash must be a non-empty string")
@@ -105,14 +138,37 @@ def _validated[M: BaseModel](model: type[M], value: object) -> M:
     return model.model_validate_json(json.dumps(value), strict=True)
 
 
+class _LocateDocument(_Saved):
+    sha256: Sha256
+    page_count: PageNumber
+
+
+class _LocateRecord(_Saved):
+    """What locate.json holds that the evidence keeps."""
+
+    version: str
+    document: _LocateDocument
+    ranges: tuple[LocatedRange, ...]
+    ocr_key: Sha256
+
+
+class _ConvertRecord(_Saved):
+    """What convert.json holds that the evidence keeps."""
+
+    sha256: Sha256
+    locate_version: str
+    settings_hash: Sha256
+    settings_plans: tuple[RangePlan, ...]
+
+
 def fingerprint_pages(pages: list[PageText] | tuple[PageText, ...]) -> tuple[PageFingerprint, ...]:
     """Hash every serialized PageText field except timing, without text normalization."""
     fingerprints: list[PageFingerprint] = []
     seen: set[int] = set()
     for raw in pages:
         try:
-            page = raw if isinstance(raw, PageText) else PageText.model_validate(raw)
-        except (ValidationError, TypeError) as exc:
+            page = raw if isinstance(raw, PageText) else _validated(PageText, raw)
+        except (TypeError, ValueError) as exc:
             raise ValueError(f"invalid page record or missing page_no: {exc}") from exc
         if page.page_no in seen:
             raise ValueError(f"duplicate page_no {page.page_no}")
@@ -178,26 +234,13 @@ def _load_object(path: Path) -> dict[str, Any]:
     return value
 
 
-def _conversion_spans(
-    convert: dict[str, Any], locate: dict[str, Any]
-) -> tuple[ConversionSpan, ...]:
+def _conversion_spans(convert: _ConvertRecord, locate: _LocateRecord) -> tuple[ConversionSpan, ...]:
     """The saved plans, once convert.json is shown to belong to the same run as locate.json."""
-    if convert["sha256"] != locate["document"]["sha256"]:
+    if convert.sha256 != locate.document.sha256:
         raise ValueError("convert.json sha256 differs from locate.json document sha256")
-    if convert["locate_version"] != locate["version"]:
+    if convert.locate_version != locate.version:
         raise ValueError("convert.json locate_version differs from locate.json version")
-    plan_values = convert.get("settings_plans")
-    if not isinstance(plan_values, list):
-        raise ValueError("convert.json settings_plans is missing, null or not a list")
-    plans = [_validated(RangePlan, item) for item in plan_values]
-    page_count = locate["document"]["page_count"]
-    for plan in plans:
-        outside = [
-            n for n in (plan.first_page, plan.last_page, *plan.image_pages) if n > page_count
-        ]
-        if outside:
-            raise ValueError(f"plan pages {outside} lie beyond locate page_count {page_count}")
-    return tuple(_span(plan) for plan in plans)
+    return tuple(_span(plan) for plan in convert.settings_plans)
 
 
 def document_evidence(artifact_dir: Path, *, converted: bool) -> DocumentEvidence:
@@ -221,33 +264,29 @@ def document_evidence(artifact_dir: Path, *, converted: bool) -> DocumentEvidenc
         page_values = pages_payload["pages"]
         if not isinstance(page_values, list) or not page_values:
             raise ValueError("page cache has no pages")
-        pages = fingerprint_pages(tuple(PageText.model_validate(value) for value in page_values))
+        pages = fingerprint_pages(tuple(_validated(PageText, value) for value in page_values))
 
-        locate = _load_object(paths[1])
-        range_values = locate["ranges"]
-        if not isinstance(range_values, list):
-            raise ValueError("locate ranges must be a list")
-        ranges = tuple(_validated(LocatedRange, item) for item in range_values)
+        locate = _validated(_LocateRecord, _load_object(paths[1]))
         spans: tuple[ConversionSpan, ...] = ()
         settings_hash = None
         if converted:
-            convert = _load_object(paths[2])
+            convert = _validated(_ConvertRecord, _load_object(paths[2]))
             spans = _conversion_spans(convert, locate)
-            settings_hash = convert["settings_hash"]
+            settings_hash = convert.settings_hash
         if [_stamp(path) for path in paths] != before:
             return incomplete_evidence("artifacts changed while being read", conversion)
         return DocumentEvidence(
             status="complete",
             reason=None,
-            page_count=locate["document"]["page_count"],
+            page_count=locate.document.page_count,
             pages_sha256=record_hash([item.sha256 for item in pages]),
             pages=pages,
-            locate_version=locate["version"],
-            ranges=ranges,
+            locate_version=locate.version,
+            ranges=locate.ranges,
             conversion=conversion,
             conversion_spans=spans,
             conversion_settings_hash=settings_hash,
-            ocr_key=locate["ocr_key"],
+            ocr_key=locate.ocr_key,
         )
     except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError, ValidationError) as exc:
         return incomplete_evidence(f"{artifact_dir}: {exc}", conversion)

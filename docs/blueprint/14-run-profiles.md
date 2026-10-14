@@ -662,16 +662,22 @@ Gate reports (`var/eval/gates-dev.json`) use `evidence_schema_version: 2` and in
 hash. Each conversion span records its page range, OCR mode, OCR language, image pages and
 renderer, so a change of OCR mode or image pages makes the span count as changed. The OCR mode
 and renderer must be values that a conversion plan allows (the `RangeOcr` and `RangeRenderer`
-types of the ingest package); a span with any other value makes the evidence incomplete.
+types of the ingest package); a span with any other value makes the evidence incomplete. The
+type of a located range must be a `StatementType`, so a range of any other type is incomplete
+too; its serialized value is the same string as before, so the evidence schema version stays 2.
 
 The record's `conversion` field is `read` when this run converted the document. A bank or
 insurer that is declined before conversion is recorded as `not_run`, with no spans and no
 settings hash. The `convert.json` left in its artifact directory belongs to an earlier run, so
 it is not read.
 
-Saved artifacts are cross-checked. `convert.json` must share the `sha256` and locate version of
-`locate.json`, and its plan pages must lie within the page count. A page count that does not
-match the cached pages is also incomplete. An artifact that is rewritten while it is being read
+Saved artifacts are read as strictly as the stage that wrote them. Each cached page record must
+validate against `PageText` without coercion, so a page number or measurement written as a
+string is incomplete. The document `sha256`, the `ocr_key` and the conversion `settings_hash`
+must be lowercase 64-digit hexadecimal digests, and the page count must be a whole number of at
+least 1. Saved artifacts are also cross-checked. `convert.json` must share the `sha256` and
+locate version of `locate.json`, and the pages of its plans and of the located ranges must lie
+within the page count. A page count that does not match the cached pages is also incomplete. An artifact that is rewritten while it is being read
 is marked incomplete with the reason `artifacts changed while being read`. Any other missing,
 unreadable or malformed artifact is incomplete, with the error in its reason. A document that
 fails to read is listed under `errored`, with incomplete evidence whose reason starts with

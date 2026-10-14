@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import get_args
 
 import pytest
+from harness.gates import EVIDENCE_SCHEMA_VERSION
 from harness.locate_evidence import (
     compare_evidence,
     document_evidence,
@@ -12,8 +13,13 @@ from harness.locate_evidence import (
     fingerprint_pages,
 )
 from harness.reproducibility import record_hash
+from pydantic import ValidationError
 
-from fra_ingest.results import PageText, RangeOcr, RangeRenderer
+from fra_core.schemas import StatementType
+from fra_ingest.config import IngestConfig
+from fra_ingest.convert import settings_hash
+from fra_ingest.pages import PAGES_STAGE_VERSION, _write_cache, ocr_key
+from fra_ingest.results import PageText, RangeOcr, RangePlan, RangeRenderer
 
 
 def page(**changes: object) -> PageText:
@@ -50,6 +56,9 @@ DEFAULT_PLANS: list[dict[str, object]] = [
 
 
 DOCUMENT_SHA = "d" * 64
+OCR_KEY = hashlib.sha256(b"pages-key").hexdigest()
+SETTINGS_HASH = hashlib.sha256(b"settings").hexdigest()
+STALE_SETTINGS_HASH = hashlib.sha256(b"stale-settings-hash").hexdigest()
 
 
 def _artifacts(
@@ -61,6 +70,9 @@ def _artifacts(
     page_total: int = 1,
     convert_sha: str = DOCUMENT_SHA,
     convert_locate_version: str = "7",
+    ocr_key_value: object = OCR_KEY,
+    settings_hash_value: object = SETTINGS_HASH,
+    locate_sha: object = DOCUMENT_SHA,
 ) -> None:
     root.mkdir()
     pages = [page(header_text=header)] + [page(page_no=n) for n in range(2, page_total + 1)]
@@ -74,8 +86,8 @@ def _artifacts(
         json.dumps(
             {
                 "version": "7",
-                "ocr_key": "pages-key",
-                "document": {"page_count": page_total, "sha256": DOCUMENT_SHA},
+                "ocr_key": ocr_key_value,
+                "document": {"page_count": page_total, "sha256": locate_sha},
                 "ranges": ranges
                 if ranges is not None
                 else [
@@ -90,7 +102,7 @@ def _artifacts(
             {
                 "sha256": convert_sha,
                 "locate_version": convert_locate_version,
-                "settings_hash": "settings",
+                "settings_hash": settings_hash_value,
                 "settings_plans": plans,
             }
         ),
@@ -143,7 +155,7 @@ def test_document_evidence_reads_artifacts_and_marks_missing_or_malformed_incomp
     assert evidence.status == "complete"
     assert evidence.page_count == 1
     assert evidence.locate_version == "7"
-    assert evidence.ocr_key == "pages-key"
+    assert evidence.ocr_key == OCR_KEY
     assert evidence.ranges[0].type == "balance"
     assert evidence.conversion_spans[0].renderer == "pdfium"
     assert document_evidence(tmp_path / "missing", converted=True).status == "incomplete"
@@ -206,7 +218,7 @@ def test_compare_separates_ranges_spans_settings_and_locate_version(tmp_path: Pa
     assert spans_result["conversion_spans_changed"] is True
     assert spans_result["status"] == "conversion spans changed"
 
-    hash_result = compare_evidence(base, changed(conversion_settings_hash="other"))
+    hash_result = compare_evidence(base, changed(conversion_settings_hash=_sha("other")))
     assert hash_result["conversion_settings_changed"] is True
     assert hash_result["conversion_spans_changed"] is False
     assert "plan changed" not in hash_result["status"]
@@ -215,10 +227,10 @@ def test_compare_separates_ranges_spans_settings_and_locate_version(tmp_path: Pa
     assert version_result["locate_version_changed"] == {"previous": "7", "current": "8"}
     assert "locate version" in version_result["status"]
 
-    key_result = compare_evidence(base, changed(ocr_key="other-pages-key"))
+    key_result = compare_evidence(base, changed(ocr_key=_sha("other-pages-key")))
     assert key_result["ocr_key_changed"] == {
-        "previous": "pages-key",
-        "current": "other-pages-key",
+        "previous": OCR_KEY,
+        "current": _sha("other-pages-key"),
     }
 
 
@@ -354,8 +366,8 @@ def _valid_dict(page_total: int = 2) -> dict[str, object]:
             }
         ],
         "conversion": "read",
-        "conversion_settings_hash": "settings",
-        "ocr_key": "pages-key",
+        "conversion_settings_hash": SETTINGS_HASH,
+        "ocr_key": OCR_KEY,
     }
 
 
@@ -401,7 +413,7 @@ def _without(key: str) -> dict[str, object]:
         (_mutated(("pages_sha256",), None), "pages_sha256"),
         (_mutated(("locate_version",), None), "locate_version"),
         (_mutated(("locate_version",), ""), "locate_version"),
-        (_mutated(("ocr_key",), ["pages-key"]), "ocr_key"),
+        (_mutated(("ocr_key",), [OCR_KEY]), "ocr_key"),
         (_mutated(("ocr_key",), None), "ocr_key"),
         (_mutated(("conversion_settings_hash",), ""), "conversion_settings_hash"),
         (_mutated(("page_count",), "12"), "page_count"),
@@ -460,14 +472,14 @@ def test_a_declined_document_ignores_a_stale_convert_json(tmp_path: Path) -> Non
     _artifacts(root, convert_sha="e" * 64)
     convert = json.loads((root / "convert.json").read_text(encoding="utf-8"))
     (root / "convert.json").write_text(
-        json.dumps({**convert, "settings_hash": "stale-settings-hash"}), encoding="utf-8"
+        json.dumps({**convert, "settings_hash": STALE_SETTINGS_HASH}), encoding="utf-8"
     )
     evidence = document_evidence(root, converted=False)
     assert evidence.status == "complete"
     assert evidence.conversion == "not_run"
     assert evidence.conversion_spans == ()
     assert evidence.conversion_settings_hash is None
-    assert "stale-settings-hash" not in json.dumps(evidence.as_dict())
+    assert STALE_SETTINGS_HASH not in json.dumps(evidence.as_dict())
     assert "e" * 64 not in json.dumps(evidence.as_dict())
 
 
@@ -566,3 +578,245 @@ def test_two_runs_that_skipped_conversion_compare_as_unchanged(tmp_path: Path) -
     assert comparison["conversion_changed"] is None
     assert comparison["conversion_spans_changed"] is False
     assert comparison["conversion_settings_changed"] is False
+
+
+def test_evidence_schema_version_is_unchanged_by_the_stricter_range_type() -> None:
+    assert EVIDENCE_SCHEMA_VERSION == 2
+
+
+@pytest.mark.parametrize("statement_type", list(StatementType))
+def test_every_statement_type_a_range_can_carry_is_accepted_and_keeps_its_string(
+    tmp_path: Path, statement_type: StatementType
+) -> None:
+    root = tmp_path / "doc"
+    ranges = [
+        {"type": statement_type.value, "first_page": 1, "last_page": 1, "score": 5.5, "rank": 1}
+    ]
+    _artifacts(root, ranges=ranges)
+    read = document_evidence(root, converted=True)
+    assert read.status == "complete"
+    assert read.as_dict()["ranges"] == ranges
+    saved = evidence_from_dict(json.loads(json.dumps(read.as_dict())))
+    assert saved == read
+
+
+def test_a_range_of_an_unknown_statement_type_is_incomplete(tmp_path: Path) -> None:
+    root = tmp_path / "doc"
+    _artifacts(
+        root,
+        ranges=[{"type": "ghost", "first_page": 1, "last_page": 1, "score": 5.5, "rank": 1}],
+    )
+    evidence = document_evidence(root, converted=True)
+    assert evidence.status == "incomplete"
+    assert evidence.reason and "type" in evidence.reason
+
+
+def test_an_earlier_report_range_of_an_unknown_statement_type_is_malformed() -> None:
+    evidence = evidence_from_dict(_mutated(("ranges", 0, "type"), "ghost"))
+    assert evidence is not None and evidence.status == "incomplete"
+    assert evidence.reason and evidence.reason.startswith("malformed locate_evidence")
+    assert "type" in evidence.reason
+
+
+def _real_page_cache(root: Path, pages: list[PageText]) -> None:
+    _write_cache(root / f"pages.v{PAGES_STAGE_VERSION}.json", {"ocr_engine": None}, pages)
+
+
+def _rewrite_first_cached_page(root: Path, **changes: object) -> None:
+    path = root / f"pages.v{PAGES_STAGE_VERSION}.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["pages"][0].update(changes)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_a_page_cache_written_by_the_pages_stage_is_complete(tmp_path: Path) -> None:
+    root = tmp_path / "doc"
+    _artifacts(root, page_total=2)
+    written = [
+        page(),
+        page(
+            page_no=2,
+            mode="text",
+            source="text",
+            ocr_language=None,
+            ocr_seconds=0.0,
+            ocr_call_seconds=[],
+        ),
+    ]
+    _real_page_cache(root, written)
+    evidence = document_evidence(root, converted=True)
+    assert evidence.status == "complete"
+    assert evidence.pages == fingerprint_pages(written)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("page_no", "1"),
+        ("page_no", 1.0),
+        ("width_pt", "612.0"),
+        ("char_count", "15"),
+        ("visual_arabic", "false"),
+        ("mode", "ghost"),
+        ("source", "ghost"),
+        ("flags", "ocr_failed"),
+        ("unexpected", 1),
+    ],
+)
+def test_a_malformed_cached_page_record_makes_evidence_incomplete(
+    tmp_path: Path, field: str, value: object
+) -> None:
+    root = tmp_path / "doc"
+    _artifacts(root)
+    _real_page_cache(root, [page()])
+    _rewrite_first_cached_page(root, **{field: value})
+    evidence = document_evidence(root, converted=True)
+    assert evidence.status == "incomplete"
+    assert evidence.reason and field in evidence.reason
+
+
+def test_fingerprinting_a_raw_page_record_does_not_coerce_it() -> None:
+    raw = page().model_dump(mode="json")
+    assert fingerprint_pages([raw])  # type: ignore[list-item]
+    with pytest.raises(ValueError, match="page_no"):
+        fingerprint_pages([{**raw, "page_no": "1"}])  # type: ignore[list-item]
+
+
+def test_digests_written_by_the_stages_are_accepted(tmp_path: Path) -> None:
+    config = IngestConfig(artifact_root=tmp_path / "artifacts", device="cpu")
+    pages_key = ocr_key(config, None)
+    converted_key = settings_hash(config, [RangePlan.model_validate(DEFAULT_PLANS[0])], "2", "7")
+    root = tmp_path / "doc"
+    _artifacts(root, ocr_key_value=pages_key, settings_hash_value=converted_key)
+    evidence = document_evidence(root, converted=True)
+    assert evidence.status == "complete"
+    assert (evidence.ocr_key, evidence.conversion_settings_hash) == (pages_key, converted_key)
+
+
+@pytest.mark.parametrize("bad", ["", "pages-key", "A" * 64, "a" * 63, 7, None])
+def test_a_locate_ocr_key_that_is_not_a_digest_is_incomplete(tmp_path: Path, bad: object) -> None:
+    root = tmp_path / "doc"
+    _artifacts(root, ocr_key_value=bad)
+    evidence = document_evidence(root, converted=True)
+    assert evidence.status == "incomplete"
+    assert evidence.reason and "ocr_key" in evidence.reason
+
+
+@pytest.mark.parametrize("bad", ["", "settings", "A" * 64, 7, None])
+def test_a_convert_settings_hash_that_is_not_a_digest_is_incomplete(
+    tmp_path: Path, bad: object
+) -> None:
+    root = tmp_path / "doc"
+    _artifacts(root, settings_hash_value=bad)
+    evidence = document_evidence(root, converted=True)
+    assert evidence.status == "incomplete"
+    assert evidence.reason and "settings_hash" in evidence.reason
+
+
+@pytest.mark.parametrize("field", ["ocr_key", "conversion_settings_hash"])
+@pytest.mark.parametrize("bad", ["pages-key", "A" * 64, "a" * 63])
+def test_an_earlier_report_digest_that_is_not_a_digest_is_malformed(field: str, bad: str) -> None:
+    evidence = evidence_from_dict(_mutated((field,), bad))
+    assert evidence is not None and evidence.status == "incomplete"
+    assert evidence.reason and evidence.reason.startswith("malformed locate_evidence")
+    assert field in evidence.reason
+
+
+@pytest.mark.parametrize("bad", ["not-a-digest", "D" * 64, 7, None])
+def test_a_document_sha256_that_is_not_a_digest_is_incomplete(tmp_path: Path, bad: object) -> None:
+    root = tmp_path / "doc"
+    _artifacts(root, locate_sha=bad, convert_sha=bad)  # type: ignore[arg-type]
+    evidence = document_evidence(root, converted=True)
+    assert evidence.status == "incomplete"
+    assert evidence.reason and "sha256" in evidence.reason
+
+
+@pytest.mark.parametrize("bad", ["1", 1.0, True, 0, None])
+def test_a_locate_page_count_that_is_not_a_page_number_is_incomplete(
+    tmp_path: Path, bad: object
+) -> None:
+    root = tmp_path / "doc"
+    _artifacts(root)
+    locate = json.loads((root / "locate.json").read_text(encoding="utf-8"))
+    locate["document"]["page_count"] = bad
+    (root / "locate.json").write_text(json.dumps(locate), encoding="utf-8")
+    assert document_evidence(root, converted=False).status == "incomplete"
+
+
+def test_a_locate_range_beyond_the_page_count_is_incomplete(tmp_path: Path) -> None:
+    root = tmp_path / "doc"
+    _artifacts(
+        root,
+        ranges=[{"type": "balance", "first_page": 1, "last_page": 2, "score": 5.5, "rank": 1}],
+    )
+    evidence = document_evidence(root, converted=False)
+    assert evidence.status == "incomplete"
+    assert evidence.reason and "page_count" in evidence.reason
+
+
+def test_an_earlier_report_beyond_its_page_count_is_malformed() -> None:
+    for path in (("ranges", 0, "last_page"), ("conversion_spans", 0, "last_page")):
+        evidence = evidence_from_dict(_mutated(path, 3))
+        assert evidence is not None and evidence.status == "incomplete"
+        assert evidence.reason and "page_count" in evidence.reason
+    evidence = evidence_from_dict(_mutated(("conversion_spans", 0, "image_pages"), [3]))
+    assert evidence is not None and evidence.status == "incomplete"
+    assert evidence.reason and "page_count" in evidence.reason
+
+
+def test_a_locate_version_that_is_not_text_is_incomplete(tmp_path: Path) -> None:
+    root = tmp_path / "doc"
+    _artifacts(root)
+    for name in ("locate.json", "convert.json"):
+        record = json.loads((root / name).read_text(encoding="utf-8"))
+        record["version" if name == "locate.json" else "locate_version"] = 7
+        (root / name).write_text(json.dumps(record), encoding="utf-8")
+    assert document_evidence(root, converted=True).status == "incomplete"
+
+
+def _consistent_record(**values: object) -> dict[str, object]:
+    record: dict[str, object] = {
+        "status": "incomplete",
+        "reason": "missing cache",
+        "page_count": None,
+        "pages_sha256": None,
+        "pages": [],
+        "locate_version": None,
+        "ranges": [],
+        "conversion": None,
+        "conversion_spans": [],
+        "conversion_settings_hash": None,
+        "ocr_key": None,
+    }
+    return {**record, **values}
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {"reason": None},
+        {"reason": ""},
+        {"locate_version": "7"},
+        {"ocr_key": "c" * 64},
+        {"page_count": 1},
+        {"conversion_settings_hash": "b" * 64},
+    ],
+)
+def test_an_incomplete_record_has_a_reason_and_no_evidence(values: dict[str, object]) -> None:
+    from harness.locate_evidence import DocumentEvidence
+
+    valid = json.dumps(_consistent_record())
+    assert DocumentEvidence.model_validate_json(valid).status == "incomplete"
+    with pytest.raises(ValidationError):
+        DocumentEvidence.model_validate_json(json.dumps(_consistent_record(**values)))
+
+
+def test_a_complete_record_has_no_reason(tmp_path: Path) -> None:
+    from harness.locate_evidence import DocumentEvidence
+
+    root = tmp_path / "doc"
+    _artifacts(root)
+    complete = document_evidence(root, converted=True)
+    assert complete.status == "complete"
+    with pytest.raises(ValidationError):
+        DocumentEvidence.model_validate_json(json.dumps({**complete.as_dict(), "reason": "stale"}))
