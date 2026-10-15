@@ -1,10 +1,10 @@
 """One job through the pipeline, with each stage recorded on the job's timeline.
 
 Locate, convert, structure and metrics are timed as separate stages: convert is run on its own
-first (``current_convert``), so ``structure_pdf`` then reuses the located pages and the
-conversion rather than repeating them. A bank or an insurer is declined after locate, and its
-convert and metrics stages are recorded as skipped. Any exception ends the job as failed with
-its message; nothing is retried.
+first (``current_convert``), and ``structure_pdf`` is given that conversion and reuses the
+located pages, so neither is repeated, even when a range converted only in part. A bank or an
+insurer is declined after locate, and its convert and metrics stages are recorded as skipped.
+Any exception ends the job as failed with its message; nothing is retried.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ class Pipeline:
     page_count: Callable[[Path], int]
     locate: Callable[[Path], LocateResult]
     convert: Callable[[Path, LocateResult], ConvertResult]
-    structure: Callable[[Path], StructureResult]
+    structure: Callable[[Path, ConvertResult | None], StructureResult]
     metrics: Callable[[Sequence[Statement]], list[MetricValue]]
 
 
@@ -58,7 +58,9 @@ def real_pipeline(
         page_count=page_count,
         locate=lambda pdf: load_or_locate(pdf, config, ocr),
         convert=lambda pdf, located: current_convert(pdf, config, ocr, located, convert),
-        structure=lambda pdf: structure_pdf(pdf, config, ocr, convert=convert),
+        structure=lambda pdf, converted: structure_pdf(
+            pdf, config, ocr, convert=convert, conversion=converted
+        ),
         metrics=lambda statements: compute(primary_statements(statements), policy),
     )
 
@@ -113,13 +115,14 @@ def run_job(store: JobStore, job: Job, pipeline: Pipeline, max_pages: int) -> Jo
             decision.code if decision is not None and decision.outcome == "declined" else None
         )
         store.start_stage(job.id, JobStage.CONVERT)
+        converted: ConvertResult | None = None
         if declined is not None:
             store.finish_stage(job.id, JobStage.CONVERT, f"skipped: declined ({declined})")
         else:
             converted = pipeline.convert(pdf, located)
             store.finish_stage(job.id, JobStage.CONVERT, f"{len(converted.ranges)} page ranges")
         store.start_stage(job.id, JobStage.STRUCTURE)
-        result = pipeline.structure(pdf)
+        result = pipeline.structure(pdf, converted)
         store.finish_stage(job.id, JobStage.STRUCTURE, f"{len(result.statements)} statements")
         store.start_stage(job.id, JobStage.METRICS)
         if declined is not None:
