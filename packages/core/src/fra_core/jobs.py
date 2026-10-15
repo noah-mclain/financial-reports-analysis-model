@@ -278,18 +278,20 @@ class JobStore:
         return self._require(job_id)
 
     @contextmanager
-    def worker_lock(self) -> Iterator[None]:
+    def worker_lock(self) -> Iterator[int]:
         """The store's one worker slot, held for as long as the block runs. A second worker
         is refused at once (``WorkerAlreadyRunning``), so a job left running belongs to a
-        worker that stopped, never to a live one. The operating system releases the lock when
-        the holder exits, however it exits."""
+        worker that stopped, never to a live one. Yields the descriptor for deliberate
+        inheritance by a conversion child via ``pass_fds``. Close it without an explicit
+        unlock: the operating system keeps exclusion until the last inherited descriptor
+        closes, even if the parent crashes. The descriptor is valid only inside this block."""
         path = self.root / "worker.lock"
         with path.open("a+") as handle:
             try:
                 fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 raise WorkerAlreadyRunning(f"another worker holds {path}") from None
-            yield
+            yield handle.fileno()
 
     def fail_interrupted(self) -> list[str]:
         """Fail every job left running, for a worker starting after one stopped mid-job. Call

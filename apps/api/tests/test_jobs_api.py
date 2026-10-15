@@ -145,3 +145,19 @@ def test_the_api_never_imports_ingest_or_docling() -> None:
     )
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+def test_analysis_json_preserves_document_flags(tmp_path: Path) -> None:
+    settings = settings_at(tmp_path)
+    with client_for(settings) as client:
+        sha = upload(client)
+        job_id = client.post(f"/documents/{sha}/analyses").json()["id"]
+        store = JobStore(settings.root)
+        store.claim()
+        data = Analysis(job_id=job_id, upload_sha256=sha, page_count=3, language="en").model_dump()
+        data["flags"] = ["statement_not_found:income", "range_not_converted:5-6"]
+        store.finish(Analysis.model_validate(data))
+        response = client.get(f"/analyses/{job_id}")
+        assert response.status_code == 200
+        assert response.json()["flags"] == data["flags"]
+        assert client.get(f"/jobs/{job_id}").json()["status"] == "needs_review"

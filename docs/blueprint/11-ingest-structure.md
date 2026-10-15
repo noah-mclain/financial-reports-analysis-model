@@ -20,6 +20,67 @@ statement, periods bound from header text, every value with its page, box, table
 Values are kept as printed (sign applied, before scale), and scale and currency are recorded on
 the statement.
 
+## Statement source authorization
+
+Structure version 27 requires the locate result. Classification identifies an apparent table
+kind; it cannot authorize a statement source. `statement_source.py` interprets the ranked,
+unpadded ranges before confidence or header binding is considered. Padded conversion spans
+provide grouping only. The unique span supported by the most distinct enabled types with a
+rank-1, named, non-negative candidate page is the primary block. Within it the lowest-rank
+range of each type is reserved, including when its table fails extraction. Support ties are
+broken by the number of distinct enabled types with named, non-negative candidate pages at
+any rank, then by the lowest sum of their locator ranks. Remaining tied spans with disjoint
+types are complementary primary sources. Tied spans that share a statement type, directly or through
+another tied span, compete; a span that shares no type with another tied span is a primary
+source for its types whatever the others do. Every type the competing spans name is ambiguous
+and keeps no primary range, and the first competing span supplies the reserved ranges. Competing
+same-type spans stay ambiguous unless two locally titled blocks prove opposite
+standalone/consolidated scopes. Each competing group is judged alone: a group of exactly two
+blocks with opposite explicit scopes is resolved whatever other blocks are tied beside it, and a
+group that is not proved stays ambiguous. Once a pair is proved, its second
+block is a primary source for every type it names that the first block does not, so such a
+type starts a statement on its own range; a type both blocks name keeps the first block's range
+as primary and the second block's tables start their own scope group. A tie that is not proved
+stays ambiguous. The scope of a type's primary range is the first explicit scope among its
+locally titled tables, in page and table order; a generic title names none, so a later explicit
+title on the same range decides it, and a range with no explicit title has none.
+
+A start must lie on its type's primary range. Page negatives and exclusive other-type titles
+veto it. Secondary ranges, unrelated padding and outside pages cannot replace a failed
+primary. A second scope requires its own matching range, a local statement title and explicit
+opposite scope in that title; filenames, notes headings and document-wide metadata cannot
+prove it. Scope groups neither merge nor lend periods. Existing confidence, header-conflict,
+column-geometry and closed-balance rules remain in effect. An adjacent compatible table may
+continue an authorized part even in padding, but padding cannot authorize a start. Only two
+known, different title scopes veto continuation; an unmarked repeated title does not. A table
+continues the latest nearby part of its own type, title scope and source group, so interleaved
+tables of two scopes each continue their own scope. A table with no scope marker in padding
+belongs to no scope or group, so it continues the latest nearby part of its type that is open and
+whose periods and columns line up with it; when no part does, it is tested against the latest
+alone, and when several parts admit it the latest keeps it, whichever group they belong to.
+Parts are merged into the latest part of the same type and source group rather than the part
+that precedes them. Primary
+metadata keeps `detect_metadata` precedence; a title-scope override applies only to a separately
+authorized second-scope group. Optional cash-flow and equity types are not extracted while
+they are excluded from the enabled source types.
+
+Every rejected grid remains in `tables` with null type and statement id, original classification
+and recovery evidence, source diagnostics and a stable reason: `source_secondary_range`,
+`source_unrelated_padding`, `source_outside_range`, `source_non_statement_page`,
+`source_primary_ambiguous`, `source_scope_unproven` or `source_conflicting_title`. Data-row
+counts are diagnostic only. Statements are ordered by type, primary group first, then page and
+table order; confidence and check results do not choose the credited source. The evaluator
+consumes this order. Removing a falsely credited statement can reduce reported coverage; no
+accuracy or gate result follows from the policy alone. Grids held for period conflicts or
+missing value columns also have null type and statement id, with their diagnostic evidence
+retained. An empty enabled-type range set returns no statements, `statement_not_extracted`
+flags and `source_outside_range` on every grid; it does not raise.
+
+The structure settings hash includes document identity/page count, canonical range bounds and
+ranks, page title/cue/negative/continuation evidence, candidate status and padding configuration.
+Equivalent reordered records reuse structure; changed source evidence rebuilds statements and
+checks together without changing locate or conversion cache contracts.
+
 ## Measured before designing
 
 Read from the golden docling output of Part 2 (2026-09-29):
@@ -66,6 +127,7 @@ fields it uses; a golden contract test fails if docling's JSON stops matching th
 | `fra_ingest/docling_json.py` | Pydantic models for the docling JSON fields structure reads (tables, cells, boxes, provenance, texts) and a loader |
 | `fra_ingest/table_grid.py` | `build_grid(table, page_height) -> Grid` |
 | `fra_ingest/visual_order.py` | Digit and bracket restoration on `visual_arabic` pages; joining of spaced letters on any page; word order of reversed tables |
+| `fra_ingest/statement_source.py` | Pure located-source planning and start eligibility |
 | `fra_ingest/classify.py` | `classify(grid, context) -> Classification` |
 | `fra_ingest/header.py` | `parse_header(grid, statement_type, context) -> HeaderLayout` |
 | `fra_ingest/metadata.py` | `detect_metadata(...) -> Metadata`: scale, currency, entity, consolidated, conflicts |
@@ -181,11 +243,23 @@ class StructureResult(BaseModel):   # statements.raw.json
      The cell carries `digits_reversed`. Nothing is reversed on other pages.
    - Spaced letters, on any page: in a cell where most tokens are single Arabic letters, each
      run of single-letter tokens is joined into one word; tokens of two or more characters
-     (numbers, `X`, the `لا` ligature is treated as one letter) stay separate. Word boundaries
-     inside a run cannot be recovered, so the joined label is kept as is and flagged
-     `letters_spaced`. Comparisons with taxonomy aliases and cue words on such text ignore
-     spaces on both sides. Readable Arabic labels for these documents are left to week 2's
-     label work.
+     (numbers, `X`, the `لا` ligature is treated as one letter) stay separate, and the cell is
+     flagged `letters_spaced`. Docling's spacing hides where one word ends and the next begins,
+     but the page's own text layer keeps the word gaps. So each joined run is split again at
+     the words that page prints (`page_vocabulary`: the page's Arabic words of two or more
+     letters after NFKC, in reading order on `visual_arabic` pages, spellings folded as the label
+     matcher folds them). The split leaves the fewest letters uncovered, then uses the fewest
+     page words; a letter no page word covers stays on the word before it. The split applies
+     only when page words cover at least 80% of the run's letters. When they cover less, or
+     the page has no text layer, the run stays joined into one word, with no word gaps, and the
+     cell carries `letters_spaced` alone. A label that the page words split into more words than
+     the plain join carries `words_from_page` on its cell. Every value cell of its row then
+     carries `label_words_from_page`, a review warning, so a reader of `statements.raw.json`
+     can tell restored spacing from printed text. A heading row has no value cell, so the
+     statement's `flags` carry `label_words_from_page:<line item id>` instead. The failure mode is a wrong split
+     where two page words happen to concatenate into a run they do not form, or a word missing
+     from the page that is fused with its neighbour. Matching is unaffected either way, since
+     comparisons with taxonomy aliases and cue words ignore spaces on both sides.
    - Word order, per table: on the Arabic digital documents of the fit and validation parts
      (20 with a PDF on disk: 17 fit, 3 validation; none marked `visual_arabic`) docling returns
      the cells of a table with the words of each cell in reverse order and the letters of each
@@ -228,7 +302,8 @@ class StructureResult(BaseModel):   # statements.raw.json
    Negative evidence: a note heading (`Note`, `إيضاح` followed by a number) above the table,
    or no period header. A line that also reads as a period (`Notes 31 December 2025`, a column
    header docling left above the table) is not a note heading. A grid is a statement when its best
-   type reaches `min_confidence` (0.5, `[structure]` in `configs/ingest.toml`); every decision
+   type reaches `min_confidence` (0.5, `[structure]` in `configs/ingest.toml`) and its source is
+   authorized under the source policy above; every decision
    and its evidence goes into `StructureResult.tables`.
 5. **Header.** The header rows are those flagged `column_header` plus any leading rows that
    hold no amounts (a cell that parses as a date or a year is header text, not an amount). They are joined per column top to bottom and parsed with `parse_period`, with
@@ -267,8 +342,10 @@ class StructureResult(BaseModel):   # statements.raw.json
    Caller and collected groups merge by real column, retaining all distinct identities.
    Identical observations deduplicate; a reused per-column ID with different facts fails loudly.
    Scope, source spans, header row, column identity and geometry are validated against the
-   original grid, source cells and page height before binding. A caller's group is validated
-   before any crop is read, and unmatched or ambiguous caller evidence fails loudly. A collected
+   original grid, source cells and page height before binding. A caller's observation rectangle
+   must lie wholly inside the original source cell's rectangle, the same rule collected
+   alternates meet; one that extends beyond it is rejected as an input error. A caller's group
+   is validated before any crop is read, and unmatched or ambiguous caller evidence fails loudly. A collected
    group the original grid cannot carry is dropped with
    `period_evidence_unavailable:<col>:raw_source_mismatch`; it never fails the document.
    Agreeing collected readings that omit the bound header's own interpretation hold the column
@@ -277,7 +354,7 @@ class StructureResult(BaseModel):   # statements.raw.json
    supplies no comparison (`geometry_invalid` for each bound column) and does not stop the
    missing slots being read.
    `TableDecision.period_evidence` retains agreement and conflict observations.
-   Cache version 24 invalidates prior structure results, including versions 23, 22, 21 and 20.
+   Cache version 43 invalidates prior structure results, including versions 42 down to 20.
 
    Each observation is parsed with the same statement kind and date context as its column,
    using core's typed `interpret_period` facts for all four-digit Gregorian calendar years.
@@ -287,7 +364,25 @@ class StructureResult(BaseModel):   # statements.raw.json
    Duration facts distinguish explicit supported lengths (3, 6, 9 or 12 months and existing
    annual/quarter cues), generic period wording, absent wording and invalid stated lengths.
    Unsupported, negated or contradictory lengths hold the column. `parse_period` retains
-   its existing permissive behavior for other callers. Candidate
+   its existing permissive behavior for other callers. Within strict facts the bare Arabic
+   noun "فترة" is generic period wording. Arabic duration cues accept the article ("ال").
+   A dash standing alone in a reading that carries a unit marker is a separator. A dotted month
+   abbreviation ("Dec. 31, 2025") is read in month-first dates. A day-first date
+   separates month and year by at most one "." and one ",", in that order, with any
+   whitespace ("31 Dec., 2025", "31 Dec.2025"); "31 Dec2025" and "31 Dec.. 2025" are not
+   complete dates. A month-first date is the month, at most one ".", whitespace, the day, at
+   most one "," with any whitespace, then the year ("Dec 31, 2025", "Dec. 31, 2025",
+   "December 31 2025"); "Dec 31,,2025" and "Dec.. 31, 2025" are not complete dates. A month
+   and year are separated by at most one "." with any whitespace and at least one separator
+   ("Dec 2025", "Dec. 2025", "Dec.2025"); "Dec.. 2025" is not a date. An Arabic scale
+   spelling that `detect_scale` accepts is a unit marker with up to three attached particles
+   or the article before it ("مبآلاف", "وبالملايين"), but not inside another word ("يتألف").
+   The "X" that stands for a currency glyph is unit text in a reading or a header row only
+   when a scale or currency marker is in the same text, so a second header row such as
+   `X '000` does not discard the date anchor above it, and "31 December 2025 X" is not a
+   complete date. An "x" left behind by masking a stated month count ("x2 months") is not a
+   printed placeholder, so the date beside it stays readable. A reading that states both
+   audited and unaudited is unparseable. Candidate
    text uses the existing header repairs; Arabic digit runs are reversed only for `text`
    provenance on a page explicitly marked `visual_arabic`. Logical OCR readings are not
    reversed, and the observation's literal text, source ID and geometry remain unchanged.
@@ -308,6 +403,12 @@ class StructureResult(BaseModel):   # statements.raw.json
    that includes a collected crop reading cannot be cleared by caller evidence, because the
    merge keeps every collected observation; it stays held for review. There is no automatic
    resolution policy.
+   A recovered reading that gives only a year (any four-digit Gregorian year, read through
+   `interpret_period`, with or without unit or status text) and has no caption flags
+   `period_uncertain`; the printed uncertainty is kept and no binding is recovered.
+   A per-share qualifier ("except per share") beside a unit marker is unit text, not period
+   residue. A duplicate statement's review keeps its `period_conflict` reasons beside
+   `duplicate_statement`.
    A recovered caption fills missing duration information but never replaces an explicit
    observation duration or complete date. Generic period wording supplies no explicit
    length, so an explicit caption can fill it. Invalid facts cannot be healed by context.
@@ -321,6 +422,46 @@ class StructureResult(BaseModel):   # statements.raw.json
    still holds the column. A heading length that contradicts an explicit column
    length holds the column in every case.
    Structure results are cached against `STRUCTURE_VERSION`; changing it invalidates prior structure results while reusing cached conversion output.
+   After row realignment and before building line items, logical OCR grids can split a
+   merged amount literal on a labelled data row. The layout must bind exactly two adjacent
+   value columns to distinct periods, without unbound or conflicted columns. A unit-span
+   cell starting in the left column may supply exactly two whitespace-separated tokens,
+   each matching `[0-9]{1,3}(?:,[0-9]{3})+` and parsing independently, only when the whole
+   literal fails number parsing. The right position must be absent or empty and unspanned.
+   At least two independent rows on the same page and in the same table section as the
+   merged amount must supply parseable, boxed unit-span amounts in both columns, with
+   disjoint horizontal bands. The witness rows must be physically distinct: rows whose
+   vertical bands overlap or touch count once, so a duplicated OCR row is one witness. Each
+   witness needs one boxed label cell lying left of its amounts; a witness without one is
+   ignored. Continuation pages need their own witnesses. Their median
+   horizontal centres establish physical order. The merged source rectangle must contain
+   both centres and the label's vertical centre. Missing, non-finite, overlapping or ambiguous
+   geometry and unresolved
+   row alignment prevent assignment. The rule refuses a layout unless its label lies left of
+   both value columns by column number and by box position, for the table and for the
+   merged row; it therefore does not assign mirrored right-to-left layouts. Digital grids do not use this rule.
+   On a continuation page the split runs before the continuation check, so merged amounts do
+   not displace the column centres it compares; a column whose period is inherited from the
+   previous page is bound first, since the split needs bound periods. On an OCR page, cells
+   that hold a merged amount (two comma-grouped tokens in one cell that the split would
+   consider) are left out of the column centres used to inherit a period and to compare with
+   the previous page, so a wide merged rectangle cannot pull the left value column past the
+   tolerance. Digital grids, and tables without such cells, give the same centres as before.
+   Signs, parentheses, decimals, percentages, note references and space-grouped numbers
+   remain outside its scope. No period ordering, magnitude, expected value or check result
+   chooses an assignment.
+
+   Both derived cells retain the original source row, source column and shared rectangle;
+   each keeps its own exact token as `raw_text`. No token rectangle is invented. The original
+   combined literal stays accessible through the Docling table reference and source position.
+   Each cell carries `numeric_columns_split`, shown as a review warning and a reason to hold
+   the statement even when its numerical checks pass. This intentional hold keeps the split
+   visible for review until its provenance is checked. Because the shared rectangle spans
+   both columns, split cells are left out of per-column geometry: column centres and the
+   horizontal band used for a synthesised missing-cell box ignore them. Assignment is pure
+   and idempotent; unsuccessful eligibility returns the original grid. Structure cache
+   version 29 makes statements, checks and reviews regenerate; conversion, pages and locate
+   caches retain their existing contracts.
 6. **Metadata.** Scale from the header text, then the caption, then the page text; per-share
    rows are exempt. Currency the same way; when none of those name one (Almarai's glyph), the
    country of incorporation decides: the earliest page with a phrase such as "a Saudi Joint
@@ -388,8 +529,10 @@ class StructureResult(BaseModel):   # statements.raw.json
 | A known total (`Total assets`) has no value in any period | Its cells kept with `numbers_missing`; the checks on it are `skipped` with `missing_values` |
 | A value does not parse | `reported` None, `raw_text` kept, parser flags on the cell |
 | A header column does not bind to a period | That column dropped, `period_unbound:<col>` on the statement; with no bound column, no statement and `statement_not_extracted:<type>` |
+| No located range for any enabled type | No statements; `statement_not_extracted:<type>` for each enabled type and `source_outside_range` on each grid |
+| Source does not authorize a start | Grid retained with null type/id and a named `source_*` reason (secondary range, unrelated padding, outside range, non-statement page, ambiguous primary, unproven scope or conflicting title) |
 | An enabled type has no classified table | `statement_not_extracted:<type>` on the result |
-| Two tables claim the same type on the same page and cannot be merged | Both kept, `ambiguous_statement:<type>`; the higher-confidence one first |
+| Two tables claim the same type on the same page and cannot be merged | Both kept, `ambiguous_statement:<type>`; the primary-source group first, then page and table order |
 | Scale or currency signals disagree | `scale_conflict` or `currency_conflict`; the header value wins |
 | Currency only inferred from document text | `currency_inferred` |
 | A subtotal or the identity fails | `CheckResult` fail with the difference; the statement gets `subtotal_failed` or `identity_failed` |

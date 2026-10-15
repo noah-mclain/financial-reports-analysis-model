@@ -8,11 +8,15 @@ hang ends only the child; this module reports how it ended.
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
 import sys
+import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from pathlib import Path
+from types import FrameType
 from typing import cast, get_args
 
 from fra_ingest.config import EFFECTIVE_CONFIG_ENV, OCR_ENGINE_ENV, IngestConfig
@@ -38,11 +42,14 @@ def convert_in_child(
     config_path: Path | None = None,
     extra_args: Sequence[str] = (),
     command: Sequence[str] | None = None,
+    worker_lock_fd: int | None = None,
 ) -> ConvertResult:
     """Transport the full validated effective config; the child does not reload settings.
 
     ``config_path`` is kept in the command for ordinary command fixtures, but the transported
     effective config is authoritative. The returned digest must match this parent's settings.
+    A worker supplies its live lock descriptor explicitly; the child retains exclusion even
+    if the parent is killed. This POSIX descriptor is not transported in config or environment.
     """
     config = IngestConfig.model_validate(config.model_dump())
     if not pdf.is_file():
@@ -69,14 +76,7 @@ def convert_in_child(
 
     started = time.perf_counter()
     try:
-        done = subprocess.run(
-            argv,
-            capture_output=True,
-            text=True,
-            timeout=config.child_timeout_s,
-            env=env,
-            check=False,
-        )
+        done = _run_child(argv, env, config.child_timeout_s, worker_lock_fd)
     except subprocess.TimeoutExpired as exc:
         detail = f"{pdf.name}: still running after {config.child_timeout_s:g} s; " + (
             _last_stage(exc.stderr)
@@ -115,6 +115,57 @@ def convert_in_child(
         failed = ", ".join(f"{r.first_page}-{r.last_page}" for r in result.ranges)
         raise IngestError("convert_failed", f"every range failed: {failed}")
     return result.model_copy(update={"timings": {**result.timings, "child_wall": wall}})
+
+
+@contextmanager
+def _defer_stop_signals() -> Iterator[None]:
+    """Defer stop handlers until Popen is assigned, or until cleanup finishes. Blocking the
+    signals with pthread_sigmask would also block them in the exec'd child. Only the main
+    thread receives Python signals; background callers need no handler replacement."""
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    pending: list[int] = []
+
+    def defer(signum: int, frame: FrameType | None) -> None:
+        pending.append(signum)
+
+    previous = {sig: signal.signal(sig, defer) for sig in (signal.SIGINT, signal.SIGTERM)}
+    try:
+        yield
+    finally:
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+        if pending:
+            signal.raise_signal(pending[0])
+
+
+def _run_child(
+    argv: list[str], env: dict[str, str], timeout: float, worker_lock_fd: int | None
+) -> subprocess.CompletedProcess[str]:
+    child: subprocess.Popen[str] | None = None
+    try:
+        with _defer_stop_signals():
+            child = subprocess.Popen(
+                argv,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+                pass_fds=() if worker_lock_fd is None else (worker_lock_fd,),
+            )
+        stdout, stderr = child.communicate(timeout=timeout)
+        return subprocess.CompletedProcess(argv, child.returncode, stdout, stderr)
+    finally:
+        if child is not None:
+            with _defer_stop_signals():
+                if child.poll() is None:
+                    child.kill()
+                child.wait()
+                if child.stdout is not None:
+                    child.stdout.close()
+                if child.stderr is not None:
+                    child.stderr.close()
 
 
 def _reason(stderr: str, pdf: Path) -> IngestErrorReason | None:

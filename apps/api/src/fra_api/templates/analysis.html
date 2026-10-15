@@ -49,6 +49,13 @@
   shown with their reasons; their figures are as read, not vouched for.</div>
 {% endif %}
 
+{% if analysis.flags %}
+<section class="panel" aria-labelledby="document-notices">
+  <h2 id="document-notices">Document notices</h2>
+  <ul class="reasons">{% for flag in analysis.flags %}<li><code>{{ flag }}</code></li>{% endfor %}</ul>
+</section>
+{% endif %}
+
 <h2>Summary</h2>
 {% if analysis.narrative %}
 <div class="panel" dir="{{ 'rtl' if analysis.narrative.language == 'ar' else 'ltr' }}" lang="{{ analysis.narrative.language }}">

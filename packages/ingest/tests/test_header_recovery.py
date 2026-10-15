@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 from pydantic import BaseModel
+from support import located_titles
 
 from fra_core.schemas import BBox, StatementType
 from fra_ingest import header_recovery
@@ -1077,7 +1078,7 @@ def test_real_partial_recovery_cannot_bypass_consumer_period_holds(
     base = inputs([(grid.docling_path, observation.document())]).model_copy(
         update={
             "page_modes": {grid.page_no: PageMode.IMAGE},
-            "title_types": {grid.page_no: (StatementType.INCOME,)},
+            "located": located_titles({grid.page_no: (StatementType.INCOME,)}, {}),
             "period_evidence": (group,),
         }
     )
@@ -1441,3 +1442,95 @@ def test_partial_recovery_with_separate_interim_context_preserves_original_bindi
                 assert layout.value_cols[target_col].end_date.isoformat() == "2024-06-30"
                 if kind != StatementType.BALANCE:
                     assert layout.value_cols[target_col].months == length
+
+
+def _without_caption(lines: list[OcrLine], caption: str) -> list[OcrLine]:
+    return [line for line in lines if line.text != caption]
+
+
+@pytest.mark.parametrize("year", ["3025", "2025"])
+def test_partial_recovery_holds_a_bare_year_without_a_caption(
+    year: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    observation = partial_observation()
+    lines = _without_caption(safety_lines("CAPTION", ("31 December 2023", year)), "CAPTION")
+    result = recover(observation, monkeypatch, lines)
+    assert not result.recovered_headers
+    assert "header_recovery_period_uncertain" in result.flags
+    assert result.cells == observation.grid.cells
+
+
+# This test and the next record current behaviour: nothing checks that a year is plausible,
+# so a misread year in a complete date, or under a dated caption, still binds.
+def test_partial_recovery_with_a_complete_date_and_no_caption_is_not_a_bare_year(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observation = partial_observation()
+    lines = _without_caption(
+        safety_lines("CAPTION", ("31 December 2023", "31 December 3025")), "CAPTION"
+    )
+    result = recover(observation, monkeypatch, lines)
+    assert [c.text for c in result.recovered_headers] == ["31 December 3025"]
+    assert result.cells == observation.grid.cells
+
+
+def test_partial_recovery_with_a_dated_caption_and_a_misread_year(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observation = partial_observation()
+    lines = safety_lines("For the year ended 31 December", ("31 December 2023", "3025"))
+    result = recover(observation, monkeypatch, lines)
+    assert [c.text for c in result.recovered_headers] == ["3025"]
+    assert result.cells == observation.grid.cells
+
+
+def _with_unit_row(observation: Observation, text: str, col: int = 0) -> Observation:
+    """Add a second header row under the bound column's date."""
+    cells = observation.table.data.table_cells
+    date = next(c for c in cells if c.start_row_offset_idx == 0 and c.start_col_offset_idx == col)
+    assert date.bbox is not None
+    units = date.model_copy(
+        update={
+            "text": text,
+            "start_row_offset_idx": 1,
+            "bbox": date.bbox.model_copy(
+                update={"top": date.bbox.bottom, "bottom": date.bbox.bottom + 1}
+            ),
+        }
+    )
+    data = observation.table.data.model_copy(update={"table_cells": [*cells, units]})
+    return observation.model_copy(
+        update={"table": observation.table.model_copy(update={"data": data})}
+    )
+
+
+def _anchor_flags(unit_text: str, monkeypatch: pytest.MonkeyPatch) -> tuple[Grid, Grid]:
+    observation = _with_unit_row(partial_observation(header="31 December 2025"), unit_text)
+    before = observation.grid
+    assert parse_header(before, StatementType.BALANCE, None).header_rows == [0, 1]
+    result = recover(
+        observation,
+        monkeypatch,
+        safety_lines("For the year ended 31 December", ("31 December 2025", "31 December 2024")),
+    )
+    return before, result
+
+
+@pytest.mark.parametrize("unit_text", ["'000", "X '000", "'000 X"])
+def test_a_glyph_placeholder_beside_a_scale_keeps_the_split_header_anchor(
+    unit_text: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    before, result = _anchor_flags(unit_text, monkeypatch)
+    assert [c.col for c in result.recovered_headers] == [1]
+    assert [e.col for e in result.period_evidence] == [0]
+    assert not any("source_anchor_invalid" in flag for flag in result.flags)
+    assert result.cells == before.cells
+
+
+@pytest.mark.parametrize("unit_text", ["X", "X (Audited)", "X Note"])
+def test_a_glyph_placeholder_without_a_unit_marker_still_discards_the_anchor(
+    unit_text: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, result = _anchor_flags(unit_text, monkeypatch)
+    assert not result.period_evidence
+    assert "period_evidence_unavailable:0:source_anchor_invalid" in result.flags

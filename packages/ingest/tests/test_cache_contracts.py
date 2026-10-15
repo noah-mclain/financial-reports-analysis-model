@@ -222,7 +222,7 @@ def test_behavior_versions_propagate_through_all_dependent_digests(
         settings_hash=old_digest,
         ranges=[],
     )
-    old_structure = structure._settings_hash(config, result)
+    old_structure = structure._settings_hash(config, result, where)
     if contract == "pages":
         monkeypatch.setattr(pages, "PAGES_STAGE_VERSION", "future")
         monkeypatch.setattr(convert, "PAGES_STAGE_VERSION", "future", raising=False)
@@ -239,6 +239,7 @@ def test_behavior_versions_propagate_through_all_dependent_digests(
                     "settings_hash": new_digest,
                 }
             ),
+            where,
         )
         != old_structure
     )
@@ -255,7 +256,7 @@ def test_legacy_structure_forces_current_conversion(
         version=structure.STRUCTURE_VERSION,
         sha256=SHA,
         convert_version=old.version,
-        settings_hash=structure._settings_hash(config, old),
+        settings_hash=structure._settings_hash(config, old, where),
         flags=["obsolete_success"],
     )
     out = tmp_path / SHA
@@ -340,12 +341,15 @@ def test_fresh_conversion_records_plans_and_reuses_them(tmp_path: Path) -> None:
     assert cached == result
 
 
-@pytest.mark.parametrize("prior_version", ["18", "19", "20", "21", "22", "23"])
+@pytest.mark.parametrize(
+    "prior_version",
+    [str(version) for version in range(18, 43)],
+)
 def test_period_evidence_changes_only_the_structure_cache_contract(
     monkeypatch: pytest.MonkeyPatch,
     prior_version: str,
 ) -> None:
-    assert structure.STRUCTURE_VERSION == "24"
+    assert structure.STRUCTURE_VERSION == "43"
     assert convert.CONVERT_VERSION == "2"
     assert pages.PAGES_STAGE_VERSION == "5"
     config = IngestConfig()
@@ -359,13 +363,16 @@ def test_period_evidence_changes_only_the_structure_cache_contract(
         settings_hash=_digest(config, where),
         ranges=[],
     )
-    current = structure._settings_hash(config, converted)
+    current = structure._settings_hash(config, converted, where)
     monkeypatch.setattr(structure, "STRUCTURE_VERSION", prior_version)
-    assert structure._settings_hash(config, converted) != current
+    assert structure._settings_hash(config, converted, where) != current
     assert _digest(config, where) == converted.settings_hash
 
 
-@pytest.mark.parametrize("prior_version", ["18", "19", "20", "21", "22", "23"])
+@pytest.mark.parametrize(
+    "prior_version",
+    [str(version) for version in range(18, 43)],
+)
 def test_prior_structure_is_not_reused_but_healthy_conversion_is(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -388,7 +395,7 @@ def test_prior_structure_is_not_reused_but_healthy_conversion_is(
             version=prior_version,
             sha256=SHA,
             convert_version=converted.version,
-            settings_hash=structure._settings_hash(config, converted),
+            settings_hash=structure._settings_hash(config, converted, where),
             flags=["obsolete_structure"],
         )
     out = tmp_path / SHA
@@ -413,7 +420,7 @@ def test_prior_structure_is_not_reused_but_healthy_conversion_is(
 
     result = structure.structure_pdf(Path("synthetic.pdf"), config, None, convert=cached_convert)
     assert calls == []
-    assert result.version == "24"
+    assert result.version == "43"
     assert result.settings_hash != old.settings_hash
     assert "obsolete_structure" not in result.flags
     assert ConvertResult.model_validate_json((out / "convert.json").read_text()) == converted

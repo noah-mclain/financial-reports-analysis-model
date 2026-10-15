@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 from fra_analytics.frame import primary_statements
@@ -47,14 +48,17 @@ class Pipeline:
     metrics: Callable[[Sequence[Statement]], list[MetricValue]]
 
 
-def real_pipeline(config: IngestConfig, policy: Policy) -> Pipeline:
+def real_pipeline(
+    config: IngestConfig, policy: Policy, *, worker_lock_fd: int | None = None
+) -> Pipeline:
     """Today's stages, as the dry run calls them: convert in a child process per document."""
     ocr = make_engine(config)
+    convert = partial(convert_in_child, worker_lock_fd=worker_lock_fd)
     return Pipeline(
         page_count=page_count,
         locate=lambda pdf: load_or_locate(pdf, config, ocr),
-        convert=lambda pdf, located: current_convert(pdf, config, ocr, located, convert_in_child),
-        structure=lambda pdf: structure_pdf(pdf, config, ocr, convert=convert_in_child),
+        convert=lambda pdf, located: current_convert(pdf, config, ocr, located, convert),
+        structure=lambda pdf: structure_pdf(pdf, config, ocr, convert=convert),
         metrics=lambda statements: compute(primary_statements(statements), policy),
     )
 
@@ -74,6 +78,7 @@ def analysis_of(
         language=located.document.language,
         statements=result.statements,
         reviews=result.reviews,
+        flags=list(dict.fromkeys([*located.flags, *result.flags])),
         decline=(
             Decline(code=industry.code, reason=industry.reason)
             if industry is not None and industry.outcome == "declined"

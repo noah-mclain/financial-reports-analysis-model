@@ -129,7 +129,7 @@ def _statement_summary(row: dict[str, Any]) -> str:
 def first_statements(
     result: StructureResult, types: Iterable[StatementType]
 ) -> dict[StatementType, Statement]:
-    """The first statement the stage found of each wanted type."""
+    """Consume the stage's source ordering: primary group first, then page/table order."""
     wanted = set(types)
     found: dict[StatementType, Statement] = {}
     for statement in result.statements:

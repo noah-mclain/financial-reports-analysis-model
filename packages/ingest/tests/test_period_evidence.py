@@ -5,6 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 import pytest
+from support import located_titles
 from test_structure import PAGE_1, _balance_tables, inputs, table
 
 from fra_core.schemas import Statement
@@ -276,6 +277,33 @@ def test_invalid_or_ambiguous_geometry_is_rejected(box: dict[str, float]) -> Non
     observations[1]["provenance"]["bbox"] = box
     with pytest.raises(ValueError, match="period evidence"):
         structure_document(supplied(raw), IngestConfig())
+
+
+@pytest.mark.parametrize(
+    "box",
+    [
+        {"left": 360, "top": 95, "right": 480, "bottom": 109},
+        {"left": 360, "top": 103, "right": 480, "bottom": 117},
+        {"left": 355, "top": 100, "right": 475, "bottom": 112},
+        {"left": 365, "top": 100, "right": 485, "bottom": 112},
+    ],
+)
+def test_an_observation_must_lie_inside_the_source_cell(box: dict[str, float]) -> None:
+    raw = evidence()
+    observations = raw["observations"]
+    assert isinstance(observations, list)
+    observations[1]["provenance"]["bbox"] = box
+    with pytest.raises(ValueError, match="invalid header geometry"):
+        structure_document(supplied(raw), IngestConfig())
+
+
+def test_an_observation_inside_the_source_cell_is_accepted() -> None:
+    raw = evidence()
+    observations = raw["observations"]
+    assert isinstance(observations, list)
+    observations[1]["provenance"]["bbox"] = {"left": 365, "top": 101, "right": 475, "bottom": 111}
+    result, _ = structure_document(supplied(raw), IngestConfig())
+    assert len(result.tables[0].period_evidence[0].observations) == 2
 
 
 def test_duplicate_source_ids_cannot_pose_as_independent_observations() -> None:
@@ -574,7 +602,7 @@ def test_income_classification_probe_does_not_create_a_false_period_kind_conflic
         evidence(texts=("2025", "For the year ended 31 December 2025")),
         evidence(3, texts=("2024", "For the year ended 31 December 2024")),
         rows=INCOME_1,
-    ).model_copy(update={"title_types": {1: (StatementType.INCOME,)}})
+    ).model_copy(update={"located": located_titles({1: (StatementType.INCOME,)}, {})})
     result, _ = structure_document(base, IngestConfig())
     assert len(result.statements) == 1
     assert [p.key for p in result.statements[0].periods] == ["FY2025", "FY2024"]
@@ -637,7 +665,10 @@ def test_recovered_caption_preserves_conflicting_explicit_durations(caption: str
         "For the six months ended 31 December 2025",
     )
     base = supplied(evidence(texts=texts), rows=INCOME_1).model_copy(
-        update={"page_modes": {1: PageMode.IMAGE}, "title_types": {1: (StatementType.INCOME,)}}
+        update={
+            "page_modes": {1: PageMode.IMAGE},
+            "located": located_titles({1: (StatementType.INCOME,)}, {}),
+        }
     )
     result, _ = structure_document(
         base, IngestConfig(), header_recover=lambda g, _d: _recovered_period_grid(g, caption)
@@ -680,7 +711,10 @@ def test_agreeing_explicit_duration_checks_recovered_context(caption: str, held:
 
     text = "For the three months ended 31 December 2025"
     base = supplied(evidence(texts=(text, text)), rows=INCOME_1).model_copy(
-        update={"page_modes": {1: PageMode.IMAGE}, "title_types": {1: (StatementType.INCOME,)}}
+        update={
+            "page_modes": {1: PageMode.IMAGE},
+            "located": located_titles({1: (StatementType.INCOME,)}, {}),
+        }
     )
     result, _ = structure_document(
         base, IngestConfig(), header_recover=lambda g, _d: _recovered_period_grid(g, caption)
@@ -894,7 +928,10 @@ def test_unsupported_stated_length_is_held_in_every_binding_path(recovered: bool
 
     texts = ("For the year ended 31 December 2025", "For the 10 months ended 31 December 2025")
     base = supplied(evidence(texts=texts), rows=INCOME_1).model_copy(
-        update={"page_modes": {1: PageMode.IMAGE}, "title_types": {1: (StatementType.INCOME,)}}
+        update={
+            "page_modes": {1: PageMode.IMAGE},
+            "located": located_titles({1: (StatementType.INCOME,)}, {}),
+        }
     )
     result, _ = structure_document(
         base,
@@ -916,7 +953,10 @@ def test_generic_period_wording_takes_missing_length_from_recovery() -> None:
 
     text = "For the period ended 31 December 2025"
     base = supplied(evidence(texts=(text, text)), rows=INCOME_1).model_copy(
-        update={"page_modes": {1: PageMode.IMAGE}, "title_types": {1: (StatementType.INCOME,)}}
+        update={
+            "page_modes": {1: PageMode.IMAGE},
+            "located": located_titles({1: (StatementType.INCOME,)}, {}),
+        }
     )
     result, _ = structure_document(
         base,
@@ -960,7 +1000,10 @@ def test_invalid_facts_cannot_be_healed_by_date_or_duration_context(
 
     text = "For the year ended 31 December 2025"
     base = supplied(evidence(texts=(text, invalid)), rows=INCOME_1).model_copy(
-        update={"page_modes": {1: PageMode.IMAGE}, "title_types": {1: (StatementType.INCOME,)}}
+        update={
+            "page_modes": {1: PageMode.IMAGE},
+            "located": located_titles({1: (StatementType.INCOME,)}, {}),
+        }
     )
     before = base.model_dump_json()
     result, _ = structure_document(
@@ -993,7 +1036,10 @@ def test_generic_and_absent_lengths_take_only_the_missing_caption_length(
 
     text = f"{generic} 31 December 2025"
     base = supplied(evidence(texts=(text, text)), rows=INCOME_1).model_copy(
-        update={"page_modes": {1: PageMode.IMAGE}, "title_types": {1: (StatementType.INCOME,)}}
+        update={
+            "page_modes": {1: PageMode.IMAGE},
+            "located": located_titles({1: (StatementType.INCOME,)}, {}),
+        }
     )
     result, _ = structure_document(
         base, IngestConfig(), header_recover=lambda g, _d: _recovered_period_grid(g, caption)
@@ -1011,7 +1057,10 @@ def test_supported_explicit_lengths_agree_in_recovery(length: int) -> None:
     caption = f"For the {length} months ended"
     text = f"{caption} 31 December 2025"
     base = supplied(evidence(texts=(text, text)), rows=INCOME_1).model_copy(
-        update={"page_modes": {1: PageMode.IMAGE}, "title_types": {1: (StatementType.INCOME,)}}
+        update={
+            "page_modes": {1: PageMode.IMAGE},
+            "located": located_titles({1: (StatementType.INCOME,)}, {}),
+        }
     )
     result, _ = structure_document(
         base, IngestConfig(), header_recover=lambda g, _d: _recovered_period_grid(g, caption)

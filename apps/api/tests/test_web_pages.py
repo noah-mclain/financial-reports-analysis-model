@@ -338,16 +338,72 @@ def test_the_results_show_statements_metrics_and_say_there_is_no_summary(tmp_pat
     assert "No written summary yet" in page
 
 
+def test_document_flags_show_ordered_reasons_without_overriding_review_status(
+    tmp_path: Path,
+) -> None:
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(
+            settings,
+            client,
+            flags=["statement_not_extracted:income", "range_not_converted"],
+        )
+        page = client.get(f"/analyses/{job_id}/view").text
+    assert 'class="badge needs_review">needs_review</span>' in page
+    assert '<h2 id="document-notices">Document notices</h2>' in page
+    assert page.index("statement_not_extracted:income") < page.index("range_not_converted")
+
+
+def test_document_informational_flag_keeps_completed_status_and_unknown_flag_is_escaped(
+    tmp_path: Path,
+) -> None:
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        informational = finished_job(settings, client, flags=["low_selectivity"])
+        informational_page = client.get(f"/analyses/{informational}/view").text
+        hostile = finished_job(settings, client, flags=["<script>notice</script>"])
+        hostile_page = client.get(f"/analyses/{hostile}/view").text
+    assert 'class="badge completed">completed</span>' in informational_page
+    assert "low_selectivity" in informational_page
+    assert "&lt;script&gt;notice&lt;/script&gt;" in hostile_page
+    assert "<script>notice</script>" not in hostile_page
+
+
+def test_document_without_flags_has_no_document_notices_section(tmp_path: Path) -> None:
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(settings, client, flags=[])
+        page = client.get(f"/analyses/{job_id}/view").text
+    assert 'class="badge completed">completed</span>' in page
+    assert "Document notices" not in page
+
+
 def test_a_declined_document_shows_the_reason_and_no_metrics(tmp_path: Path) -> None:
     settings = settings_at(tmp_path)
     decline = Decline(code="bank", reason="declined:bank: total deposits on page 3")
     with TestClient(create_app(Profile.NATIVE, settings)) as client:
         job_id = finished_job(
-            settings, client, statements=[], reviews=[], metrics=[], decline=decline
+            settings,
+            client,
+            statements=[],
+            reviews=[],
+            metrics=[],
+            decline=decline,
+            flags=["statement_not_extracted:income"],
         )
         page = client.get(f"/analyses/{job_id}/view").text
     assert "Declined (bank)" in page and "total deposits on page 3" in page
+    assert "statement_not_extracted:income" in page
     assert "<h2>Metrics</h2>" not in page
+
+
+def test_a_document_hold_remains_visible_with_document_notices(tmp_path: Path) -> None:
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(settings, client, hold="identity mismatch", flags=["unknown_reason"])
+        page = client.get(f"/analyses/{job_id}/view").text
+    assert "Every statement is held for review." in page and "identity mismatch" in page
+    assert "unknown_reason" in page
 
 
 def test_a_narrative_is_shown_with_how_it_was_checked(tmp_path: Path) -> None:
