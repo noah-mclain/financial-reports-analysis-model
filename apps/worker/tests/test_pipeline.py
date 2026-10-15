@@ -2,6 +2,7 @@
 analysis it leaves, a decline, a page limit and a failing stage."""
 
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -250,6 +251,7 @@ def test_a_bank_is_declined_without_convert_or_metrics_and_says_why(tmp_path: Pa
     analysis = store.load_analysis(job.id)
     assert analysis is not None and analysis.decline is not None
     assert analysis.decline.code == "bank" and "total deposits" in analysis.decline.reason
+    assert analysis.flags == ["declined:bank"]
 
 
 def test_a_pdf_over_the_page_limit_fails_before_any_page_is_read(tmp_path: Path) -> None:
@@ -281,3 +283,60 @@ def test_drain_runs_every_queued_job_and_stops_when_none_is_left(tmp_path: Path)
     assert drain(store, pipeline_for(sha, calls), max_pages=50) == 2
     assert calls.names.count("locate") == 2
     assert drain(store, pipeline_for(sha, calls), max_pages=50) == 0
+
+
+@pytest.mark.parametrize(
+    ("locate_flags", "structure_flags", "expected_flags"),
+    [
+        (["statement_not_found:income"], [], ["statement_not_found:income"]),
+        (["image_pages_not_read:2"], [], ["image_pages_not_read:2"]),
+        (["ocr_failed_pages:1"], [], ["ocr_failed_pages:1"]),
+        (["garbled_text_layers_not_read:1"], [], ["garbled_text_layers_not_read:1"]),
+        ([], ["statement_not_extracted:income"], ["statement_not_extracted:income"]),
+        ([], ["range_not_converted:5-6"], ["range_not_converted:5-6"]),
+        (["future_failure:page7"], [], ["future_failure:page7"]),
+        (
+            ["ocr_failed_pages:1", "ocr_failed_pages:1"],
+            ["ocr_failed_pages:1", "range_not_converted:5-6"],
+            ["ocr_failed_pages:1", "range_not_converted:5-6"],
+        ),
+    ],
+)
+def test_partial_extraction_keeps_document_flags_and_needs_review(
+    tmp_path: Path,
+    locate_flags: list[str],
+    structure_flags: list[str],
+    expected_flags: list[str],
+) -> None:
+    store, sha = queued(tmp_path)
+    loc = located(sha).model_copy(update={"flags": locate_flags})
+    result = structured(sha).model_copy(update={"flags": structure_flags})
+    pipeline = replace(pipeline_for(sha, Calls(), result=result), locate=lambda pdf: loc)
+    job = run_one(store, pipeline)
+    assert job.status is JobStatus.NEEDS_REVIEW
+    analysis = store.load_analysis(job.id)
+    assert analysis is not None
+    assert analysis.flags == expected_flags
+    assert analysis.status() is JobStatus.NEEDS_REVIEW
+    assert store.events(job.id)[-1].kind == "needs_review"
+
+
+def test_low_selectivity_is_preserved_without_holding_complete_extraction(tmp_path: Path) -> None:
+    store, sha = queued(tmp_path)
+    loc = located(sha).model_copy(update={"flags": ["low_selectivity"]})
+    pipeline = replace(pipeline_for(sha, Calls()), locate=lambda pdf: loc)
+    job = run_one(store, pipeline)
+    assert job.status is JobStatus.COMPLETED
+    analysis = store.load_analysis(job.id)
+    assert analysis is not None and analysis.flags == ["low_selectivity"]
+
+
+def test_no_statements_keeps_the_document_failure_reasons(tmp_path: Path) -> None:
+    store, sha = queued(tmp_path)
+    result = structured(sha).model_copy(
+        update={"statements": [], "reviews": [], "flags": ["statement_not_extracted:balance"]}
+    )
+    job = run_one(store, pipeline_for(sha, Calls(), result=result))
+    analysis = store.load_analysis(job.id)
+    assert job.status is JobStatus.NEEDS_REVIEW
+    assert analysis is not None and analysis.flags == ["statement_not_extracted:balance"]

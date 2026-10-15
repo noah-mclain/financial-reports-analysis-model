@@ -274,3 +274,17 @@ def test_a_finished_job_whose_analysis_file_is_missing_is_an_error(tmp_path: Pat
     store.analysis_path(job.id).unlink()
     with pytest.raises(FileNotFoundError, match="is completed but"):
         store.load_analysis(job.id)
+
+
+def test_document_flags_hold_an_otherwise_passing_analysis_across_storage(tmp_path: Path) -> None:
+    store = store_at(tmp_path)
+    upload = store.add_upload(PDF, "r.pdf", SETTINGS)
+    job = store.enqueue(upload.sha256)
+    store.claim()
+    analysis = analysis_for(job.id, upload.sha256, "passed").model_copy(
+        update={"flags": ["range_not_converted:5-6"]}
+    )
+    assert store.finish(analysis).status is JobStatus.NEEDS_REVIEW
+    restored = store.load_analysis(job.id)
+    assert restored is not None and restored.flags == ["range_not_converted:5-6"]
+    assert restored.status() is JobStatus.NEEDS_REVIEW

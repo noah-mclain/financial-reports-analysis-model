@@ -102,6 +102,10 @@ class Analysis(BaseModel):
     language: str
     statements: list[Statement] = Field(default_factory=list)
     reviews: list[StatementReview] = Field(default_factory=list)
+    flags: list[str] = Field(
+        default_factory=list,
+        description="Document-level locate/structure reasons, in stage order without duplicates",
+    )
     decline: Decline | None = None
     hold: str | None = Field(
         default=None, description="Why every statement is held, when one reason holds them all"
@@ -113,14 +117,17 @@ class Analysis(BaseModel):
 
     def status(self) -> JobStatus:
         """``completed`` only when there are statements and every one passed review; a
-        decline, a hold, a statement held for review or no statement at all is
-        ``needs_review``."""
+        decline, a hold, an unresolved document flag, a statement held for review or no
+        statement at all is ``needs_review``. Only ``low_selectivity`` is informational:
+        it describes conversion cost, not incomplete extraction. Unknown flags hold the job
+        conservatively until their meaning is explicitly classified here."""
         reviewed = {r.statement_id: r.status for r in self.reviews}
         missing = [s.id for s in self.statements if s.id not in reviewed]
         if missing:
             msg = f"analysis {self.job_id}: statements without a review: {missing}"
             raise ValueError(msg)
         passed = bool(self.statements) and all(reviewed[s.id] == "passed" for s in self.statements)
-        if self.decline is None and self.hold is None and passed:
+        document_held = any(flag != "low_selectivity" for flag in self.flags)
+        if self.decline is None and self.hold is None and not document_held and passed:
             return JobStatus.COMPLETED
         return JobStatus.NEEDS_REVIEW

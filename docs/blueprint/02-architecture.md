@@ -70,6 +70,19 @@ everything downstream of it.
 - A user correction moves the job back to `queued`, re-entering at `validate`.
 - Narration re-runs only on explicit request.
 
+The current upload worker preserves locate and structure document flags in `Analysis.flags`,
+in stage order with duplicates removed. Incomplete extraction or an unknown document flag
+sets `needs_review` even when the statements present passed their individual reviews.
+`low_selectivity` alone describes conversion cost and does not hold a complete analysis.
+The analysis API returns these reasons; consumers must display them beside the review status.
+
+The single upload worker uses a nonblocking POSIX file lock on its job store. It explicitly
+passes the locked descriptor to each conversion child, including conversion requested during
+structure. Exclusion lasts until both worker and child close it. SIGINT and SIGTERM unwind
+the worker, killing and reaping an active conversion before releasing its slot. SIGKILL cannot
+run cleanup: the orphaned conversion retains exclusion until it exits; a hung orphan must be
+stopped before a replacement can start. The lock is not a timeout or a cross-machine lease.
+
 ## 2.4 Data contract (`packages/core`)
 
 ```python

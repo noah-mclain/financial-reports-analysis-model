@@ -59,9 +59,11 @@ load PyTorch.
 
 ### Why the CLI is the child
 
-`fra-ingest convert <pdf>` converts in its own process and exits. `convert_in_child` runs it
-with `subprocess.run([sys.executable, "-m", "fra_ingest.cli", "convert", ...], timeout=...)`
-and reads the `convert.json` it wrote. The week 4 worker calls the same helper.
+`fra-ingest convert <pdf>` converts in its own process and exits. `convert_in_child` starts it
+with `subprocess.Popen([sys.executable, "-m", "fra_ingest.cli", "convert", ...])`, communicates
+with a timeout, kills and reaps it on timeout or an unwinding exception, and reads the
+`convert.json` it wrote. The upload worker explicitly passes its lock descriptor so the child
+keeps exclusion even after a parent crash (02, Job states).
 
 - A docling crash, an out-of-memory kill or a hang takes down only the child, and the parent
   reports how it ended.
