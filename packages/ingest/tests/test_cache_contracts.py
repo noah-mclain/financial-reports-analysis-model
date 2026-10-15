@@ -444,7 +444,7 @@ def test_an_alias_edit_changes_the_structure_cache_key(
         settings_hash=_digest(config, where),
         ranges=[],
     )
-    current = structure._settings_hash(config, converted)
+    current = structure._settings_hash(config, converted, where)
     edited = tmp_path / "taxonomy.yaml"
     packaged = resources.files("fra_core.taxonomy").joinpath("canonical_items.yaml")
     edited.write_text(
@@ -454,4 +454,4 @@ def test_an_alias_edit_changes_the_structure_cache_key(
     taxonomy = load_taxonomy(edited)
     assert taxonomy.version == load_taxonomy().version
     monkeypatch.setattr(structure, "load_taxonomy", lambda: taxonomy)
-    assert structure._settings_hash(config, converted) != current
+    assert structure._settings_hash(config, converted, where) != current
