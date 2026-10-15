@@ -28,6 +28,9 @@ from fra_core.schemas import JobStage
 
 # Page images at 2x (144 dpi): sharp enough to read a figure, small enough to load at once.
 RENDER_SCALE = 2.0
+# A page's longest side in pixels at most: a PDF may declare any page size, and the bitmap is
+# allocated in full before it is encoded. An A3 page at 2x is 2,384 pixels long.
+MAX_RENDER_SIDE = 4000
 STAGES = tuple(stage.value for stage in JobStage)
 # PDFium is process-global and not thread-safe, even for different documents. Keep native
 # construction, access and explicit destruction under the same lock in both sync routes.
@@ -58,13 +61,20 @@ def page_size(pdf: Path, page_no: int) -> tuple[float, float]:
     return float(width), float(height)
 
 
+def render_scale(width: float, height: float) -> float:
+    """``RENDER_SCALE``, lowered for a page so large its longest side would pass
+    ``MAX_RENDER_SIDE`` pixels."""
+    return min(RENDER_SCALE, MAX_RENDER_SIDE / max(width, height))
+
+
 def render_page(pdf: Path, page_no: int, target: Path) -> None:
     with _PDFIUM_LOCK:
-        page_size(pdf, page_no)  # the same 404 for a missing page; the lock is reentrant
+        # The same 404 for a missing page; the lock is reentrant.
+        scale = render_scale(*page_size(pdf, page_no))
         with (
             pdfium.PdfDocument(pdf) as document,
             closing(document[page_no - 1]) as page,
-            closing(page.render(scale=RENDER_SCALE)) as bitmap,
+            closing(page.render(scale=scale)) as bitmap,
         ):
             # PIL can share the native bitmap buffer. Detach before closing PDFium objects.
             image = bitmap.to_pil().copy()

@@ -12,8 +12,10 @@ import pypdfium2 as pdfium
 import pytest
 from api_support import settings_at
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from fra_api.app import create_app
+from fra_api.pages import MAX_RENDER_SIDE, render_page
 from fra_api.views import (
     amount,
     analysis_view,
@@ -52,9 +54,9 @@ PERIOD = Period(key="2025-12-31", end_date=date(2025, 12, 31), kind=PeriodKind.I
 PAGE_W, PAGE_H = 600.0, 800.0
 
 
-def one_page_pdf() -> bytes:
+def one_page_pdf(width: float = PAGE_W, height: float = PAGE_H) -> bytes:
     document = pdfium.PdfDocument.new()
-    document.new_page(PAGE_W, PAGE_H)
+    document.new_page(width, height)
     buffer = io.BytesIO()
     document.save(buffer)
     return buffer.getvalue()
@@ -271,6 +273,33 @@ def test_the_same_figure_claimed_twice_links_each_occurrence_to_its_own_metric()
     third = [*claims, Claim(metric_id="current_ratio", period_key=PERIOD.key, text_span="1.50")]
     with pytest.raises(ValueError, match="is not in"):
         sentence_parts(Sentence(text=text, claims=third), anchors)
+
+
+def test_a_claimed_figure_is_never_found_inside_a_longer_figure() -> None:
+    text = "The current ratio is 1.50, the quick ratio 1.5 and revenue 1,250."
+    claims = [
+        Claim(metric_id="quick_ratio", period_key=PERIOD.key, text_span="1.5"),
+        Claim(metric_id="current_ratio", period_key=PERIOD.key, text_span="1.50"),
+        Claim(metric_id="revenue_growth", period_key=PERIOD.key, text_span="250"),
+    ]
+    anchors = frozenset(metric_anchor(c.metric_id, c.period_key) for c in claims)
+    two = Sentence(text=text, claims=claims[:2])
+    links = [(p.text, p.href) for p in sentence_parts(two, anchors) if p.href]
+    assert links == [
+        ("1.50", f"#{metric_anchor('current_ratio', PERIOD.key)}"),
+        ("1.5", f"#{metric_anchor('quick_ratio', PERIOD.key)}"),
+    ]
+    with pytest.raises(ValueError, match="'250' is not in"):  # only inside 1,250
+        sentence_parts(Sentence(text=text, claims=claims), anchors)
+
+
+def test_a_page_declared_huge_is_rendered_no_longer_than_the_limit(tmp_path: Path) -> None:
+    pdf = tmp_path / "huge.pdf"
+    pdf.write_bytes(one_page_pdf(14_400, 7_200))  # the PDF maximum: 200 by 100 inches
+    target = tmp_path / "1.png"
+    render_page(pdf, 1, target)
+    with Image.open(target) as image:
+        assert image.size == (MAX_RENDER_SIDE, MAX_RENDER_SIDE // 2)  # not 28,800 by 14,400
 
 
 def test_the_analysis_lists_computed_metrics_first_and_refuses_an_unreviewed_statement() -> None:

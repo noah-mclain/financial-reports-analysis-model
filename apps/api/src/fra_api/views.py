@@ -256,26 +256,39 @@ class SectionView:
     sentences: tuple[tuple[SentencePart, ...], ...]
 
 
+def _span_pattern(span: str) -> re.Pattern[str]:
+    """The span as printed, not as part of a longer figure: ``1.5`` is not found inside
+    ``1.50``, nor ``50`` inside ``1,250``."""
+    before = r"(?<!\w)(?<!\d[.,])" if span[0].isalnum() else ""
+    after = r"(?!\w)(?![.,]\d)" if span[-1].isalnum() else ""
+    return re.compile(before + re.escape(span) + after)
+
+
 def sentence_parts(sentence: Sentence, anchors: frozenset[str]) -> tuple[SentencePart, ...]:
-    """The sentence with each claimed span a link to the metric it states. A span missing
-    from the sentence, overlapping another, or naming a metric the analysis did not compute
-    is an error: a figure in the summary is shown only with its trace."""
-    placed = []
-    taken: dict[str, int] = {}  # the same text claimed twice is its next occurrence
+    """The sentence with each claimed span a link to the metric it states. Each claim takes
+    the first occurrence of its span that no earlier claim took, so the same figure claimed
+    twice links each occurrence in turn. A span with no free occurrence, or naming a metric
+    the analysis did not compute, is an error: a figure in the summary is shown only with
+    its trace."""
+    placed: list[tuple[int, int, str]] = []
     for claim in sentence.claims:
-        at = sentence.text.find(claim.text_span, taken.get(claim.text_span, 0))
         anchor = metric_anchor(claim.metric_id, claim.period_key)
-        if at < 0:
-            raise ValueError(f"claim {claim.text_span!r} is not in {sentence.text!r}")
         if anchor not in anchors:
             raise ValueError(f"claim {claim.text_span!r} names no computed metric ({anchor})")
-        placed.append((at, at + len(claim.text_span), anchor))
-        taken[claim.text_span] = at + len(claim.text_span)
+        found = next(
+            (
+                m
+                for m in _span_pattern(claim.text_span).finditer(sentence.text)
+                if all(m.end() <= start or m.start() >= end for start, end, _ in placed)
+            ),
+            None,
+        )
+        if found is None:
+            raise ValueError(f"claim {claim.text_span!r} is not in {sentence.text!r}")
+        placed.append((found.start(), found.end(), anchor))
     parts: list[SentencePart] = []
     cursor = 0
     for start, end, anchor in sorted(placed):
-        if start < cursor:
-            raise ValueError(f"claims overlap in {sentence.text!r}")
         if start > cursor:
             parts.append(SentencePart(sentence.text[cursor:start], None))
         parts.append(SentencePart(sentence.text[start:end], f"#{anchor}"))
