@@ -179,7 +179,7 @@ a first look. The holdout and the dry runs reduce that risk; they do not remove 
 | R16 | Fused adapter does not convert to GGUF cleanly | Week 1 spike, before any training run depends on it |
 | R17 | Blind documents leak into development | Issuer-grouped pools enforced by `make corpus-check`; failures fixed on non-blind documents |
 | R18 | Cloud environment cannot reach most filing hosts | Collection and fetch scripts run unchanged on the Mac; URL and sha256 recorded so the set reproduces |
-| R19 | CPU-only narration too slow in Docker | Smaller model in the Docker profile if measured generation is under 5 tokens/s; the template summary is always available |
+| R19 | CPU-only narration too slow in Docker | Closed 2026-10-15: the 7B Q4_K_M file generates 15 to 19 tokens/s on the CPU inside the container, above the 5 tokens/s line ([14-run-profiles.md](14-run-profiles.md)); the template summary is always available |
 | R20 | Source site terms restrict automated download | Polite fetch (one request at a time, robots.txt respected), issuer and exchange sources preferred, documents never redistributed |
 
 ## Working rules

@@ -1,14 +1,15 @@
 # 14. Run profiles: the model route from MLX to llama.cpp, and the Docker skeleton
 
-Status: v5, 2026-10-06. The GGUF spike is measured, on two runs, the Docker skeleton is built
+Status: v6, 2026-10-15. R19 is measured and closed ("R19: the 7B file inside the
+container"). The GGUF spike is measured, on two runs, the Docker skeleton is built
 and measured ("The Docker skeleton"), the week 2 OCR bake-off is recorded ("The OCR
 bake-off", the last section), and a hosted Linux container smoke run covers x86-64 for the
 image as it stood on 2026-10-05. This document closes R16 as a question
 ([08-revised-plan.md](08-revised-plan.md)): the route works on a small model. The route uses a
 step that [01-constraints.md](01-constraints.md) 1.4 forbade on this machine; the owner amended
 that rule on 2026-10-02 for this export only, under conditions (see "Decision for week 3"). The
-7B route has not been run: the rehearsal comes first. This document records a first number for
-R19.
+7B route has not been run: the rehearsal comes first. This document closes R19 with a measurement
+of the 7B file inside the container.
 
 ## The question
 
@@ -197,7 +198,37 @@ This is the 0.5B model on the Mac's own CPU, not in a container. The 7B model ha
 times the parameters, and CPU speed scales roughly with size, so the Docker profile lands
 about 4 to 5.3 tokens/s generating, on either side of the 5 tokens/s line of R19, and about 25
 tokens/s reading the prompt, before the VM takes its share. Those are estimates, not
-measurements: R19 stays open until the 7B file is benchmarked inside the container.
+measurements: R19 stayed open until the 7B file was benchmarked inside the container.
+
+## R19: the 7B file inside the container
+
+Measured on 2026-10-15: the official Qwen2.5-7B-Instruct Q4_K_M GGUF (`Qwen/Qwen2.5-7B-Instruct-GGUF`,
+two shards, 4.36 GiB, 7.62 B parameters; sha256 `dfce12e3862a5283ccfb88221b48480e58745165de856439950d0f22590580db` and
+`539cf93f78e887edea1c04e2d7d8cdaca9d01dae9c9025bcb8accbe29df3d72a`), run by `llama-bench` (build 843e7dcc1) in
+`ghcr.io/ggml-org/llama.cpp:full`, pulled as
+`ghcr.io/ggml-org/llama.cpp@sha256:139d4c374d80269e0b706c55901b0b4caea3d5caa4734d5652b299a2f3da9503`,
+on Docker 27.3.1 with 12 CPUs and 13.1 GiB of memory: `-ngl 0 -p 512 -n 128 -r 3`, at 6 and 12
+threads. These are short-context figures: generation slows as the context grows, and the
+narration time target ([04-execution-phases.md](04-execution-phases.md)) has not been measured
+end to end through the server.
+
+| Threads | Prompt, tokens/s | Generation, tokens/s |
+|--------:|-----------------:|---------------------:|
+| 6 | 46.5 ± 0.8 | 18.9 ± 2.4 |
+| 12 | 67.6 ± 2.7 | 15.1 ± 1.5 |
+
+Generation is 15 to 19 tokens/s, three to four times the 5 tokens/s line, so R19 is closed: the
+Docker profile keeps the 7B model and needs no smaller one. The machine was not idle: the load
+average was 9.8 when the run started and rose to 39 during it. An idle machine
+is expected to read no slower, but that is not measured. The estimate above was low on both:
+about 1.9 to 2.7 times for the prompt and 2.8 to 4.7 times for generation; scaling the 0.5B model's speed by parameter count does
+not hold.
+
+Generation is slower at 12 threads than at 6. The likely reason, not measured, is that each
+generated token reads every weight once, so it is bound by memory bandwidth and more threads add
+contention; with the load average above 12, oversubscription alone could also explain it. Reading the prompt is batched
+and does gain from them. The served model should therefore run with an explicit thread count
+rather than llama.cpp's default; which count is best on an idle machine is not measured.
 
 ## What failed, and the fix
 
@@ -225,7 +256,7 @@ the adapter rewritten: MLX writes `adapters.safetensors` with its own config, an
 converter reads the PEFT layout. It remains the fallback if the real adapter loses answers at
 the level that ships, or if a fused 7B model fails to convert.
 
-Nothing in the spike was run in Docker. The CPU-only figures come from `-ngl 0` on macOS.
+Nothing in the 0.5B spike was run in Docker. The CPU-only figures come from `-ngl 0` on macOS.
 
 ## Decision for week 3
 
@@ -268,9 +299,8 @@ Runs of the 7B export recorded here (condition 7 of 1.4): none yet.
 
 Before and during week 3:
 
-- **Benchmark first.** Run an off-the-shelf Qwen2.5-7B-Instruct Q4_K_M GGUF in the container
-  before training anything. Speed does not depend on the adapter, and R19's mitigation, a
-  smaller model, needs its own training run.
+- **Benchmark first.** Done on 2026-10-15: 15 to 19 tokens/s generating in the container (see
+  "R19: the 7B file inside the container"), so no smaller model is trained.
 - **Rehearse the 7B route** with a throwaway adapter, and record peak memory, disk and any
   quantize fallbacks (condition 1 in [01-constraints.md](01-constraints.md) 1.4). Nothing is
   recorded yet.
@@ -289,7 +319,7 @@ Before and during week 3:
 
 ## Open
 
-- R19: generation speed of the 7B GGUF inside the container.
+- The thread count for the served model, measured on an idle machine.
 
 What the spike cannot have shown about the 7B:
 
