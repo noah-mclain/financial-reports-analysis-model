@@ -11,6 +11,12 @@ flagged, as is a row whose label fits more than one item, whose alias disagrees 
 or an item two rows claim with different figures. A flagged row is left unmapped: a mapping is
 never guessed. Section headings are not aliases (``LabelIndex.headings``): they only tell which
 total sits under them. Cash flow is not mapped yet. Headings carry no values and are left alone.
+
+Two refinements read only what is already settled. A heading the text layer ran into a row's
+label is read past, and the rest must be an alias exactly (``LabelIndex.match_past_headings``).
+An alias two items share by section ("Lease liabilities", current and non-current) is settled
+by the total the row is confirmed to sum into, when that total is mapped; an alias whose item
+belongs to another section than the row's confirmed total is flagged, not mapped.
 """
 
 from __future__ import annotations
@@ -115,8 +121,25 @@ def _resolve(
     aliased: tuple[CanonicalItem, ...],
     anchored: list[tuple[str, str]],
     confirmed: frozenset[str],
+    *,
+    past_heading: bool = False,
+    section: str | None = None,
+    section_totals: frozenset[str] = frozenset(),
 ) -> tuple[str | None, MappingSource | None, str, str | None]:
-    """The canonical id, its source, the evidence, and the flag for one row."""
+    """The canonical id, its source, the evidence, and the flag for one row. ``section`` is the
+    mapped total the row is confirmed to sum into, when there is one."""
+    how = "alias_past_heading" if past_heading else "alias"
+    if section is not None:
+        in_section = tuple(a for a in aliased if a.within == section)
+        if len(aliased) > 1 and len(in_section) == 1:
+            aliased, how = in_section, f"{how}_in_section:{section}"
+        elif (
+            len(aliased) == 1
+            and aliased[0].within is not None
+            and section in section_totals
+            and aliased[0].within != section
+        ):
+            return None, None, f"section_conflict:{aliased[0].id}|section={section}", "ambiguous"
     alias_ids = _ids(aliased)
     anchor_ids = sorted({a for _, a in anchored})
     if len(aliased) > 1:
@@ -131,7 +154,7 @@ def _resolve(
     if aliased and aliased[0].subtotal and item.id not in confirmed:
         return None, None, f"alias_total_unconfirmed:{alias_ids[0]}", "ambiguous"
     if aliased:
-        return alias_ids[0], MappingSource.LEXICON, "alias", None
+        return alias_ids[0], MappingSource.LEXICON, how, None
     if anchor_ids:
         return anchor_ids[0], MappingSource.ANCHOR, f"anchor:{anchored[0][0]}", None
     return None, None, "no_alias_no_anchor", "unmapped"
@@ -216,7 +239,10 @@ def map_statement(
 ) -> Statement:
     if statement.type not in MAPPED_TYPES:
         return statement
-    aliased = {i.id: index.match_all(i.raw_label, statement.type) for i in statement.line_items}
+    matched = {
+        i.id: index.match_past_headings(i.raw_label, statement.type) for i in statement.line_items
+    }
+    aliased = {row: found for row, (found, _) in matched.items()}
     checked = checked_totals(checks)
     confirmed = confirmed_totals(checks)
     anchors: _Anchors = defaultdict(list)
@@ -225,7 +251,12 @@ def map_statement(
         i.id: found
         for i in statement.line_items
         if i.cells
-        and (found := _resolve(i, aliased[i.id], anchors[i.id], confirmed))[0] is not None
+        and (
+            found := _resolve(
+                i, aliased[i.id], anchors[i.id], confirmed, past_heading=matched[i.id][1]
+            )
+        )[0]
+        is not None
     }
     _sum_anchors(statement, {k: v[0] for k, v in first_pass.items() if v[0]}, checked, anchors)
     rows: list[LineItem] = []
@@ -233,8 +264,15 @@ def map_statement(
         if not item.cells:
             rows.append(item)
             continue
+        parent = first_pass.get(item.parent_id) if item.parent_id is not None else None
         canonical, source, evidence, flag = _resolve(
-            item, aliased[item.id], anchors[item.id], confirmed
+            item,
+            aliased[item.id],
+            anchors[item.id],
+            confirmed,
+            past_heading=matched[item.id][1],
+            section=parent[0] if parent is not None else None,
+            section_totals=index.section_totals,
         )
         rows.append(
             item.model_copy(

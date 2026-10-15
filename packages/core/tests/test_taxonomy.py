@@ -189,3 +189,120 @@ def test_a_heading_that_is_an_alias_of_another_item_is_rejected(tmp_path: Path) 
     item = _total(headings={"en": ["some section"], "ar": ["قسم أ"]})
     with pytest.raises(ValueError, match=r"heading 'some section'.*total_a.*total_b"):
         load_taxonomy(_write(tmp_path, [item, other]))
+
+
+def _write_taxonomy(tmp_path: Path, document: dict[str, object]) -> Path:
+    path = tmp_path / "taxonomy.yaml"
+    path.write_text(yaml.safe_dump(document, allow_unicode=True), encoding="utf-8")
+    return path
+
+
+def _section_total(item_id: str) -> dict[str, object]:
+    return {
+        "id": item_id,
+        "statement": "balance",
+        "subtotal": True,
+        "aliases": {"en": [item_id.replace("_", " ")], "ar": [item_id]},
+    }
+
+
+def _shared_leaf(
+    item_id: str, within: str | None, alias: str = "lease liabilities"
+) -> dict[str, object]:
+    leaf: dict[str, object] = {
+        "id": item_id,
+        "statement": "balance",
+        "aliases": {"en": [alias], "ar": ["مطلوبات عقود الإيجار"]},
+    }
+    if within is not None:
+        leaf["within"] = within
+    return leaf
+
+
+def test_an_alias_shared_by_items_of_different_sections_loads_and_looks_up_as_none(
+    tmp_path: Path,
+) -> None:
+    path = _write_taxonomy(
+        tmp_path,
+        {
+            "version": 1,
+            "items": [
+                _section_total("current_total"),
+                _section_total("non_current_total"),
+                _shared_leaf("lease_current", "current_total"),
+                _shared_leaf("lease_non_current", "non_current_total"),
+            ],
+        },
+    )
+    taxonomy = load_taxonomy(path)
+    assert taxonomy.lookup("Lease liabilities", StatementType.BALANCE) is None
+    assert taxonomy.by_id("lease_current").within == "current_total"  # type: ignore[union-attr]
+
+
+@pytest.mark.parametrize(
+    "withins", [("current_total", None), ("current_total", "current_total"), (None, None)]
+)
+def test_a_shared_alias_needs_a_different_section_on_every_item(
+    tmp_path: Path, withins: tuple[str | None, str | None]
+) -> None:
+    path = _write_taxonomy(
+        tmp_path,
+        {
+            "version": 1,
+            "items": [
+                _section_total("current_total"),
+                _shared_leaf("a", withins[0]),
+                _shared_leaf("b", withins[1]),
+            ],
+        },
+    )
+    with pytest.raises(ValueError, match="maps to both"):
+        load_taxonomy(path)
+
+
+def test_within_must_name_a_total_of_the_same_statement(tmp_path: Path) -> None:
+    path = _write_taxonomy(
+        tmp_path,
+        {
+            "version": 1,
+            "items": [_shared_leaf("a", "missing"), _shared_leaf("b", None, alias="other")],
+        },
+    )
+    with pytest.raises(ValueError, match="not a total of the same statement"):
+        load_taxonomy(path)
+
+
+def test_statement_headings_need_both_languages(tmp_path: Path) -> None:
+    path = _write_taxonomy(
+        tmp_path,
+        {
+            "version": 1,
+            "statement_headings": {"balance": {"en": ["assets"]}},
+            "items": [_section_total("current_total")],
+        },
+    )
+    with pytest.raises(ValueError, match=r"statement_headings\.balance"):
+        load_taxonomy(path)
+
+
+def test_the_balance_sheet_prints_statement_headings_in_both_languages(
+    taxonomy: Taxonomy,
+) -> None:
+    headings = taxonomy.statement_headings[StatementType.BALANCE]
+    assert "assets" in headings and "الموجودات" in headings
+
+
+@pytest.mark.parametrize(
+    "english", ["assets", ["assets", ""], ["assets", 3]], ids=["string", "empty", "number"]
+)
+def test_statement_headings_must_be_lists_of_text(tmp_path: Path, english: object) -> None:
+    path = _write_taxonomy(
+        tmp_path,
+        {
+            "version": 1,
+            "statement_headings": {"balance": {"en": english, "ar": ["الموجودات"]}},
+            "items": [_section_total("current_total")],
+        },
+    )
+    with pytest.raises(ValueError, match=r"statement_headings\.balance: needs a list"):
+        load_taxonomy(path)

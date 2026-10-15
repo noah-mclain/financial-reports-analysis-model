@@ -3,11 +3,15 @@
 Validated at load time so a bad file fails fast instead of mis-mapping labels mid-run.
 
 Aliases are keyed per statement: "Non-controlling interests" is a profit line in the income
-statement and an equity line in the balance sheet.
+statement and an equity line in the balance sheet. Within one statement an alias names one item,
+except where every item sharing it says which total it sits ``within`` and those totals differ:
+"Lease liabilities" is printed under current and under non-current liabilities alike, and only
+the section a row sums into tells the two apart.
 """
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -44,6 +48,8 @@ class CanonicalItem:
     # How statements print the heading of the section this total closes ("Current assets").
     # Not aliases: a heading never names the total, it only tells which total sits under it.
     headings: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    # The total this item sums into, for an item whose alias another item shares.
+    within: str | None = None
 
     def aliases_for(self, language: str) -> tuple[str, ...]:
         return self.aliases.get(language, ())
@@ -74,6 +80,12 @@ class Taxonomy:
     items: tuple[CanonicalItem, ...]
     _by_id: Mapping[str, CanonicalItem]
     _by_alias: Mapping[tuple[StatementType, str], CanonicalItem]
+    # Headings a statement prints over its sections ("Assets", "Equity and liabilities"); a text
+    # layer can run them into the first row below, like a section heading.
+    statement_headings: Mapping[StatementType, tuple[str, ...]] = field(default_factory=dict)
+    # sha256 of the file as read: what a cache of mapped statements must be keyed on, since an
+    # alias can change without the version changing.
+    digest: str = ""
 
     def by_id(self, canonical_id: str) -> CanonicalItem | None:
         return self._by_id.get(canonical_id)
@@ -89,7 +101,8 @@ class Taxonomy:
         )
 
     def lookup(self, label: str, statement: StatementType) -> CanonicalItem | None:
-        """Exact match on the normalized label, within one statement.
+        """Exact match on the normalized label, within one statement; None for an alias items
+        share by section (``within``), which only a row's section settles.
 
         This is the first rung of the mapping ladder. Labels it does not resolve go on to the
         embedding matcher and then, if still unresolved, to the model.
@@ -100,7 +113,8 @@ class Taxonomy:
 @lru_cache(maxsize=4)
 def load_taxonomy(path: Path | None = None) -> Taxonomy:
     """Load the taxonomy, from the packaged resource unless a path is given."""
-    raw = _read(path)
+    text = _read_text(path)
+    raw = _parse(text)
     version = raw.get("version")
     if version != _SUPPORTED_VERSION:
         msg = f"taxonomy version {version!r} is not supported (expected {_SUPPORTED_VERSION})"
@@ -113,16 +127,26 @@ def load_taxonomy(path: Path | None = None) -> Taxonomy:
 
     items = tuple(_build_item(entry) for entry in entries)
     by_id = _index_by_id(items)
+    _check_within(items, by_id)
     by_alias = _index_by_alias(items)
     _check_headings(items, by_alias)
-    return Taxonomy(version=version, items=items, _by_id=by_id, _by_alias=by_alias)
+    return Taxonomy(
+        version=version,
+        items=items,
+        _by_id=by_id,
+        _by_alias=by_alias,
+        statement_headings=_build_statement_headings(raw.get("statement_headings", {})),
+        digest=hashlib.sha256(text.encode("utf-8")).hexdigest(),
+    )
 
 
-def _read(path: Path | None) -> dict[str, Any]:
+def _read_text(path: Path | None) -> str:
     if path is not None:
-        text = path.read_text(encoding="utf-8")
-    else:
-        text = resources.files(__package__).joinpath(_RESOURCE).read_text(encoding="utf-8")
+        return path.read_text(encoding="utf-8")
+    return resources.files(__package__).joinpath(_RESOURCE).read_text(encoding="utf-8")
+
+
+def _parse(text: str) -> dict[str, Any]:
     loaded = yaml.safe_load(text)
     if not isinstance(loaded, dict):
         msg = "taxonomy file does not contain a mapping"
@@ -160,6 +184,10 @@ def _build_item(entry: Any) -> CanonicalItem:
 
     subtotal = bool(entry.get("subtotal", False))
     headings = _build_headings(item_id, subtotal, entry.get("headings", {}))
+    within = entry.get("within")
+    if within is not None and (not isinstance(within, str) or not within):
+        msg = f"{item_id}: within must name a total"
+        raise ValueError(msg)
 
     return CanonicalItem(
         id=item_id,
@@ -170,6 +198,7 @@ def _build_item(entry: Any) -> CanonicalItem:
         per_share=bool(entry.get("per_share", False)),
         aliases=MappingProxyType(aliases),
         headings=MappingProxyType(headings),
+        within=within,
     )
 
 
@@ -201,23 +230,61 @@ def _index_by_id(items: tuple[CanonicalItem, ...]) -> Mapping[str, CanonicalItem
     return MappingProxyType(index)
 
 
+def _shared_by_section(a: CanonicalItem, b: CanonicalItem) -> bool:
+    return a.within is not None and b.within is not None and a.within != b.within
+
+
 def _index_by_alias(
     items: tuple[CanonicalItem, ...],
 ) -> Mapping[tuple[StatementType, str], CanonicalItem]:
-    index: dict[tuple[StatementType, str], CanonicalItem] = {}
+    """Alias to its one item. An alias items share by section is left out: a lookup of it is
+    None, and the mapper settles it by the row's section."""
+    owners: dict[tuple[StatementType, str], list[CanonicalItem]] = {}
     for item in items:
         for language in _REQUIRED_LANGUAGES:
             for alias in item.aliases_for(language):
                 key = (item.statement, normalize_label(alias))
-                existing = index.get(key)
-                if existing is not None and existing.id != item.id:
-                    msg = (
-                        f"alias {alias!r} maps to both {existing.id!r} and {item.id!r} "
-                        f"within the {item.statement.value} statement"
-                    )
-                    raise ValueError(msg)
-                index[key] = item
-    return MappingProxyType(index)
+                found = owners.setdefault(key, [])
+                for existing in found:
+                    if existing.id != item.id and not _shared_by_section(existing, item):
+                        msg = (
+                            f"alias {alias!r} maps to both {existing.id!r} and {item.id!r} "
+                            f"within the {item.statement.value} statement"
+                        )
+                        raise ValueError(msg)
+                if all(existing.id != item.id for existing in found):
+                    found.append(item)
+    return MappingProxyType({key: found[0] for key, found in owners.items() if len(found) == 1})
+
+
+def _check_within(items: tuple[CanonicalItem, ...], by_id: Mapping[str, CanonicalItem]) -> None:
+    for item in items:
+        if item.within is None:
+            continue
+        total = by_id.get(item.within)
+        if total is None or not total.subtotal or total.statement is not item.statement:
+            msg = f"{item.id}: within {item.within!r} is not a total of the same statement"
+            raise ValueError(msg)
+
+
+def _build_statement_headings(raw: Any) -> Mapping[StatementType, tuple[str, ...]]:
+    if not isinstance(raw, dict):
+        msg = "statement_headings must be a mapping of statement to languages"
+        raise ValueError(msg)
+    built: dict[StatementType, tuple[str, ...]] = {}
+    for statement, languages in raw.items():
+        need = f"statement_headings.{statement}: needs a list for each of {_REQUIRED_LANGUAGES}"
+        if not isinstance(languages, dict) or set(languages) != set(_REQUIRED_LANGUAGES):
+            raise ValueError(need)
+        for language in _REQUIRED_LANGUAGES:
+            values = languages[language]
+            # A bare string would iterate as one-letter headings and load without complaint.
+            if not isinstance(values, list) or not all(isinstance(v, str) and v for v in values):
+                raise ValueError(f"{need}; {language} is {values!r}")
+        built[StatementType(statement)] = tuple(
+            v for language in _REQUIRED_LANGUAGES for v in languages[language]
+        )
+    return MappingProxyType(built)
 
 
 def _check_headings(

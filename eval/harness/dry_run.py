@@ -77,6 +77,7 @@ from fra_ingest.results import ConvertResult, IndustryDecision, LocateResult, St
 from fra_ingest.stage import load_or_locate
 from fra_ingest.structure import structure_pdf
 from harness.holdout_records import log_look, read_looks, read_moves
+from harness.independent_gold import FrozenGold, aggregate_gold, counts, load_gold
 from harness.locate import decision_label, judge_decision, truth_label
 from harness.mapping import SLOT_STATES, critical_slots
 from harness.paths import (
@@ -288,9 +289,14 @@ def run_document(
     config: IngestConfig,
     stages: Stages,
     clock: Callable[[], float],
+    gold: FrozenGold | None = None,
+    gold_scores: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """One document through the pipeline. A failure is recorded by class and returned as a row;
-    only a stop of the whole run (an interrupt) escapes."""
+    only a stop of the whole run (an interrupt) escapes. With ``gold``, the document's gold
+    counts go to ``gold_scores`` and never into the row, which is written out and reported."""
+    if (gold is None) != (gold_scores is None):
+        raise ValueError("gold and gold_scores are given together")
     row: dict[str, Any] = {
         "id": entry["id"],
         "ingest_config": config.model_dump(mode="json"),
@@ -313,6 +319,7 @@ def run_document(
         "metrics_failure": None,
         "metrics_failure_at": None,
     }
+    figures = counts(gold, None) if gold is not None else None
     seconds: dict[str, float] = row["stage_seconds"]
     convert_seconds = 0.0
     converted: list[ConvertResult] = []
@@ -355,6 +362,8 @@ def run_document(
                     ),
                 }
             seconds["structure"] = clock() - began - convert_seconds
+        if gold is not None:
+            figures = counts(gold, result)
         row["stages"]["structure"] = {"flags": flag_classes(result.flags)}
         row["statements"] = _statements(result, config, stages.checks(config, result.sha256))
         row["identity"] = (row["statements"].get(StatementType.BALANCE.value) or {}).get("identity")
@@ -381,6 +390,15 @@ def run_document(
         total - seconds.get("critical", 0.0) - seconds.get("metrics", 0.0), 3
     )
     row["stage_seconds"] = {k: round(v, 3) for k, v in seconds.items()}
+    if gold is not None and gold_scores is not None:
+        gold_scores.append(
+            {
+                "period": row["period"],
+                "language": row["language"],
+                "gold": figures,
+                "gold_method": gold.method,
+            }
+        )
     return row
 
 
@@ -937,6 +955,7 @@ def run(
     stages: Stages,
     layers_by_pool: Mapping[str, Mapping[str, int]],
     earlier: Path | None = None,
+    gold_dir: Path | None = None,
     clock: Callable[[], float] = time.perf_counter,
 ) -> dict[str, Any]:
     """Refuse a run that would waste its look, take the look, run every holdout document and
@@ -963,6 +982,34 @@ def run(
             f"{availability.missing} of {availability.documents} holdout documents have no PDF in "
             f"{store / TRAIN} or no measured text layer in {FETCHED.name}; no look was taken"
         )
+    gold_files: dict[str, FrozenGold] = {}
+    gold_hashes: dict[str, str] = {}
+    if gold_dir is not None:
+        try:
+            if not gold_dir.is_dir():
+                raise ValueError("gold directory is missing")
+            entries = {str(d["id"]): d for d in documents}
+            for path in sorted(gold_dir.glob("*.json")):
+                gold = load_gold(path)
+                if gold.reference_scope != "full_primary_statements":
+                    raise ValueError("packet subsets cannot establish full holdout accuracy")
+                identity = gold.document.id
+                if identity not in entries or path.stem != identity or identity in gold_files:
+                    raise ValueError("gold id must uniquely name a train document and its file")
+                if _is_control(entries[identity]):
+                    raise ValueError("negative control gold is out of scope for label accuracy")
+                if sha256_file(pdf_of(entries[identity])) != gold.document.sha256:
+                    raise ValueError("gold source PDF hash does not match")
+                gold_files[identity] = gold
+                gold_hashes[identity] = sha256_file(path)
+            controls = {str(d["id"]) for d in documents if d.get("role") == NEGATIVE_CONTROL}
+            missing = holdout_availability(documents, moves, set(gold_files) | controls)
+            if missing.missing:
+                raise ValueError(f"{missing.missing} holdout documents lack frozen gold")
+        except (OSError, ValueError) as exc:
+            raise PreflightFailed(
+                "independent gold preflight failed; no look was taken: " + type(exc).__name__
+            ) from exc
     # Compared before the look: an earlier report that cannot be read back must refuse the run,
     # not raise once every document has run.
     compared: dict[str, Any] | None = None
@@ -983,7 +1030,7 @@ def run(
     evidence = report_evidence(
         config,
         documents={},
-        expected={},
+        expected=gold_hashes,
         inputs={
             "candidates": record_hash(documents),
             "fetched": record_hash(fetched),
@@ -995,6 +1042,9 @@ def run(
     )
 
     rows: list[dict[str, Any]] = []
+    # Held in memory for the aggregate only: per-document counts show which holdout documents
+    # were read right, so they reach neither the rows file nor the report.
+    gold_scores: list[dict[str, Any]] = []
     rows_file.parent.mkdir(parents=True, exist_ok=True)
     try:
         for entry in holdout:
@@ -1010,6 +1060,8 @@ def run(
                         config.model_copy(update={"artifact_root": root}),
                         stages,
                         clock,
+                        gold=gold_files.get(entry["id"]),
+                        gold_scores=gold_scores if entry["id"] in gold_files else None,
                     )
                 )
                 # On disk at once, so a crash of this process loses no finished document.
@@ -1035,6 +1087,11 @@ def run(
             "rows_file": str(rows_file),
             "rows": rows,
             "aggregates": aggregate(rows),
+            "gold_accuracy": (
+                aggregate_gold(gold_scores, complete=len(rows) == len(holdout))
+                if gold_dir is not None
+                else None
+            ),
             "projection": projection(rows, layers_by_pool),
             "comparison": compared,
         }
@@ -1093,6 +1150,9 @@ def parser() -> argparse.ArgumentParser:
         help="an earlier run's report.json, read only: its headline figures are recomputed "
         "under today's definitions beside this run's",
     )
+    parse.add_argument(
+        "--gold-dir", type=Path, help="frozen independent PDF gold; full holdout coverage required"
+    )
     return parse
 
 
@@ -1124,6 +1184,7 @@ def main(argv: list[str] | None = None) -> int:
             stages=stages,
             layers_by_pool=pool_layers(candidates, fetched),
             earlier=args.earlier,
+            gold_dir=args.gold_dir,
         )
     except PreflightFailed as exc:
         print(f"refused: {exc}", file=sys.stderr)
