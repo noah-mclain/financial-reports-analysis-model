@@ -762,7 +762,12 @@ def structure_pdf(
     *,
     use_cache: bool = True,
     convert: Callable[[Path, IngestConfig], ConvertResult] = _convert,
+    conversion: ConvertResult | None = None,
 ) -> StructureResult:
+    """``conversion`` is one the caller just made for this document: used as it is, so a
+    partial or failed range is read and flagged rather than converted again (a worker job
+    times convert as its own stage). Without it, the stored conversion is used when current
+    and complete, else ``convert`` runs."""
     started = time.perf_counter()
     located = load_or_locate(pdf, config, ocr)
     out_dir = config.artifact_root / located.document.sha256
@@ -776,7 +781,13 @@ def structure_pdf(
         _write(out_dir / "table_checks.json", "[]")  # statements.raw.json promises these
         _write(out_dir / "statements.raw.json", declined.model_dump_json(indent=2))
         return declined
-    converted = current_convert(pdf, config, ocr, located, convert)
+    if conversion is None:
+        converted = current_convert(pdf, config, ocr, located, convert)
+    elif conversion.sha256 != located.document.sha256:
+        msg = f"conversion of {conversion.sha256} given for {located.document.sha256}"
+        raise ValueError(msg)
+    else:
+        converted = conversion
 
     digest = _settings_hash(config, converted, located, ocr)
     target = out_dir / "statements.raw.json"

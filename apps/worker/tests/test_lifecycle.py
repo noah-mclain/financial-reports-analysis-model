@@ -45,7 +45,9 @@ stages.page_count = lambda pdf: 1
 stages.current_convert = lambda pdf, config, ocr, located, convert: convert(pdf, config)
 if sys.argv[2] == "structure":
     stages.current_convert = lambda *args: SimpleNamespace(ranges=[])
-    stages.structure_pdf = lambda pdf, config, ocr, convert: convert(pdf, config)
+    stages.structure_pdf = lambda pdf, config, ocr, convert, conversion: convert(
+        pdf, config
+    )
 stages.load_or_locate = lambda *args: LocateResult(
     version="test", document=Document(sha256=upload.sha256, filename="test.pdf",
     page_count=1, language="en"), pages=[], ranges=[], convert_ranges=[],

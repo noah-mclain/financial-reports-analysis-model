@@ -151,6 +151,7 @@ def metric(value: float | None) -> MetricValue:
 class Calls:
     def __init__(self) -> None:
         self.names: list[str] = []
+        self.conversions: list[ConvertResult | None] = []
 
 
 def pipeline_for(
@@ -176,8 +177,9 @@ def pipeline_for(
         step("convert")
         return converted(sha256)
 
-    def structure(pdf: Path) -> StructureResult:
+    def structure(pdf: Path, conversion: ConvertResult | None) -> StructureResult:
         step("structure")
+        calls.conversions.append(conversion)
         return result or structured(sha256)
 
     def metrics(statements: Sequence[Statement]) -> list[MetricValue]:
@@ -212,6 +214,7 @@ def test_a_job_runs_each_stage_in_order_and_leaves_its_analysis(tmp_path: Path) 
     job = run_one(store, pipeline_for(sha, calls))
     assert job.status is JobStatus.COMPLETED
     assert calls.names == ["locate", "convert", "structure", "metrics"]
+    assert calls.conversions == [converted(sha)]  # structure reads this job's conversion
     timeline = [(e.kind, e.stage, e.detail) for e in store.events(job.id)]
     assert timeline == [
         ("queued", None, None),
@@ -245,6 +248,7 @@ def test_a_bank_is_declined_without_convert_or_metrics_and_says_why(tmp_path: Pa
     job = run_one(store, pipeline_for(sha, calls, industry=BANK, result=declined(sha)))
     assert job.status is JobStatus.NEEDS_REVIEW
     assert calls.names == ["locate", "structure"]
+    assert calls.conversions == [None]
     details = {(e.stage, e.detail) for e in store.events(job.id) if e.kind == "finished"}
     assert (JobStage.CONVERT, "skipped: declined (bank)") in details
     assert (JobStage.METRICS, "skipped: declined") in details
