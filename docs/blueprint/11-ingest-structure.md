@@ -538,6 +538,7 @@ class StructureResult(BaseModel):   # statements.raw.json
 | A subtotal or the identity fails | `CheckResult` fail with the difference; the statement gets `subtotal_failed` or `identity_failed` |
 | Identity totals not found | Check `skipped`, `identity_totals_not_found` |
 | `convert.json` missing or a range failed | Structure runs on what converted; failed ranges flagged `range_not_converted:<a-b>` |
+| A range only partly converted | Structure runs on what converted; the range is flagged `range_partially_converted:<a-b>`, which holds the job for review |
 
 ## Testing
 

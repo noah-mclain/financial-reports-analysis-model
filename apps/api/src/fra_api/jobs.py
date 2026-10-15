@@ -21,7 +21,7 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
-from fra_core.jobs import JobSettings, JobStore, UploadRejected
+from fra_core.jobs import JobSettings, JobStore, UploadRejected, UploadTooLarge
 from fra_core.schemas import FINISHED, Analysis, Job, JobEvent, Upload
 
 PDF_TYPE = "application/pdf"
@@ -50,19 +50,6 @@ def sse(event: JobEvent) -> str:
     return f"id: {event.seq}\nevent: {event.kind}\ndata: {event.model_dump_json()}\n\n"
 
 
-async def _read_limited(request: Request, limit: int) -> bytes:
-    """The body, refused as soon as it passes ``limit`` bytes, so a large upload is never
-    held in memory whole."""
-    chunks: list[bytes] = []
-    size = 0
-    async for chunk in request.stream():
-        size += len(chunk)
-        if size > limit:
-            raise HTTPException(status_code=413, detail=f"the file is over {limit} bytes")
-        chunks.append(chunk)
-    return b"".join(chunks)
-
-
 def add_job_routes(routes: FastAPI) -> None:
     """The upload, job and analysis routes, on the app itself."""
 
@@ -74,14 +61,17 @@ def add_job_routes(routes: FastAPI) -> None:
     ) -> Upload:
         if content_type.split(";")[0].strip() != PDF_TYPE:
             raise HTTPException(status_code=415, detail=f"send the PDF as {PDF_TYPE}")
-        settings = settings_of(request)
-        data = await _read_limited(request, settings.max_upload_bytes)
+        store, settings = store_of(request), settings_of(request)
         try:
-            # Hashing, writing and the SQLite insert run off the event loop, so a large upload
-            # never stalls health checks, polling or event streams.
-            return await run_in_threadpool(
-                store_of(request).add_upload, data, unquote(x_filename), settings
-            )
+            # Written to disk as it arrives, never held whole; the file writes, hashing and
+            # the SQLite insert run off the event loop, so a large upload never stalls
+            # health checks, polling or event streams.
+            with store.upload_writer(settings) as writer:
+                async for chunk in request.stream():
+                    await run_in_threadpool(writer.write, chunk)
+                return await run_in_threadpool(writer.finish, unquote(x_filename))
+        except UploadTooLarge as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
         except UploadRejected as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
