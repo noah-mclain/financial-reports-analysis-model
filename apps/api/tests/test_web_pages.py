@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import io
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from pathlib import Path
 
 import pypdfium2 as pdfium
@@ -28,6 +28,7 @@ from fra_core.profile import Profile
 from fra_core.schemas import (
     Analysis,
     BBox,
+    Caveat,
     Cell,
     Claim,
     Decline,
@@ -143,6 +144,59 @@ def test_amounts_are_grouped_and_negatives_shown_in_parentheses() -> None:
     assert amount(Decimal("1234567")) == "1,234,567"
     assert amount(Decimal("-1234.5")) == "(1,234.5)"
     assert amount(Decimal("0")) == "0"
+
+
+@pytest.mark.parametrize("precision", [3, 28])
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("123456789012345678901234567890.123", "123,456,789,012,345,678,901,234,567,890.123"),
+        ("-123456789012345678901234567890.123", "(123,456,789,012,345,678,901,234,567,890.123)"),
+        ("-1234.5000", "(1,234.5000)"),
+        ("1.23400E+8", "123,400,000"),
+        ("1.23400E-8", "0.0000000123400"),
+        ("0.0000", "0.0000"),
+        ("-0.00", "0.00"),
+    ],
+)
+def test_printed_amounts_keep_every_digit_without_using_decimal_precision(
+    precision: int, value: str, expected: str
+) -> None:
+    with localcontext() as context:
+        context.prec = precision
+        assert amount(Decimal(value)) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (1.25, "1.25 SAR per share"),
+        (-1.257, "(1.257) SAR per share"),
+        (0.0, "0.0 SAR per share"),
+        (0.0000125, "0.0000125 SAR per share"),
+    ],
+)
+def test_per_share_values_keep_fractional_precision_and_name_the_unit(
+    value: float, expected: str
+) -> None:
+    assert metric_text(metric(MetricUnit.PER_SHARE, value)) == expected
+
+
+@pytest.mark.parametrize("value", [1e308, -1e308, 0.0, 0.1234, -0.1234, 5e-324])
+def test_percentage_display_stays_finite_without_changing_the_metric(value: float) -> None:
+    computed = metric(MetricUnit.RATIO, value)
+    with localcontext() as context:
+        context.prec = 3
+        text = metric_text(computed)
+    assert text is not None and text.endswith("%")
+    assert "inf" not in text.lower() and "nan" not in text.lower()
+    # The finite extreme is 1 followed by 310 zeros; ordinary ratios retain one decimal.
+    expected = ("-" if value < 0 else "") + "1" + "0" * 310 + ".0%"
+    if abs(value) == 1e308:
+        assert text == expected
+    else:
+        assert text == f"{value * 100:.1f}%"
+    assert computed.value == value
 
 
 @pytest.mark.parametrize(
@@ -469,3 +523,147 @@ def test_the_upload_field_has_a_label(tmp_path: Path) -> None:
     with TestClient(create_app(Profile.NATIVE, settings_at(tmp_path))) as client:
         page = client.get("/").text
     assert '<label for="file">' in page and 'id="file"' in page
+
+
+@pytest.mark.parametrize("token", ["nan", "NaN", "inf", "+Inf", "-Infinity", "1e999"])
+@pytest.mark.parametrize("position", range(4))
+def test_nonfinite_source_boxes_are_rejected_before_css(
+    tmp_path: Path, token: str, position: int
+) -> None:
+    coordinates = ["0", "0", "10", "10"]
+    coordinates[position] = token
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(settings, client)
+        analysis = JobStore(settings.root).load_analysis(job_id)
+        assert analysis is not None
+        response = client.get(
+            f"/documents/{analysis.upload_sha256}/pages/1",
+            params={"box": ",".join(coordinates)},  # includes URL-encoded + and commas
+        )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "box coordinates must be finite"
+    assert "nan%" not in response.text and "inf%" not in response.text
+
+
+def test_finite_box_boundaries_and_negative_edge_clipping_remain_valid(tmp_path: Path) -> None:
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(settings, client)
+        analysis = JobStore(settings.root).load_analysis(job_id)
+        assert analysis is not None
+        url = f"/documents/{analysis.upload_sha256}/pages/1"
+        full = client.get(url, params={"box": "0,0,600,800"})
+        cut = client.get(url, params={"box": "-10,-10,10,10"})
+    assert full.status_code == cut.status_code == 200
+    assert "left:0.000%;top:0.000%;width:100.000%;height:100.000%" in full.text
+    assert "cut to the page" not in full.text
+    assert "cut to the page" in cut.text
+
+
+@pytest.mark.parametrize("language", ["en", "ar"])
+@pytest.mark.parametrize(
+    "caveat_id", ["scale_assumed_units", "currency_from_domicile", "currency_inferred"]
+)
+def test_statement_caveats_keep_evidence_and_mark_only_affected_values(
+    tmp_path: Path, language: str, caveat_id: str
+) -> None:
+    caveat = Caveat.model_validate(
+        {
+            "id": caveat_id,
+            "evidence": {"currency": 'SAR "<script>عملة</script>"'},
+        }
+    )
+    printed = statement("a" * 64, language).model_copy(update={"caveats": [caveat]})
+    item = printed.line_items[0]
+    # The same row can contain a printed percentage, an amount, and an unread cell.
+    percent = item.cells[0].model_copy(update={"reported": Decimal("25"), "flags": ["percent"]})
+    unread = item.cells[0].model_copy(update={"reported": None})
+    printed = printed.model_copy(
+        update={"line_items": [item.model_copy(update={"cells": [item.cells[0], percent, unread]})]}
+    )
+    shown = statement_view(printed, review())
+    assert shown.caveats[0].id == caveat.id
+    assert shown.caveats[0].evidence == caveat.evidence
+    assert shown.status == "passed"
+    assert len(shown.rows[0].cells[0][0].caveats) == 1
+    assert shown.rows[0].cells[0][1].caveats == ()
+    assert shown.rows[0].cells[0][2].caveats == ()
+    settings = settings_at(tmp_path)
+    cash = metric(MetricUnit.CURRENCY, 1.25).model_copy(update={"caveats": [caveat.id]})
+    ratio = metric(MetricUnit.RATIO, 0.25).model_copy(update={"metric_id": "margin"})
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(settings, client, statements=[printed], metrics=[cash, ratio])
+        page = client.get(f"/analyses/{job_id}/view").text
+    assert f'data-caveat="{caveat.id}"' in page
+    assert "<script>عملة</script>" not in page
+    assert "&lt;script&gt;عملة&lt;/script&gt;" in page
+    assert "&#34;" in page  # evidence is safe in the hover title
+    assert ("لم تذكر القائمة" if language == "ar" else "The statement") in page
+    assert f'dir="{"rtl" if language == "ar" else "ltr"}" lang="{language}"' in page
+    ratio_row = page.split('<tr id="metric-margin-2025-12-31">')[1].split("</tr>")[0]
+    assert "caveat-mark" not in ratio_row.split("<td><code>")[0]
+    # Inputs remain caveated currency amounts even when the resulting ratio is unaffected.
+    assert "caveat-mark" in ratio_row.split("<td><code>")[1]
+
+
+def test_summary_footnotes_follow_existing_claims_and_are_listed_once(tmp_path: Path) -> None:
+    caveat = Caveat(id="currency_from_domicile", evidence={"currency": "SAR"})
+    printed = statement("a" * 64).model_copy(update={"caveats": [caveat]})
+    cash = metric(MetricUnit.CURRENCY, 1.25).model_copy(update={"caveats": [caveat.id]})
+    ratio = metric(MetricUnit.RATIO, 0.25).model_copy(update={"metric_id": "margin"})
+    narrative = claimed("The amount is 1.25.", "1.25")
+    first = narrative.sections[0].sentences[0]
+    narrative.sections[0].sentences += [
+        first.model_copy(),
+        Sentence(
+            text="The margin is 25%.",
+            claims=[Claim(metric_id="margin", period_key=PERIOD.key, text_span="25%")],
+        ),
+    ]
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(
+            settings, client, statements=[printed], metrics=[cash, ratio], narrative=narrative
+        )
+        page = client.get(f"/analyses/{job_id}/view").text
+    summary = page.split("<h2>Summary</h2>")[1].split("<h2>Statements</h2>")[0]
+    assert summary.count('class="caveat-mark"') == 2
+    assert summary.count("The statement does not name its currency.") == 1
+    assert 'href="#metric-current_ratio-2025-12-31"' in summary
+    ratio_sentence = summary.split('href="#metric-margin-2025-12-31"')[1].split("</p>")[0]
+    assert "caveat-mark" not in ratio_sentence
+
+
+def test_uncaveated_statements_and_metric_values_have_no_footnote_marks(tmp_path: Path) -> None:
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(settings, client)
+        page = client.get(f"/analyses/{job_id}/view").text
+    assert 'class="caveat-mark"' not in page
+    assert "data-caveat=" not in page
+
+
+def test_summary_caveats_use_the_summary_language_and_preserve_cross_statement_scope() -> None:
+    caveat = Caveat(id="currency_inferred", evidence={"currency": "SAR"})
+    printed = statement("a" * 64).model_copy(update={"caveats": [caveat]})
+    computed = metric(MetricUnit.RATIO, 0.25).model_copy(update={"caveats": [caveat.id]})
+    narrative = claimed("الهامش 25%.", "25%").model_copy(update={"language": "ar"})
+    analysis = Analysis(
+        job_id="b" * 32,
+        upload_sha256="a" * 64,
+        page_count=1,
+        language="ar",
+        statements=[printed],
+        reviews=[review()],
+        metrics=[computed],
+        narrative=narrative,
+    )
+    shown = analysis_view(analysis)
+    assert len(shown.metrics[0].notes) == 1  # keep analytics' explicit caveat on this ratio
+    assert shown.footnotes[0].language == "ar"
+    assert (
+        shown.footnotes[0].text
+        == "لم تذكر القائمة عملتها. اعتُمد SAR لأنه العملة الأكثر ذكراً في المستند."
+    )
+    assert shown.footnotes[0].evidence == caveat.evidence

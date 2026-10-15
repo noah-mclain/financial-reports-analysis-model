@@ -8,8 +8,11 @@ points with a top-left origin (``fra_core.schemas.BBox``), placed as shares of t
 from __future__ import annotations
 
 import io
+import math
 import uuid
+from contextlib import closing
 from pathlib import Path
+from threading import RLock
 from typing import Annotated
 
 import pypdfium2 as pdfium
@@ -26,6 +29,9 @@ from fra_core.schemas import JobStage
 # Page images at 2x (144 dpi): sharp enough to read a figure, small enough to load at once.
 RENDER_SCALE = 2.0
 STAGES = tuple(stage.value for stage in JobStage)
+# PDFium is process-global and not thread-safe, even for different documents. Keep native
+# construction, access and explicit destruction under the same lock in both sync routes.
+_PDFIUM_LOCK = RLock()
 
 _templates = Environment(
     loader=PackageLoader("fra_api", "templates"), autoescape=select_autoescape(["html"])
@@ -44,24 +50,34 @@ def _pdf(store: JobStore, sha256: str) -> Path:
 
 def page_size(pdf: Path, page_no: int) -> tuple[float, float]:
     """Width and height of a page in PDF points; 404 for a page the PDF does not have."""
-    with pdfium.PdfDocument(pdf) as document:
+    with _PDFIUM_LOCK, pdfium.PdfDocument(pdf) as document:
         if not 1 <= page_no <= len(document):
             raise HTTPException(status_code=404, detail=f"no page {page_no}")
-        width, height = document[page_no - 1].get_size()
+        with closing(document[page_no - 1]) as page:
+            width, height = page.get_size()
     return float(width), float(height)
 
 
 def render_page(pdf: Path, page_no: int, target: Path) -> None:
-    page_size(pdf, page_no)  # the same 404 for a missing page
-    with pdfium.PdfDocument(pdf) as document:
-        image = document[page_no - 1].render(scale=RENDER_SCALE).to_pil()
+    with _PDFIUM_LOCK:
+        page_size(pdf, page_no)  # the same 404 for a missing page; the lock is reentrant
+        with (
+            pdfium.PdfDocument(pdf) as document,
+            closing(document[page_no - 1]) as page,
+            closing(page.render(scale=RENDER_SCALE)) as bitmap,
+        ):
+            # PIL can share the native bitmap buffer. Detach before closing PDFium objects.
+            image = bitmap.to_pil().copy()
     buffer = io.BytesIO()
     image.save(buffer, format="PNG")
     target.parent.mkdir(parents=True, exist_ok=True)
     # A name of its own, so two requests rendering the same page never share a temporary file.
     tmp = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
-    tmp.write_bytes(buffer.getvalue())
-    tmp.replace(target)
+    try:
+        tmp.write_bytes(buffer.getvalue())
+        tmp.replace(target)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def parse_box(text: str) -> tuple[float, float, float, float]:
@@ -69,6 +85,8 @@ def parse_box(text: str) -> tuple[float, float, float, float]:
         left, top, right, bottom = (float(part) for part in text.split(","))
     except ValueError:
         raise HTTPException(status_code=400, detail="box is left,top,right,bottom") from None
+    if not all(math.isfinite(value) for value in (left, top, right, bottom)):
+        raise HTTPException(status_code=400, detail="box coordinates must be finite")
     if right <= left or bottom <= top:
         raise HTTPException(status_code=400, detail="box is not ordered")
     return left, top, right, bottom

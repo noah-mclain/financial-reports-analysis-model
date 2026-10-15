@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field, replace
-from decimal import Decimal
+from decimal import Context, Decimal, localcontext
 from urllib.parse import urlencode
 
 from fra_core.schemas import (
@@ -26,6 +26,7 @@ from fra_core.schemas import (
     StatementReview,
     StatementType,
 )
+from fra_core.schemas.caveat import CaveatId
 
 STATEMENT_TITLES = {
     StatementType.BALANCE: "Statement of financial position",
@@ -37,6 +38,24 @@ STATEMENT_TITLES = {
 SCALE_WORDS = {1: "", 1_000: "thousands", 1_000_000: "millions", 1_000_000_000: "billions"}
 RTL_LANGUAGES = frozenset({"ar"})
 DUPLICATE_CELL = "duplicate_cell"
+# Fixed language templates from blueprint 13, shared by statement, metric and summary views.
+CAVEAT_TEXT: dict[str, dict[CaveatId, str]] = {
+    "en": {
+        "scale_assumed_units": "Amounts are shown as printed. The statement names no unit "
+        "multiplier such as thousands or millions, so they are taken to be in single {currency}.",
+        "currency_from_domicile": "The statement does not name its currency. {currency} is "
+        "taken from the company's country of incorporation.",
+        "currency_inferred": "The statement does not name its currency. {currency} is the "
+        "currency named most often in the document.",
+    },
+    "ar": {
+        "scale_assumed_units": "المبالغ معروضة كما وردت. لم تذكر القائمة مضاعفاً للوحدة مثل "
+        "الآلاف أو الملايين، ولذلك اعتُبرت بالـ{currency} دون مضاعف.",
+        "currency_from_domicile": "لم تذكر القائمة عملتها. اعتُمد {currency} بحسب بلد تأسيس الشركة.",
+        "currency_inferred": "لم تذكر القائمة عملتها. اعتُمد {currency} لأنه العملة الأكثر ذكراً "
+        "في المستند.",
+    },
+}
 
 
 def source_url(sha256: str, provenance: Provenance) -> str:
@@ -47,8 +66,21 @@ def source_url(sha256: str, provenance: Provenance) -> str:
 
 def amount(value: Decimal) -> str:
     """A printed amount as statements print it: grouped, a negative in parentheses."""
-    text = f"{abs(value):,}"
+    text = f"{value.copy_abs():,f}"
     return f"({text})" if value < 0 else text
+
+
+@dataclass(frozen=True)
+class CaveatView:
+    id: CaveatId
+    currency: str
+    evidence: dict[str, str]
+    anchor: str
+    language: str
+
+    @property
+    def text(self) -> str:
+        return CAVEAT_TEXT[self.language][self.id].format(currency=self.currency)
 
 
 @dataclass(frozen=True)
@@ -57,6 +89,7 @@ class CellView:
     printed: str
     flags: tuple[str, ...]
     source: str | None
+    caveats: tuple[CaveatView, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -83,6 +116,7 @@ class StatementView:
     reasons: tuple[str, ...]
     warnings: tuple[str, ...]
     duplicate: bool
+    caveats: tuple[CaveatView, ...]
 
 
 @dataclass(frozen=True)
@@ -91,6 +125,7 @@ class InputView:
     period: str
     text: str
     source: str
+    caveats: tuple[CaveatView, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -101,8 +136,9 @@ class MetricView:
     value: str | None
     formula: str
     flags: tuple[str, ...]
-    caveats: tuple[str, ...]
+    caveats: tuple[CaveatId, ...]
     inputs: tuple[InputView, ...] = field(default=())
+    notes: tuple[CaveatView, ...] = ()
 
 
 def statement_view(statement: Statement, review: StatementReview) -> StatementView:
@@ -111,6 +147,16 @@ def statement_view(statement: Statement, review: StatementReview) -> StatementVi
     label, as Arabic statements print it)."""
     ordered = sorted(statement.periods, key=lambda p: (p.end_date, p.months or 0), reverse=True)
     keys = [p.key for p in ordered]
+    caveats = tuple(
+        CaveatView(
+            id=c.id,
+            currency=statement.currency,
+            evidence=c.evidence,
+            anchor=f"statement-{statement.id}-{c.id}",
+            language=statement.language,
+        )
+        for c in statement.caveats
+    )
     rows = []
     for item in statement.line_items:
         by_period: dict[str, list[CellView]] = {}
@@ -121,6 +167,9 @@ def statement_view(statement: Statement, review: StatementReview) -> StatementVi
                     printed=cell.raw_text,
                     flags=tuple(cell.flags),
                     source=source_url(statement.document_sha256, cell.provenance),
+                    caveats=caveats
+                    if cell.reported is not None and "percent" not in cell.flags
+                    else (),
                 )
             )
         # Two cells read for one period are both shown and flagged, never one silently kept.
@@ -154,6 +203,7 @@ def statement_view(statement: Statement, review: StatementReview) -> StatementVi
         reasons=tuple(review.reasons),
         warnings=tuple(review.warnings),
         duplicate="duplicate_statement" in review.reasons,
+        caveats=caveats,
     )
 
 
@@ -163,22 +213,28 @@ def metric_text(metric: MetricValue) -> str | None:
         return None
     value = metric.value
     if metric.unit is MetricUnit.RATIO:
-        return f"{value * 100:.1f}%"
+        # Float scaling can overflow even when the stored ratio is finite. The decimal
+        # display context is independent of callers' precision and does not change the metric.
+        with localcontext(Context(prec=34)):
+            return f"{Decimal(str(value)) * 100:.1f}%"
     if metric.unit is MetricUnit.TIMES:
         return f"{value:.2f}×"
     if metric.unit is MetricUnit.DAYS:
         return f"{value:.0f} days"
     currencies = sorted({i.currency for cells in metric.inputs.values() for i in cells})
+    if metric.unit is MetricUnit.PER_SHARE:
+        return f"{amount(Decimal(str(value)))} {'/'.join(currencies)} per share".strip()
     return f"{value:,.0f} {'/'.join(currencies)}".strip()
 
 
-def _input_view(sha256: str, cell: MetricInput) -> InputView:
+def _input_view(sha256: str, cell: MetricInput, caveats: tuple[CaveatView, ...]) -> InputView:
     scale = SCALE_WORDS[cell.scale]
     return InputView(
         canonical_id=cell.canonical_id,
         period=cell.period_key,
         text=f"{amount(cell.reported)} {cell.currency} {scale}".strip(),
         source=source_url(sha256, cell.provenance),
+        caveats=caveats,
     )
 
 
@@ -191,6 +247,7 @@ def metric_anchor(metric_id: str, period_key: str) -> str:
 class SentencePart:
     text: str
     href: str | None
+    caveats: tuple[CaveatView, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -228,17 +285,47 @@ def sentence_parts(sentence: Sentence, anchors: frozenset[str]) -> tuple[Sentenc
     return tuple(parts)
 
 
-def narrative_view(narrative: Narrative, anchors: frozenset[str]) -> tuple[SectionView, ...]:
+def narrative_view(
+    narrative: Narrative,
+    anchors: frozenset[str],
+    notes: dict[str, tuple[CaveatView, ...]] | None = None,
+) -> tuple[SectionView, ...]:
+    notes = notes or {}
+
+    def parts(sentence: Sentence) -> tuple[SentencePart, ...]:
+        linked = sentence_parts(sentence, anchors)
+        footnotes = {
+            note.anchor: note
+            for claim in sentence.claims
+            for note in notes.get(metric_anchor(claim.metric_id, claim.period_key), ())
+        }
+        return (*linked, SentencePart("", None, tuple(footnotes.values()))) if footnotes else linked
+
     return tuple(
         SectionView(
             heading=section.heading.value.replace("_", " "),
-            sentences=tuple(sentence_parts(s, anchors) for s in section.sentences),
+            sentences=tuple(parts(s) for s in section.sentences),
         )
         for section in narrative.sections
     )
 
 
-def metric_view(sha256: str, metric: MetricValue) -> MetricView:
+def metric_view(
+    sha256: str, metric: MetricValue, statement_notes: dict[str, tuple[CaveatView, ...]]
+) -> MetricView:
+    inputs = tuple(
+        _input_view(sha256, cell, statement_notes.get(cell.statement_id, ()))
+        for cells in metric.inputs.values()
+        for cell in cells
+    )
+    notes = {
+        note.anchor: note for cell in inputs for note in cell.caveats if note.id in metric.caveats
+    }
+    missing = set(metric.caveats) - {note.id for note in notes.values()}
+    if missing:
+        raise ValueError(
+            f"metric {metric.metric_id}: caveats without source statements: {sorted(missing)}"
+        )
     return MetricView(
         name=metric.metric_id.replace("_", " "),
         anchor=metric_anchor(metric.metric_id, metric.period_key),
@@ -247,9 +334,8 @@ def metric_view(sha256: str, metric: MetricValue) -> MetricView:
         formula=metric.formula,
         flags=tuple(metric.flags),
         caveats=tuple(metric.caveats),
-        inputs=tuple(
-            _input_view(sha256, cell) for cells in metric.inputs.values() for cell in cells
-        ),
+        inputs=inputs,
+        notes=tuple(notes.values()),
     )
 
 
@@ -259,6 +345,7 @@ class AnalysisView:
     metrics: tuple[MetricView, ...]
     computed: int
     narrative: tuple[SectionView, ...] | None
+    footnotes: tuple[CaveatView, ...]
 
 
 def analysis_view(analysis: Analysis) -> AnalysisView:
@@ -268,19 +355,47 @@ def analysis_view(analysis: Analysis) -> AnalysisView:
     missing = [s.id for s in analysis.statements if s.id not in reviews]
     if missing:
         raise ValueError(f"analysis {analysis.job_id}: statements without a review: {missing}")
-    metrics = [metric_view(analysis.upload_sha256, m) for m in analysis.metrics]
+    statements = tuple(statement_view(s, reviews[s.id]) for s in analysis.statements)
+    statement_notes = {s.id: s.caveats for s in statements}
+    metrics = [metric_view(analysis.upload_sha256, m, statement_notes) for m in analysis.metrics]
+    summary_notes = (
+        {
+            m.anchor: tuple(
+                replace(
+                    note,
+                    anchor=f"summary-{note.id}-{note.currency}",
+                    language=analysis.narrative.language,
+                )
+                for note in m.notes
+            )
+            for m in metrics
+            if m.value is not None
+        }
+        if analysis.narrative is not None
+        else {}
+    )
+    narrative = (
+        narrative_view(
+            analysis.narrative,
+            frozenset(m.anchor for m in metrics if m.value is not None),
+            summary_notes,
+        )
+        if analysis.narrative is not None
+        else None
+    )
+    footnotes = {
+        note.anchor: note
+        for section in narrative or ()
+        for parts in section.sentences
+        for part in parts
+        for note in part.caveats
+    }
     return AnalysisView(
-        statements=tuple(statement_view(s, reviews[s.id]) for s in analysis.statements),
+        statements=statements,
         metrics=tuple(
             [m for m in metrics if m.value is not None] + [m for m in metrics if m.value is None]
         ),
         computed=sum(1 for m in metrics if m.value is not None),
-        narrative=(
-            narrative_view(
-                analysis.narrative,
-                frozenset(m.anchor for m in metrics if m.value is not None),
-            )
-            if analysis.narrative is not None
-            else None
-        ),
+        narrative=narrative,
+        footnotes=tuple(footnotes.values()),
     )

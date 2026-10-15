@@ -1,10 +1,13 @@
 {% extends "base.html" %}
 {% block title %}{{ filename }}: results{% endblock %}
+{% macro caveat_marks(notes) %}{% for note in notes %}<sup><a class="caveat-mark" href="#{{ note.anchor }}" aria-label="Caveat: {{ note.id }}">†</a></sup>{% endfor %}{% endmacro %}
+{% macro caveat_text(note) %}<p class="muted" id="{{ note.anchor }}" data-caveat="{{ note.id }}" dir="{{ 'rtl' if note.language == 'ar' else 'ltr' }}" lang="{{ note.language }}" title="{% for key, value in note.evidence.items() %}{{ key }}: {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}">{{ note.text }}</p>{% endmacro %}
 {% macro statement_table(s) %}
 <section class="panel" dir="{{ 'rtl' if s.rtl else 'ltr' }}" lang="{{ s.language }}">
   <div dir="ltr" lang="en">
     <h3>{{ s.title }} <span class="badge {{ s.status }}">{{ 'passed its checks' if s.status == 'passed' else 'held for review' }}</span></h3>
     <p class="muted" style="margin:4px 0">{{ s.units }}{% if s.pages %} · pages {{ s.pages | join(', ') }}{% endif %}</p>
+    {% for note in s.caveats %}{{ caveat_text(note) }}{% endfor %}
     {% if s.reasons %}<ul class="reasons">{% for r in s.reasons %}<li><code>{{ r }}</code></li>{% endfor %}</ul>{% endif %}
     {% if s.warnings %}<p class="muted" style="font-size:13px">Warnings: {% for w in s.warnings %}<code>{{ w }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
   </div>
@@ -20,6 +23,7 @@
           <td class="num{{ ' flagged' if found | selectattr('flags') | list }}" dir="ltr">
           {% for c in found %}<div title="printed: {{ c.printed }}">
             {% if c.source %}<a href="{{ c.source }}">{{ c.text or '—' }}</a>{% else %}{{ c.text }}{% endif %}
+            {{ caveat_marks(c.caveats) }}
             {% if c.flags %}<div class="flag-names"><span aria-hidden="true">⚑</span> flags: {{ c.flags | join(', ') }}</div>{% endif %}</div>
           {% endfor %}</td>
         {% endfor %}
@@ -50,8 +54,9 @@
 <div class="panel" dir="{{ 'rtl' if analysis.narrative.language == 'ar' else 'ltr' }}" lang="{{ analysis.narrative.language }}">
   {% for section in view.narrative %}
     <h3>{{ section.heading }}</h3>
-    {% for parts in section.sentences %}<p>{% for part in parts %}{% if part.href %}<a href="{{ part.href }}" title="the computed metric and its inputs">{{ part.text }}</a>{% else %}{{ part.text }}{% endif %}{% endfor %}</p>{% endfor %}
+    {% for parts in section.sentences %}<p>{% for part in parts %}{% if part.href %}<a href="{{ part.href }}" title="the computed metric and its inputs">{{ part.text }}</a>{% else %}{{ part.text }}{% endif %}{{ caveat_marks(part.caveats) }}{% endfor %}</p>{% endfor %}
   {% endfor %}
+  {% for note in view.footnotes %}{{ caveat_text(note) }}{% endfor %}
   <p class="muted" dir="ltr" lang="en">{{ 'Written by the model and checked against the computed metrics.' if analysis.narrative.grounding.value == 'passed' else 'Template sentences: the generated text failed the check against the computed metrics.' }}</p>
 </div>
 {% else %}
@@ -81,9 +86,9 @@
   {% for m in view.metrics %}
     <tr id="{{ m.anchor }}">
       <td>{{ m.name }}</td><td>{{ m.period }}</td>
-      <td class="num">{% if m.value is none %}<span class="muted">not computed</span>{% else %}{{ m.value }}{% endif %}</td>
+      <td class="num">{% if m.value is none %}<span class="muted">not computed</span>{% else %}{{ m.value }}{{ caveat_marks(m.notes) }}{% endif %}</td>
       <td><code>{{ m.formula }}</code></td>
-      <td>{% for i in m.inputs %}<a href="{{ i.source }}" title="{{ i.period }}">{{ i.canonical_id }}</a> {{ i.text }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
+      <td>{% for i in m.inputs %}<a href="{{ i.source }}" title="{{ i.period }}">{{ i.canonical_id }}</a> {{ i.text }}{{ caveat_marks(i.caveats) }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
       <td class="muted" style="font-size:13px">{{ (m.flags + m.caveats) | join(', ') }}</td>
     </tr>
   {% endfor %}
