@@ -10,8 +10,8 @@ from fra_core.jobs import (
     JobSettings,
     JobStore,
     UploadRejected,
+    UploadTooLarge,
     WorkerAlreadyRunning,
-    check_upload,
     load_job_settings,
 )
 from fra_core.paths import REPO_ROOT
@@ -96,11 +96,35 @@ def test_a_missing_or_unknown_setting_is_an_error(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     ("data", "message"),
-    [(b"", "empty"), (b"GIF89a", "not a PDF"), (PDF + b"x" * 1000, "the limit is 1000")],
+    [(b"", "empty"), (b"GIF89a", "not a PDF"), (PDF + b"x" * 1000, "the limit of 1000 bytes")],
 )
-def test_an_empty_oversized_or_non_pdf_upload_is_refused(data: bytes, message: str) -> None:
+def test_an_empty_oversized_or_non_pdf_upload_is_refused_and_leaves_nothing(
+    tmp_path: Path, data: bytes, message: str
+) -> None:
+    store = store_at(tmp_path)
     with pytest.raises(UploadRejected, match=message):
-        check_upload(data, SETTINGS)
+        store.add_upload(data, "r.pdf", SETTINGS)
+    assert list((tmp_path / "jobs" / "uploads").iterdir()) == []
+
+
+def test_an_upload_is_checked_chunk_by_chunk_and_refused_at_the_first_bad_chunk(
+    tmp_path: Path,
+) -> None:
+    store = store_at(tmp_path)
+    with store.upload_writer(SETTINGS) as writer:
+        for chunk in (b"%P", b"DF-1.7", b"\n%x\n"):
+            writer.write(chunk)
+        upload = writer.finish("r.pdf")
+    assert store.upload_path(upload.sha256).read_bytes() == b"%PDF-1.7\n%x\n"
+    with store.upload_writer(SETTINGS) as writer, pytest.raises(UploadRejected, match="not a"):
+        writer.write(b"%P")
+        writer.write(b"NG")  # refused here, before any more is read
+    with store.upload_writer(SETTINGS) as writer, pytest.raises(UploadTooLarge):
+        writer.write(PDF)
+        writer.write(b"x" * 1000)
+    assert sorted(p.name for p in (tmp_path / "jobs" / "uploads").iterdir()) == [
+        f"{upload.sha256}.pdf"
+    ]
 
 
 def test_the_same_bytes_uploaded_twice_are_one_upload_under_the_first_name(

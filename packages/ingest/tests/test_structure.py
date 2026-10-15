@@ -191,6 +191,17 @@ def test_a_missing_enabled_type_is_flagged() -> None:
     assert "statement_not_extracted:income" in result.flags
 
 
+def test_a_partly_converted_range_is_flagged_so_the_job_is_held() -> None:
+    given = inputs([("docling/p1-2.json", document())])
+    partial = given.convert.ranges[0].model_copy(update={"status": "partial"})
+    given = given.model_copy(
+        update={"convert": given.convert.model_copy(update={"ranges": [partial]})}
+    )
+    result, _ = structure_document(given, IngestConfig())
+    assert len(result.statements) == 1  # what converted is still read
+    assert "range_partially_converted:1-2" in result.flags
+
+
 INCOME_2 = [
     INCOME_HEADER,
     ["Profit for the year", "", "40", "35"],

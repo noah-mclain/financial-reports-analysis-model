@@ -361,7 +361,7 @@ with `primary_statements`). `fra_analytics.METRIC_IDS` lists all 21.
 
 | Method and path | Purpose |
 |-----------------|---------|
-| `POST /documents` | Multipart upload. PDF magic bytes, 50 MB limit, 400-page limit, sha256 dedupe. Returns `Document` |
+| `POST /documents` | The PDF as the request body (`Content-Type: application/pdf`, file name in `X-Filename`), written to disk as it arrives. PDF magic bytes, 50 MB limit, sha256 dedupe; the 400-page limit is checked by the worker. Returns `Upload` |
 | `GET /documents/{id}` | Metadata, detected language, text-layer coverage |
 | `GET /documents/{id}/pages/{page_no}.png` | Rendered page for the source viewer |
 | `POST /documents/{id}/analyses` | Enqueue a job. Returns `Job` |

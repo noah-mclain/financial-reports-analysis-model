@@ -109,17 +109,59 @@ class UploadRejected(ValueError):
     """An upload that is not a PDF within the limits; the message says which limit."""
 
 
-def check_upload(data: bytes, settings: JobSettings) -> None:
-    """Refuse an empty file, one over the size limit, or one that does not start as a PDF.
-    The page limit needs the PDF read, so the worker checks it."""
-    if not data:
-        raise UploadRejected("the file is empty")
-    if len(data) > settings.max_upload_bytes:
-        raise UploadRejected(
-            f"the file is {len(data)} bytes; the limit is {settings.max_upload_bytes}"
-        )
-    if not data.startswith(PDF_MAGIC):
-        raise UploadRejected("the file is not a PDF")
+class UploadTooLarge(UploadRejected):
+    """An upload over the size limit, refused as soon as it passes it."""
+
+
+class UploadWriter:
+    """Receives an upload chunk by chunk: hashed and written to a temporary file as it
+    arrives, and refused as soon as it passes the size limit or does not start as a PDF, so
+    an upload is never held in memory whole. The page limit needs the PDF read, so the
+    worker checks it. Use it as a context manager: leaving without ``finish`` removes the
+    temporary file."""
+
+    def __init__(self, store: JobStore, settings: JobSettings) -> None:
+        self._store = store
+        self._limit = settings.max_upload_bytes
+        self._tmp = store.root / "uploads" / f".{uuid.uuid4().hex}.tmp"
+        self._file = self._tmp.open("wb")
+        self._hash = hashlib.sha256()
+        self._size = 0
+        self._head = b""
+
+    def __enter__(self) -> UploadWriter:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self._file.close()
+        self._tmp.unlink(missing_ok=True)
+
+    def write(self, chunk: bytes) -> None:
+        self._size += len(chunk)
+        if self._size > self._limit:
+            raise UploadTooLarge(f"the file passes the limit of {self._limit} bytes")
+        if len(self._head) < len(PDF_MAGIC):
+            self._head += chunk[: len(PDF_MAGIC) - len(self._head)]
+            if not PDF_MAGIC.startswith(self._head):
+                raise UploadRejected("the file is not a PDF")
+        self._hash.update(chunk)
+        self._file.write(chunk)
+
+    def finish(self, filename: str) -> Upload:
+        """Store the upload. The same bytes again return the first upload, file name
+        included."""
+        if self._size == 0:
+            raise UploadRejected("the file is empty")
+        if self._head != PDF_MAGIC:
+            raise UploadRejected("the file is not a PDF")
+        self._file.close()
+        sha256 = self._hash.hexdigest()
+        path = self._store.upload_path(sha256)
+        if path.is_file():
+            self._tmp.unlink()
+        else:
+            os.replace(self._tmp, path)
+        return self._store._record_upload(sha256, filename, self._size)
 
 
 def _now() -> datetime:
@@ -178,18 +220,20 @@ class JobStore:
 
     # ---- uploads -------------------------------------------------------------------------
 
+    def upload_writer(self, settings: JobSettings) -> UploadWriter:
+        return UploadWriter(self, settings)
+
     def add_upload(self, data: bytes, filename: str, settings: JobSettings) -> Upload:
-        """Store a checked PDF (``check_upload``). The same bytes again return the first
-        upload, file name included."""
-        check_upload(data, settings)
-        sha256 = hashlib.sha256(data).hexdigest()
-        path = self.upload_path(sha256)
-        if not path.is_file():
-            _write_atomically(path, data)
+        """Store an upload already in memory, checked as ``UploadWriter`` checks it."""
+        with self.upload_writer(settings) as writer:
+            writer.write(data)
+            return writer.finish(filename)
+
+    def _record_upload(self, sha256: str, filename: str, size: int) -> Upload:
         with self._transaction() as conn:
             conn.execute(
                 "INSERT OR IGNORE INTO uploads VALUES (?, ?, ?, ?)",
-                (sha256, filename, len(data), self._clock().isoformat()),
+                (sha256, filename, size, self._clock().isoformat()),
             )
             row = conn.execute("SELECT * FROM uploads WHERE sha256 = ?", (sha256,)).fetchone()
         return Upload.model_validate(dict(row))

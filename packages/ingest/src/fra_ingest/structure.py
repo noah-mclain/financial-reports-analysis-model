@@ -74,7 +74,7 @@ from fra_ingest.visual_order import (
     restore_word_order,
 )
 
-STRUCTURE_VERSION = "43"  # source guard and OCR amount split, with Arabic labels at page words
+STRUCTURE_VERSION = "44"  # partly converted ranges flagged
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -639,6 +639,12 @@ def structure_document(
         f"range_not_converted:{r.first_page}-{r.last_page}"
         for r in inputs.convert.ranges
         if r.status in ("failed", "skipped")
+    ]
+    # Docling converted only some of the range's pages: what it read may be incomplete.
+    flags += [
+        f"range_partially_converted:{r.first_page}-{r.last_page}"
+        for r in inputs.convert.ranges
+        if r.status == "partial"
     ]
     structured = StructureResult(
         version=STRUCTURE_VERSION,
