@@ -401,3 +401,52 @@ def test_attached_currency_markers_do_not_hide_invalid_residue(residue: str) -> 
     from fra_core.periods import interpret_period
 
     assert interpret_period(f"30 June 2025 {residue}").period is None
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Dec 31, 2025",
+        "Dec. 31, 2025",
+        "December 31 2025",
+        "December 31,2025",
+        "Dec 31 , 2025",
+        "Dec 2025",
+        "Dec. 2025",
+        "Dec.2025",
+        "December 2025",
+    ],
+)
+def test_month_first_dates_with_single_separators_are_text_dates(text: str) -> None:
+    from fra_core.periods import interpret_period
+
+    facts = interpret_period(text)
+    assert facts.calendar in ("complete", "month_year")
+    assert facts.date_text == text
+
+
+@pytest.mark.parametrize(
+    "text", ["Dec 31,,2025", "Dec.. 31, 2025", "Dec 31, ,2025", "Dec.. 2025", "Dec 312025"]
+)
+def test_month_first_dates_with_repeated_or_missing_separators_are_not_complete(
+    text: str,
+) -> None:
+    from fra_core.periods import interpret_period
+
+    facts = interpret_period(text)
+    assert facts.calendar != "complete"
+
+
+@pytest.mark.parametrize(
+    "text,key",
+    [
+        ("Dec 31,,2025", "2025-12-31"),
+        ("Dec.. 2025", "2025-12-31"),
+        ("Dec 31, 2025", "2025-12-31"),
+        ("Dec. 2025", "2025-12-31"),
+    ],
+)
+def test_the_compatibility_parser_does_not_use_the_strict_text_date(text: str, key: str) -> None:
+    period = parse_period(text, default_kind=PeriodKind.INSTANT)
+    assert period is not None
+    assert period.key == key

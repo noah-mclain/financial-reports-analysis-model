@@ -194,4 +194,8 @@ def test_a_notes_table_in_thousands_does_not_rescale_the_statements(
 ) -> None:
     stored = stored_result(golden_structure, "edita-2025-en-consolidated-eas.pdf")
     scales = {s.id.split("-", 1)[1]: s.scale for s in stored.statements}
-    assert scales == {"balance-1": 1, "comprehensive_income-2": 1, "income-3": 1, "income-4": 1000}
+    assert scales == {"balance-1": 1, "comprehensive_income-2": 1, "income-3": 1}
+    notes = [t for t in stored.tables if t.page_no == 60]
+    assert notes and all(t.type is None and t.statement_id is None for t in notes)
+    # The page is a notes page: that reason, and not merely a lower-ranked range.
+    assert all("source_non_statement_page" in t.evidence for t in notes)

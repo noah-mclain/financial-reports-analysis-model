@@ -52,6 +52,7 @@ class Classification(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     type: StatementType | None
+    proposed_type: StatementType | None = None
     confidence: float = 0.0
     evidence: list[str] = Field(default_factory=list)
     industry_flags: list[str] = Field(default_factory=list)
@@ -87,10 +88,15 @@ def classify(
     min_confidence: float,
 ) -> Classification:
     flags = list(context.industry_flags)
-    if not layout.value_cols:
-        return Classification(type=None, evidence=["no_period_header"], industry_flags=flags)
-    if any(_is_note_heading(text) for text in context.heading_texts):
-        return Classification(type=None, evidence=["note_heading"], industry_flags=flags)
+    rejection = (
+        "no_period_header"
+        if not layout.value_cols
+        else (
+            "note_heading"
+            if any(_is_note_heading(text) for text in context.heading_texts)
+            else None
+        )
+    )
 
     labels = (
         [grid.text(r, layout.label_col) for r in layout.data_rows(grid)]
@@ -112,13 +118,22 @@ def classify(
         evidence.append(f"{statement.value}:hits={hits}:score={score:.2f}")
 
     best = max(scores, key=lambda s: (scores[s], *_tie_rank(s, context)))
+    if rejection is not None:
+        return Classification(
+            type=None, proposed_type=best, evidence=[rejection], industry_flags=flags
+        )
     if scores[best] < min_confidence:
         return Classification(
             type=None,
+            proposed_type=best,
             confidence=scores[best],
             evidence=[*evidence, "below_confidence"],
             industry_flags=flags,
         )
     return Classification(
-        type=best, confidence=min(scores[best], 1.0), evidence=evidence, industry_flags=flags
+        type=best,
+        proposed_type=best,
+        confidence=min(scores[best], 1.0),
+        evidence=evidence,
+        industry_flags=flags,
     )

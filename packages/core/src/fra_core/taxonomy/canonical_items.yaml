@@ -14,8 +14,18 @@
 # they name is mapped only when a check confirms it as a total.
 # critical items gate the pipeline: if one is missing or unmapped, the job stops for review
 # instead of producing a confident summary from an incomplete statement.
+# within names the total an item sums into. Only items that share an alias carry it: "Lease
+# liabilities" is printed under current and non-current liabilities alike, and the mapper takes
+# the item whose total the row is confirmed to sum into, never the one its position suggests.
+# statement_headings are printed over a statement's sections ("Assets"); like a section heading,
+# a text layer can run one into the first row below it, and the mapper reads past it.
 
 version: 1
+
+statement_headings:
+  balance:
+    en: [assets, equity and liabilities, liabilities and equity, shareholders equity and liabilities]
+    ar: [الموجودات, الأصول, حقوق الملكية والمطلوبات, المطلوبات وحقوق الملكية, حقوق الملكية والالتزامات, الالتزامات وحقوق الملكية]
 
 items:
   # ---------------- Profit or loss ----------------
@@ -104,15 +114,16 @@ items:
     critical: true
     natural_sign: "+"
     aliases:
-      en: [profit attributable to shareholders of the parent, profit attributable to equity holders of the parent, attributable to owners of the company]
-      ar: [الربح العائد لمساهمي الشركة الأم, العائد إلى مالكي الشركة الأم, الحصة في الربح العائدة للشركة الأم]
+      # The bare forms are how a statement prints the line under "Profit for the year attributable to:".
+      en: [profit attributable to shareholders of the parent, profit attributable to equity holders of the parent, attributable to owners of the company, shareholders of the company, equity holders of the company, owners of the company, shareholders of the parent, equity holders of the parent]
+      ar: [الربح العائد لمساهمي الشركة الأم, العائد إلى مالكي الشركة الأم, الحصة في الربح العائدة للشركة الأم, المساهمين في الشركة, مساهمي الشركة, مساهمي الشركة الأم, المساهمين في الشركة الأم, مالكي الشركة]
 
   - id: net_income_attributable_nci
     statement: income
     natural_sign: "+"
     aliases:
-      en: [non-controlling interests, profit attributable to non-controlling interests]
-      ar: [الحصص غير المسيطرة, حقوق الأقلية, العائد إلى الحصص غير المسيطرة]
+      en: [non-controlling interests, non-controlling interest, profit attributable to non-controlling interests]
+      ar: [الحصص غير المسيطرة, حقوق الأقلية, العائد إلى الحصص غير المسيطرة, حقوق الملكية غير المسيطرة]
 
   - id: eps_basic
     statement: income
@@ -137,7 +148,7 @@ items:
     natural_sign: "+"
     aliases:
       en: [cash and cash equivalents, cash and bank balances, cash at bank and in hand]
-      ar: [النقد وما في حكمه, النقدية وما في حكمها, نقد وأرصدة لدى البنوك, النقدية وأرصدة البنوك]
+      ar: [النقد وما في حكمه, نقد وما في حكمه, النقدية وما في حكمها, نقد وأرصدة لدى البنوك, النقدية وأرصدة البنوك]
 
   - id: short_term_investments
     statement: balance
@@ -184,7 +195,7 @@ items:
     natural_sign: "+"
     aliases:
       en: [property plant and equipment, fixed assets, property and equipment]
-      ar: [الممتلكات والآلات والمعدات, أصول ثابتة, الموجودات الثابتة, ممتلكات ومعدات]
+      ar: [الممتلكات والآلات والمعدات, ممتلكات وآلات ومعدات, أصول ثابتة, الموجودات الثابتة, ممتلكات ومعدات]
 
   - id: right_of_use_assets
     statement: balance
@@ -247,28 +258,32 @@ items:
     natural_sign: "+"
     aliases:
       en: [trade payables, accounts payable, trade and other payables]
-      ar: [ذمم دائنة, دائنون تجاريون, الدائنون وأرصدة دائنة أخرى]
+      ar: [ذمم دائنة, دائنون تجاريون, الدائنون وأرصدة دائنة أخرى, ذمم دائنة تجارية وذمم دائنة أخرى, ذمم دائنة تجارية وأخرى]
 
   - id: short_term_borrowings
     statement: balance
     natural_sign: "+"
     aliases:
-      en: [short-term borrowings, short-term loans, bank overdraft, credit facilities]
-      ar: [قروض قصيرة الأجل, تسهيلات ائتمانية, البنوك الدائنة]
+      en: [short-term borrowings, short-term loans, bank overdraft, bank overdrafts, credit facilities]
+      ar: [قروض قصيرة الأجل, تسهيلات ائتمانية, البنوك الدائنة, سحب على المكشوف]
 
+  # "Loans and borrowings" under current liabilities is the part of the term debt due within a
+  # year; overdrafts and short-term loans print beside it as lines of their own. Both are debt.
   - id: current_portion_long_term_debt
     statement: balance
     natural_sign: "+"
+    within: total_current_liabilities
     aliases:
-      en: [current portion of long-term loans, current portion of long-term debt]
-      ar: [الجزء المتداول من القروض طويلة الأجل, الجزء المتداول من التزامات طويلة الأجل]
+      en: [current portion of long-term loans, current portion of long-term debt, loans and borrowings]
+      ar: [الجزء المتداول من القروض طويلة الأجل, الجزء المتداول من التزامات طويلة الأجل, قروض وتسهيلات]
 
   - id: lease_liabilities_current
     statement: balance
     natural_sign: "+"
+    within: total_current_liabilities
     aliases:
-      en: [current lease liabilities, lease liabilities current portion]
-      ar: [التزامات عقود الإيجار المتداولة, الجزء المتداول من التزامات الإيجار]
+      en: [current lease liabilities, lease liabilities current portion, lease liabilities]
+      ar: [التزامات عقود الإيجار المتداولة, الجزء المتداول من التزامات الإيجار, مطلوبات عقود الإيجار, التزامات عقود الإيجار]
 
   - id: other_current_liabilities
     statement: balance
@@ -292,16 +307,18 @@ items:
   - id: long_term_borrowings
     statement: balance
     natural_sign: "+"
+    within: total_non_current_liabilities
     aliases:
-      en: [long-term borrowings, long-term loans, term loans]
-      ar: [قروض طويلة الأجل, التزامات طويلة الأجل]
+      en: [long-term borrowings, long-term loans, term loans, loans and borrowings]
+      ar: [قروض طويلة الأجل, التزامات طويلة الأجل, قروض وتسهيلات]
 
   - id: lease_liabilities_non_current
     statement: balance
     natural_sign: "+"
+    within: total_non_current_liabilities
     aliases:
-      en: [non-current lease liabilities, lease liabilities non-current]
-      ar: [التزامات عقود الإيجار غير المتداولة]
+      en: [non-current lease liabilities, lease liabilities non-current, lease liabilities]
+      ar: [التزامات عقود الإيجار غير المتداولة, مطلوبات عقود الإيجار, التزامات عقود الإيجار]
 
   - id: other_non_current_liabilities
     statement: balance
@@ -343,7 +360,7 @@ items:
     natural_sign: "+"
     aliases:
       en: [retained earnings, accumulated profits, accumulated losses]
-      ar: [الأرباح المبقاة, أرباح مرحلة, الأرباح المرحلة, الخسائر المتراكمة]
+      ar: [الأرباح المبقاة, أرباح مبقاة, أرباح مرحلة, الأرباح المرحلة, الخسائر المتراكمة]
 
   - id: other_reserves
     statement: balance
@@ -358,15 +375,15 @@ items:
     natural_sign: "+"
     subtotal: true
     aliases:
-      en: [equity attributable to shareholders of the parent, equity attributable to owners of the company, shareholders equity]
-      ar: [حقوق المساهمين في الشركة الأم, الحقوق العائدة لمساهمي الشركة الأم, حقوق مالكي الشركة الأم]
+      en: [equity attributable to shareholders of the parent, equity attributable to owners of the company, shareholders equity, equity attributable to equity holders of the company, equity attributable to equity holders of the parent, equity attributable to shareholders of the company]
+      ar: [حقوق المساهمين في الشركة الأم, الحقوق العائدة لمساهمي الشركة الأم, حقوق مالكي الشركة الأم, حقوق الملكية العائدة للمساهمين في الشركة, حقوق الملكية العائدة لمساهمي الشركة, حقوق الملكية العائدة لمساهمي الشركة الأم]
 
   - id: non_controlling_interests
     statement: balance
     natural_sign: "+"
     aliases:
-      en: [non-controlling interests, minority interest]
-      ar: [الحصص غير المسيطرة, حقوق الأقلية]
+      en: [non-controlling interests, non-controlling interest, minority interest]
+      ar: [الحصص غير المسيطرة, حقوق الأقلية, حقوق الملكية غير المسيطرة]
 
   - id: total_equity
     statement: balance

@@ -347,3 +347,11 @@ def test_a_closing_total_label_without_values_does_not_close_the_part() -> None:
 def test_an_unrecognised_closing_total_leaves_the_part_open() -> None:
     damaged = _balance(5, ["Cash", "Total equity and totel liablities"])
     assert len(merge_continuations([damaged, _balance(6, ["Cash"])], INDEX)) == 1
+
+
+def test_identical_columns_and_periods_do_not_merge_different_source_groups() -> None:
+    first = part(1, [FY25, FY24], {"FY2025": 500, "FY2024": 650}, ["Revenue"])
+    second = part(2, [FY25, FY24], {"FY2025": 500, "FY2024": 650}, ["Net profit"])
+    first.source_group = "primary:income"
+    second.source_group = "scope:income:False:2-2"
+    assert len(merge_continuations([first, second], INDEX)) == 2

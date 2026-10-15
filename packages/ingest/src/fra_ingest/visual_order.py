@@ -3,7 +3,9 @@
 Measured on Almarai AR: each run of Arabic digits comes out reversed in place (mirrored
 brackets swapped back), and letters come out in reading order but separated by single spaces.
 Digit runs are reversed back in place only on pages Part 1 marked ``visual_arabic``; spaced
-letters are joined wherever they occur.
+letters are joined wherever they occur. Docling's spacing hides where one word ends and the next
+begins, so a joined run is split again at the words the page's own text layer prints there
+(``page_vocabulary``): pypdfium2 keeps the word gaps, in either reading order.
 
 A second pattern, measured on the Arabic digital fit documents: docling returns the cells of a
 table with the words of each cell in reverse order and the letters of each word in reading
@@ -19,6 +21,7 @@ import unicodedata
 from fra_core.schemas import StatementType
 from fra_ingest.label_match import LabelIndex
 from fra_ingest.table_grid import Grid, GridCell
+from fra_ingest.text_match import canonical, reading_variants
 
 _DIGIT = "٠-٩۰-۹"
 _RUN = re.compile(rf"[{_DIGIT}](?:[{_DIGIT},.٫٬]*[{_DIGIT}])?")
@@ -66,7 +69,66 @@ def is_letter_spaced(text: str) -> bool:
     return letters >= 3 and letters >= 0.6 * len(tokens)
 
 
-def join_spaced_letters(text: str) -> str:
+# A page word shorter than this is no evidence of a boundary: a lone letter is as often the
+# fragment of a word split at a diacritic or a ligature as a word.
+_MIN_PAGE_WORD = 2
+# The share of a run's letters that page words must cover before the run is split at them;
+# below it the run is joined whole, as before. Set so that a single letter the text layer
+# printed against digits (the "م" of a year) does not stop a short heading being split.
+_MIN_COVERED = 0.8
+# Letters and the marks written on them, so a vowelled word is one word, not fragments.
+_ARABIC_WORD = re.compile("[\u0621-\u064a\u0671-\u06d3\u064b-\u065f\u0670]+")
+
+
+def page_vocabulary(text: str, *, visual: bool) -> frozenset[str]:
+    """The Arabic words a page's text layer prints, in ``canonical`` form with their letters in
+    reading order (``visual`` pages print them reversed). Word order is irrelevant here. The text
+    is read after NFKC, as the lexicon reads it, so a layer in presentation forms counts too."""
+    normalized = unicodedata.normalize("NFKC", text)
+    words = _ARABIC_WORD.findall(reading_variants(normalized, visual)[0])
+    return frozenset(k for w in words if len(k := canonical(w)) >= _MIN_PAGE_WORD)
+
+
+def split_at_page_words(run: str, vocabulary: frozenset[str]) -> str:
+    """``run`` (letters joined from docling's spacing) with a space before each page word it
+    is made of: the fewest page words, any letter no page word covers kept on the word before
+    it. ``run`` unchanged when page words cover less than ``_MIN_COVERED`` of it."""
+    if not vocabulary:
+        return run
+    n = len(run)
+    # best[i]: (uncovered letters, words) for run[:i], and the pieces that achieve it.
+    best: list[tuple[tuple[int, int], tuple[tuple[str, bool], ...]] | None] = [None] * (n + 1)
+    best[0] = ((0, 0), ())
+    for i in range(n):
+        current = best[i]
+        if current is None:
+            continue
+        (uncovered, words), pieces = current
+        steps = [((uncovered + 1, words), (run[i], False), i + 1)]
+        steps += [
+            ((uncovered, words + 1), (run[i:j], True), j)
+            for j in range(i + 1, n + 1)
+            if canonical(run[i:j]) in vocabulary
+        ]
+        for cost, step, j in steps:
+            known = best[j]
+            if known is None or cost < known[0]:
+                best[j] = (cost, (*pieces, step))
+    final = best[n]
+    if final is None:  # every letter can be kept as uncovered, so this cannot happen
+        raise RuntimeError(f"no segmentation of {run!r}")
+    (uncovered, _), pieces = final
+    if n == 0 or (n - uncovered) / n < _MIN_COVERED:
+        return run
+    out = ""
+    for text, is_word in pieces:
+        out += f" {text}" if is_word and out else text
+    return out
+
+
+def join_spaced_letters(text: str, vocabulary: frozenset[str] = frozenset()) -> str:
+    """Letters docling spaced apart joined into words: split at the words of ``vocabulary``
+    (``page_vocabulary`` of the page) where they cover the run, else joined whole."""
     if not is_letter_spaced(text):
         return text
     out: list[str] = []
@@ -76,11 +138,11 @@ def join_spaced_letters(text: str) -> str:
             run.append(token)
             continue
         if run:
-            out.append("".join(run))
+            out.append(split_at_page_words("".join(run), vocabulary))
             run = []
         out.append(token)
     if run:
-        out.append("".join(run))
+        out.append(split_at_page_words("".join(run), vocabulary))
     return " ".join(out)
 
 
@@ -94,16 +156,20 @@ def repair_text(text: str, *, visual: bool) -> str:
     return join_spaced_letters(restore_digits(text) if visual else text)
 
 
-def repair_grid(grid: Grid, *, visual: bool) -> Grid:
+def repair_grid(grid: Grid, *, visual: bool, vocabulary: frozenset[str] = frozenset()) -> Grid:
+    """Digits restored on ``visual`` pages and spaced letters joined, split at the words of
+    ``vocabulary`` (the page's, from ``page_vocabulary``) where they cover the run."""
     cells = []
     for cell in grid.cells:
         flags = list(cell.flags)
         text = restore_digits(cell.text) if visual else cell.text
         if text != cell.text:
             flags.append("digits_reversed")
-        joined = join_spaced_letters(text)
+        joined = join_spaced_letters(text, vocabulary)
         if joined != text:
             flags.append("letters_spaced")
+            if joined != join_spaced_letters(text):
+                flags.append("words_from_page")
         if cell.is_column_header:
             year = join_split_year(joined)
             if year != joined:

@@ -151,7 +151,9 @@ def test_an_anchor_reads_a_heading_merged_into_the_first_row() -> None:
         ]
     )
     assert out["r3"].canonical_id == "total_current_assets"
-    assert out["r1"].mapping_flag == "unmapped"
+    # The row itself is read past its heading: what follows is an alias exactly.
+    assert out["r1"].canonical_id == "inventories"
+    assert out["r1"].mapping_evidence == "alias_past_heading"
 
 
 def test_a_first_row_that_only_contains_a_heading_names_no_section() -> None:
@@ -442,3 +444,78 @@ def test_noncritical_and_unvalued_labels_do_not_create_extra_findings() -> None:
     skipped = statement([], StatementType.CASH_FLOW)
     assert map_statement(skipped, INDEX, []) == skipped
     assert map_statement(skipped, INDEX, []).mapping_findings == ()
+
+
+# ---- an alias two items share by section, and headings run into a label -----------------------
+
+
+def liabilities() -> list[LineItem]:
+    return [
+        row(1, "Non-current liabilities", None),
+        row(2, "Loans and borrowings", "8", parent=4),
+        row(3, "Lease liabilities", "2", parent=4),
+        row(4, "", "10", subtotal=True),
+        row(5, "Current liabilities", None),
+        row(6, "Bank overdrafts", "1", parent=9),
+        row(7, "Loans and borrowings", "3", parent=9),
+        row(8, "Lease liabilities", "1", parent=9),
+        row(9, "", "5", subtotal=True),
+    ]
+
+
+def test_an_alias_shared_by_section_is_settled_by_the_total_the_row_sums_into() -> None:
+    out = mapped(liabilities())
+    assert out["r4"].canonical_id == "total_non_current_liabilities"
+    assert out["r9"].canonical_id == "total_current_liabilities"
+    assert out["r2"].canonical_id == "long_term_borrowings"
+    assert out["r3"].canonical_id == "lease_liabilities_non_current"
+    assert out["r3"].mapping_evidence == "alias_in_section:total_non_current_liabilities"
+    assert out["r6"].canonical_id == "short_term_borrowings"
+    assert out["r7"].canonical_id == "current_portion_long_term_debt"
+    assert out["r8"].canonical_id == "lease_liabilities_current"
+
+
+def test_a_shared_alias_with_no_mapped_section_stays_ambiguous() -> None:
+    out = mapped([row(1, "Lease liabilities", "2"), row(2, "Loans and borrowings", "8")])
+    assert out["r1"].canonical_id is None and out["r1"].mapping_flag == "ambiguous"
+    assert out["r1"].mapping_evidence.startswith("alias_multiple:")  # type: ignore[union-attr]
+
+
+def test_a_shared_alias_under_an_unconfirmed_total_stays_ambiguous() -> None:
+    out = mapped(liabilities(), unchecked=frozenset({"r4"}))
+    assert out["r4"].canonical_id is None
+    assert out["r3"].canonical_id is None and out["r3"].mapping_flag == "ambiguous"
+
+
+def test_an_alias_of_the_other_section_is_flagged_not_mapped() -> None:
+    items = [
+        row(1, "Non-current liabilities", None),
+        row(2, "Current lease liabilities", "2", parent=4),
+        row(3, "Long-term loans", "8", parent=4),
+        row(4, "", "10", subtotal=True),
+    ]
+    out = mapped(items)
+    assert out["r4"].canonical_id == "total_non_current_liabilities"
+    assert out["r2"].canonical_id is None and out["r2"].mapping_flag == "ambiguous"
+    assert out["r2"].mapping_evidence == (
+        "section_conflict:lease_liabilities_current|section=total_non_current_liabilities"
+    )
+    assert out["r3"].canonical_id == "long_term_borrowings"
+
+
+def test_a_statement_heading_and_a_section_heading_run_into_a_label_are_read_past() -> None:
+    out = mapped(
+        [
+            row(1, "الموجودات الموجودات غير المتداولة ممتلكات وآلات ومعدات", "10", parent=3),
+            row(2, "موجودات حق الاستخدام", "5", parent=3),
+            row(3, "", "15", subtotal=True),
+        ]
+    )
+    assert out["r3"].canonical_id == "total_non_current_assets"
+    assert out["r1"].canonical_id == "ppe_net"
+    assert out["r1"].mapping_evidence == "alias_past_heading"
+
+
+def test_a_label_that_only_starts_with_a_heading_is_not_read_past() -> None:
+    out = mapped([row(1, "Assets held for sale", "10")])
+    assert out["r1"].canonical_id is None and out["r1"].mapping_flag == "unmapped"

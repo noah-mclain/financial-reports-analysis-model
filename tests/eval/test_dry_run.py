@@ -1111,6 +1111,53 @@ def test_negative_controls_are_judged_apart_from_the_corporate_headline() -> Non
     }
 
 
+@pytest.mark.parametrize("control_gold", [False, True])
+def test_control_gold_refuses_before_a_look_and_controls_stay_out_of_gold_accuracy(
+    tmp_path: Path, control_gold: bool
+) -> None:
+    import hashlib
+
+    from harness.independent_gold import FrozenGold, Reading
+    from tests.eval.test_independent_gold import call_run, reading
+
+    corporate, control = (candidate_record(issuer) for issuer in HOLDOUT_ISSUERS[:2])
+    control.update(role="negative_control", sector="bank")
+    setup = Setup(tmp_path, [corporate, control])
+    directory = tmp_path / "gold"
+    directory.mkdir()
+    for entry in [corporate, control] if control_gold else [corporate]:
+        first, second = reading(), reading("reader-b")
+        for data in (first, second):
+            data["id"] = entry["id"]
+            data["sha256"] = hashlib.sha256(b"").hexdigest()
+        frozen = FrozenGold(
+            readings=(Reading.model_validate(first), Reading.model_validate(second))
+        )
+        (directory / f"{entry['id']}.json").write_text(frozen.model_dump_json())
+    actual = declined_result("bank")
+    actual.sha256 = hashlib.sha256(b"").hexdigest()
+    calls = Calls()
+    stages = stub_stages(calls, result=actual)
+    if control_gold:
+        with pytest.raises(PreflightFailed, match="no look") as error:
+            call_run(setup, directory, stages)
+        assert "negative control" in str(error.value.__cause__)
+        assert read_looks(setup.log) == []
+        assert calls.events == []
+        assert not setup.report.exists()
+    else:
+        report = call_run(setup, directory, stages)
+        total = report["gold_accuracy"]["strata"]["total"]
+        assert (total["documents"], total["labeled_documents"]) == (1, 1)
+        assert total["figures"]["digital"]["cells"] == 1
+        assert total["measures"]["mapping_rows"]["total"] == 1
+        assert "gold" not in report["rows"][1]
+        assert (
+            report["aggregates"]["negative_controls"]["judgement_against_label"]["right"]["total"]
+            == 1
+        )
+
+
 def test_critical_items_are_summed_per_stratum_over_documents_that_reached_statements() -> None:
     full = {
         "mapped": 8,

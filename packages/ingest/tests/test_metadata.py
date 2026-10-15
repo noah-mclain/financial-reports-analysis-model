@@ -1,5 +1,7 @@
 """Scale, currency, entity and consolidation (spec 11, Data flow step 6)."""
 
+import pytest
+
 from fra_ingest.metadata import detect_metadata
 
 
@@ -221,3 +223,22 @@ def test_the_entity_line_is_kept_when_a_domicile_line_follows_it() -> None:
     lines = ("Juhayna Food Industries S.A.E.", "(An Egyptian Joint Stock Company)")
     assert _entity(*lines) == "Juhayna Food Industries S.A.E."
     assert _entity(*reversed(lines)) == "Juhayna Food Industries S.A.E."
+
+
+@pytest.mark.parametrize(
+    "titles,scope",
+    [
+        (["Consolidated statement of financial position"], True),
+        (["Standalone statement of financial position"], False),
+        (["قائمة المركز المالي المجمعة"], True),
+        (["قائمة المركز المالي المستقلة"], False),
+        (["Consolidated standalone statement of income"], None),
+        (["Statement of income"], None),
+    ],
+)
+def test_statement_title_scope_keeps_unknown_and_conflicting_markers(
+    titles: list[str], scope: bool | None
+) -> None:
+    from fra_ingest.metadata import statement_title_scope
+
+    assert statement_title_scope(titles) is scope

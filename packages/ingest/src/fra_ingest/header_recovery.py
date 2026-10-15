@@ -7,7 +7,6 @@ is bounded by the table and its nearest caption, and uses the configured engine 
 from __future__ import annotations
 
 import math
-import re
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
@@ -16,11 +15,10 @@ from statistics import median
 import pypdfium2 as pdfium
 from PIL import Image
 
-from fra_core.numbers import normalize_digits
 from fra_core.periods import interpret_period, parse_period
 from fra_core.schemas import BBox, PeriodKind, Provenance, StatementType, TextSource
 from fra_core.schemas.statement import PeriodEvidence, PeriodObservation
-from fra_core.units import unit_marker_spans
+from fra_core.units import is_glyph_placeholder, unit_marker_spans
 from fra_ingest.config import IngestConfig
 from fra_ingest.docling_json import DlDocument, DlTable
 from fra_ingest.header import (
@@ -33,10 +31,9 @@ from fra_ingest.header import (
     printed_date,
 )
 from fra_ingest.ocr import OcrEngine, OcrLine
-from fra_ingest.period_evidence import source_cell
+from fra_ingest.period_evidence import contained, source_cell
 from fra_ingest.table_grid import Grid, GridCell
 
-_YEAR = re.compile(r"(?:19|20)\d{2}")
 _PROGRAMMING_ERRORS = (TypeError, AttributeError, NameError, IndexError, KeyError)
 
 
@@ -127,9 +124,11 @@ def _unavailable(grid: Grid, cols: list[int], reason: str) -> Grid:
 
 
 def _only_units(text: str) -> bool:
+    """Unit text is marker spans and punctuation, with a glyph placeholder beside a marker."""
     covered = {i for start, end in unit_marker_spans(text) for i in range(start, end)}
+    rest = "".join(" " if i in covered else c for i, c in enumerate(text))
     return bool(covered) and all(
-        i in covered or c.isspace() or c in "()[]'\".,:" for i, c in enumerate(text)
+        is_glyph_placeholder(token) or not token.strip("()[]'\".,:") for token in rest.split()
     )
 
 
@@ -205,11 +204,7 @@ def _collect_evidence(
                 continue
             if not _overlap(box, anchor):
                 continue
-            if not (
-                _valid_box(box, crop.page_width, crop.page_height)
-                and anchor.left <= box.left < box.right <= anchor.right
-                and anchor.top <= box.top < box.bottom <= anchor.bottom
-            ):
+            if not (_valid_box(box, crop.page_width, crop.page_height) and contained(box, anchor)):
                 reasons.add("outside_source_rectangle")
                 continue
             if any(
@@ -482,7 +477,7 @@ def recover_header(
     # Preserve the printed uncertainty even when it prevents recovering any binding.
     grid = grid.model_copy(update={"recovered_context": context_cells})
     if (
-        any(_YEAR.fullmatch(normalize_digits(line.text)[0].strip()) for line, _ in selected)
+        any(interpret_period(line.text).calendar == "year_only" for line, _ in selected)
         and not caption
     ):
         return _flag(grid, "period_uncertain")

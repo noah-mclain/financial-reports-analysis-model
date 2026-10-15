@@ -25,6 +25,7 @@ CRITICAL_CELL_FLAGS = (
     "row_misaligned",
     "row_realigned",
     "ambiguous_separator",
+    "numeric_columns_split",
 )
 _HOLD_FLAGS = (
     "period_unbound",
@@ -43,7 +44,12 @@ _WARNING_FLAGS = (
     "words_reversed",
     "word_order_uncertain",
 )
-_WARNING_CELL_FLAGS = ("label_merged", "blank_confirmed")
+_WARNING_CELL_FLAGS = (
+    "label_merged",
+    "label_words_from_page",
+    "blank_confirmed",
+    "numeric_columns_split",
+)
 _FAILED = (
     ("subtotal", "subtotal_failed"),
     ("balance_identity", "identity_failed"),
@@ -100,7 +106,8 @@ def review_statement(
     reasons += [f for f in statement.flags if f.split(":")[0] in _HOLD_FLAGS]
     reasons += [f"{finding.reason}:{finding.item_id}" for finding in statement.mapping_findings]
     if not primary:
-        reasons = ["duplicate_statement"]
+        kept = [r for r in reasons if r.split(":")[0] == "period_conflict"]
+        reasons = [*kept, "duplicate_statement"]
     warnings = [f for f in statement.flags if f in _WARNING_FLAGS]
     warnings += [f"{flag}:{counts[flag]}" for flag in _WARNING_CELL_FLAGS if counts[flag]]
     vouched = {(i, c.period_key) for c in checks if c.status == "pass" for i in c.line_item_ids}
