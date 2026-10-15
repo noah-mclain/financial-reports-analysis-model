@@ -1,0 +1,661 @@
+{
+  "version": 1,
+  "method": "assisted_review",
+  "readings": [
+    {
+      "id": "juhayna-2024-en-consolidated",
+      "sha256": "4c52b27b92e8de962ad49618aa0a7429f36e6324fd864ee2321b8c4222f1e953",
+      "reader": "nada",
+      "source": "pdf_reviewed",
+      "complete": true,
+      "statements": [
+        {
+          "type": "balance",
+          "pages": [
+            5
+          ],
+          "page_mode": "scanned",
+          "scale": 1,
+          "currency": "EGP",
+          "periods": [
+            {
+              "key": "2024-12-31",
+              "end_date": "2024-12-31",
+              "kind": "instant",
+              "months": null,
+              "restated": false,
+              "audited": null
+            },
+            {
+              "key": "2023-12-31",
+              "end_date": "2023-12-31",
+              "kind": "instant",
+              "months": null,
+              "restated": false,
+              "audited": null
+            }
+          ],
+          "rows": [
+            {
+              "label": "Property, plant and equipment",
+              "values": {
+                "2024-12-31": "3886899018",
+                "2023-12-31": "3077685183"
+              },
+              "unconfirmed": [],
+              "canonical_id": "ppe_net"
+            },
+            {
+              "label": "Projects under construction",
+              "values": {
+                "2024-12-31": "1511945561",
+                "2023-12-31": "299334840"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Biological assets",
+              "values": {
+                "2024-12-31": "445704631",
+                "2023-12-31": "305114220"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Equity accounted investees",
+              "values": {
+                "2024-12-31": "18025552",
+                "2023-12-31": "15670070"
+              },
+              "unconfirmed": [],
+              "canonical_id": "investments_in_associates"
+            },
+            {
+              "label": "Right of use assets",
+              "values": {
+                "2024-12-31": "93038704",
+                "2023-12-31": "38966498"
+              },
+              "unconfirmed": [],
+              "canonical_id": "right_of_use_assets"
+            },
+            {
+              "label": "Good will",
+              "values": {
+                "2024-12-31": "97092890",
+                "2023-12-31": "97092890"
+              },
+              "unconfirmed": [],
+              "canonical_id": "goodwill"
+            },
+            {
+              "label": "Other long term asset",
+              "values": {
+                "2024-12-31": "699057",
+                "2023-12-31": "707329"
+              },
+              "unconfirmed": [],
+              "canonical_id": "other_non_current_assets"
+            },
+            {
+              "label": "Non-current assets",
+              "values": {
+                "2024-12-31": "6053405413",
+                "2023-12-31": "3834571030"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_non_current_assets"
+            },
+            {
+              "label": "Inventory",
+              "values": {
+                "2024-12-31": "4177070922",
+                "2023-12-31": "2783515178"
+              },
+              "unconfirmed": [],
+              "canonical_id": "inventories"
+            },
+            {
+              "label": "Trade and other receivables",
+              "values": {
+                "2024-12-31": "1501832833",
+                "2023-12-31": "834918362"
+              },
+              "unconfirmed": [],
+              "canonical_id": "trade_receivables"
+            },
+            {
+              "label": "Due from related party",
+              "values": {
+                "2024-12-31": "3421436",
+                "2023-12-31": "2760164"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Other biological assets",
+              "values": {
+                "2024-12-31": "43487421",
+                "2023-12-31": "29465780"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Cash and cash equivalents",
+              "values": {
+                "2024-12-31": "1811244599",
+                "2023-12-31": "1093526328"
+              },
+              "unconfirmed": [],
+              "canonical_id": "cash_and_equivalents"
+            },
+            {
+              "label": "PPE held for sale",
+              "values": {
+                "2024-12-31": "0",
+                "2023-12-31": "1610291"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Current assets",
+              "values": {
+                "2024-12-31": "7537057211",
+                "2023-12-31": "4745796103"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_current_assets"
+            },
+            {
+              "label": "Total assets",
+              "values": {
+                "2024-12-31": "13590462624",
+                "2023-12-31": "8580367133"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_assets"
+            },
+            {
+              "label": "Issued and paid up capital",
+              "values": {
+                "2024-12-31": "941405082",
+                "2023-12-31": "941405082"
+              },
+              "unconfirmed": [],
+              "canonical_id": "share_capital"
+            },
+            {
+              "label": "Legal reserve",
+              "values": {
+                "2024-12-31": "742112963",
+                "2023-12-31": "742112963"
+              },
+              "unconfirmed": [],
+              "canonical_id": "other_reserves"
+            },
+            {
+              "label": "General reserve - issuance premium",
+              "values": {
+                "2024-12-31": "330920428",
+                "2023-12-31": "330920428"
+              },
+              "unconfirmed": [],
+              "canonical_id": "other_reserves"
+            },
+            {
+              "label": "Retained earnings",
+              "values": {
+                "2024-12-31": "4324257529",
+                "2023-12-31": "2233885644"
+              },
+              "unconfirmed": [],
+              "canonical_id": "retained_earnings"
+            },
+            {
+              "label": "Total equity attributable to company owners",
+              "values": {
+                "2024-12-31": "6338696002",
+                "2023-12-31": "4248324117"
+              },
+              "unconfirmed": [],
+              "canonical_id": "equity_attributable_parent"
+            },
+            {
+              "label": "Non-controlling interests",
+              "values": {
+                "2024-12-31": "628468",
+                "2023-12-31": "1444468"
+              },
+              "unconfirmed": [],
+              "canonical_id": "non_controlling_interests"
+            },
+            {
+              "label": "Total equity",
+              "values": {
+                "2024-12-31": "6339324470",
+                "2023-12-31": "4249768585"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_equity"
+            },
+            {
+              "label": "Loans",
+              "values": {
+                "2024-12-31": "578066880",
+                "2023-12-31": "90395408"
+              },
+              "unconfirmed": [],
+              "canonical_id": "long_term_borrowings"
+            },
+            {
+              "label": "Lease contract liabilities",
+              "values": {
+                "2024-12-31": "84041450",
+                "2023-12-31": "53847845"
+              },
+              "unconfirmed": [],
+              "canonical_id": "lease_liabilities_non_current"
+            },
+            {
+              "label": "Deferred tax liabilities",
+              "values": {
+                "2024-12-31": "387421265",
+                "2023-12-31": "321767403"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Deferred income",
+              "values": {
+                "2024-12-31": "2199658",
+                "2023-12-31": "6023113"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Non-current liabilities",
+              "values": {
+                "2024-12-31": "1051729253",
+                "2023-12-31": "472033765"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_non_current_liabilities"
+            },
+            {
+              "label": "Provisions",
+              "values": {
+                "2024-12-31": "228224163",
+                "2023-12-31": "183529210"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Bank credit facilities",
+              "values": {
+                "2024-12-31": "2909495624",
+                "2023-12-31": "1096229656"
+              },
+              "unconfirmed": [],
+              "canonical_id": "short_term_borrowings"
+            },
+            {
+              "label": "Creditors and other credit balances",
+              "values": {
+                "2024-12-31": "2006712301",
+                "2023-12-31": "2261080629"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Due to related parties",
+              "values": {
+                "2024-12-31": "0",
+                "2023-12-31": "17871750"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Income tax liabilities",
+              "values": {
+                "2024-12-31": "712162570",
+                "2023-12-31": "177047207"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Lease contracts liabilities",
+              "values": {
+                "2024-12-31": "67487158",
+                "2023-12-31": "57958125"
+              },
+              "unconfirmed": [],
+              "canonical_id": "lease_liabilities_current"
+            },
+            {
+              "label": "Loans",
+              "values": {
+                "2024-12-31": "271503629",
+                "2023-12-31": "57204336"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Deferred income",
+              "values": {
+                "2024-12-31": "3823456",
+                "2023-12-31": "7643866"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Current liabilities",
+              "values": {
+                "2024-12-31": "6199408901",
+                "2023-12-31": "3858564779"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_current_liabilities"
+            },
+            {
+              "label": "Total liabilities",
+              "values": {
+                "2024-12-31": "7251138154",
+                "2023-12-31": "4330598548"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_liabilities"
+            }
+          ]
+        },
+        {
+          "type": "comprehensive_income",
+          "pages": [
+            7
+          ],
+          "page_mode": "scanned",
+          "scale": 1,
+          "currency": "EGP",
+          "periods": [
+            {
+              "key": "FY2024",
+              "end_date": "2024-12-31",
+              "kind": "duration",
+              "months": 12,
+              "restated": false,
+              "audited": null
+            },
+            {
+              "key": "FY2023",
+              "end_date": "2023-12-31",
+              "kind": "duration",
+              "months": 12,
+              "restated": false,
+              "audited": null
+            }
+          ],
+          "rows": [
+            {
+              "label": "Net profit for the year after tax",
+              "values": {
+                "FY2024": "2735394516",
+                "FY2023": "1021460218"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Losses of foreign currency evaluation (EAS 13 - appendix H)",
+              "values": {
+                "FY2024": "-344814387",
+                "FY2023": "0"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Tax impact (EAS 13 - appendix H)",
+              "values": {
+                "FY2024": "-3677680",
+                "FY2023": "0"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Total comprehensive income",
+              "values": {
+                "FY2024": "2386902449",
+                "FY2023": "1021460218"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Parent owners of the company",
+              "values": {
+                "FY2024": "2386802102",
+                "FY2023": "1020909888"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Non-controlling interests",
+              "values": {
+                "FY2024": "100347",
+                "FY2023": "550330"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            }
+          ]
+        },
+        {
+          "type": "income",
+          "pages": [
+            6
+          ],
+          "page_mode": "scanned",
+          "scale": 1,
+          "currency": "EGP",
+          "periods": [
+            {
+              "key": "FY2024",
+              "end_date": "2024-12-31",
+              "kind": "duration",
+              "months": 12,
+              "restated": false,
+              "audited": null
+            },
+            {
+              "key": "FY2023",
+              "end_date": "2023-12-31",
+              "kind": "duration",
+              "months": 12,
+              "restated": false,
+              "audited": null
+            }
+          ],
+          "rows": [
+            {
+              "label": "Net sales",
+              "values": {
+                "FY2024": "24302616048",
+                "FY2023": "15536190159"
+              },
+              "unconfirmed": [],
+              "canonical_id": "revenue"
+            },
+            {
+              "label": "Cost of sales",
+              "values": {
+                "FY2024": "-16912916624",
+                "FY2023": "-11926060448"
+              },
+              "unconfirmed": [],
+              "canonical_id": "cost_of_revenue"
+            },
+            {
+              "label": "Gross profit",
+              "values": {
+                "FY2024": "7389699424",
+                "FY2023": "3610129711"
+              },
+              "unconfirmed": [],
+              "canonical_id": "gross_profit"
+            },
+            {
+              "label": "Other operating income",
+              "values": {
+                "FY2024": "332938371",
+                "FY2023": "159994633"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Selling and Marketing expenses",
+              "values": {
+                "FY2024": "-2159669231",
+                "FY2023": "-1342075407"
+              },
+              "unconfirmed": [],
+              "canonical_id": "selling_general_admin"
+            },
+            {
+              "label": "General and administrative expenses",
+              "values": {
+                "FY2024": "-644978687",
+                "FY2023": "-388147620"
+              },
+              "unconfirmed": [],
+              "canonical_id": "selling_general_admin"
+            },
+            {
+              "label": "Net (Losses) income/ Reverse of Impairment of trade and other receivables",
+              "values": {
+                "FY2024": "-3081048",
+                "FY2023": "5971372"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Other expenses",
+              "values": {
+                "FY2024": "-221931314",
+                "FY2023": "-243943082"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Results from operating activities",
+              "values": {
+                "FY2024": "4692977515",
+                "FY2023": "1801929607"
+              },
+              "unconfirmed": [],
+              "canonical_id": "operating_income"
+            },
+            {
+              "label": "Share of net (Loss) /profit of Equity accounted investees",
+              "values": {
+                "FY2024": "2355482",
+                "FY2023": "-1256023"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Net finance (cost)",
+              "values": {
+                "FY2024": "-596428158",
+                "FY2023": "-320893260"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Loss on sale of investment at FV through profit or loss",
+              "values": {
+                "FY2024": "-522059933",
+                "FY2023": "-115108535"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Net profit for the year before income tax",
+              "values": {
+                "FY2024": "3576844906",
+                "FY2023": "1364671789"
+              },
+              "unconfirmed": [],
+              "canonical_id": "profit_before_tax"
+            },
+            {
+              "label": "Current income tax",
+              "values": {
+                "FY2024": "-841450390",
+                "FY2023": "-343211571"
+              },
+              "unconfirmed": [],
+              "canonical_id": "income_tax_expense"
+            },
+            {
+              "label": "Net profit for the year after tax",
+              "values": {
+                "FY2024": "2735394516",
+                "FY2023": "1021460218"
+              },
+              "unconfirmed": [],
+              "canonical_id": "net_income"
+            },
+            {
+              "label": "Owners of the company",
+              "values": {
+                "FY2024": "2735294169",
+                "FY2023": "1020909888"
+              },
+              "unconfirmed": [],
+              "canonical_id": "net_income_attributable_parent"
+            },
+            {
+              "label": "Non-controlling interests",
+              "values": {
+                "FY2024": "100347",
+                "FY2023": "550330"
+              },
+              "unconfirmed": [],
+              "canonical_id": "net_income_attributable_nci"
+            },
+            {
+              "label": "Earning per share for the year (L.E/share)",
+              "values": {
+                "FY2024": "2.91",
+                "FY2023": "0.98"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "reference_scope": "reviewed_packet_slots"
+}
