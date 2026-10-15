@@ -5,9 +5,16 @@ from decimal import Decimal
 from fra_core.schemas import BBox, StatementType, TextSource
 from fra_core.taxonomy.loader import load_taxonomy
 from fra_ingest.classify import Classification
+from fra_ingest.column_assignment import SPLIT_FLAG
 from fra_ingest.header import parse_header
 from fra_ingest.label_match import LabelIndex
-from fra_ingest.parts import PartialStatement, build_part, column_centre, is_per_share
+from fra_ingest.parts import (
+    PartialStatement,
+    _synthesized_box,
+    build_part,
+    column_centre,
+    is_per_share,
+)
 from fra_ingest.table_grid import Grid, GridCell
 
 
@@ -125,6 +132,21 @@ def test_column_centre_is_the_mean_of_its_cells() -> None:
     g = grid(ROWS)
     assert column_centre(g, 2, [2, 3]) == 250.0
     assert column_centre(g, 2, [1]) is None
+
+
+def test_column_centre_leaves_merged_amounts_out_only_when_asked() -> None:
+    rows = [*ROWS, ["Other income", "", "1,200,300 4,500,600", ""]]
+    g = grid(rows)
+    merged_cell = g.cell(6, 2)
+    assert merged_cell is not None and merged_cell.bbox is not None
+    wide = merged_cell.model_copy(
+        update={"bbox": merged_cell.bbox.model_copy(update={"right": 390})}
+    )
+    g = g.model_copy(update={"cells": tuple(wide if c is merged_cell else c for c in g.cells)})
+    plain = column_centre(g, 2, [2, 3])
+    assert column_centre(g, 2, [2, 3], skip_merged=True) == plain
+    assert column_centre(g, 2, [2, 3, 6]) != plain
+    assert column_centre(g, 2, [2, 3, 6], skip_merged=True) == plain
 
 
 def test_a_spanning_value_stays_in_its_own_column() -> None:
@@ -392,3 +414,69 @@ def test_a_per_share_heading_reaches_continuing_and_discontinued_rows() -> None:
         True,
         True,
     ]
+
+
+def test_a_label_whose_spaces_came_from_the_page_marks_every_value_of_its_row() -> None:
+    g = grid(ROWS, pads={2: 10, 3: 10, 4: 10})
+    restored = tuple(
+        c.model_copy(update={"flags": ("letters_spaced", "words_from_page")})
+        if (c.row, c.col) == (2, 0)
+        else c
+        for c in g.cells
+    )
+    g = g.model_copy(update={"cells": restored})
+    layout = parse_header(g, StatementType.BALANCE, None)
+    classification = Classification(type=StatementType.BALANCE, confidence=0.8)
+    built = build_part(g, layout, classification, source=TextSource.TEXT)
+    by_label = {i.raw_label: i for i in built.line_items}
+    ppe = by_label["Property, Plant and Equipment"]
+    assert ppe.cells and all("label_words_from_page" in c.flags for c in ppe.cells)
+    assert all("label_words_from_page" not in c.flags for c in by_label["Investments"].cells)
+
+
+def _with_split_amounts(split_rows: tuple[int, ...]) -> Grid:
+    """The grid helper's cells, with the right column's cells in ``split_rows`` replaced by a
+    split amount: both new cells keep the one rectangle that spanned the two columns."""
+    g = grid(ROWS)
+    cells = tuple(
+        c.model_copy(
+            update={
+                "flags": (SPLIT_FLAG,),
+                "bbox": BBox(left=210, top=c.bbox.top, right=390, bottom=c.bbox.bottom),
+            }
+        )
+        if c.row in split_rows and c.col in (2, 3) and c.bbox is not None
+        else c
+        for c in g.cells
+    )
+    return g.model_copy(update={"cells": cells})
+
+
+def test_unsplit_grids_keep_their_column_centre_and_synthesized_box() -> None:
+    g = grid(ROWS)
+    assert column_centre(g, 3, [2, 3, 4]) == 350.0
+    assert _synthesized_box(g, 4, 2) == BBox(left=210, top=85, right=290, bottom=95)
+    assert _synthesized_box(g, 4, 3) == BBox(left=310, top=85, right=390, bottom=95)
+
+
+def test_a_split_amounts_wide_box_is_not_column_geometry_for_the_centre() -> None:
+    g = _with_split_amounts((5,))
+    assert column_centre(g, 3, [2, 3, 5]) == 350.0
+    assert column_centre(g, 2, [2, 3, 5]) == 250.0
+
+
+def test_a_synthesized_box_stays_inside_the_band_the_unsplit_cells_define() -> None:
+    g = _with_split_amounts((5,))
+    box_ = _synthesized_box(g, 4, 2)
+    assert box_ == BBox(left=210, top=85, right=290, bottom=95)
+    box_ = _synthesized_box(g, 4, 3)
+    assert box_ is not None
+    assert (box_.left, box_.right) == (310, 390)
+
+
+def test_a_column_of_only_split_cells_has_no_geometry_of_its_own() -> None:
+    g = _with_split_amounts((0, 2, 3, 4, 5))
+    assert column_centre(g, 3, [0, 2, 3, 4, 5]) is None
+    bare = g.model_copy(update={"cells": tuple(c for c in g.cells if c.col != 3)})
+    assert _synthesized_box(bare, 4, 3) is None
+    assert _synthesized_box(g, 4, 3) is None
