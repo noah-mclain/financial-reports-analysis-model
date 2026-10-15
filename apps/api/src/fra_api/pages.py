@@ -22,7 +22,7 @@ from jinja2 import Environment, PackageLoader, select_autoescape
 
 from fra_api.jobs import settings_of, store_of
 from fra_api.views import analysis_view
-from fra_core.jobs import JobStore
+from fra_core.jobs import JobSettings, JobStore
 from fra_core.profile import Profile
 from fra_core.schemas import JobStage
 
@@ -49,6 +49,15 @@ def _pdf(store: JobStore, sha256: str) -> Path:
     if store.get_upload(sha256) is None:
         raise HTTPException(status_code=404, detail=f"no document {sha256}")
     return store.upload_path(sha256)
+
+
+def _within_page_limit(settings: JobSettings, page_no: int) -> None:
+    """A page past the upload page limit is never rendered, even of a PDF the worker refused,
+    so the limit bounds rendering as it bounds analysis."""
+    if page_no > settings.max_pages:
+        raise HTTPException(
+            status_code=404, detail=f"page {page_no} is past the limit of {settings.max_pages}"
+        )
 
 
 def page_size(pdf: Path, page_no: int) -> tuple[float, float]:
@@ -170,6 +179,7 @@ def add_page_routes(app: FastAPI, profile: Profile) -> None:
     @app.get("/documents/{sha256}/pages/{page_no}.png")
     def page_image(request: Request, sha256: str, page_no: int) -> Response:
         store = store_of(request)
+        _within_page_limit(settings_of(request), page_no)
         pdf = _pdf(store, sha256)
         target = store.root / "pages" / sha256 / f"{page_no}.png"
         if not target.is_file():
@@ -184,6 +194,7 @@ def add_page_routes(app: FastAPI, profile: Profile) -> None:
         box: Annotated[str | None, Query()] = None,
     ) -> HTMLResponse:
         store = store_of(request)
+        _within_page_limit(settings_of(request), page_no)
         pdf = _pdf(store, sha256)
         width, height = page_size(pdf, page_no)
         overlay = place_box(parse_box(box), width, height) if box is not None else None

@@ -45,8 +45,16 @@
 {% elif analysis.hold %}
 <div class="banner hold"><strong>Every statement is held for review.</strong> {{ analysis.hold }}</div>
 {% elif job.status.value == 'needs_review' %}
+{% set held = view.statements | selectattr('status', 'equalto', 'needs_review') | list %}
+{% if held %}
 <div class="banner hold">Some figures did not pass their own checks. Statements held for review are
   shown with their reasons; their figures are as read, not vouched for.</div>
+{% elif not view.statements %}
+<div class="banner hold">No statement was extracted from this document.</div>
+{% else %}
+<div class="banner hold">Every statement passed its own checks, but the document notices below
+  need review before its figures are relied on.</div>
+{% endif %}
 {% endif %}
 
 {% if analysis.flags %}

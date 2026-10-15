@@ -486,6 +486,41 @@ def test_the_results_of_an_unfinished_job_redirect_to_its_timeline(tmp_path: Pat
         assert client.get(f"/jobs/{'0' * 32}/view").status_code == 404
 
 
+def test_a_job_held_only_by_a_document_notice_does_not_say_figures_failed(
+    tmp_path: Path,
+) -> None:
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        flagged = finished_job(settings, client, flags=["range_not_converted:5-6"])
+        empty = finished_job(settings, client, statements=[], reviews=[], metrics=[])
+        flagged_page = client.get(f"/analyses/{flagged}/view").text
+        empty_page = client.get(f"/analyses/{empty}/view").text
+    assert "Every statement passed its own checks" in flagged_page
+    assert "did not pass their own checks" not in flagged_page
+    assert "No statement was extracted from this document." in empty_page
+    assert "did not pass their own checks" not in empty_page
+
+
+def test_a_page_past_the_page_limit_is_never_rendered(tmp_path: Path) -> None:
+    settings = settings_at(tmp_path).model_copy(update={"max_pages": 1})
+    document = pdfium.PdfDocument.new()
+    document.new_page(PAGE_W, PAGE_H)
+    document.new_page(PAGE_W, PAGE_H)
+    buffer = io.BytesIO()
+    document.save(buffer)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        sha256 = client.post(
+            "/documents",
+            content=buffer.getvalue(),
+            headers={"Content-Type": "application/pdf", "X-Filename": "two.pdf"},
+        ).json()["sha256"]
+        assert client.get(f"/documents/{sha256}/pages/1.png").status_code == 200
+        for path in (f"/documents/{sha256}/pages/2.png", f"/documents/{sha256}/pages/2"):
+            response = client.get(path)
+            assert response.status_code == 404 and "past the limit of 1" in response.text
+    assert not (settings.root / "pages" / sha256 / "2.png").exists()
+
+
 def test_a_page_renders_as_a_png_and_the_viewer_places_the_box_by_page_share(
     tmp_path: Path,
 ) -> None:
