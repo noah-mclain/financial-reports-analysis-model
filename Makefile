@@ -60,6 +60,8 @@ typecheck: ## Type check the packages, apps, the analytics golden test, eval har
 	$(UV) run mypy eval/harness
 	$(UV) run mypy $(wildcard scripts/ci/*.py)
 	$(UV) run mypy scripts/pool_store.py
+	$(UV) run mypy training/dataset_contracts.py
+	$(UV) run mypy training/sec_crosswalk.py
 
 test: ## Fast tests (no models, no OCR)
 	@$(MAKE) --no-print-directory unhide-pth

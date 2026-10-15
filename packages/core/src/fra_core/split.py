@@ -168,7 +168,10 @@ class Look:
 
 @dataclass(frozen=True)
 class Move:
-    """An issuer moved out of the holdout into fit: an override or a spent look."""
+    """An issuer moved out of the holdout into fit: an override or a spent look.
+
+    `key` is the normalized issuer name, even when its documents are keyed by CIK.
+    """
 
     issuer: str
     key: str
@@ -178,6 +181,18 @@ class Move:
     date: str
     looks_before: int
     reason: str
+
+
+def _check_move_identity(move: Move) -> None:
+    if (
+        not isinstance(move.issuer, str)
+        or not isinstance(move.key, str)
+        or not move.key
+        or move.key != issuer_key(move.issuer)
+    ):
+        raise SplitError(
+            f"{move.issuer!r}: move key {move.key!r} must match a nonempty normalized issuer name"
+        )
 
 
 def check_looks(looks: Sequence[Look]) -> None:
@@ -192,6 +207,7 @@ def check_moves(moves: Sequence[Move], looks: Sequence[Look]) -> None:
     """The moves record against the scoring log: an override is dated before the first look and
     made with no look in the log; a spent look comes after a logged look."""
     for m in moves:
+        _check_move_identity(m)
         _iso_date(m.date, m.issuer)
         if (m.source, m.target) != (Part.HOLDOUT, Part.FIT):
             raise SplitError(f"{m.issuer}: a move only goes from holdout to fit")
@@ -272,6 +288,7 @@ def _place(
             )
     moved = set()
     for m in moves:
+        _check_move_identity(m)
         found = names.get(m.key)
         if found is None:
             raise SplitError(f"{m.issuer}: moved, but it has no train document")

@@ -102,7 +102,7 @@ testpaths = ["apps", "packages", "tests"]
 # Keep in sync with workspace members. uv marks editable .pth files hidden on macOS and
 # Python 3.11+ skips hidden .pth files, so tests set the paths directly.
 # `make unhide-pth` fixes it for scripts and `uv run python`.
-pythonpath = ["apps/api/src", "apps/worker/src", "packages/analytics/src", "packages/core/src", "packages/ingest/src", "scripts", "training/sources", "eval"]
+pythonpath = ["apps/api/src", "apps/worker/src", "packages/analytics/src", "packages/core/src", "packages/ingest/src", "scripts", "training", "training/sources", "eval"]
 addopts = "-q --strict-markers"
 markers = [
   "slow: needs model weights or OCR, excluded from the default run",

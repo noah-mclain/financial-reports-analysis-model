@@ -847,3 +847,78 @@ def test_a_competing_pair_resolves_on_its_own_beside_a_disjoint_block(explicit: 
     else:
         assert not rest
         assert all("source_primary_ambiguous" in by_page[n].evidence for n in (5, 6, 40, 41))
+
+
+# Three blocks of balance, income and comprehensive income, each first-ranked for one type and
+# with the same rank sum, so all three tie and compete for every type.
+THREE_BLOCKS = {
+    5: (1, 2, 3),
+    30: (2, 3, 1),
+    50: (3, 1, 2),
+}
+THREE_TYPES = [T.BALANCE, T.INCOME, T.COMPREHENSIVE_INCOME]
+
+
+def _three_competing_blocks() -> tuple[list[StatementRange], list[PageScore]]:
+    ranges = [
+        span(kind, first + offset, rank=rank)
+        for first, ranks in THREE_BLOCKS.items()
+        for offset, (kind, rank) in enumerate(zip(THREE_TYPES, ranks, strict=True))
+    ]
+    scores = [
+        page(first + offset, kind)
+        for first in THREE_BLOCKS
+        for offset, kind in enumerate(THREE_TYPES)
+    ]
+    return ranges, scores
+
+
+def test_a_group_of_three_competing_blocks_stays_ambiguous_and_cannot_be_resolved() -> None:
+    ranges, scores = _three_competing_blocks()
+    p = source_plan(ranges, scores, THREE_TYPES, 65, 1)
+    assert len(p.tied_spans) == 3 and p.ambiguous
+    assert [len(c.spans) for c in p.competing] == [3]
+    for first in THREE_BLOCKS:
+        for offset, kind in enumerate(THREE_TYPES):
+            context = table_source(p, first + offset, kind, 4)
+            assert context.ambiguous
+            decision = start_decision(context, None, None, False)
+            assert decision.reason == "source_primary_ambiguous"
+    with pytest.raises(ValueError, match="two competing source blocks"):
+        resolve_tied_blocks(p, p.competing[0])
+
+
+def test_explicit_titles_do_not_resolve_a_group_of_three_competing_blocks() -> None:
+    from support import INCOME_1
+
+    comprehensive = [
+        [
+            "",
+            "Notes",
+            "For the year ended 31 December 2025 SAR thousands",
+            "For the year ended 31 December 2024 SAR thousands",
+        ],
+        ["Other comprehensive income", "", "1", "2"],
+        ["Total comprehensive income", "", "1", "2"],
+    ]
+    ranges, scores = _three_competing_blocks()
+    full = [*PAGE_1, *PAGE_2[1:]]
+    tables = (full, INCOME_1, comprehensive)
+    names = (
+        "statement of financial position",
+        "statement of income",
+        "statement of comprehensive income",
+    )
+    scope = {5: "Consolidated ", 30: "Standalone ", 50: "Consolidated "}
+    base = structured_source(
+        [(first + k, tables[k]) for first in THREE_BLOCKS for k in range(3)],
+        ranges,
+        scores,
+        [(first + k, 50, scope[first] + names[k]) for first in THREE_BLOCKS for k in range(3)],
+    )
+    result, _ = structure_document(base, IngestConfig())
+    assert not result.statements
+    by_page = {t.page_no: t for t in result.tables}
+    for first in THREE_BLOCKS:
+        for k in range(3):
+            assert "source_primary_ambiguous" in by_page[first + k].evidence
