@@ -8,6 +8,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from fra_core.jobs import JobSettings, JobStore
 from fra_core.schemas import (
@@ -240,6 +241,77 @@ def test_a_statement_held_for_review_ends_the_job_in_needs_review(tmp_path: Path
     store, sha = queued(tmp_path)
     job = run_one(store, pipeline_for(sha, Calls(), result=structured(sha, "needs_review")))
     assert job.status is JobStatus.NEEDS_REVIEW
+
+
+@pytest.mark.parametrize(
+    ("status", "flag"),
+    [
+        ("partial", "range_partially_converted:2-4"),
+        ("failed", "range_not_converted:2-4"),
+        ("skipped", "range_not_converted:2-4"),
+    ],
+)
+def test_incomplete_conversion_holds_even_passing_statements(
+    tmp_path: Path, status: str, flag: str
+) -> None:
+    store, sha = queued(tmp_path)
+    conversion = converted(sha)
+    conversion = conversion.model_copy(
+        update={"ranges": [conversion.ranges[0].model_copy(update={"status": status})]}
+    )
+    pipeline = replace(pipeline_for(sha, Calls()), convert=lambda pdf, located: conversion)
+    job = run_one(store, pipeline)
+    analysis = store.load_analysis(job.id)
+    assert job.status is JobStatus.NEEDS_REVIEW
+    assert analysis is not None and analysis.flags == [flag]
+    assert analysis.reviews[0].status == "passed"
+    assert store.events(job.id)[-1].kind == "needs_review"
+
+
+def test_conversion_diagnostics_survive_and_flags_are_deduplicated(tmp_path: Path) -> None:
+    store, sha = queued(tmp_path)
+    flag = "range_partially_converted:2-4"
+    conversion = converted(sha).model_copy(update={"flags": ["conversion_warning"]})
+    conversion = conversion.model_copy(
+        update={
+            "ranges": [
+                conversion.ranges[0].model_copy(
+                    update={"status": "partial", "flags": ["convert_partial:2-4"]}
+                )
+            ]
+        }
+    )
+    result = structured(sha).model_copy(update={"flags": [flag]})
+    pipeline = replace(
+        pipeline_for(sha, Calls(), result=result), convert=lambda pdf, located: conversion
+    )
+    job = run_one(store, pipeline)
+    analysis = store.load_analysis(job.id)
+    assert analysis is not None
+    assert analysis.flags == ["conversion_warning", flag, "convert_partial:2-4"]
+    assert job.status is JobStatus.NEEDS_REVIEW
+
+
+@pytest.mark.parametrize("status", ["unknown", None, "missing"])
+def test_invalid_range_status_fails_at_the_conversion_validation_boundary(
+    tmp_path: Path, status: str | None
+) -> None:
+    store, sha = queued(tmp_path)
+    data = converted(sha).model_dump()
+    if status == "missing":
+        del data["ranges"][0]["status"]
+    else:
+        data["ranges"][0]["status"] = status
+
+    def convert(pdf: Path, located: LocateResult) -> ConvertResult:
+        return ConvertResult.model_validate(data)
+
+    with pytest.raises(ValidationError, match=r"ranges\.0\.status"):
+        ConvertResult.model_validate(data)
+    job = run_one(store, replace(pipeline_for(sha, Calls()), convert=convert))
+    assert job.status is JobStatus.FAILED and job.stage is JobStage.CONVERT
+    assert job.error is not None and "ValidationError" in job.error and "status" in job.error
+    assert store.load_analysis(job.id) is None
 
 
 def test_a_bank_is_declined_without_convert_or_metrics_and_says_why(tmp_path: Path) -> None:

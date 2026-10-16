@@ -51,6 +51,7 @@ from fra_ingest.results import (
     ConvertResult,
     IndustryDecision,
     LocateResult,
+    RangeConversion,
     StructureResult,
     TableDecision,
 )
@@ -77,6 +78,19 @@ from fra_ingest.visual_order import (
 STRUCTURE_VERSION = "44"  # partly converted ranges flagged
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
+
+
+def range_conversion_flags(ranges: Sequence[RangeConversion]) -> list[str]:
+    """Incomplete ranges, in structure's stable order: unconverted, then partial."""
+    return [
+        f"range_not_converted:{r.first_page}-{r.last_page}"
+        for r in ranges
+        if r.status in ("failed", "skipped")
+    ] + [
+        f"range_partially_converted:{r.first_page}-{r.last_page}"
+        for r in ranges
+        if r.status == "partial"
+    ]
 
 
 class StructureInputs(BaseModel):
@@ -635,17 +649,7 @@ def structure_document(
     flags = [f"statement_not_extracted:{t.value}" for t in config.enabled_types if t not in found]
     if inputs.industry_hold is not None:
         flags.append(f"industry_uncertain:{inputs.industry_hold}")
-    flags += [
-        f"range_not_converted:{r.first_page}-{r.last_page}"
-        for r in inputs.convert.ranges
-        if r.status in ("failed", "skipped")
-    ]
-    # Docling converted only some of the range's pages: what it read may be incomplete.
-    flags += [
-        f"range_partially_converted:{r.first_page}-{r.last_page}"
-        for r in inputs.convert.ranges
-        if r.status == "partial"
-    ]
+    flags += range_conversion_flags(inputs.convert.ranges)
     structured = StructureResult(
         version=STRUCTURE_VERSION,
         sha256=inputs.sha256,
