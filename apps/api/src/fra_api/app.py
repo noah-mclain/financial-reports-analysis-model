@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from importlib.metadata import version
+from threading import BoundedSemaphore
 
 from fastapi import FastAPI
 
@@ -36,6 +37,7 @@ def create_app(profile: Profile, settings: JobSettings) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+    app.state.upload_slots = BoundedSemaphore(settings.max_concurrent_uploads)
     add_job_routes(app)
     add_page_routes(app, profile)
 

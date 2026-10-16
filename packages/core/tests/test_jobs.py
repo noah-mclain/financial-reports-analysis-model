@@ -3,8 +3,10 @@
 import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
+from pydantic import ValidationError
 
 from fra_core.jobs import (
     JobSettings,
@@ -91,7 +93,84 @@ def test_a_missing_or_unknown_setting_is_an_error(tmp_path: Path) -> None:
         load_job_settings(path, tmp_path)
 
 
+def test_multipart_settings_have_bounded_defaults_and_toml_overrides(tmp_path: Path) -> None:
+    assert SETTINGS.max_multipart_parts == 32
+    assert SETTINGS.max_multipart_overhead_bytes == 64 * 1024
+    path = tmp_path / "jobs.toml"
+    path.write_text(
+        '[storage]\nroot = "x"\n[upload]\nmax_bytes = 1000\nmax_pages = 1\n'
+        "max_multipart_parts = 5\nmax_multipart_overhead_bytes = 2048\n"
+        "[worker]\npoll_seconds = 1\n"
+    )
+    settings = load_job_settings(path, tmp_path)
+    assert settings.max_multipart_parts == 5
+    assert settings.max_multipart_overhead_bytes == 2048
+
+
+@pytest.mark.parametrize("field", ["max_multipart_parts", "max_multipart_overhead_bytes"])
+@pytest.mark.parametrize("value", [0, -1])
+def test_multipart_limits_must_be_positive(field: str, value: int) -> None:
+    with pytest.raises(ValueError, match=field):
+        JobSettings.model_validate({**SETTINGS.model_dump(), field: value})
+
+
 # ---- uploads ----------------------------------------------------------------------------------
+
+
+def test_concurrent_upload_default_matches_documentation() -> None:
+    assert SETTINGS.max_concurrent_uploads == 8
+    doc = (REPO_ROOT / "docs/blueprint/02-architecture.md").read_text()
+    assert (
+        f"`JobSettings.max_concurrent_uploads` (default {SETTINGS.max_concurrent_uploads})" in doc
+    )
+    assert "`upload.max_concurrent_uploads`" in doc
+
+
+def test_concurrent_upload_toml_override(tmp_path: Path) -> None:
+    path = tmp_path / "jobs.toml"
+    path.write_text(
+        '[storage]\nroot = "x"\n[upload]\nmax_bytes = 1000\nmax_pages = 1\n'
+        "max_concurrent_uploads = 3\n[worker]\npoll_seconds = 1\n"
+    )
+    assert load_job_settings(path, tmp_path).max_concurrent_uploads == 3
+
+
+@pytest.mark.parametrize("value", [0, -1])
+def test_concurrent_upload_limit_must_be_positive(value: int) -> None:
+    with pytest.raises(ValidationError, match="max_concurrent_uploads") as caught:
+        JobSettings.model_validate({**SETTINGS.model_dump(), "max_concurrent_uploads": value})
+    assert caught.value.errors()[0]["type"] == "greater_than"
+
+
+@pytest.mark.parametrize("original_failure", [False, True])
+def test_close_failure_unlinks_the_upload_and_preserves_the_original_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, original_failure: bool
+) -> None:
+    store = store_at(tmp_path)
+    writer = store.upload_writer(SETTINGS)
+    writer.write(PDF)
+    writer._file.close()
+    monkeypatch.setattr(writer, "_file", Mock(close=Mock(side_effect=OSError("close failed"))))
+    failure = UploadTooLarge("original size limit") if original_failure else None
+    with pytest.raises(UploadTooLarge if original_failure else OSError) as caught, writer:
+        if failure is not None:
+            raise failure
+    if failure is not None:
+        assert caught.value is failure
+        assert any("close failed" in note for note in failure.__notes__)
+    assert list((store.root / "uploads").iterdir()) == []
+
+
+def test_cleanup_failure_after_finish_still_surfaces(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = store_at(tmp_path)
+    with pytest.raises(OSError, match="close failed"), store.upload_writer(SETTINGS) as writer:
+        writer.write(PDF)
+        upload = writer.finish("r.pdf")
+        monkeypatch.setattr(writer, "_file", Mock(close=Mock(side_effect=OSError("close failed"))))
+    assert store.upload_path(upload.sha256).read_bytes() == PDF
+    assert list((store.root / "uploads").glob("*.tmp")) == []
 
 
 @pytest.mark.parametrize(

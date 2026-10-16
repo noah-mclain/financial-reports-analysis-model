@@ -33,7 +33,7 @@ from fra_ingest.ocr import make_engine
 from fra_ingest.pages import page_count
 from fra_ingest.results import ConvertResult, LocateResult, StructureResult
 from fra_ingest.stage import load_or_locate
-from fra_ingest.structure import current_convert, structure_pdf
+from fra_ingest.structure import current_convert, range_conversion_flags, structure_pdf
 
 
 @dataclass(frozen=True)
@@ -70,9 +70,19 @@ class PageLimitExceeded(ValueError):
 
 
 def analysis_of(
-    job: Job, located: LocateResult, result: StructureResult, metrics: list[MetricValue]
+    job: Job,
+    located: LocateResult,
+    converted: ConvertResult | None,
+    result: StructureResult,
+    metrics: list[MetricValue],
 ) -> Analysis:
     industry = result.industry
+    conversion_flags: list[str] = []
+    if converted is not None:
+        conversion_flags.extend(converted.flags)
+        for page_range in converted.ranges:
+            conversion_flags.extend(range_conversion_flags([page_range]))
+            conversion_flags.extend(page_range.flags)
     return Analysis(
         job_id=job.id,
         upload_sha256=job.upload_sha256,
@@ -80,7 +90,7 @@ def analysis_of(
         language=located.document.language,
         statements=result.statements,
         reviews=result.reviews,
-        flags=list(dict.fromkeys([*located.flags, *result.flags])),
+        flags=list(dict.fromkeys([*located.flags, *conversion_flags, *result.flags])),
         decline=(
             Decline(code=industry.code, reason=industry.reason)
             if industry is not None and industry.outcome == "declined"
@@ -134,6 +144,6 @@ def run_job(store: JobStore, job: Job, pipeline: Pipeline, max_pages: int) -> Jo
             store.finish_stage(
                 job.id, JobStage.METRICS, f"{computed} of {len(metrics)} values computed"
             )
-        return store.finish(analysis_of(job, located, result, metrics))
+        return store.finish(analysis_of(job, located, converted, result, metrics))
     except Exception as exc:  # the job's own failure: recorded on the job, never retried
         return store.fail(job.id, f"{type(exc).__name__}: {exc}")

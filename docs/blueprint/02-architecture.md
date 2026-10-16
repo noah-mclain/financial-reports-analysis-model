@@ -361,7 +361,7 @@ with `primary_statements`). `fra_analytics.METRIC_IDS` lists all 21.
 
 | Method and path | Purpose |
 |-----------------|---------|
-| `POST /documents` | The PDF as the request body (`Content-Type: application/pdf`, file name in `X-Filename`), written to disk as it arrives. PDF magic bytes, 50 MB limit, sha256 dedupe; the 400-page limit is checked by the worker. Returns `Upload` |
+| `POST /documents` | One PDF file part named `file` in `multipart/form-data` (part type `application/pdf`), or a raw `application/pdf` body with file name in `X-Filename`. Both are written to disk and hashed as they arrive, with the same PDF magic-byte check, 50 MB limit and sha256 dedupe; the 400-page limit is checked by the worker. Returns `Upload` |
 | `GET /documents/{id}` | Metadata, detected language, text-layer coverage |
 | `GET /documents/{id}/pages/{page_no}.png` | Rendered page for the source viewer |
 | `POST /documents/{id}/analyses` | Enqueue a job. Returns `Job` |
@@ -373,5 +373,23 @@ with `primary_statements`). `fra_analytics.METRIC_IDS` lists all 21.
 | `POST /analyses/{id}/corrections` | Value or mapping correction. Re-enters at `validate`, returns recomputed metrics, stores a labeled example |
 | `GET /analyses/{id}/export.xlsx` | Statements and metrics workbook |
 | `GET /health` | Free memory, lease holder, model loaded, disk free |
+
+Multipart uploads use `JobSettings.max_multipart_parts` (default 32, including the file)
+and `JobSettings.max_multipart_overhead_bytes` (default 65536 bytes). These optional settings
+can be overridden as `upload.max_multipart_parts` and `upload.max_multipart_overhead_bytes`
+in `configs/jobs.toml`; both must be positive. The overhead allowance bounds aggregate headers
+and text fields. The entire streamed envelope, including boundaries and epilogue, is limited
+to `max_upload_bytes + max_multipart_overhead_bytes`. Exceeding the part count returns 400;
+exceeding either byte limit returns 413, without consuming the remaining body. Invalid multipart
+boundaries return 400. One dedicated worker thread per upload runs acquisition, writes,
+finish and cleanup in order. Cleanup is always last, including after request cancellation;
+the slot is released after it finishes.
+
+`JobSettings.max_concurrent_uploads` (default 8), overridden as
+`upload.max_concurrent_uploads` in `configs/jobs.toml`, must be positive. The API rejects
+uploads above this application-wide limit immediately with 503 and `Retry-After: 1`.
+Admission is per application instance/process, so several uvicorn workers multiply the configured limit.
+Header checks for 415 and 422 run before admission; an admitted upload holds its slot
+until cleanup finishes, including after request cancellation.
 
 The API binds to 127.0.0.1 and never imports docling, torch or mlx (checked by T7).

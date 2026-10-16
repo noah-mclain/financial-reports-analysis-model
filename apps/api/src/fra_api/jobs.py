@@ -1,9 +1,9 @@
 """Upload, queue and follow analysis jobs (docs/blueprint/02-architecture.md, 2.8).
 
-``POST /documents`` takes the PDF as the request body (``Content-Type: application/pdf``) with
-its file name in the ``X-Filename`` header, percent-encoded UTF-8 so an Arabic name survives
-(browsers send only Latin-1 in headers); no multipart parser is needed. The page limit
-needs the PDF read, which the API never does: the worker checks it and fails the job.
+``POST /documents`` takes a multipart ``file`` part or a raw ``application/pdf`` body. Both
+stream into the same bounded, hashing upload writer. A raw body carries its file name in the
+``X-Filename`` header, percent-encoded UTF-8 so an Arabic name survives (browsers send only
+Latin-1 in headers). The page limit needs the PDF read: the worker checks it and fails the job.
 ``GET /jobs/{id}/events`` is a server-sent event stream that ends after the job's last event;
 a client that reconnects sends ``Last-Event-ID`` and receives only what it missed, and the
 stream of a job already finished closes at once, so a browser's automatic reconnect never
@@ -13,7 +13,11 @@ leaves a request waiting.
 from __future__ import annotations
 
 import asyncio
+import logging
+import sys
 from collections.abc import AsyncIterator
+from concurrent.futures import Future
+from threading import BoundedSemaphore
 from typing import Annotated
 from urllib.parse import unquote
 
@@ -21,11 +25,16 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
-from fra_core.jobs import JobSettings, JobStore, UploadRejected, UploadTooLarge
+from fra_api.upload_worker import UploadWorker
+from fra_api.uploads import MULTIPART_TYPE, PDF_TYPE, MultipartUpload, UploadTypeRejected
+from fra_core.jobs import JobSettings, JobStore, UploadRejected, UploadTooLarge, UploadWriter
 from fra_core.schemas import FINISHED, Analysis, Job, JobEvent, Upload
 
-PDF_TYPE = "application/pdf"
+logger = logging.getLogger(__name__)
+
 _FINAL_EVENTS = frozenset({"completed", "needs_review", "failed"})
+# Upload duration is unknown; invite a short retry without holding a server-side waiter.
+_UPLOAD_RETRY_SECONDS = 1
 
 
 def store_of(request: Request) -> JobStore:
@@ -56,20 +65,86 @@ def add_job_routes(routes: FastAPI) -> None:
     @routes.post("/documents", status_code=201)
     async def upload(
         request: Request,
-        content_type: Annotated[str, Header()],
-        x_filename: Annotated[str, Header(min_length=1)],
+        content_type: Annotated[str, Header()] = "",
+        x_filename: Annotated[str | None, Header(min_length=1)] = None,
     ) -> Upload:
-        if content_type.split(";")[0].strip() != PDF_TYPE:
-            raise HTTPException(status_code=415, detail=f"send the PDF as {PDF_TYPE}")
+        media_type = content_type.split(";")[0].strip().lower()
+        if media_type not in (PDF_TYPE, MULTIPART_TYPE):
+            raise HTTPException(
+                status_code=415, detail=f"content type must be {PDF_TYPE} or {MULTIPART_TYPE}"
+            )
+        if media_type == PDF_TYPE and x_filename is None:
+            raise HTTPException(status_code=422, detail="raw PDF requires X-Filename")
         store, settings = store_of(request), settings_of(request)
+        slots: BoundedSemaphore = request.app.state.upload_slots
+        writer: UploadWriter | None = None
+
+        def acquire() -> UploadWriter:
+            nonlocal writer
+            writer = store.upload_writer(settings)
+            return writer
+
+        def cleanup() -> None:
+            if writer is not None:
+                writer.__exit__(None, None, None)
+
+        if not slots.acquire(blocking=False):
+            raise HTTPException(
+                status_code=503,
+                detail="concurrent upload limit reached; retry later",
+                headers={"Retry-After": str(_UPLOAD_RETRY_SECONDS)},
+            )
+        worker = UploadWorker(on_exit=slots.release)
         try:
-            # Written to disk as it arrives, never held whole; the file writes, hashing and
-            # the SQLite insert run off the event loop, so a large upload never stalls
-            # health checks, polling or event streams.
-            with store.upload_writer(settings) as writer:
+            worker.start()
+        except BaseException:
+            slots.release()  # No work was queued and no worker owns the slot.
+            raise
+        try:
+            try:
+                writer = await asyncio.wrap_future(worker.submit(acquire))
+                multipart = (
+                    MultipartUpload(writer, content_type, settings)
+                    if media_type == MULTIPART_TYPE
+                    else None
+                )
                 async for chunk in request.stream():
-                    await run_in_threadpool(writer.write, chunk)
-                return await run_in_threadpool(writer.finish, unquote(x_filename))
+                    await asyncio.wrap_future(worker.submit((multipart or writer).write, chunk))
+                if multipart is not None:
+                    filename = multipart.filename()
+                else:
+                    assert x_filename is not None  # raw name checked before reading the body
+                    filename = unquote(x_filename)
+                return await asyncio.wrap_future(worker.submit(writer.finish, filename))
+            finally:
+                closing = worker.close(cleanup)
+                failure = sys.exception()
+                pending = asyncio.wrap_future(closing)
+                pending.add_done_callback(
+                    lambda done: None if done.cancelled() else done.exception()
+                )
+                try:
+                    await asyncio.shield(pending)
+                except asyncio.CancelledError as cancelled:
+                    original = failure if failure is not None else cancelled
+
+                    def report(done: Future[None]) -> None:
+                        try:
+                            done.result()
+                        except BaseException as cleanup_error:
+                            original.add_note(f"upload cleanup failed: {cleanup_error!r}")
+                            logger.exception("upload cleanup failed after request cancellation")
+
+                    closing.add_done_callback(report)
+                    raise original from None
+                except BaseException as cleanup_error:
+                    if failure is None:
+                        raise
+                    failure.add_note(f"upload cleanup failed: {cleanup_error!r}")
+                if failure is not None:
+                    raise failure
+        except UploadTypeRejected as exc:
+            raise HTTPException(status_code=415, detail=str(exc)) from exc
         except UploadTooLarge as exc:
             raise HTTPException(status_code=413, detail=str(exc)) from exc
         except UploadRejected as exc:
