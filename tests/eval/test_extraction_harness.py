@@ -146,6 +146,39 @@ def test_periods_are_scored_by_key_date_kind_and_length() -> None:
     assert (same.periods, same.periods_right) == (1, 1)
 
 
+@pytest.mark.parametrize("blank", [False, True])
+@pytest.mark.parametrize("change", ["date", "kind", "months", "missing", "exact"])
+def test_cell_correctness_requires_the_full_period_contract(blank: bool, change: str) -> None:
+    period = Period(key="FY2025", end_date=date(2025, 12, 31), kind=PeriodKind.DURATION, months=12)
+    variants = {
+        "date": period.model_copy(update={"end_date": date(2025, 6, 30)}),
+        "kind": Period(key=period.key, end_date=period.end_date, kind=PeriodKind.INSTANT),
+        "months": period.model_copy(update={"months": 6}),
+        "missing": None,
+        "exact": period,
+    }
+    expected = statement_of(
+        [ExpectedRow(label="Cash", values={period.key: None if blank else Decimal("5")})]
+    )
+    expected = expected.model_copy(update={"periods": [period]})
+    line = item(1, "Cash", "5", period)
+    if blank:
+        line = line.model_copy(
+            update={"cells": [line.cells[0].model_copy(update={"reported": None, "raw_text": ""})]}
+        )
+    read_period = variants[change]
+    extracted = extracted_of([line], period).model_copy(
+        update={"periods": [read_period] if read_period else []}
+    )
+    before = extracted.model_dump()
+    score = score_statement(expected, extracted)
+    assert score.cells == 1
+    assert score.periods_right == int(change == "exact")
+    assert score.right == int(change == "exact")
+    assert score.mislabelled == 0  # a period error is not a label error
+    assert extracted.model_dump() == before
+
+
 def test_scale_and_currency_are_scored() -> None:
     wrong = extracted_of([item(1, "Cash", "5")]).model_copy(update={"scale": 1})
     score = score_statement(statement_of([row("Cash", "5")]), wrong)

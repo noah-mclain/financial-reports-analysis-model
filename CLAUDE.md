@@ -68,6 +68,7 @@ make lint           # ruff format check and ruff check
 make typecheck      # mypy --strict over packages, apps and the eval harness
 make docs-check     # no placeholder left in docs
 make dev            # serve the API natively (profile native) on FRA_API_PORT
+make worker         # run queued analysis jobs natively, beside make dev (ONCE=1: run the queue, exit)
 make docker-up      # build and start the Docker profile (api and worker); needs Docker running
 make docker-health  # check the Docker profile's API from the host
 make corpus-check   # corpus pool split rules, no network

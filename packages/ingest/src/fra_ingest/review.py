@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Sequence
-from typing import Literal
-
-from pydantic import BaseModel, ConfigDict, Field
 
 from fra_core.schemas import Cell, CheckResult, Statement, StatementType
+
+# Defined in core so the worker and the API can read it; imported from here by ingest.
+from fra_core.schemas import StatementReview as StatementReview
 
 # In the order the reasons are listed.
 CRITICAL_CELL_FLAGS = (
@@ -55,18 +55,6 @@ _FAILED = (
     ("balance_identity", "identity_failed"),
     ("net_profit_tie", "tie_failed"),
 )
-
-
-class StatementReview(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    statement_id: str
-    status: Literal["passed", "needs_review"]
-    reasons: list[str] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
-    numeric_cells: int = Field(ge=0)
-    checked_cells: int = Field(ge=0)
-    flagged_cells: int = Field(ge=0)
 
 
 def _lost(cell: Cell) -> bool:

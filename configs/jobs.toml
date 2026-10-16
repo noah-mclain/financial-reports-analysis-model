@@ -1,0 +1,16 @@
+# Upload and job settings, read by the API and the worker through fra_core.jobs.load_job_settings.
+# Every key is required.
+
+[storage]
+# Under the repository root (FRA_ROOT in the Docker image): the job database, the uploaded PDFs
+# and the analyses of finished jobs.
+root = "var/jobs"
+
+[upload]
+# docs/blueprint/02-architecture.md, 2.8: 50 MB and 400 pages.
+max_bytes = 52428800
+max_pages = 400
+
+[worker]
+# How often an idle worker looks for a queued job, and an event stream for a new event.
+poll_seconds = 1.0

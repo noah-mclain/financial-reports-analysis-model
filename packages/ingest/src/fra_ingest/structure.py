@@ -51,6 +51,7 @@ from fra_ingest.results import (
     ConvertResult,
     IndustryDecision,
     LocateResult,
+    RangeConversion,
     StructureResult,
     TableDecision,
 )
@@ -74,9 +75,22 @@ from fra_ingest.visual_order import (
     restore_word_order,
 )
 
-STRUCTURE_VERSION = "43"  # source guard and OCR amount split, with Arabic labels at page words
+STRUCTURE_VERSION = "44"  # partly converted ranges flagged
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
+
+
+def range_conversion_flags(ranges: Sequence[RangeConversion]) -> list[str]:
+    """Incomplete ranges, in structure's stable order: unconverted, then partial."""
+    return [
+        f"range_not_converted:{r.first_page}-{r.last_page}"
+        for r in ranges
+        if r.status in ("failed", "skipped")
+    ] + [
+        f"range_partially_converted:{r.first_page}-{r.last_page}"
+        for r in ranges
+        if r.status == "partial"
+    ]
 
 
 class StructureInputs(BaseModel):
@@ -635,11 +649,7 @@ def structure_document(
     flags = [f"statement_not_extracted:{t.value}" for t in config.enabled_types if t not in found]
     if inputs.industry_hold is not None:
         flags.append(f"industry_uncertain:{inputs.industry_hold}")
-    flags += [
-        f"range_not_converted:{r.first_page}-{r.last_page}"
-        for r in inputs.convert.ranges
-        if r.status in ("failed", "skipped")
-    ]
+    flags += range_conversion_flags(inputs.convert.ranges)
     structured = StructureResult(
         version=STRUCTURE_VERSION,
         sha256=inputs.sha256,
@@ -756,7 +766,12 @@ def structure_pdf(
     *,
     use_cache: bool = True,
     convert: Callable[[Path, IngestConfig], ConvertResult] = _convert,
+    conversion: ConvertResult | None = None,
 ) -> StructureResult:
+    """``conversion`` is one the caller just made for this document: used as it is, so a
+    partial or failed range is read and flagged rather than converted again (a worker job
+    times convert as its own stage). Without it, the stored conversion is used when current
+    and complete, else ``convert`` runs."""
     started = time.perf_counter()
     located = load_or_locate(pdf, config, ocr)
     out_dir = config.artifact_root / located.document.sha256
@@ -770,7 +785,13 @@ def structure_pdf(
         _write(out_dir / "table_checks.json", "[]")  # statements.raw.json promises these
         _write(out_dir / "statements.raw.json", declined.model_dump_json(indent=2))
         return declined
-    converted = current_convert(pdf, config, ocr, located, convert)
+    if conversion is None:
+        converted = current_convert(pdf, config, ocr, located, convert)
+    elif conversion.sha256 != located.document.sha256:
+        msg = f"conversion of {conversion.sha256} given for {located.document.sha256}"
+        raise ValueError(msg)
+    else:
+        converted = conversion
 
     digest = _settings_hash(config, converted, located, ocr)
     target = out_dir / "statements.raw.json"

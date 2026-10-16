@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}{{ filename }}: results{% endblock %}
+{% macro caveat_marks(notes) %}{% for note in notes %}<sup><a class="caveat-mark" href="#{{ note.anchor }}" aria-label="Caveat: {{ note.id }}">†</a></sup>{% endfor %}{% endmacro %}
+{% macro caveat_text(note) %}<p class="muted" id="{{ note.anchor }}" data-caveat="{{ note.id }}" dir="{{ 'rtl' if note.language == 'ar' else 'ltr' }}" lang="{{ note.language }}" title="{% for key, value in note.evidence.items() %}{{ key }}: {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}">{{ note.text }}</p>{% endmacro %}
+{% macro statement_table(s) %}
+<section class="panel" dir="{{ 'rtl' if s.rtl else 'ltr' }}" lang="{{ s.language }}">
+  <div dir="ltr" lang="en">
+    <h3>{{ s.title }} <span class="badge {{ s.status }}">{{ 'passed its checks' if s.status == 'passed' else 'held for review' }}</span></h3>
+    <p class="muted" style="margin:4px 0">{{ s.units }}{% if s.pages %} · pages {{ s.pages | join(', ') }}{% endif %}</p>
+    {% for note in s.caveats %}{{ caveat_text(note) }}{% endfor %}
+    {% if s.reasons %}<ul class="reasons">{% for r in s.reasons %}<li><code>{{ r }}</code></li>{% endfor %}</ul>{% endif %}
+    {% if s.warnings %}<p class="muted" style="font-size:13px">Warnings: {% for w in s.warnings %}<code>{{ w }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+  </div>
+  <div class="scroll">
+  <table>
+    <thead><tr><th></th>{% for p in s.periods %}<th class="num" dir="ltr">{{ p }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for row in s.rows %}
+      <tr class="{{ 'subtotal' if row.subtotal }}">
+        <td style="padding-inline-start: {{ 10 + 16 * row.depth }}px">{{ row.label }}
+          {% if row.mapping_flag %}<span class="badge needs_review" dir="ltr" title="not mapped to a canonical item">{{ row.mapping_flag }}</span>{% endif %}</td>
+        {% for found in row.cells %}
+          <td class="num{{ ' flagged' if found | selectattr('flags') | list }}" dir="ltr">
+          {% for c in found %}<div title="printed: {{ c.printed }}">
+            {% if c.source %}<a href="{{ c.source }}">{{ c.text or '—' }}</a>{% else %}{{ c.text }}{% endif %}
+            {{ caveat_marks(c.caveats) }}
+            {% if c.flags %}<div class="flag-names"><span aria-hidden="true">⚑</span> flags: {{ c.flags | join(', ') }}</div>{% endif %}</div>
+          {% endfor %}</td>
+        {% endfor %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endmacro %}
+{% block main %}
+<h1>{{ filename }}</h1>
+<p class="muted">{{ analysis.page_count }} pages · language {{ analysis.language }} ·
+  <span class="badge {{ job.status.value }}">{{ job.status.value }}</span></p>
+
+{% if analysis.decline %}
+<div class="banner bad"><strong>Declined ({{ analysis.decline.code }}).</strong> {{ analysis.decline.reason }}
+  This tool covers non-financial companies; banks and insurers use a different statement template.</div>
+{% elif analysis.hold %}
+<div class="banner hold"><strong>Every statement is held for review.</strong> {{ analysis.hold }}</div>
+{% elif job.status.value == 'needs_review' %}
+{% set held = view.statements | selectattr('status', 'equalto', 'needs_review') | list %}
+{% if held %}
+<div class="banner hold">Some figures did not pass their own checks. Statements held for review are
+  shown with their reasons; their figures are as read, not vouched for.</div>
+{% elif not view.statements %}
+<div class="banner hold">No statement was extracted from this document.</div>
+{% else %}
+<div class="banner hold">Every statement passed its own checks, but the document notices below
+  need review before its figures are relied on.</div>
+{% endif %}
+{% endif %}
+
+{% if analysis.flags %}
+<section class="panel" aria-labelledby="document-notices">
+  <h2 id="document-notices">Document notices</h2>
+  <ul class="reasons">{% for flag in analysis.flags %}<li><code>{{ flag }}</code></li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+<h2>Summary</h2>
+{% if analysis.narrative %}
+<div class="panel" dir="{{ 'rtl' if analysis.narrative.language == 'ar' else 'ltr' }}" lang="{{ analysis.narrative.language }}">
+  {% for section in view.narrative %}
+    <h3>{{ section.heading }}</h3>
+    {% for parts in section.sentences %}<p>{% for part in parts %}{% if part.href %}<a href="{{ part.href }}" title="the computed metric and its inputs">{{ part.text }}</a>{% else %}{{ part.text }}{% endif %}{{ caveat_marks(part.caveats) }}{% endfor %}</p>{% endfor %}
+  {% endfor %}
+  {% for note in view.footnotes %}{{ caveat_text(note) }}{% endfor %}
+  <p class="muted" dir="ltr" lang="en">{{ 'Written by the model and checked against the computed metrics.' if analysis.narrative.grounding.value == 'passed' else 'Template sentences: the generated text failed the check against the computed metrics.' }}</p>
+</div>
+{% else %}
+<div class="panel muted">No written summary yet: narration is not built in this version. The
+  statements and metrics below are as extracted and computed.</div>
+{% endif %}
+
+{% set primary = view.statements | rejectattr('duplicate') | list %}
+{% set duplicates = view.statements | selectattr('duplicate') | list %}
+<h2>Statements</h2>
+{% if not primary %}<p class="muted">No statement was extracted.</p>{% endif %}
+<p class="muted" style="font-size:13px">Click a figure to see where it was read on the page. Highlighted cells carry a flag, named under the figure.</p>
+{% for s in primary %}{{ statement_table(s) }}{% endfor %}
+{% if duplicates %}
+<details><summary class="muted">{{ duplicates | length }} more table{{ 's' if duplicates | length > 1 }} of a type already shown</summary>
+  {% for s in duplicates %}{{ statement_table(s) }}{% endfor %}
+</details>
+{% endif %}
+
+{% if not analysis.decline %}
+<h2>Metrics</h2>
+<p class="muted" style="font-size:13px">{{ view.computed }} of {{ view.metrics | length }} values computed. Each comes from a formula over the cells linked beside it.</p>
+<div class="panel scroll">
+<table>
+  <thead><tr><th>Metric</th><th>Period</th><th class="num">Value</th><th>Formula</th><th>Inputs</th><th>Flags</th></tr></thead>
+  <tbody>
+  {% for m in view.metrics %}
+    <tr id="{{ m.anchor }}">
+      <td>{{ m.name }}</td><td>{{ m.period }}</td>
+      <td class="num">{% if m.value is none %}<span class="muted">not computed</span>{% else %}{{ m.value }}{{ caveat_marks(m.notes) }}{% endif %}</td>
+      <td><code>{{ m.formula }}</code></td>
+      <td>{% for i in m.inputs %}<a href="{{ i.source }}" title="{{ i.period }}">{{ i.canonical_id }}</a> {{ i.text }}{{ caveat_marks(i.caveats) }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
+      <td class="muted" style="font-size:13px">{{ (m.flags + m.caveats) | join(', ') }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

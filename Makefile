@@ -29,7 +29,7 @@ $(error FRA_LLM_PORT is empty: set it in $(ENV_FILE))
 endif
 export FRA_API_PORT FRA_LLM_PORT
 
-.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping eval-gates dry-run expected-drafts eval-extraction verify-expected dev docker-up docker-health ci-workflows-check container-smoke hygiene-check
+.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping eval-gates dry-run expected-drafts eval-extraction verify-expected dev worker docker-up docker-health ci-workflows-check container-smoke hygiene-check
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -133,6 +133,10 @@ sec-fsds: ## SEC statement labels for training (needs FRA_SEC_USER_AGENT; QUARTE
 dev: ## Serve the API natively (profile native) on FRA_API_PORT
 	@$(MAKE) --no-print-directory unhide-pth
 	FRA_PROFILE=native $(UV) run uvicorn fra_api.main:app --host 127.0.0.1 --port $(FRA_API_PORT)
+
+worker: ## Run queued analysis jobs natively (profile native), beside make dev; ONCE=1 runs the queue and exits
+	@$(MAKE) --no-print-directory unhide-pth
+	FRA_PROFILE=native $(UV) run fra-worker $(if $(ONCE),--once)
 
 docker-up: ## Build and start the Docker profile (api and worker); fails if a service exits at start or the api does not turn healthy
 	docker compose up -d --build --wait

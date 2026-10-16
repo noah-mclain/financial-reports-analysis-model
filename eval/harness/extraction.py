@@ -493,13 +493,16 @@ class CellJudgement:
     item: LineItem | None
     right: bool
     mislabelled: bool
+    item_position: int | None
+    cell_position: int | None
 
 
 def _judge(
     expected: ExpectedStatement, statement: Statement | None, aligned: Sequence[int | None]
 ) -> list[CellJudgement]:
     items = statement.line_items if statement is not None else []
-    period_keys = {p.key for p in statement.periods} if statement is not None else set()
+    periods = {_period(p) for p in statement.periods} if statement is not None else set()
+    matched_keys = {p.key for p in expected.periods if _period(p) in periods}
     judged = []
     for row, position in zip(expected.rows, aligned, strict=True):
         item = items[position] if position is not None else None
@@ -508,11 +511,16 @@ def _judge(
             if key in row.unconfirmed:
                 continue
             read = item.value_for(key) if item is not None else None
+            cell_position = (
+                next((i for i, c in enumerate(item.cells) if c.period_key == key), None)
+                if item is not None
+                else None
+            )
             # A figure must be read, on its own label; nothing printed must be a printed blank in
             # a period the statement has, not absent output or a lost value.
-            same = item is not None and read == value
+            same = item is not None and read == value and key in matched_keys
             if value is None:
-                same = same and key in period_keys and _shows_blank(item, key)
+                same = same and _shows_blank(item, key)
             right = same and (value is None or labelled)
             judged.append(
                 CellJudgement(
@@ -523,6 +531,8 @@ def _judge(
                     item=item,
                     right=right,
                     mislabelled=same and not right,
+                    item_position=position,
+                    cell_position=cell_position,
                 )
             )
     return judged

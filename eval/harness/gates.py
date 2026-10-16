@@ -57,7 +57,7 @@ from typing import Any
 
 import yaml
 
-from fra_core.schemas import CheckResult, Statement, StatementType
+from fra_core.schemas import CheckResult, Statement, StatementType, TextSource
 from fra_core.taxonomy.loader import Taxonomy, load_taxonomy
 from fra_ingest.config import REPO_ROOT, load_config
 from fra_ingest.label_match import LabelIndex
@@ -65,7 +65,7 @@ from fra_ingest.ocr import make_engine
 from fra_ingest.results import StructureResult
 from fra_ingest.review import StatementReview
 from fra_ingest.structure import structure_pdf
-from harness.confidence import OUTCOMES, confidence_part, statement_outcomes
+from harness.confidence import OUTCOMES, confidence_part, output_coverage, statement_outcomes
 from harness.expected import EXPECTED_DIR, ExpectedFile, load_expected
 from harness.extraction import DIGITAL, SCANNED, score_statement, wilson_interval
 from harness.failures import DOCUMENT_ERRORS, EngineFailure, EngineGuard, aborted, document_failure
@@ -131,12 +131,49 @@ def document_figures(
     and currency are checked."""
     types = tuple(types)
     found = first_statements(result, types)
-    reviews = {r.statement_id: r for r in result.reviews}
+    reviews: dict[str, StatementReview] = {}
+    for review in result.reviews:
+        if review.statement_id in reviews and reviews[review.statement_id] != review:
+            raise ValueError(f"statement {review.statement_id!r} has ambiguous reviews")
+        reviews[review.statement_id] = review
     balance = found.get(StatementType.BALANCE)
     everything = first_statements(result, StatementType)
     counts, slots, disagreements = critical_slots(everything, expected, index, taxonomy)
     counts["absent"] = sum(1 for slot in slots if slot["state"] == "unmapped")
     figures = []
+    # The same first-of-type selection as accuracy, tracked by list position rather than id.
+    first_positions: dict[StatementType, int] = {}
+    for position, statement in enumerate(result.statements):
+        first_positions.setdefault(statement.type, position)
+    references = {e.type: e for e in expected.statements} if expected else {}
+    coverage = []
+    for position, statement in enumerate(result.statements):
+        reference = references.get(statement.type)
+        assessed_reference = reference if first_positions[statement.type] == position else None
+        mode = (
+            reference.page_mode
+            if reference
+            else (
+                "scanned"
+                if entry["text_layer"] != "digital"
+                or any(
+                    c.provenance.source is TextSource.OCR
+                    for item in statement.line_items
+                    for c in item.cells
+                )
+                else "digital"
+            )
+        )
+        coverage.append(
+            {
+                "status": expected.status if expected else "unreferenced",
+                "page_mode": mode,
+                "type": statement.type.value,
+                **output_coverage(
+                    assessed_reference, statement, reviews.get(statement.id), position
+                ),
+            }
+        )
     for e in expected.statements if expected else []:
         extracted = everything.get(e.type)
         score = score_statement(e, extracted)
@@ -173,6 +210,7 @@ def document_figures(
         "mapping": dict(counts),
         "disagreements": disagreements,
         "figures": figures,
+        "output_coverage": coverage,
     }
 
 
@@ -359,7 +397,7 @@ def _identity_lines(a: Mapping[str, Any], documents: int) -> list[str]:
 def _confident_lines(confident: Mapping[str, Mapping[str, Any]]) -> list[str]:
     out = []
     for key, c in confident.items():
-        if c["status"] != "checked":
+        if c["status"] == "draft":
             judged = "provisional"
         elif c["met"] is None:
             judged = "reported"
@@ -371,6 +409,17 @@ def _confident_lines(confident: Mapping[str, Mapping[str, Any]]) -> list[str]:
             f"  A confident {key}: {c['wrong_confident']} wrong shown as confident of "
             f"{c['cells']} cells {judged}; on passed statements {accepted} ({counts}; "
             f"n={c['files']} files)"
+        )
+        out.append(
+            f"    output coverage: {c['assessed_numeric']} of {c['emitted_numeric']} emitted "
+            f"numeric cells assessed; {c['unassessed_numeric']} unassessed, "
+            f"{c['unassessed_confident']} confident unassessed; {c['reason']}"
+        )
+        out.extend(
+            f"    unassessed: {u['id']} {u['statement']}[{u['statement_position']}] "
+            f"row {u['row_position']} cell {u['cell_position']} {u['label']!r} "
+            f"{u['period']}: read {u['read']}; confident={u['confident']}"
+            for u in c["unassessed"]
         )
         out.extend(
             f"    confident wrong: {w['id']} {w['statement']} {w['label']!r} {w['period']}: "

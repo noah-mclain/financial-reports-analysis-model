@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from fra_core.paths import ANALYTICS_POLICY as ANALYTICS_POLICY
+
 ROOT = Path(__file__).resolve().parents[2]
 CANDIDATES = ROOT / "eval/corpus/candidates.yaml"
 FETCHED = ROOT / "eval/corpus/fetched.yaml"
@@ -15,7 +17,6 @@ HOLDOUT_MOVES = ROOT / "eval/corpus/holdout_moves.yaml"
 VALIDATION_USES = ROOT / "eval/corpus/validation_uses.yaml"
 SCORING_LOG = ROOT / "eval/corpus/scoring_log.tsv"
 CORPUS = ROOT / "var/corpus"
-ANALYTICS_POLICY = ROOT / "configs/analytics.toml"
 
 # Reported by in every harness report (D18): the golden set and the train pool hold these two.
 STRATA = ("annual", "interim")

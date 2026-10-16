@@ -70,6 +70,19 @@ everything downstream of it.
 - A user correction moves the job back to `queued`, re-entering at `validate`.
 - Narration re-runs only on explicit request.
 
+The current upload worker preserves locate and structure document flags in `Analysis.flags`,
+in stage order with duplicates removed. Incomplete extraction or an unknown document flag
+sets `needs_review` even when the statements present passed their individual reviews.
+`low_selectivity` alone describes conversion cost and does not hold a complete analysis.
+The analysis API returns these reasons; consumers must display them beside the review status.
+
+The single upload worker uses a nonblocking POSIX file lock on its job store. It explicitly
+passes the locked descriptor to each conversion child, including conversion requested during
+structure. Exclusion lasts until both worker and child close it. SIGINT and SIGTERM unwind
+the worker, killing and reaping an active conversion before releasing its slot. SIGKILL cannot
+run cleanup: the orphaned conversion retains exclusion until it exits; a hung orphan must be
+stopped before a replacement can start. The lock is not a timeout or a cross-machine lease.
+
 ## 2.4 Data contract (`packages/core`)
 
 ```python
@@ -348,7 +361,7 @@ with `primary_statements`). `fra_analytics.METRIC_IDS` lists all 21.
 
 | Method and path | Purpose |
 |-----------------|---------|
-| `POST /documents` | Multipart upload. PDF magic bytes, 50 MB limit, 400-page limit, sha256 dedupe. Returns `Document` |
+| `POST /documents` | One PDF file part named `file` in `multipart/form-data` (part type `application/pdf`), or a raw `application/pdf` body with file name in `X-Filename`. Both are written to disk and hashed as they arrive, with the same PDF magic-byte check, 50 MB limit and sha256 dedupe; the 400-page limit is checked by the worker. Returns `Upload` |
 | `GET /documents/{id}` | Metadata, detected language, text-layer coverage |
 | `GET /documents/{id}/pages/{page_no}.png` | Rendered page for the source viewer |
 | `POST /documents/{id}/analyses` | Enqueue a job. Returns `Job` |
@@ -360,5 +373,23 @@ with `primary_statements`). `fra_analytics.METRIC_IDS` lists all 21.
 | `POST /analyses/{id}/corrections` | Value or mapping correction. Re-enters at `validate`, returns recomputed metrics, stores a labeled example |
 | `GET /analyses/{id}/export.xlsx` | Statements and metrics workbook |
 | `GET /health` | Free memory, lease holder, model loaded, disk free |
+
+Multipart uploads use `JobSettings.max_multipart_parts` (default 32, including the file)
+and `JobSettings.max_multipart_overhead_bytes` (default 65536 bytes). These optional settings
+can be overridden as `upload.max_multipart_parts` and `upload.max_multipart_overhead_bytes`
+in `configs/jobs.toml`; both must be positive. The overhead allowance bounds aggregate headers
+and text fields. The entire streamed envelope, including boundaries and epilogue, is limited
+to `max_upload_bytes + max_multipart_overhead_bytes`. Exceeding the part count returns 400;
+exceeding either byte limit returns 413, without consuming the remaining body. Invalid multipart
+boundaries return 400. One dedicated worker thread per upload runs acquisition, writes,
+finish and cleanup in order. Cleanup is always last, including after request cancellation;
+the slot is released after it finishes.
+
+`JobSettings.max_concurrent_uploads` (default 8), overridden as
+`upload.max_concurrent_uploads` in `configs/jobs.toml`, must be positive. The API rejects
+uploads above this application-wide limit immediately with 503 and `Retry-After: 1`.
+Admission is per application instance/process, so several uvicorn workers multiply the configured limit.
+Header checks for 415 and 422 run before admission; an admitted upload holds its slot
+until cleanup finishes, including after request cancellation.
 
 The API binds to 127.0.0.1 and never imports docling, torch or mlx (checked by T7).

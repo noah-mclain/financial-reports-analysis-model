@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import os
 import tomllib
-from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from fra_core.paths import REPO_ROOT as REPO_ROOT
+from fra_core.paths import find_repo_root as find_repo_root
 from fra_core.schemas import StatementType
-
-_SOURCE_ROOT = Path(__file__).resolve().parents[4]
 
 # Names an OCR engine goes by in the settings; ``none`` leaves image pages unread.
 OcrEngineName = Literal["ocrmac", "tesseract", "none"]
@@ -20,19 +19,6 @@ OcrEngineName = Literal["ocrmac", "tesseract", "none"]
 OCR_ENGINE_ENV = "FRA_OCR_ENGINE"
 EFFECTIVE_CONFIG_ENV = "FRA_INGEST_EFFECTIVE_CONFIG"
 
-
-def find_repo_root(environ: Mapping[str, str], source_root: Path, cwd: Path) -> Path:
-    """Where configs/ and var/ live: ``FRA_ROOT`` when set (an installed copy, as in the
-    Docker image), else the source checkout when it holds the config, else the working
-    directory."""
-    if environ.get("FRA_ROOT"):
-        return Path(environ["FRA_ROOT"])
-    if (source_root / "configs" / "ingest.toml").is_file():
-        return source_root
-    return cwd
-
-
-REPO_ROOT = find_repo_root(os.environ, _SOURCE_ROOT, Path.cwd())
 DEFAULT_CONFIG_PATH = REPO_ROOT / "configs" / "ingest.toml"
 
 # (section, key) in the TOML file, to the field it sets.

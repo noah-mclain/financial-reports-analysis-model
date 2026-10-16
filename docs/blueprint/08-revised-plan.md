@@ -114,7 +114,11 @@ restore if time is left, not the first thing to add.
   meet G1's accuracy bars ([04-execution-phases.md](04-execution-phases.md)). Scanned Arabic
   cells have no accuracy bar: no figure on them may be wrong and shown as confident, and their
   accuracy is reported with its interval beside the share of figures on statements that passed
-  review (D20 in [06-decisions-and-risks.md](06-decisions-and-risks.md)).
+  review (D20 in [06-decisions-and-risks.md](06-decisions-and-risks.md)). Emitted numeric cells outside
+  confirmed expected alignments are reported separately with their confidence status, including
+  duplicate and additional statements and output without an expected reference. Confident
+  unassessed output withholds a pass without being labelled proven wrong. Accuracy and the
+  accepted share retain their expected-cell denominators.
 - **B. Mapping.** Every critical item (revenue, net profit, total assets, total equity, total
   current assets and liabilities) is mapped or explicitly flagged on `dev` and `model_test`,
   in both languages. No silent wrong mapping.
@@ -183,7 +187,7 @@ a first look. The holdout and the dry runs reduce that risk; they do not remove 
 | R16 | Fused adapter does not convert to GGUF cleanly | Week 1 spike, before any training run depends on it |
 | R17 | Blind documents leak into development | Issuer-grouped pools enforced by `make corpus-check`; failures fixed on non-blind documents |
 | R18 | Cloud environment cannot reach most filing hosts | Collection and fetch scripts run unchanged on the Mac; URL and sha256 recorded so the set reproduces |
-| R19 | CPU-only narration too slow in Docker | Smaller model in the Docker profile if measured generation is under 5 tokens/s; the template summary is always available |
+| R19 | CPU-only narration too slow in Docker | Closed 2026-10-15: the 7B Q4_K_M file generates 15 to 19 tokens/s on the CPU inside the container, above the 5 tokens/s line ([14-run-profiles.md](14-run-profiles.md)); the template summary is always available |
 | R20 | Source site terms restrict automated download | Polite fetch (one request at a time, robots.txt respected), issuer and exchange sources preferred, documents never redistributed |
 
 ## Working rules
