@@ -37,6 +37,9 @@ _TOML_FIELDS: dict[tuple[str, str], str] = {
     ("storage", "root"): "root",
     ("upload", "max_bytes"): "max_upload_bytes",
     ("upload", "max_pages"): "max_pages",
+    ("upload", "max_multipart_parts"): "max_multipart_parts",
+    ("upload", "max_multipart_overhead_bytes"): "max_multipart_overhead_bytes",
+    ("upload", "max_concurrent_uploads"): "max_concurrent_uploads",
     ("worker", "poll_seconds"): "poll_seconds",
 }
 _SCHEMA = """
@@ -74,12 +77,16 @@ class JobSettings(BaseModel):
     root: Path
     max_upload_bytes: int = Field(gt=0)
     max_pages: int = Field(gt=0)
+    max_multipart_parts: int = Field(default=32, gt=0)
+    max_multipart_overhead_bytes: int = Field(default=64 * 1024, gt=0)
+    max_concurrent_uploads: int = Field(default=8, gt=0)
     poll_seconds: float = Field(gt=0)
 
 
 def load_job_settings(path: Path, repo_root: Path) -> JobSettings:
-    """The settings in ``path`` (configs/jobs.toml). Every key is required and no other is
-    allowed; a relative storage root is under ``repo_root``."""
+    """The settings in ``path`` (configs/jobs.toml). Multipart and concurrent-upload limits
+    have defaults; other keys are required and unknown keys fail. A relative storage root
+    is under ``repo_root``."""
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     known = {section for section, _ in _TOML_FIELDS}
     unknown = sorted(set(data) - known) + sorted(
@@ -94,6 +101,8 @@ def load_job_settings(path: Path, repo_root: Path) -> JobSettings:
     values: dict[str, Any] = {}
     for (section, key), field in _TOML_FIELDS.items():
         if key not in data.get(section, {}):
+            if not JobSettings.model_fields[field].is_required():
+                continue
             raise ValueError(f"{path}: {section}.{key} is not set")
         values[field] = data[section][key]
     root = Path(values["root"])
@@ -133,8 +142,16 @@ class UploadWriter:
         return self
 
     def __exit__(self, *exc: object) -> None:
-        self._file.close()
-        self._tmp.unlink(missing_ok=True)
+        try:
+            try:
+                self._file.close()
+            finally:
+                self._tmp.unlink(missing_ok=True)
+        except Exception as cleanup_error:
+            original = exc[1] if len(exc) > 1 else None
+            if not isinstance(original, BaseException):
+                raise
+            original.add_note(f"upload cleanup failed: {cleanup_error!r}")
 
     def write(self, chunk: bytes) -> None:
         self._size += len(chunk)
