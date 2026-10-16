@@ -151,8 +151,8 @@ def document_figures(
         reference = references.get(statement.type)
         assessed_reference = reference if first_positions[statement.type] == position else None
         mode = (
-            reference.page_mode
-            if reference
+            assessed_reference.page_mode
+            if assessed_reference
             else (
                 "scanned"
                 if entry["text_layer"] != "digital"
@@ -269,7 +269,8 @@ def _gate_a(
         "figures": _figures(documents, unreadable),
         "confident": {
             key: {**block, "met": _unless_unreadable(block["met"], unreadable)}
-            if block["met"] is not None
+            if block["status"] in {"checked", "unreferenced"}
+            and CONFIDENT_GATED.get((block["page_mode"], block["language"]), False)
             else block
             for key, block in confidence_part(documents, CONFIDENT_GATED).items()
         },

@@ -12,7 +12,7 @@ from harness.gates import document_figures, gate_report, lines
 from test_extraction_harness import P, extracted_of, item, row, statement_of
 from test_gates import INDEX, TAXONOMY, TYPES, doc
 
-from fra_core.schemas import LineItem, Period, PeriodKind, Statement, StatementType
+from fra_core.schemas import LineItem, Period, PeriodKind, Statement, StatementType, TextSource
 from fra_ingest.results import StructureResult
 from fra_ingest.review import StatementReview, review_statement
 from fra_ingest.table_checks import check_identity
@@ -321,6 +321,81 @@ def safety_report(
 
 def safety_block(report: dict[str, Any], status: str = "checked") -> dict[str, Any]:
     return report["strata"]["total"]["gate_a"]["confident"][f"{status} scanned ar"]  # type: ignore[no-any-return]
+
+
+@pytest.mark.parametrize(
+    "text_layer,source,duplicate_mode",
+    [
+        ("digital", TextSource.OCR, "scanned"),
+        ("digital", TextSource.TEXT, "digital"),
+        ("mixed", TextSource.TEXT, "scanned"),
+    ],
+)
+def test_duplicate_statement_coverage_uses_its_own_mode(
+    text_layer: str, source: TextSource, duplicate_mode: str
+) -> None:
+    expected, primary = safety_fixture()
+    expected = expected.model_copy(
+        update={"statements": [expected.statements[0].model_copy(update={"page_mode": "digital"})]}
+    )
+    duplicate = primary.model_copy(
+        update={
+            "id": "duplicate",
+            "line_items": [
+                line.model_copy(
+                    update={
+                        "cells": [
+                            cell.model_copy(
+                                update={
+                                    "provenance": cell.provenance.model_copy(
+                                        update={"source": source}
+                                    )
+                                }
+                            )
+                            for cell in line.cells
+                        ]
+                    }
+                )
+                for line in primary.line_items
+            ],
+        }
+    )
+    result = StructureResult(
+        version="v",
+        sha256="a" * 64,
+        convert_version="c",
+        settings_hash="h",
+        statements=[primary, duplicate],
+        reviews=[review_of(primary), review_of(duplicate)],
+    )
+    entry = {
+        "id": "d",
+        "language": "ar",
+        "scale": 1000,
+        "currency": "SAR",
+        "text_layer": text_layer,
+    }
+    document = document_figures(entry, result, {}, expected, INDEX, TAXONOMY, TYPES)
+    assert [c["page_mode"] for c in document["output_coverage"]] == ["digital", duplicate_mode]
+    report = gate_report([document], pairs=[])
+    for stratum in ("unknown", "total"):
+        gate = report["strata"][stratum]["gate_a"]
+        assert set(gate["figures"]["checked"]) == {"digital"}
+        assert gate["figures"]["checked"]["digital"]["cells"] == 3
+        assert gate["figures"]["checked"]["digital"]["right"] == 3
+        digital = gate["confident"]["checked digital ar"]
+        assert (digital["cells"], digital["accepted_share"]) == (3, 1.0)
+        assert digital["assessed_numeric"] == 3 and digital["met"] is None
+        if duplicate_mode == "scanned":
+            scanned = gate["confident"]["checked scanned ar"]
+            assert digital["unassessed_numeric"] == 0
+            assert (scanned["cells"], scanned["accepted_share"]) == (0, None)
+            assert scanned["unassessed_numeric"] == scanned["unassessed_confident"] == 3
+            assert {c["statement_position"] for c in scanned["unassessed"]} == {1}
+            assert scanned["wrong_confident"] == 0 and scanned["met"] is False
+        else:
+            assert set(gate["confident"]) == {"checked digital ar"}
+            assert digital["unassessed_numeric"] == digital["unassessed_confident"] == 3
 
 
 @pytest.mark.parametrize("extra", ["row", "duplicate_row", "same_object", "cell", "duplicate_cell"])
