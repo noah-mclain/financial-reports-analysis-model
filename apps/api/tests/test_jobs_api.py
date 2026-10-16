@@ -6,6 +6,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import quote
 
 from api_support import settings_at
 from fastapi.testclient import TestClient
@@ -123,6 +124,14 @@ def test_the_event_stream_sends_every_event_and_ends_after_the_last(
         assert client.get(f"/jobs/{'0' * 32}/events").status_code == 404
         # A browser reconnects after the stream ends: nothing is left, and it closes at once.
         assert client.get(f"/jobs/{job_id}/events", headers={"Last-Event-ID": "4"}).text == ""
+
+
+def test_a_percent_encoded_arabic_file_name_is_stored_decoded(tmp_path: Path) -> None:
+    job_settings = settings_at(tmp_path)
+    with client_for(job_settings) as client:
+        name = "تقرير-المراعي.pdf"
+        sha256 = upload(client, headers={**HEADERS, "X-Filename": quote(name)})
+        assert client.get(f"/documents/{sha256}").json()["filename"] == name
 
 
 def test_the_api_never_imports_ingest_or_docling() -> None:

@@ -488,6 +488,9 @@ source = { editable = "apps/api" }
 dependencies = [
     { name = "fastapi" },
     { name = "fra-core" },
+    { name = "jinja2" },
+    { name = "pillow" },
+    { name = "pypdfium2" },
     { name = "python-multipart" },
     { name = "uvicorn" },
 ]
@@ -496,6 +499,9 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", specifier = "==0.141.1" },
     { name = "fra-core", editable = "packages/core" },
+    { name = "jinja2", specifier = ">=3.1" },
+    { name = "pillow", specifier = ">=11.0" },
+    { name = "pypdfium2", specifier = ">=5.13" },
     { name = "python-multipart", specifier = ">=0.0.32" },
     { name = "uvicorn", specifier = ">=0.34" },
 ]

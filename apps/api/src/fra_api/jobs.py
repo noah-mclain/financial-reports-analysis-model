@@ -1,8 +1,9 @@
 """Upload, queue and follow analysis jobs (docs/blueprint/02-architecture.md, 2.8).
 
-``POST /documents`` takes a multipart ``file`` part or a raw ``application/pdf`` body with
-its file name in ``X-Filename``. Both stream into the same bounded, hashing upload writer.
-The page limit needs the PDF read: the worker checks it and fails the job.
+``POST /documents`` takes a multipart ``file`` part or a raw ``application/pdf`` body. Both
+stream into the same bounded, hashing upload writer. A raw body carries its file name in the
+``X-Filename`` header, percent-encoded UTF-8 so an Arabic name survives (browsers send only
+Latin-1 in headers). The page limit needs the PDF read: the worker checks it and fails the job.
 ``GET /jobs/{id}/events`` is a server-sent event stream that ends after the job's last event;
 a client that reconnects sends ``Last-Event-ID`` and receives only what it missed, and the
 stream of a job already finished closes at once, so a browser's automatic reconnect never
@@ -18,6 +19,7 @@ from collections.abc import AsyncIterator
 from concurrent.futures import Future
 from threading import BoundedSemaphore
 from typing import Annotated
+from urllib.parse import unquote
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -108,8 +110,11 @@ def add_job_routes(routes: FastAPI) -> None:
                 )
                 async for chunk in request.stream():
                     await asyncio.wrap_future(worker.submit((multipart or writer).write, chunk))
-                filename = multipart.filename() if multipart is not None else x_filename
-                assert filename is not None  # raw name checked before reading the body
+                if multipart is not None:
+                    filename = multipart.filename()
+                else:
+                    assert x_filename is not None  # raw name checked before reading the body
+                    filename = unquote(x_filename)
                 return await asyncio.wrap_future(worker.submit(writer.finish, filename))
             finally:
                 closing = worker.close(cleanup)
