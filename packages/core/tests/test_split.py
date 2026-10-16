@@ -318,6 +318,41 @@ def test_unknown_move_kind_is_refused() -> None:
         check_moves([mv(kind="exception")], [])
 
 
+def test_moves_recorded_in_chronological_order_are_accepted() -> None:
+    looks = [a_look("2026-10-05"), a_look("2026-10-07")]
+    moves = [
+        mv("Alpha Issuer", date="2026-10-02"),
+        mv("Beta Issuer", date="2026-10-02"),
+        mv("Gamma Issuer", kind="spent_look", looks_before=1, date="2026-10-06"),
+        mv("Delta Issuer", kind="spent_look", looks_before=2, date="2026-10-08"),
+    ]
+    check_moves(moves, looks)
+
+
+def test_moves_out_of_order_by_look_count_are_refused() -> None:
+    looks = [a_look("2026-10-01"), a_look("2026-10-03")]
+    later = mv("Alpha Issuer", kind="spent_look", looks_before=2, date="2026-10-03")
+    earlier = mv("Beta Issuer", kind="spent_look", looks_before=1, date="2026-10-03")
+    check_moves([earlier, later], looks)
+    with pytest.raises(SplitError, match="out of order"):
+        check_moves([later, earlier], looks)
+
+
+def test_moves_out_of_order_by_date_are_refused() -> None:
+    first = mv("Alpha Issuer", date="2026-10-02")
+    second = mv("Beta Issuer", date="2026-10-03")
+    check_moves([first, second], [])
+    with pytest.raises(SplitError, match="out of order"):
+        check_moves([second, first], [])
+
+
+def test_a_spent_look_dated_after_the_look_that_followed_it_is_refused() -> None:
+    looks = [a_look("2026-10-05"), a_look("2026-10-07")]
+    check_moves([mv(kind="spent_look", looks_before=1, date="2026-10-07")], looks)
+    with pytest.raises(SplitError, match="dated after the look that followed it"):
+        check_moves([mv(kind="spent_look", looks_before=1, date="2026-10-08")], looks)
+
+
 # ---- the scoring log's rules ----------------------------------------------------------------
 
 
@@ -387,6 +422,69 @@ def test_holdout_scoring_refuses_a_look_dated_before_the_log_or_broken_moves() -
             [doc(AL_DAWAA)], [mv(looks_before=1)], [a_look()], a_look("2026-10-06"), recorded.append
         )
     assert recorded == []
+
+
+def test_holdout_scoring_refuses_a_proposed_look_before_a_spent_move() -> None:
+    cik = next(c for c in range(1, 1000) if hashed_part(cik_key(c)) is Part.HOLDOUT)
+    documents = [doc("Synthetic Moved", cik=cik)]
+    looks = [a_look("2026-10-05")]
+    moves = [mv("Synthetic Moved", kind="spent_look", looks_before=1, date="2026-10-08")]
+    check_moves(moves, looks)
+    recorded: list[Look] = []
+
+    with pytest.raises(SplitError, match="dated after the look that followed it"):
+        holdout_for_scoring(documents, moves, looks, a_look("2026-10-07"), recorded.append)
+    assert recorded == []
+
+
+@pytest.mark.parametrize("date", ["2026-10-08", "2026-10-09"])
+def test_holdout_scoring_accepts_a_proposed_look_on_or_after_a_spent_move(date: str) -> None:
+    ciks = [c for c in range(1, 1000) if hashed_part(cik_key(c)) is Part.HOLDOUT][:2]
+    documents = [doc("Synthetic Moved", cik=ciks[0]), doc("Synthetic Held", cik=ciks[1])]
+    moves = [mv("Synthetic Moved", kind="spent_look", looks_before=1, date="2026-10-08")]
+    looks = [a_look("2026-10-05")]
+    check_moves(moves, looks)
+    persisted = list(looks)
+    look = a_look(date)
+
+    selected = holdout_for_scoring(documents, moves, looks, look, persisted.append)
+
+    assert selected == [documents[1]]
+    assert persisted == [*looks, look]
+    check_looks(persisted)
+    check_moves(moves, persisted)
+
+
+@pytest.mark.parametrize("looks", [[], [a_look("2026-10-05")]])
+def test_holdout_scoring_cannot_use_a_proposed_look_to_validate_past_moves(
+    looks: list[Look],
+) -> None:
+    look = a_look("2026-10-08")
+    moves = [mv("Synthetic Moved", kind="spent_look", looks_before=len(looks) + 1, date=look.date)]
+    check_moves(moves, [*looks, look])
+    recorded: list[Look] = []
+
+    with pytest.raises(SplitError, match=f"recorded after {len(looks) + 1} looks"):
+        holdout_for_scoring([], moves, looks, look, recorded.append)
+    assert recorded == []
+
+
+def test_holdout_scoring_propagates_record_failure_after_valid_spent_move() -> None:
+    ciks = [c for c in range(1, 1000) if hashed_part(cik_key(c)) is Part.HOLDOUT][:2]
+    documents = [doc("Synthetic Moved", cik=ciks[0]), doc("Synthetic Held", cik=ciks[1])]
+    moves = [mv("Synthetic Moved", kind="spent_look", looks_before=1, date="2026-10-08")]
+    looks = [a_look("2026-10-05")]
+    look = a_look("2026-10-08")
+    attempted: list[Look] = []
+
+    def record(proposed: Look) -> None:
+        attempted.append(proposed)
+        raise OSError("log is read-only")
+
+    with pytest.raises(OSError, match="read-only"):
+        holdout_for_scoring(documents, moves, looks, look, record)
+    assert attempted == [look]
+    assert looks == [a_look("2026-10-05")]
 
 
 # ---- availability: counts, never documents --------------------------------------------------
