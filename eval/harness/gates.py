@@ -150,13 +150,13 @@ def document_figures(
     for position, statement in enumerate(result.statements):
         reference = references.get(statement.type)
         assessed_reference = reference if first_positions[statement.type] == position else None
+        # Cell-free output defaults to digital but has no numeric coverage to certify safety.
         mode = (
             assessed_reference.page_mode
             if assessed_reference
             else (
                 "scanned"
-                if entry["text_layer"] != "digital"
-                or any(
+                if any(
                     c.provenance.source is TextSource.OCR
                     for item in statement.line_items
                     for c in item.cells

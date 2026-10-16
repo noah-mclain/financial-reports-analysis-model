@@ -323,24 +323,9 @@ def safety_block(report: dict[str, Any], status: str = "checked") -> dict[str, A
     return report["strata"]["total"]["gate_a"]["confident"][f"{status} scanned ar"]  # type: ignore[no-any-return]
 
 
-@pytest.mark.parametrize(
-    "text_layer,source,duplicate_mode",
-    [
-        ("digital", TextSource.OCR, "scanned"),
-        ("digital", TextSource.TEXT, "digital"),
-        ("mixed", TextSource.TEXT, "scanned"),
-    ],
-)
-def test_duplicate_statement_coverage_uses_its_own_mode(
-    text_layer: str, source: TextSource, duplicate_mode: str
-) -> None:
-    expected, primary = safety_fixture()
-    expected = expected.model_copy(
-        update={"statements": [expected.statements[0].model_copy(update={"page_mode": "digital"})]}
-    )
-    duplicate = primary.model_copy(
+def with_cell_source(statement: Statement, source: TextSource) -> Statement:
+    return statement.model_copy(
         update={
-            "id": "duplicate",
             "line_items": [
                 line.model_copy(
                     update={
@@ -356,10 +341,47 @@ def test_duplicate_statement_coverage_uses_its_own_mode(
                         ]
                     }
                 )
-                for line in primary.line_items
-            ],
+                for line in statement.line_items
+            ]
         }
     )
+
+
+@pytest.mark.parametrize(
+    "text_layer,source,duplicate_mode",
+    [
+        ("digital", TextSource.OCR, "scanned"),
+        ("digital", TextSource.TEXT, "digital"),
+        ("mixed", TextSource.TEXT, "digital"),
+        ("mixed", TextSource.OCR, "scanned"),
+        ("scanned", TextSource.TEXT, "digital"),
+    ],
+)
+@pytest.mark.parametrize(
+    "reference_case", ["duplicate", "additional_type", "missing_reference", "no_reference"]
+)
+def test_unassessed_statement_coverage_uses_its_own_mode(
+    text_layer: str, source: TextSource, duplicate_mode: str, reference_case: str
+) -> None:
+    expected, primary = safety_fixture()
+    expected = expected.model_copy(
+        update={"statements": [expected.statements[0].model_copy(update={"page_mode": "digital"})]}
+    )
+    duplicate = with_cell_source(primary, source).model_copy(
+        update={
+            "id": "duplicate",
+            "type": StatementType.INCOME if reference_case == "additional_type" else primary.type,
+        }
+    )
+    assessed_cells = 3
+    status = "checked"
+    if reference_case == "missing_reference":
+        expected = expected.model_copy(update={"statements": []})
+        assessed_cells = 0
+    elif reference_case == "no_reference":
+        expected = None
+        assessed_cells = 0
+        status = "unreferenced"
     result = StructureResult(
         version="v",
         sha256="a" * 64,
@@ -380,22 +402,54 @@ def test_duplicate_statement_coverage_uses_its_own_mode(
     report = gate_report([document], pairs=[])
     for stratum in ("unknown", "total"):
         gate = report["strata"][stratum]["gate_a"]
-        assert set(gate["figures"]["checked"]) == {"digital"}
-        assert gate["figures"]["checked"]["digital"]["cells"] == 3
-        assert gate["figures"]["checked"]["digital"]["right"] == 3
-        digital = gate["confident"]["checked digital ar"]
-        assert (digital["cells"], digital["accepted_share"]) == (3, 1.0)
-        assert digital["assessed_numeric"] == 3 and digital["met"] is None
+        if assessed_cells:
+            assert set(gate["figures"]["checked"]) == {"digital"}
+            assert gate["figures"]["checked"]["digital"]["cells"] == 3
+            assert gate["figures"]["checked"]["digital"]["right"] == 3
+        else:
+            assert gate["figures"]["checked"] == {}
+        digital = gate["confident"][f"{status} digital ar"]
+        assert (digital["cells"], digital["accepted_share"]) == (
+            assessed_cells,
+            1.0 if assessed_cells else None,
+        )
+        assert digital["assessed_numeric"] == assessed_cells and digital["met"] is None
         if duplicate_mode == "scanned":
-            scanned = gate["confident"]["checked scanned ar"]
-            assert digital["unassessed_numeric"] == 0
+            scanned = gate["confident"][f"{status} scanned ar"]
+            assert digital["unassessed_numeric"] == 3 - assessed_cells
             assert (scanned["cells"], scanned["accepted_share"]) == (0, None)
             assert scanned["unassessed_numeric"] == scanned["unassessed_confident"] == 3
             assert {c["statement_position"] for c in scanned["unassessed"]} == {1}
             assert scanned["wrong_confident"] == 0 and scanned["met"] is False
         else:
-            assert set(gate["confident"]) == {"checked digital ar"}
-            assert digital["unassessed_numeric"] == digital["unassessed_confident"] == 3
+            assert set(gate["confident"]) == {f"{status} digital ar"}
+            assert (
+                digital["unassessed_numeric"]
+                == digital["unassessed_confident"]
+                == 6 - assessed_cells
+            )
+        assert sum(c["emitted_numeric"] for c in gate["confident"].values()) == 6
+
+
+@pytest.mark.parametrize("empty_rows", [False, True])
+def test_cell_free_unreferenced_output_cannot_certify_safety(empty_rows: bool) -> None:
+    extracted = extracted_of([item(0, "Empty", None)] if empty_rows else [])
+    result = StructureResult(
+        version="v",
+        sha256="a" * 64,
+        convert_version="c",
+        settings_hash="h",
+        statements=[extracted],
+        reviews=[review_of(extracted)],
+    )
+    entry = {"id": "d", "language": "ar", "scale": 1000, "currency": "SAR", "text_layer": "mixed"}
+    document = document_figures(entry, result, {}, None, INDEX, TAXONOMY, TYPES)
+    assert document["output_coverage"][0]["page_mode"] == "digital"
+    report = gate_report([document], pairs=[])
+    block = report["strata"]["total"]["gate_a"]["confident"]["unreferenced digital ar"]
+    assert block["emitted_numeric"] == block["unassessed_confident"] == block["cells"] == 0
+    assert block["accepted_share"] is None and block["met"] is None
+    assert block["reason"] == "no confirmed expected figures; safety is not measured"
 
 
 @pytest.mark.parametrize("extra", ["row", "duplicate_row", "same_object", "cell", "duplicate_cell"])
@@ -495,6 +549,9 @@ def test_unassessed_output_discloses_confidence_using_the_own_cell_flag(
 )
 def test_output_outside_confirmed_gold_cannot_vanish_from_confidence_coverage(case: str) -> None:
     expected, extracted = safety_fixture()
+    if case != "unconfirmed":
+        # These cases assert D20's safety block for additional or unreferenced OCR output.
+        extracted = with_cell_source(extracted, TextSource.OCR)
     statements = [extracted]
     status = "checked"
     if case in {"duplicate_statement", "same_statement_object", "additional_type"}:
