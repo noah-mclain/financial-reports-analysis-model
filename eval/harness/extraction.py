@@ -31,6 +31,7 @@ import subprocess
 import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
+from decimal import Decimal
 from difflib import SequenceMatcher
 from importlib import metadata
 from pathlib import Path
@@ -479,6 +480,70 @@ def _period(period: Period) -> tuple[object, ...]:
     return (period.key, period.end_date, period.kind, period.months)
 
 
+@dataclass(frozen=True)
+class CellJudgement:
+    """One confirmed expected figure against what was read for it. ``item`` is the extracted
+    row it aligned with, None when no row aligned; ``mislabelled`` is the right figure read
+    under another row's label, which is not right."""
+
+    row: ExpectedRow
+    period_key: str
+    expected: Decimal | None
+    read: Decimal | None
+    item: LineItem | None
+    right: bool
+    mislabelled: bool
+    item_position: int | None
+    cell_position: int | None
+
+
+def _judge(
+    expected: ExpectedStatement, statement: Statement | None, aligned: Sequence[int | None]
+) -> list[CellJudgement]:
+    items = statement.line_items if statement is not None else []
+    periods = {_period(p) for p in statement.periods} if statement is not None else set()
+    matched_keys = {p.key for p in expected.periods if _period(p) in periods}
+    judged = []
+    for row, position in zip(expected.rows, aligned, strict=True):
+        item = items[position] if position is not None else None
+        labelled = item is not None and not mislabelled(row, item.raw_label, expected.rows)
+        for key, value in row.values.items():
+            if key in row.unconfirmed:
+                continue
+            read = item.value_for(key) if item is not None else None
+            cell_position = (
+                next((i for i, c in enumerate(item.cells) if c.period_key == key), None)
+                if item is not None
+                else None
+            )
+            # A figure must be read, on its own label; nothing printed must be a printed blank in
+            # a period the statement has, not absent output or a lost value.
+            same = item is not None and read == value and key in matched_keys
+            if value is None:
+                same = same and _shows_blank(item, key)
+            right = same and (value is None or labelled)
+            judged.append(
+                CellJudgement(
+                    row=row,
+                    period_key=key,
+                    expected=value,
+                    read=read,
+                    item=item,
+                    right=right,
+                    mislabelled=same and not right,
+                    item_position=position,
+                    cell_position=cell_position,
+                )
+            )
+    return judged
+
+
+def judge_cells(expected: ExpectedStatement, statement: Statement | None) -> list[CellJudgement]:
+    """Every confirmed figure of ``expected``, in row order, judged against ``statement``."""
+    items = statement.line_items if statement is not None else []
+    return _judge(expected, statement, align_rows(expected.rows, items))
+
+
 def _shows_blank(item: LineItem | None, key: str) -> bool:
     """Whether the row holds a cell for the period that was read empty and is not unsure. Absent
     output, a figure that failed to parse and a lost or shifted value are not a printed blank."""
@@ -508,44 +573,37 @@ def score_statement(expected: ExpectedStatement, statement: Statement | None) ->
         statements_found=int(statement is not None),
     )
     items = statement.line_items if statement is not None else []
-    period_keys = {p.key for p in statement.periods} if statement is not None else set()
     if statement is not None:
         found = {_period(p) for p in statement.periods}
         score.periods_right = sum(1 for p in expected.periods if _period(p) in found)
         score.metadata_right = (statement.scale == expected.scale) + (
             statement.currency == expected.currency
         )
+    score.unconfirmed = sum(
+        1 for row in expected.rows for key in row.values if key in row.unconfirmed
+    )
     aligned = align_rows(expected.rows, items)
-    for row, position in zip(expected.rows, aligned, strict=True):
-        item = items[position] if position is not None else None
-        labelled = item is not None and not mislabelled(row, item.raw_label, expected.rows)
-        for key, value in row.values.items():
-            if key in row.unconfirmed:
-                score.unconfirmed += 1
-                continue
-            read = item.value_for(key) if item is not None else None
-            score.cells += 1
-            score.cells_missing += int(statement is None)
-            same = item is not None and read == value
-            if value is None:
-                same = same and key in period_keys and _shows_blank(item, key)
-            if same and (value is None or labelled):
-                score.right += 1
-            else:
-                score.mislabelled += same
-                score.wrong.append(
-                    {
-                        "statement": expected.type.value,
-                        "label": row.label,
-                        "period": key,
-                        "expected": "" if value is None else str(value),
-                        "read": "" if read is None else str(read),
-                        "label_read": item.raw_label if item is not None else "",
-                    }
-                )
-            if value is not None and read is not None and abs(read) == abs(value):
-                score.sign_cells += 1
-                score.sign_right += read == value
+    for cell in _judge(expected, statement, aligned):
+        value, read = cell.expected, cell.read
+        score.cells += 1
+        score.cells_missing += int(statement is None)
+        if cell.right:
+            score.right += 1
+        else:
+            score.mislabelled += cell.mislabelled
+            score.wrong.append(
+                {
+                    "statement": expected.type.value,
+                    "label": cell.row.label,
+                    "period": cell.period_key,
+                    "expected": "" if value is None else str(value),
+                    "read": "" if read is None else str(read),
+                    "label_read": cell.item.raw_label if cell.item is not None else "",
+                }
+            )
+        if value is not None and read is not None and abs(read) == abs(value):
+            score.sign_cells += 1
+            score.sign_right += read == value
     score.extra_rows = unmatched_numeric_rows(items, aligned)
     return score
 

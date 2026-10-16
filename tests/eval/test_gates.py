@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 from harness import gates as gates_module
+from harness.confidence import OUTCOMES
 from harness.expected import ExpectedFile, ExpectedRow, ExpectedStatement
 from harness.gates import (
     NOT_MEASURED,
@@ -148,7 +149,11 @@ def doc(
         "scale_currency": {"expected": scale[0], "found": scale[1], "right": scale[2]},
         "mapping": mapping or {"mapped": 6},
         "disagreements": [],
-        "figures": figures or [],
+        # A figure given without outcomes has none of interest to the test: all zero.
+        "figures": [
+            {"outcomes": dict.fromkeys(OUTCOMES, 0), "confident_wrong": [], **f}
+            for f in figures or []
+        ],
     }
 
 
@@ -287,6 +292,52 @@ def test_an_unreadable_document_makes_every_part_not_met_and_is_listed() -> None
         assert a["scale_currency"]["met"] is False and s["gate_b"]["met"] is False
     printed = "\n".join(lines(report))
     assert "gone: unreadable_pdf" in printed
+
+
+@pytest.mark.parametrize("unreadable", [False, True])
+@pytest.mark.parametrize("cells", [0, 1])
+@pytest.mark.parametrize(
+    "status,mode,language,eligible",
+    [
+        ("checked", "scanned", "ar", True),
+        ("unreferenced", "scanned", "ar", True),
+        ("draft", "scanned", "ar", False),
+        ("checked", "digital", "ar", False),
+        ("checked", "scanned", "en", False),
+    ],
+)
+def test_unreadable_override_applies_to_eligible_confidence_blocks_even_without_cells(
+    unreadable: bool, cells: int, status: str, mode: str, language: str, eligible: bool
+) -> None:
+    # Unreferenced output has coverage but no expected-cell outcomes.
+    figures = (
+        [
+            {
+                "status": status,
+                "page_mode": mode,
+                "cells": cells,
+                "right": cells,
+                "outcomes": {"right_accepted": cells},
+            }
+        ]
+        if status != "unreferenced"
+        else []
+    )
+    document = {**doc("a", "annual", figures=figures), "language": language}
+    if status == "unreferenced":
+        document["output_coverage"] = [
+            {"status": status, "page_mode": mode, "unassessed_numeric": 1}
+        ]
+    errors = ["gone: unreadable_pdf"] if unreadable else []
+    report = gate_report([document], pairs=[], errors=errors)
+    met = None
+    if eligible:
+        met = False if unreadable else True if cells and status == "checked" else None
+    for stratum in ("annual", "total"):
+        block = report["strata"][stratum]["gate_a"]["confident"][f"{status} {mode} {language}"]
+        assert block["met"] is met
+        assert block["cells"] == (0 if status == "unreferenced" else cells)
+        assert block["unassessed_confident"] == 0
 
 
 # ---- gate B: an item no row carries is absent, whatever else the statement flags --------------
