@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from importlib.metadata import version
+from pathlib import Path
 
 import pytest
+from api_support import settings_at
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
@@ -13,8 +15,9 @@ from fra_core.profile import Profile
 
 
 @pytest.mark.parametrize("profile", list(Profile))
-def test_health_reports_status_version_and_profile(profile: Profile) -> None:
-    response = TestClient(create_app(profile)).get(HEALTH_PATH)
+def test_health_reports_status_version_and_profile(profile: Profile, tmp_path: Path) -> None:
+    job_settings = settings_at(tmp_path)
+    response = TestClient(create_app(profile, job_settings)).get(HEALTH_PATH)
 
     assert response.status_code == 200
     assert response.json() == {
@@ -25,8 +28,9 @@ def test_health_reports_status_version_and_profile(profile: Profile) -> None:
 
 
 @pytest.mark.parametrize("profile", list(Profile))
-def test_index_is_html_and_names_the_profile(profile: Profile) -> None:
-    response = TestClient(create_app(profile)).get("/")
+def test_index_is_html_and_names_the_profile(profile: Profile, tmp_path: Path) -> None:
+    job_settings = settings_at(tmp_path)
+    response = TestClient(create_app(profile, job_settings)).get("/")
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
@@ -37,9 +41,21 @@ def test_the_health_path_is_slash_health() -> None:
     assert HEALTH_PATH == "/health"
 
 
-def test_the_app_serves_the_index_and_health_and_nothing_else() -> None:
-    app = create_app(Profile.NATIVE)
+def test_the_app_serves_the_index_health_and_the_job_routes_and_nothing_else(
+    tmp_path: Path,
+) -> None:
+    job_settings = settings_at(tmp_path)
+    app = create_app(Profile.NATIVE, job_settings)
 
     routes = [route for route in app.routes if isinstance(route, APIRoute)]
     assert len(routes) == len(app.routes)
-    assert sorted(route.path for route in routes) == ["/", HEALTH_PATH]
+    assert sorted((route.path, *sorted(route.methods or ())) for route in routes) == [
+        ("/", "GET"),
+        ("/analyses/{job_id}", "GET"),
+        ("/documents", "POST"),
+        ("/documents/{sha256}", "GET"),
+        ("/documents/{sha256}/analyses", "POST"),
+        (HEALTH_PATH, "GET"),
+        ("/jobs/{job_id}", "GET"),
+        ("/jobs/{job_id}/events", "GET"),
+    ]

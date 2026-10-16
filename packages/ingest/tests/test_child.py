@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import signal
+import subprocess
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
+from types import FrameType
 
 import pytest
 
@@ -287,3 +290,90 @@ def test_progress_lines_do_not_fill_the_tail_of_a_crash(tmp_path: Path) -> None:
     assert caught.value.reason == "convert_crashed"
     assert "ValueError: bad table" in caught.value.detail
     assert "pages" not in caught.value.detail
+
+
+def test_shutdown_during_spawn_still_kills_and_reaps_the_child(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pdf, config = setup(tmp_path)
+    real_popen = subprocess.Popen
+    started: list[subprocess.Popen[str]] = []
+
+    def start(
+        argv: Sequence[str],
+        *,
+        stdout: int,
+        stderr: int,
+        text: bool,
+        env: dict[str, str],
+        pass_fds: tuple[int, ...] = (),
+    ) -> subprocess.Popen[str]:
+        process = real_popen(
+            argv, stdout=stdout, stderr=stderr, text=text, env=env, pass_fds=pass_fds
+        )
+        started.append(process)
+        assert process.stdout is not None and process.stdout.readline() == "ready\n"
+        signal.raise_signal(signal.SIGTERM)
+        return process
+
+    def stop(signum: int, frame: FrameType | None) -> None:
+        raise SystemExit(128 + signum)
+
+    previous = signal.signal(signal.SIGTERM, stop)
+    monkeypatch.setattr(subprocess, "Popen", start)
+    try:
+        with pytest.raises(SystemExit, match="143"):
+            convert_in_child(
+                pdf,
+                config,
+                command=fake("import signal; print('ready', flush=True); signal.pause()"),
+            )
+        assert len(started) == 1 and started[0].poll() is not None
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+        for process in started:
+            if process.poll() is None:
+                process.kill()
+            process.communicate(timeout=10)
+
+
+@pytest.mark.parametrize("failure", ["exception", "timeout"])
+def test_conversion_reaps_its_live_child_on_communication_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    pdf, config = setup(tmp_path)
+    config = config.model_copy(update={"child_timeout_s": 0.2})
+    started: list[subprocess.Popen[str]] = []
+
+    class ObservedChild(subprocess.Popen[str]):
+        def communicate(
+            self, input: str | None = None, timeout: float | None = None
+        ) -> tuple[str, str]:
+            started.append(self)
+            assert self.stdout is not None and self.stdout.readline() == "ready\n"
+            if failure == "exception":
+                raise RuntimeError("communication failed")
+            return super().communicate(input, timeout)
+
+    monkeypatch.setattr(subprocess, "Popen", ObservedChild)
+    try:
+        with pytest.raises(RuntimeError if failure == "exception" else IngestError) as caught:
+            convert_in_child(
+                pdf,
+                config,
+                command=fake("import signal; print('ready', flush=True); signal.pause()"),
+            )
+        if isinstance(caught.value, IngestError):
+            assert caught.value.reason == "convert_timeout"
+        assert len(started) == 1 and started[0].returncode is not None
+        assert started[0].stdout is not None and started[0].stdout.closed
+        assert started[0].stderr is not None and started[0].stderr.closed
+    finally:
+        for process in started:
+            if process.poll() is None:
+                process.kill()
+            process.wait(timeout=10)
+            if process.stdout is not None:
+                process.stdout.close()
+            if process.stderr is not None:
+                process.stderr.close()

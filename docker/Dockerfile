@@ -33,6 +33,8 @@ RUN apt-get update \
     && useradd --create-home --uid 1000 app
 COPY --from=build /opt/venv /opt/venv
 COPY configs /app/configs
+# var/ holds the job database, uploads, analyses and ingest artifacts; the app user writes it.
+RUN mkdir -p /app/var && chown app:app /app/var
 ENV PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     FRA_PROFILE=docker \

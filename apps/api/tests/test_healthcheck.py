@@ -9,9 +9,11 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 
 import pytest
 import uvicorn
+from api_support import settings_at
 from fastapi import FastAPI
 
 from fra_api.app import create_app
@@ -95,14 +97,16 @@ def reply(body: bytes, content_type: str = "application/json") -> bytes:
     return head.encode() + body
 
 
-def test_check_returns_the_body_when_the_profile_matches(serve_app: Serve) -> None:
-    port = serve_app(create_app(Profile.DOCKER))
+def test_check_returns_the_body_when_the_profile_matches(serve_app: Serve, tmp_path: Path) -> None:
+    job_settings = settings_at(tmp_path)
+    port = serve_app(create_app(Profile.DOCKER, job_settings))
 
     assert check(port, expect_profile=Profile.DOCKER)["profile"] == "docker"
 
 
-def test_check_fails_when_the_profile_differs(serve_app: Serve) -> None:
-    port = serve_app(create_app(Profile.DOCKER))
+def test_check_fails_when_the_profile_differs(serve_app: Serve, tmp_path: Path) -> None:
+    job_settings = settings_at(tmp_path)
+    port = serve_app(create_app(Profile.DOCKER, job_settings))
 
     with pytest.raises(HealthCheckError, match="native"):
         check(port, expect_profile=Profile.NATIVE)
@@ -131,9 +135,13 @@ def test_check_fails_cleanly_on_a_bad_reply(serve_raw: ServeRaw, raw: bytes, mes
 
 
 def test_main_prints_the_body_and_exits_zero_when_healthy(
-    serve_app: Serve, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    serve_app: Serve,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
 ) -> None:
-    port = serve_app(create_app(Profile.DOCKER))
+    job_settings = settings_at(tmp_path)
+    port = serve_app(create_app(Profile.DOCKER, job_settings))
     monkeypatch.setattr("sys.argv", ["healthcheck", str(port), "--profile", "docker"])
 
     assert main() == 0

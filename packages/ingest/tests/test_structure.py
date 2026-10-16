@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from decimal import Decimal
 
+import pytest
 from support import (
     HEADER as HEADER,
 )
@@ -36,7 +37,8 @@ from support import (
 from fra_core.schemas import PageMode, StatementType
 from fra_ingest.config import IngestConfig
 from fra_ingest.docling_json import DlDocument
-from fra_ingest.structure import StructureInputs, structure_document
+from fra_ingest.results import RangeConversion
+from fra_ingest.structure import StructureInputs, range_conversion_flags, structure_document
 
 SHA = "b" * 64
 
@@ -189,6 +191,62 @@ def test_a_tail_grid_that_would_not_have_continued_gets_no_closed_reason() -> No
 def test_a_missing_enabled_type_is_flagged() -> None:
     result, _ = structure_document(inputs([("docling/p1-2.json", document())]), IngestConfig())
     assert "statement_not_extracted:income" in result.flags
+
+
+def test_a_partly_converted_range_is_flagged_so_the_job_is_held() -> None:
+    given = inputs([("docling/p1-2.json", document())])
+    partial = given.convert.ranges[0].model_copy(update={"status": "partial"})
+    given = given.model_copy(
+        update={"convert": given.convert.model_copy(update={"ranges": [partial]})}
+    )
+    result, _ = structure_document(given, IngestConfig())
+    assert len(result.statements) == 1  # what converted is still read
+    assert "range_partially_converted:1-2" in result.flags
+
+
+def test_range_flags_keep_structure_output_order_for_mixed_statuses() -> None:
+    given = inputs([("docling/p1-2.json", document())])
+    data = given.model_dump()
+    data["convert"]["ranges"] = [
+        {
+            **given.convert.ranges[0].model_dump(),
+            "status": status,
+            "first_page": page,
+            "last_page": page,
+        }
+        for page, status in enumerate(["partial", "failed", "ok", "skipped"], start=1)
+    ]
+    given = StructureInputs.model_validate(data)
+    expected = [
+        "range_not_converted:2-2",
+        "range_not_converted:4-4",
+        "range_partially_converted:1-1",
+    ]
+    assert range_conversion_flags(given.convert.ranges) == expected
+    result, _ = structure_document(given, IngestConfig())
+    assert [flag for flag in result.flags if flag.startswith("range_")] == expected
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        ("ok", []),
+        ("failed", ["range_not_converted:1-2"]),
+        ("skipped", ["range_not_converted:1-2"]),
+        ("partial", ["range_partially_converted:1-2"]),
+    ],
+)
+def test_public_range_flags_cover_each_valid_status(status: str, expected: list[str]) -> None:
+    conversion = RangeConversion.model_validate(
+        {
+            "first_page": 1,
+            "last_page": 2,
+            "ocr": "pdf_aware",
+            "ocr_language": None,
+            "status": status,
+        }
+    )
+    assert range_conversion_flags([conversion]) == expected
 
 
 INCOME_2 = [

@@ -226,6 +226,32 @@ def test_structure_rebuilds_statements_and_checks_after_same_digest_recovery(
     assert (statements.read_bytes(), checks.read_bytes()) == before
 
 
+def test_a_conversion_given_is_read_as_it_is_and_never_converted_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = IngestConfig(artifact_root=tmp_path)
+    where = located([PageMode.TEXT] * 2, [(1, 2)], sha256=SHA)
+    monkeypatch.setattr(structure, "load_or_locate", lambda *_args: where)
+    monkeypatch.setattr(structure, "read_pages", lambda *_args, **_kw: [])
+    partial = convert_pdf(
+        PDF,
+        where,
+        {},
+        config,
+        runner_factory=lambda _config: FakeRunner({"1-2": "partial"}),
+        docling=RELEASE,
+    )
+
+    def refuse(_pdf: Path, _config: IngestConfig) -> ConvertResult:
+        raise AssertionError("converted a second time")
+
+    result = structure.structure_pdf(PDF, config, None, convert=refuse, conversion=partial)
+    assert "range_partially_converted:1-2" in result.flags
+    other = partial.model_copy(update={"sha256": "c" * 64})
+    with pytest.raises(ValueError, match="given for"):
+        structure.structure_pdf(PDF, config, None, convert=refuse, conversion=other)
+
+
 @pytest.mark.parametrize("failure", ["interrupt", "missing_docling"])
 def test_injected_conversion_failure_removes_derived_artifacts_before_running(
     tmp_path: Path, failure: str
