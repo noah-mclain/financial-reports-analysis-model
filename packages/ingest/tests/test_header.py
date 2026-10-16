@@ -4,6 +4,18 @@ from fra_core.schemas import StatementType
 from fra_ingest.header import is_amount, is_note_ref, parse_header, split_note
 from fra_ingest.table_grid import Grid, GridCell
 
+
+def test_standalone_interim_context_holds_duration_but_keeps_instant_balance_facts() -> None:
+    from fra_core.schemas import PeriodKind
+    from fra_ingest.header import has_period_context, period_with_context
+
+    assert has_period_context("Interim")
+    assert not has_period_context("interimly")
+    assert period_with_context("2024", "Interim 30 June 2025", PeriodKind.DURATION) is None
+    balance = period_with_context("2024", "Interim 30 June 2025", PeriodKind.INSTANT)
+    assert balance is not None and balance.key == "2024-06-30" and balance.months is None
+
+
 BALANCE, INCOME = StatementType.BALANCE, StatementType.INCOME
 
 

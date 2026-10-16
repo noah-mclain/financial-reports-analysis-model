@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>__TITLE__ — PDF review</title>
+<style>
+body{font:16px system-ui;margin:24px;color:#17212b;background:#f8fafc}
+h1{font-size:26px}table{border-collapse:collapse;width:100%;background:white}
+td,th{border:1px solid #ccd4dc;padding:8px;vertical-align:top}
+section{margin-top:32px}.page{position:relative;max-width:1000px}
+img,svg{width:100%;display:block}svg{position:absolute;inset:0;height:100%}
+rect{fill:#ffcc0033;stroke:#b76000;stroke-width:.8}
+:target{outline:3px solid #2563eb}.note{background:#fff6d5;padding:16px}
+label{display:block;margin:6px 0}input{font:inherit;max-width:200px}
+textarea{width:100%;height:320px;font:14px monospace}
+button{font:inherit;padding:10px;margin:8px 0}a{color:#185abd}
+</style>
+<h1>__TITLE__: source review</h1>
+<p class="note">Agreement measures consistency, not accuracy. Verify the highlighted regions,
+periods, units and taxonomy assignments against the PDF. Examine complete statement pages for
+missing rows. Review answers stay on this computer; nothing is submitted automatically.</p>
+<p><a href="source.pdf">Full source PDF</a> · <a href="map.json">Coordinates and observations</a> ·
+__RUN_LINKS__ · <a href="reading-draft.json">Original draft</a></p>
+<p>Pages are one-based; table rows/columns are zero-based. Paragraph/line numbers are not
+available for every table. Highlighted regions come from extraction and may need correction.
+The full snapshots preserve additional evidence that this viewer does not render.</p>
+<label>Your name <input id="reader" autocomplete="name"></label>
+<table><thead><tr><th>#</th><th>Statement</th><th>Label</th><th>Period</th>
+<th>Snapshots and location</th><th>Consistency</th><th>Your PDF check</th></tr></thead>
+<tbody>__ROWS__</tbody></table>
+<h2>Answer editor</h2>
+<p>Use “Apply cell reviews” to copy your cell checks into the editor. Then correct statement
+metadata, labels, periods and coverage here; add rows/statements omitted by extraction.
+An empty value input means a printed blank (null). An illegible value must remain unconfirmed.
+Taxonomy ids are suggestions until you check them. Do not apply cell reviews again after
+changing row order or adding rows in the editor.</p>
+<button id="apply">Apply cell reviews to editor</button>
+<textarea id="editor" aria-label="Reviewed answer JSON"></textarea>
+<label><input id="complete" type="checkbox">I checked all statement pages, every row,
+periods, scale/currency and taxonomy assignments, and corrected omissions.</label>
+<button id="download">Download reviewed answers</button><p id="status" role="status"></p>
+__PAGES__
+<script id="draft" type="application/json">__DRAFT__</script>
+<script>
+const initial = JSON.parse(document.getElementById('draft').textContent);
+const editor = document.getElementById('editor');
+editor.value = JSON.stringify(initial, null, 2);
+document.querySelectorAll('.canonical').forEach(input => input.addEventListener('input', () => {
+  const answer = input.closest('.answer');
+  document.querySelectorAll('.answer').forEach(other => {
+    if(other.dataset.si === answer.dataset.si && other.dataset.ri === answer.dataset.ri)
+      other.querySelector('.canonical').value = input.value;
+  });
+}));
+document.getElementById('apply').onclick = () => {
+  const reading = JSON.parse(JSON.stringify(initial));
+  document.querySelectorAll('.answer').forEach(answer => {
+    const row = reading.statements[Number(answer.dataset.si)].rows[Number(answer.dataset.ri)];
+    const period = answer.dataset.period;
+    const value = answer.querySelector('.value').value.trim();
+    row.values[period] = value === '' ? null : value;
+    row.canonical_id = answer.querySelector('.canonical').value.trim() || null;
+    if(answer.querySelector('.confirmed').checked)
+      row.unconfirmed = row.unconfirmed.filter(key => key !== period);
+  });
+  reading.reader = document.getElementById('reader').value.trim();
+  editor.value = JSON.stringify(reading, null, 2);
+  document.getElementById('status').textContent = 'Cell reviews applied. Check metadata and omissions in the editor.';
+};
+document.getElementById('download').onclick = () => {
+  try {
+    const reading = JSON.parse(editor.value);
+    reading.reader = document.getElementById('reader').value.trim();
+    reading.complete = document.getElementById('complete').checked;
+    if(!reading.reader || !reading.complete) throw Error('Enter your name and check complete source coverage.');
+    if(reading.statements.some(s => s.rows.some(r => r.unconfirmed.length)))
+      throw Error('There are still unconfirmed cells. Check or correct them against the PDF.');
+    const blob = new Blob([JSON.stringify(reading, null, 2)+'\n'], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a'); link.href=url;
+    link.download=reading.id+'-reviewed.json'; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    document.getElementById('status').textContent='Downloaded. The approve command validates the answers before freezing.';
+  } catch(error) { document.getElementById('status').textContent=error.message; }
+};
+</script></html>

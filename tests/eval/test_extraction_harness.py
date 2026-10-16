@@ -218,9 +218,62 @@ def test_a_figure_read_where_nothing_is_printed_is_wrong() -> None:
         statement_of([blank]), extracted_of([item(1, "Treasury shares", "7")])
     )
     assert (invented.cells, invented.right) == (1, 0)
-    empty = extracted_of([item(1, "Treasury shares", None)])
+    blank_item = item(1, "Treasury shares", "0")
+    blank_item.cells[0].reported = None
+    blank_item.cells[0].raw_text = ""
+    empty = extracted_of([blank_item])
     assert score_statement(statement_of([blank]), empty).cells == 1
     assert score_statement(statement_of([blank]), empty).right == 1
+
+
+@pytest.mark.parametrize("missing", ["row", "cell", "period", "cell_period"])
+def test_a_blank_requires_an_aligned_cell_and_period(missing: str) -> None:
+    blank = ExpectedRow(label="Treasury shares", values={P.key: None})
+    blank_item = item(1, "Treasury shares", "0")
+    blank_item.cells[0].reported = None
+    blank_item.cells[0].raw_text = ""
+    extracted = extracted_of([blank_item])
+    if missing == "row":
+        extracted.line_items = []
+    elif missing == "cell":
+        blank_item.cells = []
+    elif missing == "period":
+        extracted.periods = [OTHER]
+        blank_item.cells[0].period_key = OTHER.key
+    else:
+        extracted.periods.append(OTHER)
+        blank_item.cells[0].period_key = OTHER.key
+    score = score_statement(statement_of([blank]), extracted)
+    assert (score.cells, score.right, score.mislabelled) == (1, 0, 0)
+
+
+@pytest.mark.parametrize(
+    "raw_text,flags,credited",
+    [
+        ("", ["numbers_missing"], True),
+        ("", ["numbers_missing", "blank_confirmed"], True),
+        ("?", ["unparsed"], False),
+        ("12x", [], False),
+        ("n/a", ["not_available"], False),
+        ("", ["numbers_missing", "unparsed"], False),
+        ("", ["numbers_missing", "spanned_cell"], False),
+        ("", ["numbers_missing", "bbox_synthesized"], False),
+        ("", ["numbers_missing", "label_merged"], False),
+        ("", ["numbers_missing", "row_misaligned"], False),
+        ("", ["numbers_missing", "row_realigned"], False),
+    ],
+)
+def test_only_an_empty_unflagged_cell_is_evidence_of_a_blank(
+    raw_text: str, flags: list[str], credited: bool
+) -> None:
+    blank = ExpectedRow(label="Treasury shares", values={P.key: None})
+    blank_item = item(1, "Treasury shares", "0")
+    blank_item.cells[0].reported = None
+    blank_item.cells[0].raw_text = raw_text
+    blank_item.cells[0].flags = flags
+    score = score_statement(statement_of([blank]), extracted_of([blank_item]))
+    assert (score.cells, score.right) == (1, int(credited))
+    assert len(score.wrong) == int(not credited)
 
 
 def test_extra_rows_are_printed_for_drafts_too() -> None:

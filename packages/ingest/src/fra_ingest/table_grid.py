@@ -5,6 +5,7 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict
 
 from fra_core.schemas import BBox
+from fra_core.schemas.statement import PeriodEvidence
 from fra_ingest.docling_json import DlDocument, DlTable
 
 
@@ -22,6 +23,7 @@ class GridCell(BaseModel):
     is_row_section: bool = False
     page_no: int
     source_row: int | None = None  # the docling row of a cell that row alignment moved
+    source_col: int | None = None  # the docling column before numeric column assignment
     flags: tuple[str, ...] = ()
 
 
@@ -37,6 +39,7 @@ class Grid(BaseModel):
     cells: tuple[GridCell, ...]
     recovered_headers: tuple[GridCell, ...] = ()
     recovered_context: tuple[GridCell, ...] = ()
+    period_evidence: tuple[PeriodEvidence, ...] = ()
     flags: tuple[
         str, ...
     ] = ()  # what repair did to the table; the statement built from it carries them

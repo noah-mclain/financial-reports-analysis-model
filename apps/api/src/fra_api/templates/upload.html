@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block main %}
+<h1>Analyse a financial report</h1>
+<p class="muted">A statement of financial position and a profit or loss statement, in English or
+Arabic, digital or scanned. Up to {{ max_mb }} MB and {{ max_pages }} pages. Banks and insurers are
+declined with the reason.</p>
+<form class="panel" id="upload">
+  <label for="file">Financial report (PDF)</label>
+  <input type="file" id="file" name="file" accept="application/pdf,.pdf" required>
+  <button type="submit" id="send">Upload and analyse</button>
+  <p id="status" class="muted" role="status"></p>
+</form>
+<script>
+const form = document.getElementById("upload");
+const status = document.getElementById("status");
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const file = document.getElementById("file").files[0];
+  if (!file) return;
+  document.getElementById("send").disabled = true;
+  status.textContent = "Uploading…";
+  try {
+    const sent = await fetch("/documents", {
+      method: "POST",
+      headers: {"Content-Type": "application/pdf", "X-Filename": encodeURIComponent(file.name)},
+      body: file,
+    });
+    const upload = await sent.json();
+    if (!sent.ok) throw new Error(upload.detail || sent.statusText);
+    const queued = await fetch(`/documents/${upload.sha256}/analyses`, {method: "POST"});
+    const job = await queued.json();
+    if (!queued.ok) throw new Error(job.detail || queued.statusText);
+    window.location = `/jobs/${job.id}/view`;
+  } catch (error) {
+    status.textContent = `Not uploaded: ${error.message}`;
+    document.getElementById("send").disabled = false;
+  }
+});
+</script>
+{% endblock %}

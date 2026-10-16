@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Sequence
-from typing import Literal
-
-from pydantic import BaseModel, ConfigDict, Field
 
 from fra_core.schemas import Cell, CheckResult, Statement, StatementType
+
+# Defined in core so the worker and the API can read it; imported from here by ingest.
+from fra_core.schemas import StatementReview as StatementReview
 
 # In the order the reasons are listed.
 CRITICAL_CELL_FLAGS = (
@@ -25,9 +25,11 @@ CRITICAL_CELL_FLAGS = (
     "row_misaligned",
     "row_realigned",
     "ambiguous_separator",
+    "numeric_columns_split",
 )
 _HOLD_FLAGS = (
     "period_unbound",
+    "period_conflict",
     "scale_conflict",
     "currency_conflict",
     "currency_missing",
@@ -42,24 +44,17 @@ _WARNING_FLAGS = (
     "words_reversed",
     "word_order_uncertain",
 )
-_WARNING_CELL_FLAGS = ("label_merged", "blank_confirmed")
+_WARNING_CELL_FLAGS = (
+    "label_merged",
+    "label_words_from_page",
+    "blank_confirmed",
+    "numeric_columns_split",
+)
 _FAILED = (
     ("subtotal", "subtotal_failed"),
     ("balance_identity", "identity_failed"),
     ("net_profit_tie", "tie_failed"),
 )
-
-
-class StatementReview(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    statement_id: str
-    status: Literal["passed", "needs_review"]
-    reasons: list[str] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
-    numeric_cells: int = Field(ge=0)
-    checked_cells: int = Field(ge=0)
-    flagged_cells: int = Field(ge=0)
 
 
 def _lost(cell: Cell) -> bool:
@@ -99,7 +94,8 @@ def review_statement(
     reasons += [f for f in statement.flags if f.split(":")[0] in _HOLD_FLAGS]
     reasons += [f"{finding.reason}:{finding.item_id}" for finding in statement.mapping_findings]
     if not primary:
-        reasons = ["duplicate_statement"]
+        kept = [r for r in reasons if r.split(":")[0] == "period_conflict"]
+        reasons = [*kept, "duplicate_statement"]
     warnings = [f for f in statement.flags if f in _WARNING_FLAGS]
     warnings += [f"{flag}:{counts[flag]}" for flag in _WARNING_CELL_FLAGS if counts[flag]]
     vouched = {(i, c.period_key) for c in checks if c.status == "pass" for i in c.line_item_ids}

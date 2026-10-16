@@ -18,7 +18,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from fra_core.labels import normalize_label
 from fra_core.numbers import parse_number
 from fra_core.schemas import BBox, Cell, LineItem, Period, Provenance, StatementType, TextSource
+from fra_core.schemas.statement import PeriodConflict
 from fra_ingest.classify import Classification
+from fra_ingest.column_assignment import SPLIT_FLAG, is_merged_amount
 from fra_ingest.header import HeaderLayout, split_note
 from fra_ingest.label_match import LabelIndex, has_subtotal_cue, squash
 from fra_ingest.table_grid import Grid
@@ -47,6 +49,9 @@ _UNDER_HEADING = tuple(
 class PartialStatement(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    period_conflicts: tuple[PeriodConflict, ...] = ()
+
+    source_group: str | None = None
     type: StatementType
     confidence: float
     first_page: int
@@ -81,11 +86,22 @@ def _under_per_share_heading(label: str) -> bool:
     return any(cue in squash(label) for cue in _UNDER_HEADING)
 
 
-def column_centre(grid: Grid, col: int, rows: Sequence[int]) -> float | None:
+def column_centre(
+    grid: Grid, col: int, rows: Sequence[int], *, skip_merged: bool = False
+) -> float | None:
+    """The mean horizontal centre of the column's boxed cells over ``rows``. Split cells never
+    count; with ``skip_merged`` neither do cells still holding two merged amounts, whose
+    rectangle spans a neighbouring column too."""
     centres = []
     for row in rows:
         cell = grid.cell(row, col)
-        if cell is not None and cell.text and cell.bbox is not None:
+        if (
+            cell is not None
+            and cell.text
+            and cell.bbox is not None
+            and SPLIT_FLAG not in cell.flags
+            and not (skip_merged and is_merged_amount(cell.text))
+        ):
             centres.append((cell.bbox.left + cell.bbox.right) / 2)
     return sum(centres) / len(centres) if centres else None
 
@@ -93,10 +109,15 @@ def column_centre(grid: Grid, col: int, rows: Sequence[int]) -> float | None:
 def _band(
     grid: Grid, *, row: int | None = None, col: int | None = None
 ) -> tuple[float, float] | None:
+    # A split amount keeps the rectangle that spanned two columns: it is not evidence for the
+    # horizontal extent of either, though it still marks where its row is.
     boxes = [
         c.bbox
         for c in grid.cells
-        if c.bbox is not None and (row is None or c.row == row) and (col is None or c.col == col)
+        if c.bbox is not None
+        and (row is None or c.row == row)
+        and (col is None or c.col == col)
+        and (row is not None or SPLIT_FLAG not in c.flags)
     ]
     if not boxes:
         return None
@@ -164,6 +185,7 @@ def build_part(
         last_page=grid.page_no,
         page_width=grid.page_width,
         periods=periods,
+        period_conflicts=layout.period_conflicts,
         header_text=" ".join(layout.header_texts.values()),
         table_refs=[f"{grid.docling_path}{grid.table_ref}"],
         flags=[*layout.evidence, *grid.flags],
@@ -198,6 +220,8 @@ def build_part(
         if not has_values:
             under_per_share = named_per_share
         per_share = named_per_share or (under_per_share and _under_per_share_heading(label))
+        # The label's word gaps were restored from the page text, not read in the cell.
+        words_from_page = label_cell is not None and "words_from_page" in label_cell.flags
         cells = []
         for col, period in layout.value_cols.items():
             if not has_values:
@@ -216,6 +240,8 @@ def build_part(
                 flags.append("per_share")
             if row in merged_rows:
                 flags.append("label_merged")
+            if words_from_page:
+                flags.append("label_words_from_page")
             bbox = (
                 grid_cell.bbox
                 if grid_cell is not None and grid_cell.bbox is not None
@@ -239,12 +265,16 @@ def build_part(
                         row=grid_cell.source_row
                         if grid_cell is not None and grid_cell.source_row is not None
                         else row,
-                        col=col,
+                        col=grid_cell.source_col
+                        if grid_cell is not None and grid_cell.source_col is not None
+                        else col,
                         source=source,
                     ),
                     flags=flags,
                 )
             )
+        if words_from_page and not cells:  # a heading has no value cell to carry the flag
+            part.flags.append(f"label_words_from_page:{item_id}")
         part.line_items.append(
             LineItem(id=item_id, raw_label=label, note_ref=note or None, cells=cells)
         )

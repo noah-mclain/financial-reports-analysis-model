@@ -131,6 +131,70 @@ class Period(BaseModel):
         return self.kind is PeriodKind.DURATION and self.months == 12
 
 
+class PeriodObservation(BaseModel):
+    """A literal header reading in PDF points, before any text repair."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source_id: str = Field(min_length=1, pattern=r"^\S+$")
+    raw_text: str = Field(min_length=1)
+    docling_path: str = Field(min_length=1)
+    provenance: Provenance
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class PeriodEvidence(BaseModel):
+    """Caller-collected alternative readings of one header column."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    observations: tuple[PeriodObservation, ...] = Field(min_length=2)
+
+    @model_validator(mode="after")
+    def _same_column(self) -> PeriodEvidence:
+        identities = [o.source_id for o in self.observations]
+        if len(identities) != len(set(identities)):
+            raise ValueError("period evidence has duplicate source IDs")
+        scopes = {
+            (o.docling_path, o.provenance.page_no, o.provenance.table_ref, o.provenance.col)
+            for o in self.observations
+        }
+        if len(scopes) != 1:
+            raise ValueError("period evidence observations must name one path/page/table/column")
+        return self
+
+    @property
+    def col(self) -> int:
+        return self.observations[0].provenance.col
+
+
+class PeriodCandidate(BaseModel):
+    """The computed interpretation of one literal observation; None is unparseable."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    observation: PeriodObservation
+    period: Period | None
+
+
+class PeriodConflict(BaseModel):
+    """Unresolved alternatives which prohibit binding their header column."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    reason: Literal["differing_periods", "unparseable_observation", "conflicting_context"]
+    candidates: tuple[PeriodCandidate, ...] = Field(min_length=2)
+
+    @model_validator(mode="after")
+    def _observations(self) -> PeriodConflict:
+        PeriodEvidence(observations=tuple(c.observation for c in self.candidates))
+        return self
+
+    @property
+    def col(self) -> int:
+        return self.candidates[0].observation.provenance.col
+
+
 class Cell(BaseModel):
     """One value in one period, as printed."""
 
@@ -227,6 +291,7 @@ class Statement(BaseModel):
     periods: list[Period] = Field(min_length=1)
     line_items: list[LineItem] = Field(default_factory=list)
     mapping_findings: tuple[MappingFinding, ...] = ()
+    period_conflicts: tuple[PeriodConflict, ...] = ()
     source_pages: list[int] = Field(default_factory=list)
     flags: list[str] = Field(default_factory=list)
     caveats: list[Caveat] = Field(

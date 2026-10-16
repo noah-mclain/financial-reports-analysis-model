@@ -49,7 +49,14 @@ def settings_hash(
         "document_timeout_s": config.document_timeout_s,
         "docling": docling,
         "locate": locate_version,
-        "plans": [plan.model_dump(mode="json") for plan in plans],
+        # Omit only the legacy renderer value so unaffected ranges retain their existing
+        # cache keys. A pdfium selection is hashed and invalidates the old conversion.
+        "plans": [
+            plan.model_dump(
+                mode="json", exclude={"renderer"} if plan.renderer == "default" else set()
+            )
+            for plan in plans
+        ],
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 

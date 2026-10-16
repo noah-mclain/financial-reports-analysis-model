@@ -98,7 +98,7 @@ def test_pipeline_records_ocr_failure_in_range_output(
         first_page=1, last_page=1 + success_pages, ocr="full_page", ocr_language="en-US"
     )
     runner = converter.DoclingRunner(IngestConfig(convert_ocr="tesseract", device="cpu"))
-    runner._converters[(plan.ocr, plan.ocr_language)] = SimpleNamespace(
+    runner._converters[(plan.ocr, plan.ocr_language, plan.renderer)] = SimpleNamespace(
         convert=lambda *args, **kwargs: result
     )
     output = runner(Path("synthetic.pdf"), plan)

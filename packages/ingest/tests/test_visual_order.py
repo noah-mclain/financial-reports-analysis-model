@@ -5,6 +5,7 @@ from fra_core.periods import parse_period
 from fra_core.taxonomy.loader import load_taxonomy
 from fra_ingest.label_match import LabelIndex
 from fra_ingest.table_grid import Grid, GridCell
+from fra_ingest.text_match import canonical
 from fra_ingest.visual_order import (
     _matches,
     _reversed_words,
@@ -12,6 +13,7 @@ from fra_ingest.visual_order import (
     is_reorderable,
     join_spaced_letters,
     join_split_year,
+    page_vocabulary,
     repair_grid,
     repair_text,
     restore_digits,
@@ -253,3 +255,90 @@ def test_a_split_year_is_joined_in_column_headings_only() -> None:
     heading, body = repair_grid(grid, visual=False).cells
     assert heading.text == "31 مارس 2026 م" and heading.flags == ("year_joined",)
     assert body.text == "5 202" and body.flags == ()
+
+
+# ---- word boundaries from the page text ------------------------------------------------------
+# Almarai AR p156: docling spaces every letter of a label, and pypdfium2 prints the same line in
+# visual order with the word gaps kept (the lines below are copied from its text layer).
+
+ALMARAI_P156 = "\n".join(
+    [
+        "تادوجوملا",
+        "ةلوادتملا ريغ تادوجوملا",
+        "تادعمو تالآو تاكلتمم \xa0٢٦,٠٥٨,٦٣٢ \xa0٢٢,٧٥٠,٣٤٢",
+        "مادختسالا قح تادوجوم \xa0٥٥١,٦١٤ \xa0٥٠٤,٠٦٦",
+        "تاحاضيإ \xa0۳۱ ربمسيد م٢٠٢٥",
+        "فالآب X",
+    ]
+)
+VOCABULARY = page_vocabulary(ALMARAI_P156, visual=True)
+
+
+def test_a_joined_label_is_split_at_the_words_printed_on_its_page() -> None:
+    spaced = "م م ت ل ك ا ت و آ لا ت و م ع د ا ت"  # lam-alef as docling orders it
+    assert join_spaced_letters(spaced, VOCABULARY) == "ممتلكات وآلات ومعدات"
+    assert join_spaced_letters("م و ج و د ا ت ح ق ا لا س ت خ د ا م", VOCABULARY) == (
+        "موجودات حق الاستخدام"
+    )
+
+
+def test_a_heading_merged_into_a_label_gets_its_words_back_and_stays_merged() -> None:
+    spaced = (
+        "ا ل م و ج و د ا ت ا ل م و ج و د ا ت غ ي ر ا ل م ت د ا و ل ة "
+        "م م ت ل ك ا ت و آ لا ت و م ع د ا ت"
+    )
+    assert join_spaced_letters(spaced, VOCABULARY) == (
+        "الموجودات الموجودات غير المتداولة ممتلكات وآلات ومعدات"
+    )
+
+
+def test_a_letter_no_page_word_explains_stays_with_its_neighbour_not_alone() -> None:
+    # "م" (the year marker) is printed against the digits, so it is no page word of its own.
+    header = "۳۱ د ي س م ب ر ٢٠٢٥ م ب آ لا ف X"
+    assert join_spaced_letters(header, VOCABULARY) == "۳۱ ديسمبر ٢٠٢٥ م بآلاف X"
+
+
+def test_without_enough_page_words_the_letters_are_joined_as_before() -> None:
+    other_page = page_vocabulary("ةيويح تادوجوم", visual=True)
+    spaced = "م م ت ل ك ا ت و آ لا ت و م ع د ا ت"
+    assert join_spaced_letters(spaced, other_page) == "ممتلكاتوآلاتومعدات"
+    assert join_spaced_letters(spaced) == "ممتلكاتوآلاتومعدات"
+
+
+def test_the_vocabulary_is_the_same_whatever_order_the_text_layer_prints_words_in() -> None:
+    logical_letters = "ممتلكات وآلات ومعدات"  # letters in order, words in either order
+    assert page_vocabulary(logical_letters, visual=False) == page_vocabulary(
+        "ومعدات وآلات ممتلكات", visual=False
+    )
+    assert page_vocabulary("تادعمو تالآو تاكلتمم", visual=True) == page_vocabulary(
+        logical_letters, visual=False
+    )
+    assert page_vocabulary("Total assets 1,234", visual=False) == frozenset()
+
+
+def test_a_grid_split_by_page_words_is_flagged() -> None:
+    grid = Grid(
+        table_ref="#/tables/0",
+        docling_path="docling/p156-156.json",
+        page_no=156,
+        page_width=793.7,
+        num_rows=1,
+        num_cols=1,
+        cells=(
+            GridCell(
+                text="م م ت ل ك ا ت و آ لا ت و م ع د ا ت", row=0, col=0, bbox=None, page_no=156
+            ),
+        ),
+    )
+    (cell,) = repair_grid(grid, visual=True, vocabulary=VOCABULARY).cells
+    assert cell.text == "ممتلكات وآلات ومعدات"
+    assert cell.flags == ("letters_spaced", "words_from_page")
+
+
+def test_a_page_in_presentation_forms_or_with_vowel_marks_still_gives_its_words() -> None:
+    # "ممتلكات" in presentation forms, and "مقدما" written with its marks.
+    presentation = page_vocabulary("ﻣﻤﺘﻠﻜﺎﺕ", visual=False)
+    assert canonical("ممتلكات") in presentation
+    vowelled = page_vocabulary("مُقَدَّمًا طويلة", visual=False)
+    assert canonical("مقدما") in vowelled
+    assert page_vocabulary("م٢٠٢٥", visual=False) == frozenset()  # a digit ends a word

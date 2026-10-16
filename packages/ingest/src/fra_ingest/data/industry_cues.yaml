@@ -17,6 +17,16 @@ exclude:
   - تسهيلات بنكية
   - تأمين مدفوع مقدما
 
+# These phrases are also common in corporate notes and policy descriptions. Count them only
+# when they appear on a located balance or income statement page.
+contextual:
+  - investment income
+  - income from financial investments
+  - loan investments
+  - investment securities
+  - instalment credit debtors
+  - realised profit from instalment sales
+
 cues:
   bank:
     deposits from customers: 3
@@ -84,6 +94,11 @@ cues:
     أموال العملاء: 2
     تمويل الهامش: 2
   other_financial/investment_holding:
+    # Weak alone: ordinary corporates also earn investment income and hold securities.
+    investment income: 2
+    income from financial investments: 2
+    loan investments: 2
+    investment securities: 2
     net gains on investments at fair value through profit or loss: 2
     dividend income from investees: 2
     private equity: 2
@@ -93,6 +108,8 @@ cues:
     إيرادات توزيعات من الشركات المستثمر فيها: 2
     الاستثمارات المباشرة: 2
   other_financial/consumer_finance:
+    instalment credit debtors: 3
+    realised profit from instalment sales: 3
     income from islamic financing contracts: 3
     consumer finance: 3
     net investment in finance receivables: 2

@@ -121,6 +121,15 @@ def test_a_confirmed_blank_holds_nothing() -> None:
     assert review.status == "passed" and review.warnings == ["blank_confirmed:1"]
 
 
+def test_split_numeric_columns_warn_and_keep_a_checked_statement_reviewable() -> None:
+    rows = [item(1, "10", "numeric_columns_split"), *ROWS[1:]]
+    review = review_statement(statement(rows), PASSING, primary=True)
+    assert review.status == "needs_review"
+    assert review.warnings == ["numeric_columns_split:1"]
+    assert review.reasons == ["numeric_columns_split:1"]
+    assert review.flagged_cells == 1
+
+
 def test_statement_flags_hold_or_warn() -> None:
     held = review_statement(
         statement(ROWS, flags=("period_unbound:2", "scale_missing")), PASSING, primary=True
@@ -128,6 +137,9 @@ def test_statement_flags_hold_or_warn() -> None:
     assert held.reasons == ["period_unbound:2"] and held.warnings == ["scale_missing"]
     merged = [item(1, "10", "label_merged"), *ROWS[1:]]
     assert review_statement(statement(merged), PASSING, primary=True).warnings == ["label_merged:1"]
+    restored = [item(1, "10", "label_words_from_page"), *ROWS[1:]]
+    review = review_statement(statement(restored), PASSING, primary=True)
+    assert review.warnings == ["label_words_from_page:1"] and review.status == "passed"
 
 
 def test_a_word_order_repair_warns_and_holds_nothing() -> None:
@@ -142,6 +154,16 @@ def test_a_second_statement_of_a_type_is_held_as_a_duplicate() -> None:
     assert review_statement(statement(ROWS), PASSING, primary=False).reasons == [
         "duplicate_statement"
     ]
+
+
+def test_a_duplicate_keeps_its_period_conflict_reason() -> None:
+    conflicted = statement(ROWS, flags=("period_conflict:2",))
+    assert review_statement(conflicted, PASSING, primary=False).reasons == [
+        "period_conflict:2",
+        "duplicate_statement",
+    ]
+    assert "duplicate_statement" not in review_statement(conflicted, PASSING, primary=True).reasons
+    assert "period_conflict:2" in review_statement(conflicted, PASSING, primary=True).reasons
 
 
 def test_an_implausible_assumed_scale_holds() -> None:

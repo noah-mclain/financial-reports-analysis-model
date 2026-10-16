@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import os
 import tomllib
-from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from fra_core.paths import REPO_ROOT as REPO_ROOT
+from fra_core.paths import find_repo_root as find_repo_root
 from fra_core.schemas import StatementType
-
-_SOURCE_ROOT = Path(__file__).resolve().parents[4]
 
 # Names an OCR engine goes by in the settings; ``none`` leaves image pages unread.
 OcrEngineName = Literal["ocrmac", "tesseract", "none"]
@@ -20,19 +19,6 @@ OcrEngineName = Literal["ocrmac", "tesseract", "none"]
 OCR_ENGINE_ENV = "FRA_OCR_ENGINE"
 EFFECTIVE_CONFIG_ENV = "FRA_INGEST_EFFECTIVE_CONFIG"
 
-
-def find_repo_root(environ: Mapping[str, str], source_root: Path, cwd: Path) -> Path:
-    """Where configs/ and var/ live: ``FRA_ROOT`` when set (an installed copy, as in the
-    Docker image), else the source checkout when it holds the config, else the working
-    directory."""
-    if environ.get("FRA_ROOT"):
-        return Path(environ["FRA_ROOT"])
-    if (source_root / "configs" / "ingest.toml").is_file():
-        return source_root
-    return cwd
-
-
-REPO_ROOT = find_repo_root(os.environ, _SOURCE_ROOT, Path.cwd())
 DEFAULT_CONFIG_PATH = REPO_ROOT / "configs" / "ingest.toml"
 
 # (section, key) in the TOML file, to the field it sets.
@@ -49,6 +35,7 @@ _TOML_FIELDS: dict[tuple[str, str], str] = {
     ("structure", "header_ocr_scale"): "header_ocr_scale",
     ("convert", "device"): "device",
     ("convert", "ocr_engine"): "convert_ocr",
+    ("convert", "pdfium_full_page_languages"): "pdfium_full_page_languages",
     ("convert", "images_scale"): "images_scale",
     ("convert", "ocr_scale"): "ocr_scale",
     ("convert", "batch_size"): "batch_size",
@@ -83,6 +70,7 @@ class IngestConfig(BaseModel):
     low_selectivity_share: float = Field(default=0.25, gt=0.0, le=1.0)
     device: Literal["mps", "cpu", "auto"] = "mps"
     convert_ocr: OcrEngineName = "ocrmac"
+    pdfium_full_page_languages: tuple[str, ...] = ()
     images_scale: float = Field(default=2.0, gt=0.0, le=4.0)
     ocr_scale: float = Field(default=3.0, gt=0.0, le=6.0)
     # Tesseract only. Page segmentation mode (3 is Tesseract's own default) and the language
@@ -96,6 +84,25 @@ class IngestConfig(BaseModel):
     child_timeout_s: float = Field(default=900.0, gt=0.0)
     memory_budget_gb: float = Field(default=3.5, gt=0.0)
     artifact_root: Path = REPO_ROOT / "var" / "artifacts"
+
+    @model_validator(mode="after")
+    def _pdfium_languages_are_readable(self) -> IngestConfig:
+        # Reuse the engine's language contract without importing it at module load time.
+        from fra_ingest.ocr import engine_language
+
+        for language in self.pdfium_full_page_languages:
+            if language not in self.ocr_languages:
+                raise ValueError(
+                    f"pdfium_full_page_languages: {language!r} is not in ocr_languages"
+                )
+            # This is a Vision-only rule, validated even when the selected engine leaves
+            # it dormant (Tesseract is unmeasured; none skips scanned ranges).
+            vision = self.model_copy(update={"convert_ocr": "ocrmac"})
+            try:
+                engine_language(vision, language)
+            except ValueError as exc:
+                raise ValueError(f"pdfium_full_page_languages: {exc}") from exc
+        return self
 
     @model_validator(mode="after")
     def _types_are_disjoint(self) -> IngestConfig:

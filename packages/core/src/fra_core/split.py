@@ -377,12 +377,14 @@ def holdout_for_scoring(
     """The holdout documents for a dry run or a model scoring. `record` writes the look to the
     scoring log and is called before the documents are returned, so no holdout scoring goes
     unlogged; if it raises, no document leaves. `looks` are the rows already in the log."""
-    check_looks([*looks, look])
+    proposed_looks = [*looks, look]
+    check_looks(proposed_looks)
     if look.parts != (Part.HOLDOUT,):
         raise SplitError(
             f"a holdout scoring returns the holdout only; the look lists {','.join(look.parts)}"
         )
     check_moves(moves, looks)
+    check_moves(moves, proposed_looks)
     holdout = _place(documents, moves)[Part.HOLDOUT]
     record(look)
     return holdout

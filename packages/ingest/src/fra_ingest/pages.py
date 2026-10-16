@@ -149,6 +149,16 @@ def document_language(pages: Sequence[PageText]) -> str:
     return "ar" if arabic > latin else "en"
 
 
+def page_count(path: Path) -> int:
+    """How many pages the PDF has, without reading any: an encrypted or unreadable file is an
+    ``IngestError``, as when its pages are read."""
+    document = _open(path)
+    try:
+        return len(document)
+    finally:
+        document.close()
+
+
 def _open(path: Path) -> Any:
     try:
         return pdfium.PdfDocument(path)

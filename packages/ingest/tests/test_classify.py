@@ -169,3 +169,13 @@ def test_a_column_header_line_above_the_table_is_not_a_note_heading() -> None:
         )
         result = classify(g, parse_header(g, BALANCE, None), context, INDEX, 0.5)
         assert result.type is BALANCE, heading
+
+
+def test_rejected_classification_keeps_the_proposed_kind_as_a_typed_field() -> None:
+    rows = [HEADER, ["Total assets", "", "5", "4"], ["Inventories", "", "10", "8"]]
+    g = grid(rows)
+    result = classify(
+        g, parse_header(g, BALANCE, None), TableContext(cue_types=(BALANCE,)), INDEX, 0.5
+    )
+    assert result.type is None and result.proposed_type is BALANCE
+    assert result.confidence == 0.45 and "below_confidence" in result.evidence

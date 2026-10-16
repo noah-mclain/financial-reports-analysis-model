@@ -1,0 +1,5708 @@
+{
+  "document_id": "juhayna-2024-en-consolidated",
+  "document_sha256": "4c52b27b92e8de962ad49618aa0a7429f36e6324fd864ee2321b8c4222f1e953",
+  "pool": "dev",
+  "reference_method": "assisted_review",
+  "reference_file": "juhayna-2024-en-consolidated.gold.json",
+  "reference_sha256": "54bb9de85770edb513f5846f067a09aa85374e947f18abdf64f90131a01e3ad5",
+  "reference_cells": 124,
+  "run_count": 2,
+  "capture_base_revision": "a4ba91d8f89672b2d8e9952c43642483658a3b6b",
+  "structure_versions": [
+    "19",
+    "19"
+  ],
+  "snapshot_sha256": [
+    "6230b57e0742d5af15d9dea01e62e880f406c2d6a66e2fcb8d733e69c2c502c5",
+    "c1c557986256e26894c3d54173bb212ca563621e5fc083b8c784d1fe31a389cd"
+  ],
+  "snapshot_settings_hashes": [
+    "c3dea590622dedf916f5887a5a632ac78f0269ebb598add471053481d3da7753",
+    "c3dea590622dedf916f5887a5a632ac78f0269ebb598add471053481d3da7753"
+  ],
+  "excluded_duplicate_review_cells": [
+    [
+      101,
+      102
+    ],
+    [
+      137,
+      138
+    ]
+  ],
+  "excluded_duplicate_of": [
+    [
+      95,
+      96
+    ],
+    [
+      131,
+      132
+    ]
+  ],
+  "alignment_note": "Rows use the submitted packet slots after duplicate exclusions. The last two balance-sheet slots were semantically repaired by review; prediction_source remains the original extracted coordinate, not validated reference provenance. The combined liabilities/equity footer is not separately represented in this reference.",
+  "repeat_cells": [
+    {
+      "statement": "balance",
+      "label": "Property, plant and equipment",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "3856899018",
+        "3856899018"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Property, plant and equipment",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "3077685183",
+        "3077685183"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Projects under connion",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "1511945561",
+        "1511945561"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Projects under connion",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "299334840",
+        "299334840"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Biological easeta",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "445704631",
+        "445704631"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Biological easeta",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "305114220",
+        "305114220"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Equity accounted investees",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "18025352",
+        "18025352"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Equity accounted investees",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "15670070",
+        "15670070"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Right of use assets",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "93038704",
+        "93038704"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Right of use assets",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "38965498",
+        "38965498"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Good will",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "97092890",
+        "97092890"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Good will",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "97092890",
+        "97092890"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Other long tenn asset",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "699057",
+        "699057"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Other long tenn asset",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "707325",
+        "707325"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Non-current sasets",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "6053405411",
+        "6053405411"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Non-current sasets",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "3834571030",
+        "3834571030"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Inventory",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "4177070922",
+        "4177070922"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Inventory",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "2783515178",
+        "2783515178"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Trade and other reselvables",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "1501832833",
+        "1501832833"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Trade and other reselvables",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "834918362",
+        "834918362"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Due from related party",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "3421436",
+        "3421436"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Due from related party",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "2760164",
+        "2760164"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Other biological assets",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "43487421",
+        "43487421"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Other biological assets",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "29465780",
+        "29465780"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Cash and cash equivaleras",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "1811244599",
+        "1811244599"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Cash and cash equivaleras",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "1093526328",
+        "1093526328"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "PPE held for sale",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        null,
+        null
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "PPE held for sale",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "1610291",
+        "1610291"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        null,
+        null
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "4745796103",
+        "4745796103"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "",
+      "period": "2024-12-31",
+      "occurrence": 1,
+      "values": [
+        "13590052624",
+        "13590052624"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "",
+      "period": "2023-12-31",
+      "occurrence": 1,
+      "values": [
+        "8580367133",
+        "8580367133"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "ed and peld up capital",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "941405082",
+        "941405082"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "ed and peld up capital",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "941405082",
+        "941405082"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "",
+      "period": "2024-12-31",
+      "occurrence": 2,
+      "values": [
+        "742112953",
+        "742112953"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "",
+      "period": "2023-12-31",
+      "occurrence": 2,
+      "values": [
+        "742112963",
+        "742112963"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "",
+      "period": "2024-12-31",
+      "occurrence": 3,
+      "values": [
+        "330920418",
+        "330920418"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "",
+      "period": "2023-12-31",
+      "occurrence": 3,
+      "values": [
+        "330920438",
+        "330920438"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "ined enmings",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "4324257519",
+        "4324257519"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "ined enmings",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "2233885644",
+        "2233885644"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "equity attributable to on",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "6338696002",
+        "6338696002"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "equity attributable to on",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "4248324117",
+        "4248324117"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "elling Interest",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "628458",
+        "628458"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "elling Interest",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "1444468",
+        "1444468"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "",
+      "period": "2024-12-31",
+      "occurrence": 4,
+      "values": [
+        "6339324470",
+        "6339324470"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "",
+      "period": "2023-12-31",
+      "occurrence": 4,
+      "values": [
+        "4249768585",
+        "4249768585"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "",
+      "period": "2024-12-31",
+      "occurrence": 5,
+      "values": [
+        "578066880",
+        "578066880"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "",
+      "period": "2023-12-31",
+      "occurrence": 5,
+      "values": [
+        "90395408",
+        "90395408"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Lease contrast llabittles",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "84041450",
+        "84041450"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Lease contrast llabittles",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "53847845",
+        "53847845"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Deferred tax liabilties",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "387421265",
+        "387421265"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Deferred tax liabilties",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "321767403",
+        "321767403"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Deferred Incor",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "2199658",
+        "2199658"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Deferred Incor",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "6023113",
+        "6023113"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Non-eurrent liabilities",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "1051729353",
+        "1051729353"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Non-eurrent liabilities",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "472033765",
+        "472033765"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Provision",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "238224163",
+        "238224163"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Provision",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "183529210",
+        "183529210"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Bank credk facilities",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "1909495624",
+        "1909495624"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Bank credk facilities",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "1096229655",
+        "1096229655"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Creditees and other credit balsaces",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "2006712301",
+        "2006712301"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Creditees and other credit balsaces",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "3261080629",
+        "3261080629"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Due to related parties",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        null,
+        null
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Due to related parties",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "17871750",
+        "17871750"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Income tax Sabillies",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "712162570",
+        "712162570"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Income tax Sabillies",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "177047207",
+        "177047207"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Lease connects labilities",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "67487158",
+        "67487158"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Lease connects labilities",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "57958125",
+        "57958125"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Loars",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "271503629",
+        "271503629"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Loars",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "57204336",
+        "57204336"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Deferred income",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "38234566199408901",
+        "38234566199408901"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Deferred income",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "76438563858564779",
+        "76438563858564779"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Current Viabilitica Total Gabilities",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "7251138154",
+        "7251138154"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Current Viabilitica Total Gabilities",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "4330598541",
+        "4330598541"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Total equity and total liablities",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "13550452624",
+        "13550452624"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Total equity and total liablities",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "8580367133",
+        "8580367133"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Share percentage",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "0.5075",
+        "0.5075"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Share percentage",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        null,
+        null
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Current assets",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "1890737018907370",
+        "1890737018907370"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Current assets",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "20079566",
+        "20079566"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Total assets",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "1890737018907370",
+        "1890737018907370"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Total assets",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "20079566",
+        "20079566"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Current liabilities",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "32373003237300",
+        "32373003237300"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Current liabilities",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "2054014",
+        "2054014"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Total liabilities",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "32373003237300",
+        "32373003237300"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Total liabilities",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "2054014",
+        "2054014"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Carrying amount of investment",
+      "period": "2023-12-31",
+      "occurrence": 0,
+      "values": [
+        "1567007015670070",
+        "1567007015670070"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "balance",
+      "label": "Carrying amount of investment",
+      "period": "2024-12-31",
+      "occurrence": 0,
+      "values": [
+        "18025552",
+        "18025552"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "comprehensive_income",
+      "label": "Net profit for the year after tax",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "2735394516",
+        "2735394516"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "comprehensive_income",
+      "label": "Net profit for the year after tax",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "1021460218",
+        "1021460218"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "comprehensive_income",
+      "label": "Losses of foreign currency evaluation (EAS 13 - appendix H)",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "-344814387",
+        "-344814387"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "comprehensive_income",
+      "label": "Losses of foreign currency evaluation (EAS 13 - appendix H)",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        null,
+        null
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "comprehensive_income",
+      "label": "Tax impact (EAS 13 - appendix H)",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "-3677680",
+        "-3677680"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "comprehensive_income",
+      "label": "Tax impact (EAS 13 - appendix H)",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        null,
+        null
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "comprehensive_income",
+      "label": "Total comprehensive income",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "2386902449",
+        "2386902449"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "comprehensive_income",
+      "label": "Total comprehensive income",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "1021460218",
+        "1021460218"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "comprehensive_income",
+      "label": "Parent owners of the company",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "2386802102",
+        "2386802102"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "comprehensive_income",
+      "label": "Parent owners of the company",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "1020909888",
+        "1020909888"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "comprehensive_income",
+      "label": "Non-controlling interests",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "100347",
+        "100347"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "comprehensive_income",
+      "label": "Non-controlling interests",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "550330",
+        "550330"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "comprehensive_income",
+      "label": "",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "2386902449",
+        "2386902449"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "comprehensive_income",
+      "label": "",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "1021460218",
+        "1021460218"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Net sales",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "24302616048",
+        "24302616048"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Net sales",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "15536190159",
+        "15536190159"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Cost of sales",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "-16912916624",
+        "-16912916624"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Cost of sales",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "-11926060448",
+        "-11926060448"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Gross profit",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "7389699424",
+        "7389699424"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Gross profit",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "3610129711",
+        "3610129711"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Other operating income",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "332938371",
+        "332938371"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Other operating income",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "159994633",
+        "159994633"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Selling and Marketing expenses",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "-2159669231",
+        "-2159669231"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Selling and Marketing expenses",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "-1342075407",
+        "-1342075407"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "General and administrative expenses",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "-644978687",
+        "-644978687"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "General and administrative expenses",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "-388147620",
+        "-388147620"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Net (Losses) income/ Reverse of Impairment of trade and other receivables",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "-3081048",
+        "-3081048"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Net (Losses) income/ Reverse of Impairment of trade and other receivables",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "5971372",
+        "5971372"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Other expenses",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "-221931314",
+        "-221931314"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Other expenses",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "-243943082",
+        "-243943082"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Results from operating activities",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "4692977515",
+        "4692977515"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Results from operating activities",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "1801929607",
+        "1801929607"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Share of net (Loss) /profit of Equity accounted investees",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "2355482",
+        "2355482"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Share of net (Loss) /profit of Equity accounted investees",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "-1256023",
+        "-1256023"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Net finance (cost)",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "-596428158",
+        "-596428158"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Net finance (cost)",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "-320893260",
+        "-320893260"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Loss on sale of investment at FV through profit or loss",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "-522059933",
+        "-522059933"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Loss on sale of investment at FV through profit or loss",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "-115108535",
+        "-115108535"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Net profit for the year before income tax",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "3576844906",
+        "3576844906"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Net profit for the year before income tax",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "1364671789",
+        "1364671789"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Current income tax",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "-841450390",
+        "-841450390"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Current income tax",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "-343211571",
+        "-343211571"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Net profit for the year after tax",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "2735394516",
+        "2735394516"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Net profit for the year after tax",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "1021460218",
+        "1021460218"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Owners of the company",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "2735294169",
+        "2735294169"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Owners of the company",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "1020909888",
+        "1020909888"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Non-controlling interests",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "100347",
+        "100347"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Non-controlling interests",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "550330",
+        "550330"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "2735394516",
+        "2735394516"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "1021460218",
+        "1021460218"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Earning per share for the year (L.E/share )",
+      "period": "FY2024",
+      "occurrence": 0,
+      "values": [
+        "2.91",
+        "2.91"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    },
+    {
+      "statement": "income",
+      "label": "Earning per share for the year (L.E/share )",
+      "period": "FY2023",
+      "occurrence": 0,
+      "values": [
+        "0.98",
+        "0.98"
+      ],
+      "present": [
+        true,
+        true
+      ]
+    }
+  ],
+  "observations": [
+    {
+      "statement": "balance",
+      "row": 0,
+      "period": "2024-12-31",
+      "expected": "3886899018",
+      "reported": [
+        "3856899018",
+        "3856899018"
+      ],
+      "cause": "recognition_digits",
+      "page": 5,
+      "predicted_label": "Property, plant and equipment",
+      "raw_text": "3 856 899 018",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 375.0821362923645,
+          "top": 169.99999989276748,
+          "right": 417.84394161420636,
+          "bottom": 177.45639535988985
+        },
+        "table_ref": "#/tables/0",
+        "row": 3,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 0,
+      "period": "2023-12-31",
+      "expected": "3077685183",
+      "reported": [
+        "3077685183",
+        "3077685183"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Property, plant and equipment",
+      "raw_text": "3 077 685 183",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 439.83572971961354,
+          "top": 169.99999989241982,
+          "right": 482.5975350414554,
+          "bottom": 177.4563953595422
+        },
+        "table_ref": "#/tables/0",
+        "row": 3,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 1,
+      "period": "2024-12-31",
+      "expected": "1511945561",
+      "reported": [
+        "1511945561",
+        "1511945561"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Projects under connion",
+      "raw_text": "1 511 945 561",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 374.9050597175738,
+          "top": 179.36580880980213,
+          "right": 417.96132694650663,
+          "bottom": 188.37946033975007
+        },
+        "table_ref": "#/tables/0",
+        "row": 4,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 1,
+      "period": "2023-12-31",
+      "expected": "299334840",
+      "reported": [
+        "299334840",
+        "299334840"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Projects under connion",
+      "raw_text": "299 334 840",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 444.7227931364743,
+          "top": 179.90406968347773,
+          "right": 482.5975352834436,
+          "bottom": 189.69476741703895
+        },
+        "table_ref": "#/tables/0",
+        "row": 4,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 2,
+      "period": "2024-12-31",
+      "expected": "445704631",
+      "reported": [
+        "445704631",
+        "445704631"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Biological easeta",
+      "raw_text": "445 704 631",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 379.8770704301553,
+          "top": 190.4915468693681,
+          "right": 417.93607112676256,
+          "bottom": 199.9125228723791
+        },
+        "table_ref": "#/tables/0",
+        "row": 5,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 2,
+      "period": "2023-12-31",
+      "expected": "305114220",
+      "reported": [
+        "305114220",
+        "305114220"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Biological easeta",
+      "raw_text": "305 114 220",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 444.72279313429254,
+          "top": 190.91860476893564,
+          "right": 482.59753528126186,
+          "bottom": 199.48546496791027
+        },
+        "table_ref": "#/tables/0",
+        "row": 5,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 3,
+      "period": "2024-12-31",
+      "expected": "18025552",
+      "reported": [
+        "18025352",
+        "18025352"
+      ],
+      "cause": "recognition_digits",
+      "page": 5,
+      "predicted_label": "Equity accounted investees",
+      "raw_text": "18 025 352",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 383.5388260882314,
+          "top": 200.31025362258015,
+          "right": 417.9396131427227,
+          "bottom": 209.67521143202828
+        },
+        "table_ref": "#/tables/0",
+        "row": 6,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 3,
+      "period": "2023-12-31",
+      "expected": "15670070",
+      "reported": [
+        "15670070",
+        "15670070"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Equity accounted investees",
+      "raw_text": "15 670 070",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 448.3880903922464,
+          "top": 200.66666657385426,
+          "right": 482.5975351580614,
+          "bottom": 210.49999990718763
+        },
+        "table_ref": "#/tables/0",
+        "row": 6,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 4,
+      "period": "2024-12-31",
+      "expected": "93038704",
+      "reported": [
+        "93038704",
+        "93038704"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Right of use assets",
+      "raw_text": "93 038 704",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 383.63449720851,
+          "top": 211.66666662349724,
+          "right": 416.6221761806069,
+          "bottom": 219.0668604736966
+        },
+        "table_ref": "#/tables/0",
+        "row": 7,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 4,
+      "period": "2023-12-31",
+      "expected": "38966498",
+      "reported": [
+        "38965498",
+        "38965498"
+      ],
+      "cause": "recognition_digits",
+      "page": 5,
+      "predicted_label": "Right of use assets",
+      "raw_text": "38 965 498",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 449.59662442168775,
+          "top": 211.6640014208082,
+          "right": 482.6107676531555,
+          "bottom": 219.12669622468195
+        },
+        "table_ref": "#/tables/0",
+        "row": 7,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 5,
+      "period": "2024-12-31",
+      "expected": "97092890",
+      "reported": [
+        "97092890",
+        "97092890"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Good will",
+      "raw_text": "97 092 890",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 383.63449720851014,
+          "top": 221.51453484685644,
+          "right": 416.622176180607,
+          "bottom": 228.9999998966001
+        },
+        "table_ref": "#/tables/0",
+        "row": 8,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 5,
+      "period": "2023-12-31",
+      "expected": "97092890",
+      "reported": [
+        "97092890",
+        "97092890"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Good will",
+      "raw_text": "97 092 890",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 449.6098565465388,
+          "top": 221.51453484685644,
+          "right": 482.59753551863565,
+          "bottom": 228.9999998966001
+        },
+        "table_ref": "#/tables/0",
+        "row": 8,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 6,
+      "period": "2024-12-31",
+      "expected": "699057",
+      "reported": [
+        "699057",
+        "699057"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Other long tenn asset",
+      "raw_text": "699 057",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 393.40862403501956,
+          "top": 231.30523251556374,
+          "right": 416.6221766573715,
+          "bottom": 238.6666668163043
+        },
+        "table_ref": "#/tables/0",
+        "row": 9,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 6,
+      "period": "2023-12-31",
+      "expected": "707329",
+      "reported": [
+        "707325",
+        "707325"
+      ],
+      "cause": "recognition_digits",
+      "page": 5,
+      "predicted_label": "Other long tenn asset",
+      "raw_text": "707 325",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 458.1622174709653,
+          "top": 231.30523251556374,
+          "right": 481.37577009331716,
+          "bottom": 238.6666668163043
+        },
+        "table_ref": "#/tables/0",
+        "row": 9,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 7,
+      "period": "2024-12-31",
+      "expected": "6053405413",
+      "reported": [
+        "6053405411",
+        "6053405411"
+      ],
+      "cause": "recognition_digits",
+      "page": 5,
+      "predicted_label": "Non-current sasets",
+      "raw_text": "6 053 405 411",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 381.1909655995133,
+          "top": 242.31976739808488,
+          "right": 419.0657077464827,
+          "bottom": 249.666666748569
+        },
+        "table_ref": "#/tables/0",
+        "row": 10,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 7,
+      "period": "2023-12-31",
+      "expected": "3834571030",
+      "reported": [
+        "3834571030",
+        "3834571030"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Non-current sasets",
+      "raw_text": "3 834 571 030",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 444.7227931943876,
+          "top": 242.31976740702154,
+          "right": 483.819301135075,
+          "bottom": 249.6666667575058
+        },
+        "table_ref": "#/tables/0",
+        "row": 10,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 8,
+      "period": "2024-12-31",
+      "expected": "4177070922",
+      "reported": [
+        "4177070922",
+        "4177070922"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Inventory",
+      "raw_text": "4 177 070 922",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 371.35712034448744,
+          "top": 270.17691242625995,
+          "right": 417.9036604285916,
+          "bottom": 280.54983119101007
+        },
+        "table_ref": "#/tables/0",
+        "row": 12,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 8,
+      "period": "2023-12-31",
+      "expected": "2783515178",
+      "reported": [
+        "2783515178",
+        "2783515178"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Inventory",
+      "raw_text": "2 783 515 178",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 439.8357297305727,
+          "top": 270.33333340618265,
+          "right": 482.59753505241457,
+          "bottom": 279.0348835719949
+        },
+        "table_ref": "#/tables/0",
+        "row": 12,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 9,
+      "period": "2024-12-31",
+      "expected": "1501832833",
+      "reported": [
+        "1501832833",
+        "1501832833"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Trade and other reselvables",
+      "raw_text": "1 501 832 833",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 373.86037001207706,
+          "top": 280.25872080275434,
+          "right": 416.6221753339189,
+          "bottom": 290.04941853631544
+        },
+        "table_ref": "#/tables/0",
+        "row": 13,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 9,
+      "period": "2023-12-31",
+      "expected": "834918362",
+      "reported": [
+        "834918362",
+        "834918362"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Trade and other reselvables",
+      "raw_text": "834 918 362",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 443.50102722475276,
+          "top": 281.33333334123364,
+          "right": 481.37576937172213,
+          "bottom": 290.0494184573021
+        },
+        "table_ref": "#/tables/0",
+        "row": 13,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 10,
+      "period": "2024-12-31",
+      "expected": "3421436",
+      "reported": [
+        "3421436",
+        "3421436"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Due from related party",
+      "raw_text": "3 421 436",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 384.8562628301125,
+          "top": 290.000000027771,
+          "right": 416.6221760084913,
+          "bottom": 300.000000027771
+        },
+        "table_ref": "#/tables/0",
+        "row": 14,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 10,
+      "period": "2023-12-31",
+      "expected": "2760164",
+      "reported": [
+        "2760164",
+        "2760164"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Due from related party",
+      "raw_text": "2 760 164",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 452.05338819597296,
+          "top": 289.9999999500314,
+          "right": 481.3757697869155,
+          "bottom": 298.66666661669814
+        },
+        "table_ref": "#/tables/0",
+        "row": 14,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 11,
+      "period": "2024-12-31",
+      "expected": "43487421",
+      "reported": [
+        "43487421",
+        "43487421"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Other biological assets",
+      "raw_text": "43 487 421",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 384.65672510626797,
+          "top": 299.70942016388284,
+          "right": 416.7803607518108,
+          "bottom": 308.05943230733584
+        },
+        "table_ref": "#/tables/0",
+        "row": 15,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 11,
+      "period": "2023-12-31",
+      "expected": "29465780",
+      "reported": [
+        "29465780",
+        "29465780"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Other biological assets",
+      "raw_text": "29 465 780",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 449.54549148660846,
+          "top": 299.595233791646,
+          "right": 481.44013452902453,
+          "bottom": 308.65185915785696
+        },
+        "table_ref": "#/tables/0",
+        "row": 15,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 12,
+      "period": "2024-12-31",
+      "expected": "1811244599",
+      "reported": [
+        "1811244599",
+        "1811244599"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Cash and cash equivaleras",
+      "raw_text": "1 811 244 599",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 373.86037001207706,
+          "top": 309.6308136511296,
+          "right": 416.6221753339189,
+          "bottom": 320.6666667191635
+        },
+        "table_ref": "#/tables/0",
+        "row": 16,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 12,
+      "period": "2023-12-31",
+      "expected": "1093526328",
+      "reported": [
+        "1093526328",
+        "1093526328"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Cash and cash equivaleras",
+      "raw_text": "1 093 526 328",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 439.81604159449483,
+          "top": 310.7582688245423,
+          "right": 481.3954572565192,
+          "bottom": 319.5178939415263
+        },
+        "table_ref": "#/tables/0",
+        "row": 16,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 13,
+      "period": "2024-12-31",
+      "expected": "0",
+      "reported": [
+        null,
+        null
+      ],
+      "cause": "lost_dash",
+      "page": 5,
+      "predicted_label": "PPE held for sale",
+      "raw_text": "",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 371.35712034448744,
+          "top": 320.6453487783157,
+          "right": 419.13955314755094,
+          "bottom": 329.3333332619524
+        },
+        "table_ref": "#/tables/0",
+        "row": 17,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": [
+        "numbers_missing",
+        "bbox_synthesized"
+      ]
+    },
+    {
+      "statement": "balance",
+      "row": 13,
+      "period": "2023-12-31",
+      "expected": "1610291",
+      "reported": [
+        "1610291",
+        "1610291"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "PPE held for sale",
+      "raw_text": "1 610 291",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 452.0533882894459,
+          "top": 320.6453487783157,
+          "right": 482.59753567410644,
+          "bottom": 327.9999999115352
+        },
+        "table_ref": "#/tables/0",
+        "row": 17,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 14,
+      "period": "2024-12-31",
+      "expected": "7537057211",
+      "reported": [
+        null,
+        null
+      ],
+      "cause": "trailing_mark",
+      "page": 5,
+      "predicted_label": "",
+      "raw_text": "7 537 057 211/",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 379.9691997367918,
+          "top": 331.6598836803941,
+          "right": 419.06570767747934,
+          "bottom": 339.00290698056506
+        },
+        "table_ref": "#/tables/0",
+        "row": 18,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": [
+        "unparsed"
+      ]
+    },
+    {
+      "statement": "balance",
+      "row": 14,
+      "period": "2023-12-31",
+      "expected": "4745796103",
+      "reported": [
+        "4745796103",
+        "4745796103"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "",
+      "raw_text": "4 745 796 103",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 444.72279317031325,
+          "top": 331.65988368126835,
+          "right": 483.8193011110008,
+          "bottom": 339.0029069814393
+        },
+        "table_ref": "#/tables/0",
+        "row": 18,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 15,
+      "period": "2024-12-31",
+      "expected": "13590462624",
+      "reported": [
+        "13590052624",
+        "13590052624"
+      ],
+      "cause": "recognition_digits",
+      "page": 5,
+      "predicted_label": "",
+      "raw_text": "13 590 052 624",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 377.52566676282555,
+          "top": 341.33333345631354,
+          "right": 419.065708832657,
+          "bottom": 348.7936046558578
+        },
+        "table_ref": "#/tables/0",
+        "row": 19,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 15,
+      "period": "2023-12-31",
+      "expected": "8580367133",
+      "reported": [
+        "8580367133",
+        "8580367133"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "",
+      "raw_text": "8 580 367 133",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 445.9445590211422,
+          "top": 341.33333345631354,
+          "right": 483.8193011681116,
+          "bottom": 348.7936046558578
+        },
+        "table_ref": "#/tables/0",
+        "row": 19,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 16,
+      "period": "2024-12-31",
+      "expected": "941405082",
+      "reported": [
+        "941405082",
+        "941405082"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "ed and peld up capital",
+      "raw_text": "941 405 082",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 379.9290457531268,
+          "top": 370.61695761420333,
+          "right": 416.66232989922105,
+          "bottom": 378.37141445217526
+        },
+        "table_ref": "#/tables/0",
+        "row": 20,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 16,
+      "period": "2023-12-31",
+      "expected": "941405082",
+      "reported": [
+        "941405082",
+        "941405082"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "ed and peld up capital",
+      "raw_text": "941 405 082",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 445.92889698591557,
+          "top": 370.74378167621336,
+          "right": 482.6131973434395,
+          "bottom": 378.2445903920338
+        },
+        "table_ref": "#/tables/0",
+        "row": 20,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 17,
+      "period": "2024-12-31",
+      "expected": "742112963",
+      "reported": [
+        "742112953",
+        "742112953"
+      ],
+      "cause": "recognition_digits",
+      "page": 5,
+      "predicted_label": "",
+      "raw_text": "742 112 953",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 381.1909655010342,
+          "top": 380.6133720581845,
+          "right": 416.62217606056737,
+          "bottom": 387.99999989123285
+        },
+        "table_ref": "#/tables/0",
+        "row": 21,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 17,
+      "period": "2023-12-31",
+      "expected": "742112963",
+      "reported": [
+        "742112963",
+        "742112963"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "",
+      "raw_text": "742 112 963",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 445.9043974087936,
+          "top": 380.41467782837327,
+          "right": 481.41593101141524,
+          "bottom": 388.1550895867961
+        },
+        "table_ref": "#/tables/0",
+        "row": 21,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 18,
+      "period": "2024-12-31",
+      "expected": "330920428",
+      "reported": [
+        "330920418",
+        "330920418"
+      ],
+      "cause": "recognition_digits",
+      "page": 5,
+      "predicted_label": "",
+      "raw_text": "330 920 418",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 379.96919964729636,
+          "top": 390.33333332979896,
+          "right": 416.6221760005476,
+          "bottom": 396.6666666631324
+        },
+        "table_ref": "#/tables/0",
+        "row": 22,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 18,
+      "period": "2023-12-31",
+      "expected": "330920428",
+      "reported": [
+        "330920438",
+        "330920438"
+      ],
+      "cause": "recognition_digits",
+      "page": 5,
+      "predicted_label": "",
+      "raw_text": "330 920 438",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 444.70283559067707,
+          "top": 390.30324283306794,
+          "right": 481.39572691983693,
+          "bottom": 397.84791993166004
+        },
+        "table_ref": "#/tables/0",
+        "row": 22,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 19,
+      "period": "2024-12-31",
+      "expected": "4324257529",
+      "reported": [
+        "4324257519",
+        "4324257519"
+      ],
+      "cause": "recognition_digits",
+      "page": 5,
+      "predicted_label": "ined enmings",
+      "raw_text": "4 324 257 519",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 375.0821349614908,
+          "top": 400.1947674088835,
+          "right": 416.6221770313222,
+          "bottom": 407.6666667593677
+        },
+        "table_ref": "#/tables/0",
+        "row": 23,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 19,
+      "period": "2023-12-31",
+      "expected": "2233885644",
+      "reported": [
+        "2233885644",
+        "2233885644"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "ined enmings",
+      "raw_text": "2 233 885 644",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 439.83572971972586,
+          "top": 400.1947674088835,
+          "right": 482.5975350415677,
+          "bottom": 407.6666667593677
+        },
+        "table_ref": "#/tables/0",
+        "row": 23,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 20,
+      "period": "2024-12-31",
+      "expected": "6338696002",
+      "reported": [
+        "6338696002",
+        "6338696002"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "equity attributable to on",
+      "raw_text": "6 338 696 002",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 379.9691997653652,
+          "top": 411.2093024561753,
+          "right": 419.06570770605276,
+          "bottom": 417.3333332051784
+        },
+        "table_ref": "#/tables/0",
+        "row": 24,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": [
+        "digit_suspect"
+      ]
+    },
+    {
+      "statement": "balance",
+      "row": 20,
+      "period": "2023-12-31",
+      "expected": "4248324117",
+      "reported": [
+        "4248324117",
+        "4248324117"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "equity attributable to on",
+      "raw_text": "4 248 324 117",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 444.67248263870897,
+          "top": 409.7077967642585,
+          "right": 483.86961169925553,
+          "bottom": 417.6061566987474
+        },
+        "table_ref": "#/tables/0",
+        "row": 24,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 21,
+      "period": "2024-12-31",
+      "expected": "628468",
+      "reported": [
+        "628458",
+        "628458"
+      ],
+      "cause": "recognition_digits",
+      "page": 5,
+      "predicted_label": "elling Interest",
+      "raw_text": "628 458",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 392.1638188793691,
+          "top": 419.68293616480895,
+          "right": 416.6452159122403,
+          "bottom": 425.9885754317767
+        },
+        "table_ref": "#/tables/0",
+        "row": 25,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": [
+        "digit_suspect"
+      ]
+    },
+    {
+      "statement": "balance",
+      "row": 21,
+      "period": "2023-12-31",
+      "expected": "1444468",
+      "reported": [
+        "1444468",
+        "1444468"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "elling Interest",
+      "raw_text": "1 444 468",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 452.011671209952,
+          "top": 419.5988047609457,
+          "right": 482.6392526877847,
+          "bottom": 427.2965440441896
+        },
+        "table_ref": "#/tables/0",
+        "row": 25,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 22,
+      "period": "2024-12-31",
+      "expected": "6339324470",
+      "reported": [
+        "6339324470",
+        "6339324470"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "",
+      "raw_text": "6 339 324 470",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 379.96919976297255,
+          "top": 430.66666657223305,
+          "right": 419.06570770366005,
+          "bottom": 438.1337209392985
+        },
+        "table_ref": "#/tables/0",
+        "row": 26,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": [
+        "digit_suspect"
+      ]
+    },
+    {
+      "statement": "balance",
+      "row": 22,
+      "period": "2023-12-31",
+      "expected": "4249768585",
+      "reported": [
+        "4249768585",
+        "4249768585"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "",
+      "raw_text": "4 249 768 585",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 444.72279197955123,
+          "top": 430.66666657310725,
+          "right": 485.0410682556644,
+          "bottom": 438.1337209401727
+        },
+        "table_ref": "#/tables/0",
+        "row": 26,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 23,
+      "period": "2024-12-31",
+      "expected": "578066880",
+      "reported": [
+        "578066880",
+        "578066880"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "",
+      "raw_text": "578 066 880",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 378.74743379559476,
+          "top": 459.9999998822224,
+          "right": 416.62217594256407,
+          "bottom": 468.7296510154418
+        },
+        "table_ref": "#/tables/0",
+        "row": 28,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 23,
+      "period": "2023-12-31",
+      "expected": "90395408",
+      "reported": [
+        "90395408",
+        "90395408"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "",
+      "raw_text": "90 395 408",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 448.2569652352535,
+          "top": 458.4597015694373,
+          "right": 482.72866084793986,
+          "bottom": 469.20890239036015
+        },
+        "table_ref": "#/tables/0",
+        "row": 28,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 24,
+      "period": "2024-12-31",
+      "expected": "84041450",
+      "reported": [
+        "84041450",
+        "84041450"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Lease contrast llabittles",
+      "raw_text": "84 041 450",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 383.6098998356154,
+          "top": 469.84149550019424,
+          "right": 416.6467735580122,
+          "bottom": 477.4085044723622
+        },
+        "table_ref": "#/tables/0",
+        "row": 29,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 24,
+      "period": "2023-12-31",
+      "expected": "53847845",
+      "reported": [
+        "53847845",
+        "53847845"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Lease contrast llabittles",
+      "raw_text": "53 847 845",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 449.6031832957874,
+          "top": 469.92343042880447,
+          "right": 482.604208774411,
+          "bottom": 477.32656954318423
+        },
+        "table_ref": "#/tables/0",
+        "row": 29,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 25,
+      "period": "2024-12-31",
+      "expected": "387421265",
+      "reported": [
+        "387421265",
+        "387421265"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Deferred tax liabilties",
+      "raw_text": "387 421 265",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 381.1909655610541,
+          "top": 479.66666659441154,
+          "right": 417.84394191430533,
+          "bottom": 487.0872093113915
+        },
+        "table_ref": "#/tables/0",
+        "row": 30,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 25,
+      "period": "2023-12-31",
+      "expected": "321767403",
+      "reported": [
+        "321767403",
+        "321767403"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Deferred tax liabilties",
+      "raw_text": "321 767 403",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 445.9445589902121,
+          "top": 479.66666659441154,
+          "right": 482.59753534346345,
+          "bottom": 487.0872093113915
+        },
+        "table_ref": "#/tables/0",
+        "row": 30,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 26,
+      "period": "2024-12-31",
+      "expected": "2199658",
+      "reported": [
+        "2199658",
+        "2199658"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Deferred Incor",
+      "raw_text": "2 199 658",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 387.27797898754085,
+          "top": 489.44688172216365,
+          "right": 416.6439915308806,
+          "bottom": 496.9659084784503
+        },
+        "table_ref": "#/tables/0",
+        "row": 31,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 26,
+      "period": "2023-12-31",
+      "expected": "6023113",
+      "reported": [
+        "6023113",
+        "6023113"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Deferred Incor",
+      "raw_text": "6 023 113",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 451.9840644557101,
+          "top": 489.235339347179,
+          "right": 482.6668594474031,
+          "bottom": 497.1774513161732
+        },
+        "table_ref": "#/tables/0",
+        "row": 31,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 27,
+      "period": "2024-12-31",
+      "expected": "1051729253",
+      "reported": [
+        "1051729353",
+        "1051729353"
+      ],
+      "cause": "recognition_digits",
+      "page": 5,
+      "predicted_label": "Non-eurrent liabilities",
+      "raw_text": "1 051 729 353",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 379.96919977751736,
+          "top": 500.54941856717465,
+          "right": 419.0657077182049,
+          "bottom": 508.0000001177728
+        },
+        "table_ref": "#/tables/0",
+        "row": 32,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 27,
+      "period": "2023-12-31",
+      "expected": "472033765",
+      "reported": [
+        "472033765",
+        "472033765"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Non-eurrent liabilities",
+      "raw_text": "472 033 765",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 450.8316224677289,
+          "top": 500.54941856717465,
+          "right": 483.8193014398258,
+          "bottom": 508.0000001177728
+        },
+        "table_ref": "#/tables/0",
+        "row": 32,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 28,
+      "period": "2024-12-31",
+      "expected": "228224163",
+      "reported": [
+        "238224163",
+        "238224163"
+      ],
+      "cause": "recognition_digits",
+      "page": 5,
+      "predicted_label": "Provision",
+      "raw_text": "238 224 163",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 379.9319154083821,
+          "top": 528.5005009457931,
+          "right": 417.88122617246836,
+          "bottom": 536.2378711189293
+        },
+        "table_ref": "#/tables/0",
+        "row": 34,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 28,
+      "period": "2023-12-31",
+      "expected": "183529210",
+      "reported": [
+        "183529210",
+        "183529210"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Provision",
+      "raw_text": "183 529 210",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 445.89572644037736,
+          "top": 528.4459367878766,
+          "right": 482.64636790756686,
+          "bottom": 536.292434959365
+        },
+        "table_ref": "#/tables/0",
+        "row": 34,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 29,
+      "period": "2024-12-31",
+      "expected": "2909495624",
+      "reported": [
+        "1909495624",
+        "1909495624"
+      ],
+      "cause": "recognition_digits",
+      "page": 5,
+      "predicted_label": "Bank credk facilities",
+      "raw_text": "1 909 495 624",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 376.3039008152288,
+          "top": 539.6666667159396,
+          "right": 416.62217709134194,
+          "bottom": 545.8313951985039
+        },
+        "table_ref": "#/tables/0",
+        "row": 35,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 29,
+      "period": "2023-12-31",
+      "expected": "1096229656",
+      "reported": [
+        "1096229655",
+        "1096229655"
+      ],
+      "cause": "recognition_digits",
+      "page": 5,
+      "predicted_label": "Bank credk facilities",
+      "raw_text": "1 096 229 655",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 441.0237925369319,
+          "top": 538.3435273554062,
+          "right": 482.6312381501992,
+          "bottom": 548.4239144708847
+        },
+        "table_ref": "#/tables/0",
+        "row": 35,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 30,
+      "period": "2024-12-31",
+      "expected": "2006712301",
+      "reported": [
+        "2006712301",
+        "2006712301"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Creditees and other credit balsaces",
+      "raw_text": "2 006 712 301",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 375.0821349596397,
+          "top": 549.5029069434399,
+          "right": 416.62217702947106,
+          "bottom": 557.0000001441235
+        },
+        "table_ref": "#/tables/0",
+        "row": 36,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 30,
+      "period": "2023-12-31",
+      "expected": "2261080629",
+      "reported": [
+        "3261080629",
+        "3261080629"
+      ],
+      "cause": "recognition_digits",
+      "page": 5,
+      "predicted_label": "Creditees and other credit balsaces",
+      "raw_text": "3 261 080 629",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 438.53467611449827,
+          "top": 546.6862351415118,
+          "right": 482.67682182455377,
+          "bottom": 557.2149273869953
+        },
+        "table_ref": "#/tables/0",
+        "row": 36,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 31,
+      "period": "2024-12-31",
+      "expected": "0",
+      "reported": [
+        null,
+        null
+      ],
+      "cause": "lost_dash",
+      "page": 5,
+      "predicted_label": "Due to related parties",
+      "raw_text": "",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 371.35712034448744,
+          "top": 558.0000000841758,
+          "right": 419.13955314755094,
+          "bottom": 569.0843023174962
+        },
+        "table_ref": "#/tables/0",
+        "row": 37,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": [
+        "numbers_missing",
+        "bbox_synthesized"
+      ]
+    },
+    {
+      "statement": "balance",
+      "row": 31,
+      "period": "2023-12-31",
+      "expected": "17871750",
+      "reported": [
+        "17871750",
+        "17871750"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Due to related parties",
+      "raw_text": "17 871 750",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 449.6098565385652,
+          "top": 558.0000000841758,
+          "right": 482.59753551066206,
+          "bottom": 565.4127907005292
+        },
+        "table_ref": "#/tables/0",
+        "row": 37,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 32,
+      "period": "2024-12-31",
+      "expected": "712162570",
+      "reported": [
+        "712162570",
+        "712162570"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Income tax Sabillies",
+      "raw_text": "712 162 570",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 381.19096556105404,
+          "top": 569.0000000247259,
+          "right": 417.8439419143053,
+          "bottom": 576.4273255913355
+        },
+        "table_ref": "#/tables/0",
+        "row": 38,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 32,
+      "period": "2023-12-31",
+      "expected": "177047207",
+      "reported": [
+        "177047207",
+        "177047207"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Income tax Sabillies",
+      "raw_text": "177 047 207",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 445.8197946839761,
+          "top": 567.6835821450285,
+          "right": 482.76652889131736,
+          "bottom": 576.3107094745369
+        },
+        "table_ref": "#/tables/0",
+        "row": 38,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 33,
+      "period": "2024-12-31",
+      "expected": "67487158",
+      "reported": [
+        "67487158",
+        "67487158"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Lease connects labilities",
+      "raw_text": "67 487 158",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 384.85626312226765,
+          "top": 578.8749999642233,
+          "right": 417.84394209436454,
+          "bottom": 586.3333332975567
+        },
+        "table_ref": "#/tables/0",
+        "row": 39,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 33,
+      "period": "2023-12-31",
+      "expected": "57958125",
+      "reported": [
+        "57958125",
+        "57958125"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Lease connects labilities",
+      "raw_text": "57 958 125",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 449.6098565514258,
+          "top": 578.8749999642233,
+          "right": 482.5975355235227,
+          "bottom": 586.3333332975567
+        },
+        "table_ref": "#/tables/0",
+        "row": 39,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 34,
+      "period": "2024-12-31",
+      "expected": "271503629",
+      "reported": [
+        "271503629",
+        "271503629"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Loars",
+      "raw_text": "271 503 629",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 381.1730986254203,
+          "top": 588.5755627013331,
+          "right": 417.86180884560343,
+          "bottom": 596.0988558786198
+        },
+        "table_ref": "#/tables/0",
+        "row": 40,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 34,
+      "period": "2023-12-31",
+      "expected": "57204336",
+      "reported": [
+        "57204336",
+        "57204336"
+      ],
+      "cause": null,
+      "page": 5,
+      "predicted_label": "Loars",
+      "raw_text": "57 204 336",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 449.6098565514258,
+          "top": 588.665697638642,
+          "right": 482.5975355235227,
+          "bottom": 596.0087209388129
+        },
+        "table_ref": "#/tables/0",
+        "row": 40,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 35,
+      "period": "2024-12-31",
+      "expected": "3823456",
+      "reported": [
+        "38234566199408901",
+        "38234566199408901"
+      ],
+      "cause": "merged_amounts",
+      "page": 5,
+      "predicted_label": "Deferred income",
+      "raw_text": "3 823 456 6 199 408 901",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 381.1909656190375,
+          "top": 598.3333331753862,
+          "right": 419.0657077660068,
+          "bottom": 615.6666666104544
+        },
+        "table_ref": "#/tables/0",
+        "row": 41,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": [
+        "implausible_magnitude"
+      ]
+    },
+    {
+      "statement": "balance",
+      "row": 35,
+      "period": "2023-12-31",
+      "expected": "7643866",
+      "reported": [
+        "76438563858564779",
+        "76438563858564779"
+      ],
+      "cause": "merged_amounts",
+      "page": 5,
+      "predicted_label": "Deferred income",
+      "raw_text": "7 643 856 3 858 564 779",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 445.75069647248574,
+          "top": 598.3333331769066,
+          "right": 485.26615915775784,
+          "bottom": 617.1052498775554
+        },
+        "table_ref": "#/tables/0",
+        "row": 41,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": [
+        "implausible_magnitude"
+      ]
+    },
+    {
+      "statement": "balance",
+      "row": 36,
+      "period": "2024-12-31",
+      "expected": "6199408901",
+      "reported": [
+        "7251138154",
+        "7251138154"
+      ],
+      "cause": "row_association",
+      "page": 5,
+      "predicted_label": "Current Viabilitica Total Gabilities",
+      "raw_text": "7 251 138 154",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 381.1909656190375,
+          "top": 619.2616278725599,
+          "right": 419.0657077660068,
+          "bottom": 626.666666706178
+        },
+        "table_ref": "#/tables/0",
+        "row": 42,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": [
+        "label_merged"
+      ]
+    },
+    {
+      "statement": "balance",
+      "row": 36,
+      "period": "2023-12-31",
+      "expected": "3858564779",
+      "reported": [
+        "4330598541",
+        "4330598541"
+      ],
+      "cause": "row_association",
+      "page": 5,
+      "predicted_label": "Current Viabilitica Total Gabilities",
+      "raw_text": "4 330 598 541",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 445.944559059282,
+          "top": 619.2616280361086,
+          "right": 483.8193012062514,
+          "bottom": 625.3808138016929
+        },
+        "table_ref": "#/tables/0",
+        "row": 42,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": [
+        "label_merged"
+      ]
+    },
+    {
+      "statement": "balance",
+      "row": 37,
+      "period": "2024-12-31",
+      "expected": "7251138154",
+      "reported": [
+        "13550452624",
+        "13550452624"
+      ],
+      "cause": "row_association",
+      "page": 5,
+      "predicted_label": "Total equity and total liablities",
+      "raw_text": "13 550 452 624",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 378.6735884105271,
+          "top": 628.6230799147344,
+          "right": 419.13955314755094,
+          "bottom": 636.8245944767054
+        },
+        "table_ref": "#/tables/0",
+        "row": 43,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "balance",
+      "row": 37,
+      "period": "2023-12-31",
+      "expected": "4330598548",
+      "reported": [
+        "8580367133",
+        "8580367133"
+      ],
+      "cause": "row_association",
+      "page": 5,
+      "predicted_label": "Total equity and total liablities",
+      "raw_text": "8 580 367 133",
+      "prediction_source": {
+        "page_no": 5,
+        "bbox": {
+          "left": 445.9445591102517,
+          "top": 629.0000001450506,
+          "right": 485.04106705093926,
+          "bottom": 635.3333334783839
+        },
+        "table_ref": "#/tables/0",
+        "row": 43,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "comprehensive_income",
+      "row": 0,
+      "period": "FY2024",
+      "expected": "2735394516",
+      "reported": [
+        "2735394516",
+        "2735394516"
+      ],
+      "cause": null,
+      "page": 7,
+      "predicted_label": "Net profit for the year after tax",
+      "raw_text": "2 735 394 516",
+      "prediction_source": {
+        "page_no": 7,
+        "bbox": {
+          "left": 397.5188233635847,
+          "top": 199.64341091213723,
+          "right": 451.3367548979557,
+          "bottom": 210.66666657823419
+        },
+        "table_ref": "#/tables/2",
+        "row": 2,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "comprehensive_income",
+      "row": 0,
+      "period": "FY2023",
+      "expected": "1021460218",
+      "reported": [
+        "1021460218",
+        "1021460218"
+      ],
+      "cause": null,
+      "page": 7,
+      "predicted_label": "Net profit for the year after tax",
+      "raw_text": "1 021 460 218",
+      "prediction_source": {
+        "page_no": 7,
+        "bbox": {
+          "left": 489.03639820640154,
+          "top": 197.37188761546062,
+          "right": 544.4734594877692,
+          "bottom": 211.95991048329904
+        },
+        "table_ref": "#/tables/2",
+        "row": 2,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "comprehensive_income",
+      "row": 1,
+      "period": "FY2024",
+      "expected": "-344814387",
+      "reported": [
+        "-344814387",
+        "-344814387"
+      ],
+      "cause": null,
+      "page": 7,
+      "predicted_label": "Losses of foreign currency evaluation (EAS 13 - appendix H)",
+      "raw_text": "( 344 814 387)",
+      "prediction_source": {
+        "page_no": 7,
+        "bbox": {
+          "left": 392.6068365225265,
+          "top": 210.5728008778336,
+          "right": 451.35620236964263,
+          "bottom": 223.00859443659013
+        },
+        "table_ref": "#/tables/2",
+        "row": 3,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": [
+        "parentheses_negative"
+      ]
+    },
+    {
+      "statement": "comprehensive_income",
+      "row": 1,
+      "period": "FY2023",
+      "expected": "0",
+      "reported": [
+        null,
+        null
+      ],
+      "cause": "lost_dash",
+      "page": 7,
+      "predicted_label": "Losses of foreign currency evaluation (EAS 13 - appendix H)",
+      "raw_text": "",
+      "prediction_source": {
+        "page_no": 7,
+        "bbox": {
+          "left": 485.5845316738649,
+          "top": 210.5728008778336,
+          "right": 545.5181392140348,
+          "bottom": 224.13953501979745
+        },
+        "table_ref": "#/tables/2",
+        "row": 3,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": [
+        "numbers_missing",
+        "bbox_synthesized",
+        "blank_confirmed"
+      ]
+    },
+    {
+      "statement": "comprehensive_income",
+      "row": 2,
+      "period": "FY2024",
+      "expected": "-3677680",
+      "reported": [
+        "-3677680",
+        "-3677680"
+      ],
+      "cause": null,
+      "page": 7,
+      "predicted_label": "Tax impact (EAS 13 - appendix H)",
+      "raw_text": "(3 677 680)",
+      "prediction_source": {
+        "page_no": 7,
+        "bbox": {
+          "left": 401.1882278834298,
+          "top": 222.9147284722297,
+          "right": 451.33675487947056,
+          "bottom": 236.38759707371082
+        },
+        "table_ref": "#/tables/2",
+        "row": 4,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": [
+        "parentheses_negative"
+      ]
+    },
+    {
+      "statement": "comprehensive_income",
+      "row": 2,
+      "period": "FY2023",
+      "expected": "0",
+      "reported": [
+        null,
+        null
+      ],
+      "cause": "lost_dash",
+      "page": 7,
+      "predicted_label": "Tax impact (EAS 13 - appendix H)",
+      "raw_text": "",
+      "prediction_source": {
+        "page_no": 7,
+        "bbox": {
+          "left": 485.5845316738649,
+          "top": 221.6899221761329,
+          "right": 545.5181392140348,
+          "bottom": 236.38759707371082
+        },
+        "table_ref": "#/tables/2",
+        "row": 4,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": [
+        "numbers_missing",
+        "bbox_synthesized",
+        "blank_confirmed"
+      ]
+    },
+    {
+      "statement": "comprehensive_income",
+      "row": 3,
+      "period": "FY2024",
+      "expected": "2386902449",
+      "reported": [
+        "2386902449",
+        "2386902449"
+      ],
+      "cause": null,
+      "page": 7,
+      "predicted_label": "Total comprehensive income",
+      "raw_text": "2 386 902 449",
+      "prediction_source": {
+        "page_no": 7,
+        "bbox": {
+          "left": 397.47523558799185,
+          "top": 236.1708172509918,
+          "right": 451.38034266372784,
+          "bottom": 247.6276323348135
+        },
+        "table_ref": "#/tables/2",
+        "row": 5,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "comprehensive_income",
+      "row": 3,
+      "period": "FY2023",
+      "expected": "1021460218",
+      "reported": [
+        "1021460218",
+        "1021460218"
+      ],
+      "cause": null,
+      "page": 7,
+      "predicted_label": "Total comprehensive income",
+      "raw_text": "1 021 460 218",
+      "prediction_source": {
+        "page_no": 7,
+        "bbox": {
+          "left": 489.25393459849806,
+          "top": 233.9379842861831,
+          "right": 545.5181392140348,
+          "bottom": 247.41085288766422
+        },
+        "table_ref": "#/tables/2",
+        "row": 5,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "comprehensive_income",
+      "row": 4,
+      "period": "FY2024",
+      "expected": "2386802102",
+      "reported": [
+        "2386802102",
+        "2386802102"
+      ],
+      "cause": null,
+      "page": 7,
+      "predicted_label": "Parent owners of the company",
+      "raw_text": "2 386 802 102",
+      "prediction_source": {
+        "page_no": 7,
+        "bbox": {
+          "left": 393.8259588491241,
+          "top": 259.5479031500849,
+          "right": 451.36021487323933,
+          "bottom": 272.0179882941278
+        },
+        "table_ref": "#/tables/2",
+        "row": 7,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "comprehensive_income",
+      "row": 4,
+      "period": "FY2023",
+      "expected": "1020909888",
+      "reported": [
+        "1020909888",
+        "1020909888"
+      ],
+      "cause": null,
+      "page": 7,
+      "predicted_label": "Parent owners of the company",
+      "raw_text": "1 020 909 888",
+      "prediction_source": {
+        "page_no": 7,
+        "bbox": {
+          "left": 485.5845316738649,
+          "top": 259.6589146355172,
+          "right": 543.0718677465662,
+          "bottom": 272.0000000694771
+        },
+        "table_ref": "#/tables/2",
+        "row": 7,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "comprehensive_income",
+      "row": 5,
+      "period": "FY2024",
+      "expected": "100347",
+      "reported": [
+        "100347",
+        "100347"
+      ],
+      "cause": null,
+      "page": 7,
+      "predicted_label": "Non-controlling interests",
+      "raw_text": "100 347",
+      "prediction_source": {
+        "page_no": 7,
+        "bbox": {
+          "left": 417.08898059909,
+          "top": 271.9069765625628,
+          "right": 451.336755442936,
+          "bottom": 284.15503869635194
+        },
+        "table_ref": "#/tables/2",
+        "row": 8,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "comprehensive_income",
+      "row": 5,
+      "period": "FY2023",
+      "expected": "550330",
+      "reported": [
+        "550330",
+        "550330"
+      ],
+      "cause": null,
+      "page": 7,
+      "predicted_label": "Non-controlling interests",
+      "raw_text": "550 330",
+      "prediction_source": {
+        "page_no": 7,
+        "bbox": {
+          "left": 507.5597285997256,
+          "top": 272.9977052909853,
+          "right": 543.1130981132864,
+          "bottom": 284.28911637293515
+        },
+        "table_ref": "#/tables/2",
+        "row": 8,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "income",
+      "row": 0,
+      "period": "FY2024",
+      "expected": "24302616048",
+      "reported": [
+        "24302616048",
+        "24302616048"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Net sales",
+      "raw_text": "24 302 616 048",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 418.2766299505968,
+          "top": 199.47724179803413,
+          "right": 480.7274767058614,
+          "bottom": 213.2824474610793
+        },
+        "table_ref": "#/tables/1",
+        "row": 1,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "income",
+      "row": 0,
+      "period": "FY2023",
+      "expected": "15536190159",
+      "reported": [
+        "15536190159",
+        "15536190159"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Net sales",
+      "raw_text": "15 536 190 159",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 516.0772871732015,
+          "top": 198.04651860952274,
+          "right": 578.6283941886762,
+          "bottom": 213.48836482127402
+        },
+        "table_ref": "#/tables/1",
+        "row": 1,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "income",
+      "row": 1,
+      "period": "FY2024",
+      "expected": "-16912916624",
+      "reported": [
+        "-16912916624",
+        "-16912916624"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Cost of sales",
+      "raw_text": "(16 912 916 624)",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 412.1674421558689,
+          "top": 212.96466307888235,
+          "right": 481.9441251041528,
+          "bottom": 226.74076323757376
+        },
+        "table_ref": "#/tables/1",
+        "row": 2,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": [
+        "parentheses_negative"
+      ]
+    },
+    {
+      "statement": "income",
+      "row": 1,
+      "period": "FY2023",
+      "expected": "-11926060448",
+      "reported": [
+        "-11926060448",
+        "-11926060448"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Cost of sales",
+      "raw_text": "(11 926 060 448)",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 510.00455991715944,
+          "top": 212.91124890111902,
+          "right": 579.8085814893549,
+          "bottom": 228.01898358129492
+        },
+        "table_ref": "#/tables/1",
+        "row": 2,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": [
+        "parentheses_negative"
+      ]
+    },
+    {
+      "statement": "income",
+      "row": 2,
+      "period": "FY2024",
+      "expected": "7389699424",
+      "reported": [
+        "7389699424",
+        "7389699424"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Gross profit",
+      "raw_text": "7 389 699 424",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 418.28061197808694,
+          "top": 227.6724801447207,
+          "right": 478.27722501904236,
+          "bottom": 241.42829501491926
+        },
+        "table_ref": "#/tables/1",
+        "row": 3,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "income",
+      "row": 2,
+      "period": "FY2023",
+      "expected": "3610129711",
+      "reported": [
+        "3610129711",
+        "3610129711"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Gross profit",
+      "raw_text": "3 610 129 711",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 516.1001182621314,
+          "top": 227.52908821509777,
+          "right": 576.1592929327783,
+          "bottom": 241.57168693946298
+        },
+        "table_ref": "#/tables/1",
+        "row": 3,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "income",
+      "row": 3,
+      "period": "FY2024",
+      "expected": "332938371",
+      "reported": [
+        "332938371",
+        "332938371"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Other operating income",
+      "raw_text": "332 938 371",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 429.22426697846777,
+          "top": 255.60862615889528,
+          "right": 480.7880532283895,
+          "bottom": 269.8332342623294
+        },
+        "table_ref": "#/tables/1",
+        "row": 4,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "income",
+      "row": 3,
+      "period": "FY2023",
+      "expected": "159994633",
+      "reported": [
+        "159994633",
+        "159994633"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Other operating income",
+      "raw_text": "159 994 633",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 525.8827544384022,
+          "top": 255.7253291867995,
+          "right": 578.6080051974274,
+          "bottom": 269.71653122333925
+        },
+        "table_ref": "#/tables/1",
+        "row": 4,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "income",
+      "row": 4,
+      "period": "FY2024",
+      "expected": "-2159669231",
+      "reported": [
+        "-2159669231",
+        "-2159669231"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Selling and Marketing expenses",
+      "raw_text": "(2 159 669 231)",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 415.8658442162836,
+          "top": 271.90697667046237,
+          "right": 479.4688579084809,
+          "bottom": 284.15503880425155
+        },
+        "table_ref": "#/tables/1",
+        "row": 5,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": [
+        "parentheses_negative"
+      ]
+    },
+    {
+      "statement": "income",
+      "row": 4,
+      "period": "FY2023",
+      "expected": "-1342075407",
+      "reported": [
+        "-1342075407",
+        "-1342075407"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Selling and Marketing expenses",
+      "raw_text": "(1 342 075 407)",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 513.7009871270752,
+          "top": 271.8252531398898,
+          "right": 577.3352892592458,
+          "bottom": 284.2367617000704
+        },
+        "table_ref": "#/tables/1",
+        "row": 5,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": [
+        "parentheses_negative"
+      ]
+    },
+    {
+      "statement": "income",
+      "row": 5,
+      "period": "FY2024",
+      "expected": "-644978687",
+      "reported": [
+        "-644978687",
+        "-644978687"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "General and administrative expenses",
+      "raw_text": "(644 978 687)",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 420.70647714785576,
+          "top": 285.1207111252369,
+          "right": 480.74389987136277,
+          "bottom": 297.8870405726653
+        },
+        "table_ref": "#/tables/1",
+        "row": 6,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": [
+        "parentheses_negative"
+      ]
+    },
+    {
+      "statement": "income",
+      "row": 5,
+      "period": "FY2023",
+      "expected": "-388147620",
+      "reported": [
+        "-388147620",
+        "-388147620"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "General and administrative expenses",
+      "raw_text": "(388 147 620)",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 517.3178663870206,
+          "top": 286.2131971644356,
+          "right": 578.6109493617439,
+          "bottom": 298.01936031649444
+        },
+        "table_ref": "#/tables/1",
+        "row": 6,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": [
+        "parentheses_negative"
+      ]
+    },
+    {
+      "statement": "income",
+      "row": 6,
+      "period": "FY2024",
+      "expected": "-3081048",
+      "reported": [
+        "-3081048",
+        "-3081048"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Net (Losses) income/ Reverse of Impairment of trade and other receivables",
+      "raw_text": "(3 081 048)",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 429.11872295099937,
+          "top": 299.4641628365271,
+          "right": 479.6505091904755,
+          "bottom": 312.23961831138064
+        },
+        "table_ref": "#/tables/1",
+        "row": 7,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": [
+        "parentheses_negative"
+      ]
+    },
+    {
+      "statement": "income",
+      "row": 6,
+      "period": "FY2023",
+      "expected": "5971372",
+      "reported": [
+        "5971372",
+        "5971372"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Net (Losses) income/ Reverse of Impairment of trade and other receivables",
+      "raw_text": "5 971 372",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 535.6034122824659,
+          "top": 299.5665496346014,
+          "right": 577.4492912064098,
+          "bottom": 311.6117448962389
+        },
+        "table_ref": "#/tables/1",
+        "row": 7,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "income",
+      "row": 7,
+      "period": "FY2024",
+      "expected": "-221931314",
+      "reported": [
+        "-221931314",
+        "-221931314"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Other expenses",
+      "raw_text": "(221 931 314)",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 420.71138061080023,
+          "top": 314.51924738233055,
+          "right": 479.5158608797181,
+          "bottom": 326.054396002936
+        },
+        "table_ref": "#/tables/1",
+        "row": 8,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": [
+        "parentheses_negative"
+      ]
+    },
+    {
+      "statement": "income",
+      "row": 7,
+      "period": "FY2023",
+      "expected": "-243943082",
+      "reported": [
+        "-243943082",
+        "-243943082"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Other expenses",
+      "raw_text": "(243 943 082)",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 518.5870790330921,
+          "top": 314.6563463315612,
+          "right": 577.3417367187154,
+          "bottom": 325.9172964200622
+        },
+        "table_ref": "#/tables/1",
+        "row": 8,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": [
+        "parentheses_negative"
+      ]
+    },
+    {
+      "statement": "income",
+      "row": 8,
+      "period": "FY2024",
+      "expected": "4692977515",
+      "reported": [
+        "4692977515",
+        "4692977515"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Results from operating activities",
+      "raw_text": "4 692 977 515",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 421.9815201297342,
+          "top": 329.3333334633731,
+          "right": 479.46885620243546,
+          "bottom": 339.3333334633731
+        },
+        "table_ref": "#/tables/1",
+        "row": 9,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "income",
+      "row": 8,
+      "period": "FY2023",
+      "expected": "1801929607",
+      "reported": [
+        "1801929607",
+        "1801929607"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Results from operating activities",
+      "raw_text": "1 801 929 607",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 519.8323055722012,
+          "top": 329.3333334629098,
+          "right": 576.0965101877381,
+          "bottom": 339.33333346290976
+        },
+        "table_ref": "#/tables/1",
+        "row": 9,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "income",
+      "row": 9,
+      "period": "FY2024",
+      "expected": "2355482",
+      "reported": [
+        "2355482",
+        "2355482"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Share of net (Loss) /profit of Equity accounted investees",
+      "raw_text": "2 355 482",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 437.84260673830136,
+          "top": 361.16632563028026,
+          "right": 479.5085224856516,
+          "bottom": 372.49258905801463
+        },
+        "table_ref": "#/tables/1",
+        "row": 10,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "income",
+      "row": 9,
+      "period": "FY2023",
+      "expected": "-1256023",
+      "reported": [
+        "-1256023",
+        "-1256023"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Share of net (Loss) /profit of Equity accounted investees",
+      "raw_text": "(1 256 023)",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 526.9923668762466,
+          "top": 360.83121933033937,
+          "right": 577.4395294503717,
+          "bottom": 373.2143179326343
+        },
+        "table_ref": "#/tables/1",
+        "row": 10,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": [
+        "parentheses_negative"
+      ]
+    },
+    {
+      "statement": "income",
+      "row": 10,
+      "period": "FY2024",
+      "expected": "-596428158",
+      "reported": [
+        "-596428158",
+        "-596428158"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Net finance (cost)",
+      "raw_text": "(596 428 158)",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 420.71757985643694,
+          "top": 373.3443860437342,
+          "right": 479.5096616679877,
+          "bottom": 384.8106526758143
+        },
+        "table_ref": "#/tables/1",
+        "row": 11,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": [
+        "parentheses_negative"
+      ]
+    },
+    {
+      "statement": "income",
+      "row": 10,
+      "period": "FY2023",
+      "expected": "-320893260",
+      "reported": [
+        "-320893260",
+        "-320893260"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Net finance (cost)",
+      "raw_text": "(320 893 260)",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 517.360130780395,
+          "top": 373.42332040039736,
+          "right": 577.3455501341333,
+          "bottom": 384.73171832927096
+        },
+        "table_ref": "#/tables/1",
+        "row": 11,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": [
+        "parentheses_negative"
+      ]
+    },
+    {
+      "statement": "income",
+      "row": 11,
+      "period": "FY2024",
+      "expected": "-522059933",
+      "reported": [
+        "-522059933",
+        "-522059933"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Loss on sale of investment at FV through profit or loss",
+      "raw_text": "(522 059 933)",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 420.7055160415389,
+          "top": 385.54992931430166,
+          "right": 480.744860297184,
+          "bottom": 398.32603964551913
+        },
+        "table_ref": "#/tables/1",
+        "row": 12,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": [
+        "parentheses_negative"
+      ]
+    },
+    {
+      "statement": "income",
+      "row": 11,
+      "period": "FY2023",
+      "expected": "-115108535",
+      "reported": [
+        "-115108535",
+        "-115108535"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Loss on sale of investment at FV through profit or loss",
+      "raw_text": "(115 108 535)",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 517.2712148762076,
+          "top": 385.18560920558076,
+          "right": 577.5131435201248,
+          "bottom": 397.75222526393037
+        },
+        "table_ref": "#/tables/1",
+        "row": 12,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": [
+        "parentheses_negative"
+      ]
+    },
+    {
+      "statement": "income",
+      "row": 12,
+      "period": "FY2024",
+      "expected": "3576844906",
+      "reported": [
+        "3576844906",
+        "3576844906"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Net profit for the year before income tax",
+      "raw_text": "3 576 844 906",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 419.3836690973963,
+          "top": 398.81746216980065,
+          "right": 477.1543599926078,
+          "bottom": 410.0655166741952
+        },
+        "table_ref": "#/tables/1",
+        "row": 13,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "income",
+      "row": 12,
+      "period": "FY2023",
+      "expected": "1364671789",
+      "reported": [
+        "1364671789",
+        "1364671789"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Net profit for the year before income tax",
+      "raw_text": "1 364 671 789",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 516.1629021175253,
+          "top": 399.2868216415639,
+          "right": 573.6502381902266,
+          "bottom": 410.3333336095407
+        },
+        "table_ref": "#/tables/1",
+        "row": 13,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "income",
+      "row": 13,
+      "period": "FY2024",
+      "expected": "-841450390",
+      "reported": [
+        "-841450390",
+        "-841450390"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Current income tax",
+      "raw_text": "( 841 450 390)",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 418.28987822683877,
+          "top": 427.33270135943303,
+          "right": 479.49109366505576,
+          "bottom": 438.6052824598969
+        },
+        "table_ref": "#/tables/1",
+        "row": 14,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": [
+        "parentheses_negative"
+      ]
+    },
+    {
+      "statement": "income",
+      "row": 13,
+      "period": "FY2023",
+      "expected": "-343211571",
+      "reported": [
+        "-343211571",
+        "-343211571"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Current income tax",
+      "raw_text": "( 343 211 571)",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 514.9397669884794,
+          "top": 427.33333329801326,
+          "right": 577.3196441400938,
+          "bottom": 438.4806200310048
+        },
+        "table_ref": "#/tables/1",
+        "row": 14,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": [
+        "parentheses_negative"
+      ]
+    },
+    {
+      "statement": "income",
+      "row": 14,
+      "period": "FY2024",
+      "expected": "2735394516",
+      "reported": [
+        "2735394516",
+        "2735394516"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Net profit for the year after tax",
+      "raw_text": "2 735 394 516",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 421.98151927771715,
+          "top": 442.00000012264695,
+          "right": 480.69199189100135,
+          "bottom": 452.000000122647
+        },
+        "table_ref": "#/tables/1",
+        "row": 15,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "income",
+      "row": 14,
+      "period": "FY2023",
+      "expected": "1021460218",
+      "reported": [
+        "1021460218",
+        "1021460218"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Net profit for the year after tax",
+      "raw_text": "1 021 460 218",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 519.8323055722012,
+          "top": 442.00000012218356,
+          "right": 576.0965101877381,
+          "bottom": 452.0000001221836
+        },
+        "table_ref": "#/tables/1",
+        "row": 15,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "income",
+      "row": 15,
+      "period": "FY2024",
+      "expected": "2735294169",
+      "reported": [
+        "2735294169",
+        "2735294169"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Owners of the company",
+      "raw_text": "2 735 294 169",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 418.2874628924365,
+          "top": 470.18719873437453,
+          "right": 479.49350757809043,
+          "bottom": 481.48721958805294
+        },
+        "table_ref": "#/tables/1",
+        "row": 17,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "income",
+      "row": 15,
+      "period": "FY2023",
+      "expected": "1020909888",
+      "reported": [
+        "1020909888",
+        "1020909888"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Owners of the company",
+      "raw_text": "1020 909 888",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 522.2528438348187,
+          "top": 472.6452938809185,
+          "right": 577.3453764371957,
+          "bottom": 483.9283495042909
+        },
+        "table_ref": "#/tables/1",
+        "row": 17,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "income",
+      "row": 16,
+      "period": "FY2024",
+      "expected": "100347",
+      "reported": [
+        "100347",
+        "100347"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Non-controlling interests",
+      "raw_text": "100 347",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 443.9979473704745,
+          "top": 489.92248058385076,
+          "right": 479.4688562131942,
+          "bottom": 500.9999996827684
+        },
+        "table_ref": "#/tables/1",
+        "row": 18,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "income",
+      "row": 16,
+      "period": "FY2023",
+      "expected": "550330",
+      "reported": [
+        "550330",
+        "550330"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Non-controlling interests",
+      "raw_text": "550 330",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 542.7901752293716,
+          "top": 490.9004447431571,
+          "right": 576.3588307981195,
+          "bottom": 502.01004226716424
+        },
+        "table_ref": "#/tables/1",
+        "row": 18,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": []
+    },
+    {
+      "statement": "income",
+      "row": 17,
+      "period": "FY2024",
+      "expected": "2.91",
+      "reported": [
+        "2.91",
+        "2.91"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Earning per share for the year (L.E/share )",
+      "raw_text": "2.91",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 459.89869980320435,
+          "top": 520.5426358169216,
+          "right": 479.46885649372933,
+          "bottom": 530.3410850153266
+        },
+        "table_ref": "#/tables/1",
+        "row": 20,
+        "col": 2,
+        "source": "ocr"
+      },
+      "flags": [
+        "per_share"
+      ]
+    },
+    {
+      "statement": "income",
+      "row": 17,
+      "period": "FY2023",
+      "expected": "0.98",
+      "reported": [
+        "0.98",
+        "0.98"
+      ],
+      "cause": null,
+      "page": 6,
+      "predicted_label": "Earning per share for the year (L.E/share )",
+      "raw_text": "0.98",
+      "prediction_source": {
+        "page_no": 6,
+        "bbox": {
+          "left": 556.5263518747502,
+          "top": 520.5426358169216,
+          "right": 577.3196438350034,
+          "bottom": 530.3410850153266
+        },
+        "table_ref": "#/tables/1",
+        "row": 20,
+        "col": 3,
+        "source": "ocr"
+      },
+      "flags": [
+        "per_share"
+      ]
+    }
+  ],
+  "catalog_gap_rows": [
+    {
+      "statement": "balance",
+      "row": 1,
+      "label": "Projects under construction",
+      "submitted_id": "puc_net"
+    },
+    {
+      "statement": "balance",
+      "row": 2,
+      "label": "Biological assets",
+      "submitted_id": "bio_assets"
+    },
+    {
+      "statement": "balance",
+      "row": 10,
+      "label": "Due from related party",
+      "submitted_id": "due_from_related_parties"
+    },
+    {
+      "statement": "balance",
+      "row": 11,
+      "label": "Other biological assets",
+      "submitted_id": "other_bio_assets"
+    },
+    {
+      "statement": "balance",
+      "row": 13,
+      "label": "PPE held for sale",
+      "submitted_id": "ppe_held_for_sale"
+    },
+    {
+      "statement": "balance",
+      "row": 25,
+      "label": "Deferred tax liabilities",
+      "submitted_id": "deferred_tax_liabilities"
+    },
+    {
+      "statement": "balance",
+      "row": 26,
+      "label": "Deferred income",
+      "submitted_id": "deferred_income"
+    },
+    {
+      "statement": "balance",
+      "row": 28,
+      "label": "Provisions",
+      "submitted_id": "provisions"
+    },
+    {
+      "statement": "balance",
+      "row": 30,
+      "label": "Creditors and other credit balances",
+      "submitted_id": "creditors_&_other_credit_balances"
+    },
+    {
+      "statement": "balance",
+      "row": 31,
+      "label": "Due to related parties",
+      "submitted_id": "due_to_related_parties"
+    },
+    {
+      "statement": "balance",
+      "row": 32,
+      "label": "Income tax liabilities",
+      "submitted_id": "income_tax_liabilities"
+    },
+    {
+      "statement": "balance",
+      "row": 34,
+      "label": "Loans",
+      "submitted_id": "loans"
+    },
+    {
+      "statement": "balance",
+      "row": 35,
+      "label": "Deferred income",
+      "submitted_id": "deferred_income"
+    },
+    {
+      "statement": "comprehensive_income",
+      "row": 0,
+      "label": "Net profit for the year after tax",
+      "submitted_id": "net_profit_year_after_tax"
+    },
+    {
+      "statement": "comprehensive_income",
+      "row": 1,
+      "label": "Losses of foreign currency evaluation (EAS 13 - appendix H)",
+      "submitted_id": "losses_of_fceval"
+    },
+    {
+      "statement": "comprehensive_income",
+      "row": 2,
+      "label": "Tax impact (EAS 13 - appendix H)",
+      "submitted_id": "tax_impact"
+    },
+    {
+      "statement": "comprehensive_income",
+      "row": 3,
+      "label": "Total comprehensive income",
+      "submitted_id": "total_comprehensive_income"
+    },
+    {
+      "statement": "comprehensive_income",
+      "row": 4,
+      "label": "Parent owners of the company",
+      "submitted_id": "parent_owners_of_company"
+    },
+    {
+      "statement": "comprehensive_income",
+      "row": 5,
+      "label": "Non-controlling interests",
+      "submitted_id": "non_controlling_interests"
+    },
+    {
+      "statement": "income",
+      "row": 3,
+      "label": "Other operating income",
+      "submitted_id": "other_operating_income"
+    },
+    {
+      "statement": "income",
+      "row": 6,
+      "label": "Net (Losses) income/ Reverse of Impairment of trade and other receivables",
+      "submitted_id": "impairment_loss_recognised_in_profit_or_loss"
+    },
+    {
+      "statement": "income",
+      "row": 7,
+      "label": "Other expenses",
+      "submitted_id": "other_expenses"
+    },
+    {
+      "statement": "income",
+      "row": 9,
+      "label": "Share of net (Loss) /profit of Equity accounted investees",
+      "submitted_id": "share_of_profit_loss_of_associates_&_joint_ventures_accounted_for_using_equity_method"
+    },
+    {
+      "statement": "income",
+      "row": 10,
+      "label": "Net finance (cost)",
+      "submitted_id": "net_finance_cost"
+    },
+    {
+      "statement": "income",
+      "row": 11,
+      "label": "Loss on sale of investment at FV through profit or loss",
+      "submitted_id": "loss_of_sale_of_investment_at_fv_through_profit_or_loss"
+    },
+    {
+      "statement": "income",
+      "row": 17,
+      "label": "Earning per share for the year (L.E/share)",
+      "submitted_id": "yearly_earning_per_share"
+    }
+  ]
+}

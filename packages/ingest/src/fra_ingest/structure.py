@@ -15,15 +15,18 @@ from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from fra_core.periods import parse_period
 from fra_core.schemas import CheckResult, LineItem, PageMode, Statement, StatementType, TextSource
+from fra_core.schemas.statement import PeriodEvidence
 from fra_core.taxonomy.loader import load_taxonomy
 from fra_ingest.caveats import unit_caveats
 from fra_ingest.child import convert_in_child
 from fra_ingest.classify import Classification, TableContext, classify
+from fra_ingest.column_assignment import split_numeric_columns
 from fra_ingest.config import IngestConfig
 from fra_ingest.continuation import continues_part, inherit_periods, is_closed, merge_continuations
 from fra_ingest.convert import cached_convert, invalidate_convert, settings_hash
@@ -31,35 +34,63 @@ from fra_ingest.converter import docling_version
 from fra_ingest.docling_json import DlDocument, load_docling_json
 from fra_ingest.errors import IngestError
 from fra_ingest.figure_checks import check_net_profit_tie
-from fra_ingest.header import parse_header
+from fra_ingest.header import HeaderLayout, parse_header
 from fra_ingest.header_recovery import recover_header
 from fra_ingest.hierarchy import RowInput, infer_hierarchy
 from fra_ingest.industry import industry_decision
 from fra_ingest.label_mapping import map_statement
 from fra_ingest.label_match import LabelIndex
-from fra_ingest.metadata import Metadata, detect_metadata
+from fra_ingest.locate import TITLE_LINE_MAX_WORDS, TitleBook, load_title_book
+from fra_ingest.metadata import Metadata, detect_metadata, statement_title_scope
 from fra_ingest.ocr import OcrEngine
 from fra_ingest.ocr_policy import plan_ranges
 from fra_ingest.pages import ocr_key, read_pages
 from fra_ingest.parts import PartialStatement, build_part
+from fra_ingest.period_evidence import merge_evidence, supported_evidence, validate_evidence
 from fra_ingest.results import (
     ConvertResult,
     IndustryDecision,
     LocateResult,
+    RangeConversion,
     StructureResult,
     TableDecision,
 )
 from fra_ingest.review import StatementReview, hold_for_industry, review_statement
-from fra_ingest.row_alignment import realign_rows
+from fra_ingest.row_alignment import Realignment, realign_rows
 from fra_ingest.stage import load_or_locate, page_ocr_languages
+from fra_ingest.statement_source import (
+    TableSourceContext,
+    resolve_tied_blocks,
+    source_plan,
+    start_decision,
+    table_source,
+)
 from fra_ingest.table_checks import run_checks
 from fra_ingest.table_grid import Grid, build_grid
 from fra_ingest.text_match import reading_variants
-from fra_ingest.visual_order import repair_grid, repair_text, restore_word_order
+from fra_ingest.visual_order import (
+    page_vocabulary,
+    repair_grid,
+    repair_text,
+    restore_word_order,
+)
 
-STRUCTURE_VERSION = "19"  # critical-item mapping findings; conversion/pages unchanged
+STRUCTURE_VERSION = "44"  # partly converted ranges flagged
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
+
+
+def range_conversion_flags(ranges: Sequence[RangeConversion]) -> list[str]:
+    """Incomplete ranges, in structure's stable order: unconverted, then partial."""
+    return [
+        f"range_not_converted:{r.first_page}-{r.last_page}"
+        for r in ranges
+        if r.status in ("failed", "skipped")
+    ] + [
+        f"range_partially_converted:{r.first_page}-{r.last_page}"
+        for r in ranges
+        if r.status == "partial"
+    ]
 
 
 class StructureInputs(BaseModel):
@@ -67,14 +98,14 @@ class StructureInputs(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    period_evidence: tuple[PeriodEvidence, ...] = ()
     sha256: str
     language: str
     industry_flags: tuple[str, ...]
     page_modes: dict[int, PageMode]
     visual_pages: set[int]
     page_texts: dict[int, str]
-    title_types: dict[int, tuple[StatementType, ...]]
-    cue_types: dict[int, tuple[StatementType, ...]]
+    located: LocateResult
     documents: list[tuple[str, DlDocument]]
     convert: ConvertResult
     industry_hold: str | None = Field(
@@ -83,6 +114,14 @@ class StructureInputs(BaseModel):
     domicile_texts: dict[int, list[str]] = Field(
         default_factory=dict, description="Part 1's page texts and their reading variants, by page"
     )
+
+    @property
+    def title_types(self) -> dict[int, tuple[StatementType, ...]]:
+        return {p.page_no: tuple(p.title_types) for p in self.located.pages}
+
+    @property
+    def cue_types(self) -> dict[int, tuple[StatementType, ...]]:
+        return {p.page_no: tuple(p.cue_types) for p in self.located.pages}
 
 
 def _headings(document: DlDocument, grid: Grid, visual: bool) -> list[str]:
@@ -136,6 +175,7 @@ def _statement(
         scale=meta.scale or 1,
         language=inputs.language,
         periods=part.periods,
+        period_conflicts=part.period_conflicts,
         line_items=items,
         source_pages=list(range(part.first_page, part.last_page + 1)),
         flags=list(dict.fromkeys([*part.flags, *meta.flags, *caveat_flags])),
@@ -150,6 +190,37 @@ class _Candidate:
     headings: list[str]
     hint: str | None
     decision: TableDecision
+    period_evidence: tuple[PeriodEvidence, ...]
+
+    @property
+    def proposed_type(self) -> StatementType:
+        kind = self.result.proposed_type
+        if kind is None:
+            raise ValueError(f"source candidate has no proposed type: {self.grid.table_ref}")
+        return kind
+
+
+def _local_statement_titles(
+    headings: Sequence[str], kind: StatementType, book: TitleBook
+) -> tuple[str, ...]:
+    """The nearest recognized title, excluding running notes headings."""
+    recognized = []
+    for line in (line for h in headings for line in h.splitlines()):
+        hits = book.titles.find([line])
+        if len(line.split()) <= TITLE_LINE_MAX_WORDS and not any(c.isdigit() for c in line):
+            hits.update(book.title_stems.find([line]))
+        if (
+            any(kind.value in groups for groups in hits.values())
+            and not book.negatives.find([line])
+            and not book.note_headers.find([line])
+        ):
+            recognized.append(line)
+    return tuple(recognized[-1:])
+
+
+def _candidate_order(candidate: _Candidate) -> tuple[int, str, int]:
+    tail = candidate.grid.table_ref.rsplit("/", 1)[-1]
+    return candidate.grid.page_no, candidate.grid.docling_path, int(tail) if tail.isdigit() else -1
 
 
 def _only_below_confidence(result: Classification) -> bool:
@@ -157,25 +228,33 @@ def _only_below_confidence(result: Classification) -> bool:
     return "below_confidence" in result.evidence and not rejections & set(result.evidence)
 
 
-def _continued_part(
-    grid: Grid,
-    hint: str | None,
-    parts: Sequence[PartialStatement],
-    titles: Sequence[StatementType],
-) -> PartialStatement | None:
-    """The statement part a low-confidence grid continues: the latest part ending on its page
-    or the page before, whose periods and value columns the grid matches, a column its header
-    leaves undated taking its period from that part first. A page titled as other statements
-    only (``titles``, from locate) continues nothing."""
-    previous = next(
-        (p for p in reversed(parts) if p.last_page in (grid.page_no, grid.page_no - 1)), None
+def _aligned(grid: Grid, layout: HeaderLayout, *, ocr: bool) -> Realignment:
+    """The grid with its rows realigned and, on an OCR page, its merged amounts split."""
+    realigned = realign_rows(grid, layout)
+    if not ocr:
+        return realigned
+    return realigned.model_copy(update={"grid": split_numeric_columns(realigned.grid, layout)})
+
+
+class _Probe(NamedTuple):
+    layout: HeaderLayout
+    aligned: Realignment | None
+    fits: bool
+
+
+def _probe(layout: HeaderLayout, grid: Grid, part: PartialStatement, *, ocr: bool) -> _Probe:
+    """``layout`` with the periods ``part`` lends it, the OCR-realigned grid (``None`` off OCR)
+    and whether the columns line up with ``part``. On an OCR page the columns are compared after
+    merged amounts are split, and cells still holding merged amounts are left out of the centres
+    used to inherit periods and to compare, so a wide merged rectangle cannot pull a column
+    centre past the tolerance."""
+    inherited = inherit_periods(layout, grid, part, ocr=ocr)
+    aligned = _aligned(grid, inherited, ocr=True) if ocr else None
+    return _Probe(
+        inherited,
+        aligned,
+        continues_part(inherited, grid if aligned is None else aligned.grid, part, ocr=ocr),
     )
-    if previous is None or (titles and previous.type not in titles):
-        return None
-    layout = inherit_periods(parse_header(grid, previous.type, hint), grid, previous)
-    if not continues_part(layout, grid, previous):
-        return None
-    return previous
 
 
 def structure_document(
@@ -184,17 +263,52 @@ def structure_document(
     *,
     header_recover: Callable[[Grid, DlDocument], Grid] | None = None,
 ) -> tuple[StructureResult, list[CheckResult]]:
+    plan = source_plan(
+        inputs.located.ranges,
+        inputs.located.pages,
+        config.enabled_types,
+        inputs.located.document.page_count,
+        config.pad_pages,
+    )
     index = LabelIndex(load_taxonomy())
     decisions: list[TableDecision] = []
     # Every grid classify accepted, or rejected only for low confidence (a possible tail page).
     candidates: list[_Candidate] = []
+    remaining = set(range(len(inputs.period_evidence)))
     for path, document in inputs.documents:
         for table in document.tables:
             raw = build_grid(table, document, path)
+            scoped = tuple(
+                group
+                for group in inputs.period_evidence
+                if (
+                    group.observations[0].docling_path,
+                    group.observations[0].provenance.page_no,
+                    group.observations[0].provenance.table_ref,
+                )
+                == (path, raw.page_no, raw.table_ref)
+            )
+            for n, group in enumerate(inputs.period_evidence):
+                if group in scoped:
+                    remaining.discard(n)
+            raw_rows = parse_header(raw, StatementType.BALANCE, None).header_rows
+            height = document.page_size(raw.page_no).height
+            # A caller's group is checked against the original grid before any crop is read.
+            scoped = merge_evidence(scoped)
+            validate_evidence(raw, scoped, raw_rows, source_table=table, page_height=height)
             visual = raw.page_no in inputs.visual_pages
-            grid = restore_word_order(repair_grid(raw, visual=visual), index)
+            vocabulary = page_vocabulary(inputs.page_texts.get(raw.page_no, ""), visual=visual)
+            grid = restore_word_order(repair_grid(raw, visual=visual, vocabulary=vocabulary), index)
             if header_recover is not None and inputs.page_modes.get(grid.page_no) is PageMode.IMAGE:
                 grid = header_recover(grid, document)
+            collected, unsupported = supported_evidence(
+                raw, grid.period_evidence, raw_rows, source_table=table, page_height=height
+            )
+            grid = grid.model_copy(
+                update={"period_evidence": collected, "flags": (*grid.flags, *unsupported)}
+            )
+            # Merge by actual column, without overwriting readings from either producer.
+            scoped = merge_evidence(collected, scoped)
             headings = _headings(document, grid, visual)
             hint = _date_hint(headings)
             context = TableContext(
@@ -203,33 +317,54 @@ def structure_document(
                 heading_texts=tuple(headings),
                 industry_flags=inputs.industry_flags,
             )
+            initial_layout = parse_header(grid, StatementType.BALANCE, hint)
             result = classify(
                 grid,
-                parse_header(grid, StatementType.BALANCE, hint),
+                initial_layout,
                 context,
                 index,
                 config.min_confidence,
             )
+            if scoped:
+                # Classification probes date presence; binding uses the classified kind.
+                initial_layout = parse_header(
+                    grid,
+                    result.type or StatementType.BALANCE,
+                    hint,
+                    period_evidence=scoped,
+                    visual=visual,
+                )
             decision = TableDecision(
                 table_ref=grid.table_ref,
                 docling_path=path,
                 page_no=grid.page_no,
                 type=result.type,
                 confidence=min(result.confidence, 1.0),
+                period_conflicts=initial_layout.period_conflicts,
                 evidence=[
                     *result.evidence,
+                    *(["source_outside_range"] if not plan.ranges else []),
+                    *(f for f in initial_layout.evidence if scoped and f.startswith("period_")),
                     *(
                         f
                         for f in grid.flags
-                        if f.startswith(("header_recovery_", "header_recovered"))
+                        if f.startswith(
+                            ("header_recovery_", "header_recovered", "period_evidence_")
+                        )
                     ),
                 ],
                 recovered_headers=grid.recovered_headers,
                 recovery_context=grid.recovered_context,
+                period_evidence=scoped,
             )
             decisions.append(decision)
-            if result.type is not None or _only_below_confidence(result):
-                candidates.append(_Candidate(grid, result, headings, hint, decision))
+            if result.proposed_type is not None:
+                candidates.append(_Candidate(grid, result, headings, hint, decision, scoped))
+
+    if remaining:
+        raise ValueError(
+            f"period evidence does not match an input path/page/table: {sorted(remaining)}"
+        )
 
     docling_texts = [
         repair_text(t.text, visual=t.prov[0].page_no in inputs.visual_pages)
@@ -247,45 +382,185 @@ def structure_document(
 
     parts: list[PartialStatement] = []
     metas: dict[str, Metadata] = {}
-    for candidate in sorted(candidates, key=lambda c: c.grid.page_no):
-        grid, result, hint = candidate.grid, candidate.result, candidate.hint
-        if result.type is None:
-            titles = inputs.title_types.get(grid.page_no, ())
-            continued = _continued_part(grid, hint, parts, titles)
-            if continued is None:
-                continue
-            if is_closed(continued, index):
-                candidate.decision.evidence = [
-                    *candidate.decision.evidence,
-                    f"after_closed:{continued.type.value}",
-                ]
-                continue
-            evidence = f"continuation_of:{continued.type.value}"
-            result = result.model_copy(
-                update={"type": continued.type, "evidence": [*result.evidence, evidence]}
-            )
-            candidate.decision.type = continued.type
-            candidate.decision.evidence = [*candidate.decision.evidence, evidence]
-        assert result.type is not None
-        layout = parse_header(grid, result.type, hint)
-        previous = next(
-            (
-                p
-                for p in reversed(parts)
-                if p.type is result.type and p.last_page in (grid.page_no, grid.page_no - 1)
-            ),
-            None,
+    # Scope evidence is reserved from located primary titles, even if extraction fails.
+    book = load_title_book()
+    local_titles: dict[int, tuple[str, ...]] = {}
+    scopes: dict[int, bool | None] = {}
+    data_rows: dict[int, int] = {}
+    for n, candidate in enumerate(candidates):
+        kind = candidate.proposed_type
+        local_titles[n] = _local_statement_titles(candidate.headings, kind, book)
+        scopes[n] = statement_title_scope(local_titles[n])
+        data_rows[n] = len(
+            parse_header(candidate.grid, kind, candidate.hint).data_rows(candidate.grid)
         )
-        if previous is not None:
-            layout = inherit_periods(layout, grid, previous)
+
+    def source_contexts() -> dict[int, TableSourceContext]:
+        return {
+            n: table_source(plan, c.grid.page_no, c.proposed_type, data_rows[n])
+            for n, c in enumerate(candidates)
+        }
+
+    contexts = source_contexts()
+    # Competing blocks may be resolved only as a pair with fully explicit, opposite local scopes.
+    # Each competing group is judged alone: blocks elsewhere in the tie do not matter.
+
+    def block_scope(span: tuple[int, int]) -> bool | None:
+        values = {
+            scopes[n]
+            for n, c in contexts.items()
+            if span[0] <= c.page_no <= span[1] and c.matching and local_titles[n]
+        }
+        return next(iter(values)) if len(values) == 1 else None
+
+    resolving = [
+        blocks
+        for blocks in plan.competing
+        if len(blocks.spans) == 2 and {block_scope(s) for s in blocks.spans} == {True, False}
+    ]
+    for blocks in resolving:
+        plan = resolve_tied_blocks(plan, blocks)
+    if resolving:
+        contexts = source_contexts()
+    primary_scopes: dict[StatementType, bool | None] = {}
+    for kind in config.enabled_types:
+        heads = sorted(
+            (
+                n
+                for n, c in contexts.items()
+                if c.proposed_type is kind and c.role == "primary" and local_titles[n]
+            ),
+            key=lambda n: _candidate_order(candidates[n]),
+        )
+        # The first explicit scope on the range, not the first title: a generic title carries none.
+        primary_scopes[kind] = next((scopes[n] for n in heads if scopes[n] is not None), None)
+
+    part_scopes: dict[str, bool | None] = {}
+    part_order: dict[str, tuple[int, int, int]] = {}
+    for n in sorted(
+        range(len(candidates)),
+        key=lambda n: _candidate_order(candidates[n]),
+    ):
+        candidate = candidates[n]
+        grid, result, hint = candidate.grid, candidate.result, candidate.hint
+        kind = candidate.proposed_type
+        nearby = [
+            p
+            for p in reversed(parts)
+            if (p.type is kind or _only_below_confidence(result))
+            and p.last_page in (grid.page_no, grid.page_no - 1)
+        ]
+        previous = nearby[0] if nearby else None
+        if previous is not None and _only_below_confidence(result) and previous.type is not kind:
+            # Low-confidence tails have no reliable winning kind. Preserve the existing
+            # continuation rule by probing the latest authorized part's kind instead.
+            kind = previous.type
+            source_context = table_source(
+                plan, grid.page_no, kind, len(parse_header(grid, kind, hint).data_rows(grid))
+            )
+            local_titles[n] = _local_statement_titles(candidate.headings, kind, book)
+            scopes[n] = statement_title_scope(local_titles[n])
+        else:
+            source_context = contexts[n]
+        eligibility = start_decision(
+            source_context, primary_scopes.get(kind), scopes[n], bool(local_titles[n])
+        )
+        candidate.decision.type = None
+        candidate.decision.evidence = [*candidate.decision.evidence, *eligibility.evidence]
+        alternatives: list[PartialStatement] = []
+        if source_context.negatives or (
+            source_context.titles and kind not in source_context.titles
+        ):
+            previous = None
+        else:
+            # The latest nearby part of the candidate's own kind, scope and source group.
+            fitting = [
+                p
+                for p in nearby
+                if p.type is kind
+                and not (
+                    scopes[n] is not None
+                    and part_scopes[p.table_refs[0]] is not None
+                    and scopes[n] is not part_scopes[p.table_refs[0]]
+                )
+                and not (eligibility.allowed and eligibility.group_key != p.source_group)
+            ]
+            previous = fitting[0] if fitting else None
+            # An unmarked table in padding names neither scope nor group, so every nearby part
+            # of its kind is a candidate, latest first.
+            alternatives = fitting[1:] if scopes[n] is None and not eligibility.allowed else []
+        layout = parse_header(
+            grid,
+            kind,
+            hint,
+            period_evidence=candidate.period_evidence,
+            visual=grid.page_no in inputs.visual_pages,
+        )
+        candidate.decision.period_conflicts = layout.period_conflicts
+        candidate.decision.evidence = list(
+            dict.fromkeys(
+                [
+                    *candidate.decision.evidence,
+                    *(
+                        f
+                        for f in layout.evidence
+                        if candidate.period_evidence and f.startswith("period_")
+                    ),
+                ]
+            )
+        )
+        if layout.period_conflicts and not layout.value_cols:
+            continue
+        continued = None
+        ocr = inputs.page_modes.get(grid.page_no) is PageMode.IMAGE
+        aligned: Realignment | None = None
+        if previous is not None and (result.type is not None or _only_below_confidence(result)):
+            # The latest candidate part that is open and lines up with the table keeps it; when
+            # none does, the latest is probed alone, as it is when there is one candidate.
+            if alternatives:
+                previous = next(
+                    (
+                        p
+                        for p in (previous, *alternatives)
+                        if _probe(layout, grid, p, ocr=ocr).fits and not is_closed(p, index)
+                    ),
+                    previous,
+                )
+            inherited, aligned, fits = _probe(layout, grid, previous, ocr=ocr)
+            if eligibility.allowed and eligibility.group_key == previous.source_group:
+                layout = inherited
+            if fits:
+                if is_closed(previous, index):
+                    candidate.decision.evidence.append(f"after_closed:{kind.value}")
+                else:
+                    continued = previous
+                    layout = inherited
+        if continued is not None:
+            group_key = continued.source_group
+            evidence = f"continuation_of:{kind.value}"
+            candidate.decision.evidence = [
+                e
+                for e in candidate.decision.evidence
+                if e != eligibility.reason or eligibility.allowed
+            ]
+            candidate.decision.evidence.append(evidence)
+            result = result.model_copy(
+                update={"type": kind, "evidence": [*result.evidence, evidence]}
+            )
+        else:
+            if not eligibility.allowed or result.type is None:
+                continue
+            group_key = eligibility.group_key
         if not layout.value_cols:
             continue
-        source = (
-            TextSource.OCR
-            if inputs.page_modes.get(grid.page_no) is PageMode.IMAGE
-            else TextSource.TEXT
+        candidate.decision.type = kind
+        candidate.decision.evidence.append(f"source_group:{group_key}")
+        source = TextSource.OCR if ocr else TextSource.TEXT
+        realigned = (
+            aligned
+            if continued is not None and aligned is not None
+            else (_aligned(grid, layout, ocr=ocr))
         )
-        realigned = realign_rows(grid, layout)
         part = build_part(
             realigned.grid,
             layout,
@@ -293,6 +568,15 @@ def structure_document(
             source=source,
             index=index,
             merged_rows=realigned.merged_labels,
+        )
+        part.source_group = group_key
+        part_scopes[part.table_refs[0]] = (
+            scopes[n] if continued is None else part_scopes[continued.table_refs[0]]
+        )
+        part_order[part.table_refs[0]] = (
+            0 if group_key and group_key.startswith("primary:") else 1,
+            grid.page_no,
+            _candidate_order(candidate)[2],
         )
         if realigned.moved:
             part.flags.append("rows_realigned")
@@ -307,8 +591,12 @@ def structure_document(
             domicile_texts=domicile_texts,
         )
 
+        scope = part_scopes[part.table_refs[0]]
+        if scope is not None and group_key and group_key.startswith("scope:"):
+            metas[part.table_refs[0]].consolidated = scope
     merged = sorted(
-        merge_continuations(parts, index), key=lambda p: (p.type.value, -p.confidence, p.first_page)
+        merge_continuations(parts, index),
+        key=lambda p: (p.type.value, *part_order[p.table_refs[0]]),
     )
     per_type = Counter(p.type for p in merged)
     decision_by_ref = {f"{d.docling_path}{d.table_ref}": d for d in decisions}
@@ -361,11 +649,7 @@ def structure_document(
     flags = [f"statement_not_extracted:{t.value}" for t in config.enabled_types if t not in found]
     if inputs.industry_hold is not None:
         flags.append(f"industry_uncertain:{inputs.industry_hold}")
-    flags += [
-        f"range_not_converted:{r.first_page}-{r.last_page}"
-        for r in inputs.convert.ranges
-        if r.status in ("failed", "skipped")
-    ]
+    flags += range_conversion_flags(inputs.convert.ranges)
     structured = StructureResult(
         version=STRUCTURE_VERSION,
         sha256=inputs.sha256,
@@ -380,14 +664,38 @@ def structure_document(
 
 
 def _settings_hash(
-    config: IngestConfig, convert: ConvertResult, ocr: OcrEngine | None = None
+    config: IngestConfig,
+    convert: ConvertResult,
+    located: LocateResult,
+    ocr: OcrEngine | None = None,
 ) -> str:
     payload = {
+        "source": {
+            "sha256": located.document.sha256,
+            "page_count": located.document.page_count,
+            "ranges": sorted(
+                (r.type.value, r.first_page, r.last_page, r.rank) for r in located.ranges
+            ),
+            "pages": sorted(
+                (
+                    p.page_no,
+                    tuple(t.value for t in p.title_types),
+                    tuple(t.value for t in p.cue_types),
+                    sorted(p.negatives),
+                    p.continuation,
+                    sorted(p.title_hits),
+                    sorted((t.value, p.is_candidate(t)) for t in config.enabled_types),
+                )
+                for p in located.pages
+            ),
+            "pad_pages": config.pad_pages,
+        },
         "structure": STRUCTURE_VERSION,
         "convert": convert.settings_hash,
         "min_confidence": config.min_confidence,
         "enabled_types": sorted(t.value for t in config.enabled_types),
-        "taxonomy": load_taxonomy().version,
+        # The content, not the version: an alias edit changes the mapping without a new version.
+        "taxonomy": load_taxonomy().digest,
         "header_ocr_scale": config.header_ocr_scale,
         "ocr": ocr_key(config, ocr),
     }
@@ -458,7 +766,12 @@ def structure_pdf(
     *,
     use_cache: bool = True,
     convert: Callable[[Path, IngestConfig], ConvertResult] = _convert,
+    conversion: ConvertResult | None = None,
 ) -> StructureResult:
+    """``conversion`` is one the caller just made for this document: used as it is, so a
+    partial or failed range is read and flagged rather than converted again (a worker job
+    times convert as its own stage). Without it, the stored conversion is used when current
+    and complete, else ``convert`` runs."""
     started = time.perf_counter()
     located = load_or_locate(pdf, config, ocr)
     out_dir = config.artifact_root / located.document.sha256
@@ -472,9 +785,15 @@ def structure_pdf(
         _write(out_dir / "table_checks.json", "[]")  # statements.raw.json promises these
         _write(out_dir / "statements.raw.json", declined.model_dump_json(indent=2))
         return declined
-    converted = current_convert(pdf, config, ocr, located, convert)
+    if conversion is None:
+        converted = current_convert(pdf, config, ocr, located, convert)
+    elif conversion.sha256 != located.document.sha256:
+        msg = f"conversion of {conversion.sha256} given for {located.document.sha256}"
+        raise ValueError(msg)
+    else:
+        converted = conversion
 
-    digest = _settings_hash(config, converted, ocr)
+    digest = _settings_hash(config, converted, located, ocr)
     target = out_dir / "statements.raw.json"
     if use_cache and target.is_file():
         try:
@@ -487,6 +806,8 @@ def structure_pdf(
             and cached.settings_hash == digest
             and (out_dir / "table_checks.json").is_file()
             and not any(
+                # A missing engine or a failed read can succeed next time. Every other
+                # unavailable comparison is a fact of the page and is reused as cached.
                 e.startswith(("header_recovery_failed:", "header_recovery_unavailable"))
                 for table in cached.tables
                 for e in table.evidence
@@ -504,8 +825,7 @@ def structure_pdf(
         page_modes={p.page_no: p.mode for p in pages},
         visual_pages={p.page_no for p in pages if p.visual_arabic},
         page_texts={p.page_no: repair_text(p.text, visual=False) for p in pages},
-        title_types={p.page_no: tuple(p.title_types) for p in located.pages},
-        cue_types={p.page_no: tuple(p.cue_types) for p in located.pages},
+        located=located,
         documents=[
             (r.docling_path, load_docling_json(out_dir / r.docling_path))
             for r in converted.ranges

@@ -1,14 +1,15 @@
 # 14. Run profiles: the model route from MLX to llama.cpp, and the Docker skeleton
 
-Status: v5, 2026-10-06. The GGUF spike is measured, on two runs, the Docker skeleton is built
+Status: v6, 2026-10-15. R19 is measured and closed ("R19: the 7B file inside the
+container"). The GGUF spike is measured, on two runs, the Docker skeleton is built
 and measured ("The Docker skeleton"), the week 2 OCR bake-off is recorded ("The OCR
 bake-off", the last section), and a hosted Linux container smoke run covers x86-64 for the
 image as it stood on 2026-10-05. This document closes R16 as a question
 ([08-revised-plan.md](08-revised-plan.md)): the route works on a small model. The route uses a
 step that [01-constraints.md](01-constraints.md) 1.4 forbade on this machine; the owner amended
 that rule on 2026-10-02 for this export only, under conditions (see "Decision for week 3"). The
-7B route has not been run: the rehearsal comes first. This document records a first number for
-R19.
+7B route has not been run: the rehearsal comes first. This document closes R19 with a measurement
+of the 7B file inside the container.
 
 ## The question
 
@@ -197,7 +198,37 @@ This is the 0.5B model on the Mac's own CPU, not in a container. The 7B model ha
 times the parameters, and CPU speed scales roughly with size, so the Docker profile lands
 about 4 to 5.3 tokens/s generating, on either side of the 5 tokens/s line of R19, and about 25
 tokens/s reading the prompt, before the VM takes its share. Those are estimates, not
-measurements: R19 stays open until the 7B file is benchmarked inside the container.
+measurements: R19 stayed open until the 7B file was benchmarked inside the container.
+
+## R19: the 7B file inside the container
+
+Measured on 2026-10-15: the official Qwen2.5-7B-Instruct Q4_K_M GGUF (`Qwen/Qwen2.5-7B-Instruct-GGUF`,
+two shards, 4.36 GiB, 7.62 B parameters; sha256 `dfce12e3862a5283ccfb88221b48480e58745165de856439950d0f22590580db` and
+`539cf93f78e887edea1c04e2d7d8cdaca9d01dae9c9025bcb8accbe29df3d72a`), run by `llama-bench` (build 843e7dcc1) in
+`ghcr.io/ggml-org/llama.cpp:full`, pulled as
+`ghcr.io/ggml-org/llama.cpp@sha256:139d4c374d80269e0b706c55901b0b4caea3d5caa4734d5652b299a2f3da9503`,
+on Docker 27.3.1 with 12 CPUs and 13.1 GiB of memory: `-ngl 0 -p 512 -n 128 -r 3`, at 6 and 12
+threads. These are short-context figures: generation slows as the context grows, and the
+narration time target ([04-execution-phases.md](04-execution-phases.md)) has not been measured
+end to end through the server.
+
+| Threads | Prompt, tokens/s | Generation, tokens/s |
+|--------:|-----------------:|---------------------:|
+| 6 | 46.5 ± 0.8 | 18.9 ± 2.4 |
+| 12 | 67.6 ± 2.7 | 15.1 ± 1.5 |
+
+Generation is 15 to 19 tokens/s, three to four times the 5 tokens/s line, so R19 is closed: the
+Docker profile keeps the 7B model and needs no smaller one. The machine was not idle: the load
+average was 9.8 when the run started and rose to 39 during it. An idle machine
+is expected to read no slower, but that is not measured. The estimate above was low on both:
+about 1.9 to 2.7 times for the prompt and 2.8 to 4.7 times for generation; scaling the 0.5B model's speed by parameter count does
+not hold.
+
+Generation is slower at 12 threads than at 6. The likely reason, not measured, is that each
+generated token reads every weight once, so it is bound by memory bandwidth and more threads add
+contention; with the load average above 12, oversubscription alone could also explain it. Reading the prompt is batched
+and does gain from them. The served model should therefore run with an explicit thread count
+rather than llama.cpp's default; which count is best on an idle machine is not measured.
 
 ## What failed, and the fix
 
@@ -225,7 +256,7 @@ the adapter rewritten: MLX writes `adapters.safetensors` with its own config, an
 converter reads the PEFT layout. It remains the fallback if the real adapter loses answers at
 the level that ships, or if a fused 7B model fails to convert.
 
-Nothing in the spike was run in Docker. The CPU-only figures come from `-ngl 0` on macOS.
+Nothing in the 0.5B spike was run in Docker. The CPU-only figures come from `-ngl 0` on macOS.
 
 ## Decision for week 3
 
@@ -268,9 +299,8 @@ Runs of the 7B export recorded here (condition 7 of 1.4): none yet.
 
 Before and during week 3:
 
-- **Benchmark first.** Run an off-the-shelf Qwen2.5-7B-Instruct Q4_K_M GGUF in the container
-  before training anything. Speed does not depend on the adapter, and R19's mitigation, a
-  smaller model, needs its own training run.
+- **Benchmark first.** Done on 2026-10-15: 15 to 19 tokens/s generating in the container (see
+  "R19: the 7B file inside the container"), so no smaller model is trained.
 - **Rehearse the 7B route** with a throwaway adapter, and record peak memory, disk and any
   quantize fallbacks (condition 1 in [01-constraints.md](01-constraints.md) 1.4). Nothing is
   recorded yet.
@@ -289,7 +319,7 @@ Before and during week 3:
 
 ## Open
 
-- R19: generation speed of the 7B GGUF inside the container.
+- The thread count for the served model, measured on an idle machine.
 
 What the spike cannot have shown about the 7B:
 
@@ -577,6 +607,58 @@ the engine, but nothing checks docling's call.
 - Docker's Arabic run extracted 0 of 3 statements where the Mac's `ara+eng` run extracted 1 of
   3. Both are 0 right of 128; they are not different results on this measure.
 
+### Scan renderer
+
+The native Vision path uses Docling's `PyPdfiumDocumentBackend` for a conversion range
+only when its plan calls for full-page OCR and its one OCR language is listed in
+`convert.pdfium_full_page_languages`. The setting is a list in `configs/ingest.toml`, initially
+`["en-US"]`; an empty list keeps Docling's default backend for every range. Each entry must
+be in `ocr.languages` and readable by Vision, or configuration fails.
+
+The rule applies only to `ocrmac`. Tesseract, including the Docker profile, keeps the default
+backend whatever the list contains: its pdfium path is unmeasured. Layout-region OCR, text
+and skipped ranges also keep the default. Arabic stays on the default because the diagnostic
+pdfium run read the print better but assigned tokens to cells worse; digital ranges stay on
+the default because they have not been measured. The initial list enables English only.
+
+This choice was made on `dev` on 10 October 2026 and awaits confirmation on fit scans. The
+diagnostic comparisons are not a gate result. `convert.json` records `renderer` (`default`
+or `pdfium`) in each `settings_plans` entry. The plans govern the conversion settings hash:
+a changed renderer invalidates conversion and its derived outputs, while unaffected ranges
+retain their cache keys. An older plan without `renderer` loads as `default`. Locate and
+page-read caches are unaffected.
+
+#### Measured scan renderer table
+
+Measured on 10 October 2026 with `make eval-gates`: the twelve `dev` documents, native
+profile, Vision, empty caches. Two of the runs were timed with `/usr/bin/time -l`: 605 s and
+601 s of wall time, 2.35 GB and 2.17 GB maximum resident set size. The first column is
+the list empty; the second is `["en-US"]`. Only the five English scanned documents differ
+between the two; the other seven records are identical.
+
+| Gate part | Default backend everywhere | English full-page ranges on pdfium |
+| --- | --- | --- |
+| Digital cells right | 138 of 138 | 138 of 138 |
+| Scanned cells right | 218 of 254 | 219 of 254 |
+| Gated language pairs identical | 2 of 2 | 2 of 2 |
+| Identity | 4 ok, 1 accepted by rule, 3 skipped, 4 without a balance sheet | 5 ok, 2 accepted by rule, 2 skipped, 3 without a balance sheet |
+| Scale and currency found and right | 30 of 36 | 31 of 36 |
+| Critical slots not accounted for | 32 of 144 | 24 of 144 |
+| Critical slots mapped | 55 | 63 |
+
+Gates A and B are not met in either column. The default column was run on the change applied
+to `main`; the `["en-US"]` column was run there and again on this branch's base, with the same
+figures. One mapped slot of `edita-2025-en-consolidated-ifrs` became an explicit flag.
+
+Limits: `dev` is in-sample and annual only; no fit, validation or holdout scan has been read
+with this setting. Arabic was tried only as a diagnostic on `edita-2024-ar-consolidated`, where
+checked cells fell from 98 to 82 of 128, which is why it is not listed. The default column
+differs from the report of 7 October (three documents without a balance sheet, 24 slots not
+accounted for) on the same code. Read from this run's conversion plans and table decisions,
+not from a controlled test: `juhayna-2025-ar-standalone` has no range covering pages 59 to 61,
+where the earlier run found the table it counted as a balance sheet. Why the located ranges
+differ between runs is open.
+
 ### Decision
 
 The Docker profile uses Tesseract with `ara+eng`. Scanned Arabic is native-only: Vision is the
@@ -601,3 +683,53 @@ the default), for the reason in the section above.
 
 Not done: how a filing is recognised as scanned Arabic in the demo (D14 says the same), and a
 `device` and engine setting per profile (week 4, with the worker).
+
+### Locate evidence in gate reports
+
+Gate reports (`var/eval/gates-dev.json`) use `evidence_schema_version: 2` and include a
+`locate_evidence` record per structured document. It fingerprints each saved page-text record
+(excluding OCR timings), the locate version, `ocr_key`, ranges, conversion spans and settings
+hash. Each conversion span records its page range, OCR mode, OCR language, image pages and
+renderer, so a change of OCR mode or image pages makes the span count as changed. The OCR mode
+and renderer must be values that a conversion plan allows (the `RangeOcr` and `RangeRenderer`
+types of the ingest package); a span with any other value makes the evidence incomplete. The
+type of a located range must be a `StatementType`, so a range of any other type is incomplete
+too; its serialized value is the same string as before, so the evidence schema version stays 2.
+
+The record's `conversion` field is `read` when this run converted the document. A bank or
+insurer that is declined before conversion is recorded as `not_run`, with no spans and no
+settings hash. The `convert.json` left in its artifact directory belongs to an earlier run, so
+it is not read.
+
+Saved artifacts are read as strictly as the stage that wrote them. Each cached page record must
+validate against `PageText` without coercion, so a page number or measurement written as a
+string is incomplete. The document `sha256`, the `ocr_key` and the conversion `settings_hash`
+must be lowercase 64-digit hexadecimal digests, and the page count must be a whole number of at
+least 1. Saved artifacts are also cross-checked. `convert.json` must share the `sha256` and
+locate version of `locate.json`, and the pages of its plans and of the located ranges must lie
+within the page count. A page count that does not match the cached pages is also incomplete. An artifact that is rewritten while it is being read
+is marked incomplete with the reason `artifacts changed while being read`. Any other missing,
+unreadable or malformed artifact is incomplete, with the error in its reason. A document that
+fails to read is listed under `errored`, with incomplete evidence whose reason starts with
+`document failed`. An incomplete or errored document makes the gate command exit 1.
+
+Compare a later run with `python -m harness.gates --compare-with
+<earlier-gates-dev.json> --output <report.json>`. The earlier report's `documents` and
+`errored` lists are both indexed by document id. An id that appears twice, within one list or
+in both, makes the report unreadable and the command exits before any document runs, as for
+any other unreadable comparison report. A report written before errored records carried
+`locate_evidence` is still read: such a record counts as incomplete evidence, and a report
+without an errored list is read as having none. Per-document comparisons report changed
+input pages, gained or lost ranges, a conversion that was read in one run and not_run in the
+other (`conversion run changed`), changed conversion spans, a settings-hash-only difference,
+locate-version or `ocr_key` changes, or unchanged inputs. A settings hash can change when the
+locate version changes even if conversion spans do not; that is reported as a settings-hash
+difference, not as a changed conversion plan. A document that errored in the
+earlier report and reads now is not comparable, because the earlier evidence is incomplete.
+Documents in the earlier report, errored or not, that are absent from the current run are
+listed under `removed_documents`, each as not comparable. An earlier
+report that uses another evidence schema version is not compared field by field: every document
+is not comparable, with the reason `earlier report uses evidence schema <n>`. Reports without
+earlier evidence, incomplete evidence and malformed evidence are not comparable with a stated
+reason. These fingerprints describe saved inputs and outputs; they do not establish that a
+cached read is correct.

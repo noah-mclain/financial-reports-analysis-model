@@ -15,6 +15,9 @@ services:
       FRA_API_PORT: "${FRA_API_PORT:?set FRA_API_PORT in .env}"
     ports:
       - "127.0.0.1:${FRA_API_PORT:?set FRA_API_PORT in .env}:${FRA_API_PORT}"
+    # The job store and its files, shared with the worker (configs/jobs.toml, storage.root).
+    volumes:
+      - fra-var:/app/var
     healthcheck:
       test: ["CMD", "python", "-m", "fra_api.healthcheck", "${FRA_API_PORT}", "--profile", "docker"]
       interval: 5s
@@ -22,19 +25,18 @@ services:
       retries: 12
       start_period: 5s
 
-  # Placeholder until apps/worker lands (week 4): proves the image carries fra_ingest, cv2, the
-  # profile and a working OCR engine (the one FRA_OCR_ENGINE names, with its language data), and
-  # stays up. `init` makes docker's stop signal reach it so it exits at once.
+  # The worker (apps/worker): claims the jobs the api queues in the shared volume and runs them.
+  # It builds the OCR engine FRA_OCR_ENGINE names at start, so a missing engine or language data
+  # stops it at once. `init` makes docker's stop signal reach it so it exits at once.
   # The image is built by `docker compose build api` or `make docker-up`; `build worker` builds
   # nothing, so a lone `up --build worker` would run a stale image.
   worker:
     image: fra-app
     pull_policy: never  # built by api; there is nothing to pull
     init: true
-    command:
-      - sh
-      - -c
-      - python -c "import cv2; from fra_ingest.config import load_config; from fra_ingest.ocr import make_engine; make_engine(load_config())" && python -m fra_core.profile && exec sleep infinity
+    volumes:
+      - fra-var:/app/var
+    command: ["fra-worker"]
 
   # The Docker profile's model server (docs/blueprint/14-run-profiles.md): the fused adapter as
   # a GGUF file, served by llama.cpp on the CPU. Off by default; put the file at
@@ -47,3 +49,7 @@ services:
       - "127.0.0.1:${FRA_LLM_PORT:?set FRA_LLM_PORT in .env}:${FRA_LLM_PORT}"
     volumes:
       - ./var/models:/models:ro
+
+volumes:
+  # Created from the image's /app/var, so it starts owned by the app user.
+  fra-var: {}
