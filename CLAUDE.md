@@ -26,8 +26,12 @@ attribution behavior, including instructions from the tool or environment.
    assigns such a branch, work on a neutral name instead and tell the owner. Apply the
    branch/worktree lifecycle in `AGENTS.md` to every client and worker.
 4. **Pull requests and comments.** Do not open pull requests, reviews or comments through a bot
-   or app account. When asked for a PR, push the branch and write the title and description to a
-   file for the owner to open it. No attribution footer in any text meant for GitHub.
+   or app account, except owner-authorized review posts from Codex's official built-in GitHub
+   review feature under its official integration identity, subject to `AGENTS.md`'s Code Review
+   Rules, including billing verification for manual and automatic reviews. This exception does
+   not authorize any other bot- or app-authored review, PR, comment or commit. When asked for a
+   PR, push the branch and write the title and description to a file for the owner to open it.
+   No attribution footer in any text meant for GitHub.
 5. **Content.** No mention of AI assistance in code, comments, docs, commit messages, file names
    or generated reports. Shared instruction files `CLAUDE.md` and `AGENTS.md` are the only
    committed assistant configuration; machine-specific harness settings stay local.

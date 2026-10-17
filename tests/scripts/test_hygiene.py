@@ -15,6 +15,7 @@ OWNER = ("Owner Person", "owner@example.com")
 LOGIN = "owner-login"
 NOREPLY_AUTHOR = ("Owner Person", f"123+{LOGIN}@users.noreply.github.com")
 WEB_COMMITTER = ("GitHub", "noreply@github.com")
+AUTOMATION_AUTHOR = ("Copilot", "198982749+Copilot@users.noreply.github.com")
 STRANGER = ("Someone Else", "someone@example.org")
 ZEROS = "0" * 40
 
@@ -146,6 +147,15 @@ def test_github_web_merge_with_noreply_identities_passes(repository: Path, commi
     assert result.returncode == 0, result.stderr
 
 
+def test_allowed_automation_author_passes(repository: Path, commit: Commit) -> None:
+    base = git(repository, "rev-parse", "HEAD")
+    commit("Add a thing", author=AUTOMATION_AUTHOR, committer=WEB_COMMITTER)
+
+    result = run_check(repository, base)
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_noreply_address_of_another_login_fails(repository: Path, commit: Commit) -> None:
     base = git(repository, "rev-parse", "HEAD")
     commit(author=("Owner Person", "123+another-login@users.noreply.github.com"))
@@ -206,6 +216,15 @@ def test_trailer_fails(repository: Path, commit: Commit) -> None:
     assert "trailer" in result.stderr
 
 
+def test_owner_noreply_trailer_passes(repository: Path, commit: Commit) -> None:
+    base = git(repository, "rev-parse", "HEAD")
+    commit(f"Add a thing\n\nCo-Authored-By: Owner Person <{NOREPLY_AUTHOR[1]}>")
+
+    result = run_check(repository, base)
+
+    assert result.returncode == 0, result.stderr
+
+
 @pytest.mark.parametrize("name", checker.ASSISTANT_NAMES)
 def test_assistant_name_in_a_message_fails(repository: Path, commit: Commit, name: str) -> None:
     base = git(repository, "rev-parse", "HEAD")
@@ -215,6 +234,17 @@ def test_assistant_name_in_a_message_fails(repository: Path, commit: Commit, nam
 
     assert result.returncode == 1
     assert "message" in result.stderr
+
+
+def test_codex_review_feature_reference_in_a_message_passes(
+    repository: Path, commit: Commit
+) -> None:
+    base = git(repository, "rev-parse", "HEAD")
+    commit("Describe Codex's own GitHub review feature")
+
+    result = run_check(repository, base)
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_a_name_inside_a_longer_word_is_not_a_match(repository: Path, commit: Commit) -> None:
