@@ -510,8 +510,10 @@ checks after material changes; do not bypass failing checks to get a merge throu
 
 ## Code Review Rules
 
-The owner may request Codex's official built-in GitHub review feature for all pull requests.
-Its review posts may use the official integration identity. This narrow exception does not
+The owner may request Codex's official built-in GitHub review feature for individual pull
+requests or automatic review for all pull requests, subject to the billing checks below.
+Only these owner-authorized review posts may use the official integration identity, as also
+permitted by `CLAUDE.md`. This narrow exception does not
 authorize the coordinator to author PRs, comments or commits as a bot, and does not change the
 owner-account publication rule above. These rules neither enable the feature nor replace native
 worker authentication and billing preflight.
@@ -523,13 +525,22 @@ worker authentication and billing preflight.
 - Check parser/evaluation regressions and pool, denominator and stratum boundaries. Support
   claims with available evidence; do not expose secrets or unverified numbers.
 
-Before the owner enables automatic review for all pull requests, they must verify in the same
+Before any Codex GitHub review request, including manual, on-demand and one-off requests, and
+before enabling automatic review for all pull requests, the owner must verify in the same
 connected Codex account that extra ChatGPT/Codex credits are zero, credit use after the included
 limit is off, and automatic top-up is off. The local worker preflight does not control or prove
-GitHub's cloud review billing. If this included-usage-only boundary cannot be established, leave
-automatic review disabled and use bounded manual review. At a usage limit, stop; do not top up,
-repeat review requests, or switch to a paid fallback. Do not add API-backed review actions,
-credentials, third-party bridges or another billing route.
+GitHub's cloud review billing. If this included-usage-only boundary cannot be established, do not
+request a Codex GitHub review and keep automatic review disabled (disable it if already enabled).
+Bounded local manual review remains subject to native worker authentication and billing preflight;
+it is not an exemption for manual GitHub reviews.
+
+After any connected-account or credit-setting change, disable automatic review and invalidate
+the previous billing confirmation. Reverify all three controls in the connected account before
+any further Codex GitHub review request or reenabling automatic review. If reverification fails
+or remains unknown, automatic review must remain disabled and no Codex GitHub review may be
+requested. At a usage limit, stop; do not top up, repeat review requests, or switch to a paid
+fallback. Do not add API-backed review actions, credentials, third-party bridges or another
+billing route.
 
 ## Project quality and evidence
 
