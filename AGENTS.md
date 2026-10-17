@@ -456,6 +456,17 @@ stale summaries when the actual diff changes. Read only relevant linked node con
 
 ## GitHub workflow and publication
 
+### Pull request description
+
+Use the repository pull request template's `Why`, `What changed` and `Validation and proof`
+sections in that order. State the concrete problem and resulting behavior; describe the smallest
+useful change, intentional exclusions, dependencies, base branch and issue link when one exists.
+Keep every validation checkbox unchecked unless its evidence is present. Record focused test
+commands and actual results, relevant controls or regressions, and attach UI proof when relevant
+(otherwise state `N/A`). Record the independent full-diff review and resolution of Critical and
+Important findings, plus the actual exit results of all four required `make` checks. Never imply
+a check, review or attachment exists when it does not.
+
 Use `gh` to inspect issues, open PRs, specific diffs and checks. Existing `pi-github` and
 `pi-prs` extensions may help after their compatibility and tool behavior have been checked.
 They are disabled by the guarded launchers. They are not authorization to add paid providers
@@ -496,6 +507,29 @@ name: `git -C "$TASK_WORKTREE" push --set-upstream origin "HEAD:refs/heads/$TASK
 Never rely on an upstream inherited from `origin/main`, publish all branches, or push another
 worktree's HEAD by accident. Resolve conflicts on the owning task branch, re-review and rerun
 checks after material changes; do not bypass failing checks to get a merge through.
+
+## Code Review Rules
+
+The owner may request Codex's official built-in GitHub review feature for all pull requests.
+Its review posts may use the official integration identity. This narrow exception does not
+authorize the coordinator to author PRs, comments or commits as a bot, and does not change the
+owner-account publication rule above. These rules neither enable the feature nor replace native
+worker authentication and billing preflight.
+
+- Report reproducible, high-impact findings with file and line evidence; omit speculative or
+  purely stylistic comments.
+- Check financial source-region provenance, deterministic `Decimal` calculations, and whether
+  uncertainty or failed identity checks are presented as verified.
+- Check parser/evaluation regressions and pool, denominator and stratum boundaries. Support
+  claims with available evidence; do not expose secrets or unverified numbers.
+
+Before the owner enables automatic review for all pull requests, they must verify in the same
+connected Codex account that extra ChatGPT/Codex credits are zero, credit use after the included
+limit is off, and automatic top-up is off. The local worker preflight does not control or prove
+GitHub's cloud review billing. If this included-usage-only boundary cannot be established, leave
+automatic review disabled and use bounded manual review. At a usage limit, stop; do not top up,
+repeat review requests, or switch to a paid fallback. Do not add API-backed review actions,
+credentials, third-party bridges or another billing route.
 
 ## Project quality and evidence
 
