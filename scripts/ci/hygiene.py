@@ -25,6 +25,7 @@ ASSISTANT_NAMES = ("claude", "anthropic", "chatgpt", "openai", "copilot", "gemin
 # A name followed by one of these is a reference, not attribution: the project's own CLAUDE.md,
 # an "OpenAI-compatible" endpoint.
 NAME_ALLOWED_SUFFIXES = (".md", "-compatible")
+CODEX_REVIEW_REFERENCE = "codex's own github review feature"
 GENERATED_MARKER = "generated with"
 SESSION_LINK_HOST = "claude.ai"
 FORBIDDEN_BRANCH_PREFIXES = (
@@ -69,6 +70,9 @@ SESSION_LINK_PATTERN = re.compile(
     r"https?://\S*" + re.escape(SESSION_LINK_HOST) + r"\S*|" + SESSION_ID, re.IGNORECASE
 )
 TRAILER_PATTERN = re.compile(r"^\s*co-authored-by\s*:", re.IGNORECASE | re.MULTILINE)
+COAUTHOR_LINE_PATTERN = re.compile(
+    r"^\s*co-authored-by\s*:\s*(?P<name>.+?)\s*<(?P<email>[^>]+)>\s*$", re.IGNORECASE
+)
 BRANCH_SESSION_PATTERN = re.compile(SESSION_ID, re.IGNORECASE)
 ALL_ZERO_SHA = re.compile(r"0+")
 HUNK_HEADER = re.compile(r"^@@ -\S+ \+(\d+)")
@@ -143,25 +147,31 @@ def read_commits(base: str, head: str) -> list[Commit]:
     return commits
 
 
+def owner_noreply(login: str) -> re.Pattern[str]:
+    return re.compile(rf"\d+\+{re.escape(login)}@users\.noreply\.github\.com", re.IGNORECASE)
+
+
+def is_owner_email(email: str, owner: str, login: str) -> bool:
+    return email.lower() == owner.lower() or owner_noreply(login).fullmatch(email) is not None
+
+
 def check_identity(commit: Commit, owner: str, login: str) -> list[str]:
-    noreply = re.compile(rf"\d+\+{re.escape(login)}@users\.noreply\.github\.com", re.IGNORECASE)
-
-    def is_owner(email: str) -> bool:
-        return email.lower() == owner.lower() or noreply.fullmatch(email) is not None
-
     findings = []
     short = commit.sha[:10]
-    if not is_owner(commit.author_email):
+    if not is_owner_email(commit.author_email, owner, login):
         findings.append(f"{short}: author {commit.author_email} is not the owner")
-    if not is_owner(commit.committer_email) and commit.committer_email != GITHUB_WEB_COMMITTER:
+    if (
+        not is_owner_email(commit.committer_email, owner, login)
+        and commit.committer_email != GITHUB_WEB_COMMITTER
+    ):
         findings.append(f"{short}: committer {commit.committer_email} is not the owner")
     return findings
 
 
-def forbidden_text(text: str) -> list[str]:
+def forbidden_text(text: str, *, allow_codex_review_reference: bool = False) -> list[str]:
     """Which rules the text breaks, by description."""
     broken = []
-    if NAME_PATTERN.search(text):
+    if has_forbidden_name(text, allow_codex_review_reference=allow_codex_review_reference):
         broken.append("names an assistant")
     if GENERATED_PATTERN.search(text):
         broken.append(f"says {GENERATED_MARKER!r}")
@@ -170,10 +180,29 @@ def forbidden_text(text: str) -> list[str]:
     return broken
 
 
-def check_message(commit: Commit) -> list[str]:
+def has_forbidden_name(text: str, *, allow_codex_review_reference: bool = False) -> bool:
+    lowered = text.lower()
+    for match in NAME_PATTERN.finditer(text):
+        if allow_codex_review_reference and lowered[match.start() :].startswith(CODEX_REVIEW_REFERENCE):
+            continue
+        return True
+    return False
+
+
+def check_message(commit: Commit, owner: str, login: str) -> list[str]:
     short = commit.sha[:10]
-    findings = [f"{short}: message {reason}" for reason in forbidden_text(commit.message)]
-    if TRAILER_PATTERN.search(commit.message):
+    findings = [
+        f"{short}: message {reason}"
+        for reason in forbidden_text(commit.message, allow_codex_review_reference=True)
+    ]
+    if TRAILER_PATTERN.search(commit.message) and any(
+        (
+            (match := COAUTHOR_LINE_PATTERN.match(line.strip())) is None
+            or not is_owner_email(match.group("email"), owner, login)
+        )
+        for line in commit.message.splitlines()
+        if TRAILER_PATTERN.match(line)
+    ):
         findings.append(f"{short}: message has a Co-Authored-By trailer")
     return findings
 
@@ -236,7 +265,7 @@ def main(argv: list[str]) -> int:
         findings: list[str] = []
         for commit in commits:
             findings += check_identity(commit, owner, arguments.owner_login)
-            findings += check_message(commit)
+            findings += check_message(commit, owner, arguments.owner_login)
         if arguments.branch is not None:
             findings += check_branch(arguments.branch)
         findings += check_added_lines(base, head)
