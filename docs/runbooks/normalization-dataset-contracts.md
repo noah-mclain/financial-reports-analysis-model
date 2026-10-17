@@ -115,7 +115,8 @@ deduplication, period weighting, long-tail coverage and source/language reportin
 with the pinned tokenizer/chat template, compare the base model and non-model baseline, then
 authorize a resource-checked training run separately.
 
-This API creates no training files, holdout dataset or scoring command. Any later provisional
+This API creates no training files, holdout dataset or scoring command; the separate
+[dataset builder](normalization-dataset-builder.md) renders its output but has run on no real data. Any later provisional
 Gate C judgment must follow D16's logged train-holdout protocol and source-specific sufficiency
 rules. D13's owner-run model_test checkpoint and D17's first blind run remain at the end.
 Synthetic checks support none of those measured claims. Export needs the conditions in

@@ -328,8 +328,9 @@ the same property earlier. Until the checkpoint, Gate C is measured on that hold
 provisional. The split rules are `fra_core.split` in `packages/core`, which does no file I/O;
 its override record is `eval/corpus/holdout_moves.yaml` and the scoring log is
 `eval/corpus/scoring_log.tsv`, both read and written only by `eval/harness/holdout_records.py`;
-`make corpus-split` prints the counts below. The dataset builder is week 3 work. Everything below
-that says what the builder does is what it will do.
+`make corpus-split` prints the counts below. The dataset builder module exists
+(`training/dataset_builder.py`) and has run on no real data. Everything below that says what the
+builder does is what it will do.
 
 - **Three parts of the `train` pool, by issuer.** *Fit*: what the adapter trains on.
   *Validation*: early stopping, hyperparameters, prompt and template choices, the bake-off of
@@ -442,10 +443,11 @@ that says what the builder does is what it will do.
   issuer's documents by period, would leak labels between training and scoring (the reason for
   corpus rule 1, risk R7). Period kind is recorded and reported instead, at four points. (1)
   *Data.* Every document records `period: annual | interim` in `candidates.yaml`, and the dataset
-  builder (week 3, not built yet) will give every training example built from it that value and
-  the length in months of the column it was read from (`Period.months` in
-  `fra_core.schemas.statement`; `Period.kind` there is duration or instant, not annual or
-  interim). (2) *Weight.* The builder will keep identical (issuer, printed label, canonical item)
+  builder (`training/dataset_builder.py`, run on no real data) counts every training example by
+  source, language and this period value in its manifest, and keeps the example's column length in
+  months on the example record (`Period.months` in `fra_core.schemas.statement`; `Period.kind`
+  there is duration or instant, not annual or interim); neither is in the prompt the model sees.
+  (2) *Weight.* The builder will keep identical (issuer, printed label, canonical item)
   rows once per issuer, so an issuer with several quarterly filings does not count several times
   for the same labels. Interim-only headers (for example "for the three months ended") are period
   headers for the parsers, not line items for the model. (3) *Scoring.* Every extraction and
