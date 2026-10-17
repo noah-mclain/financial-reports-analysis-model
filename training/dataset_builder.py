@@ -25,6 +25,7 @@ from dataset_contracts import (
 from fra_core.split import cik_key
 
 BUILDER_VERSION = 1
+TOKEN_LIMIT = 2048
 SYSTEM_PROMPT = (
     "Map the financial statement line item to a canonical id from the taxonomy, "
     "or null if no canonical id applies."
@@ -165,7 +166,7 @@ def build_dataset(
     partitioned: PartitionedExamples,
     *,
     count_tokens: TokenCounter,
-    token_limit: int = 2048,
+    token_limit: int = TOKEN_LIMIT,
     tokenizer_id: str,
 ) -> BuiltDataset:
     """Deduplicate, render and length-audit both parts; an over-length row is an error.

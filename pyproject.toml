@@ -65,6 +65,9 @@ dev = [
   "types-PyYAML>=6.0",
   "pypdfium2>=4.30",
   "truststore>=0.10",
+  # training/chat_tokenizer.py imports both directly; the pins match uv.lock.
+  "transformers==5.17.0",
+  "tokenizers==0.23.2",
 ]
 
 [tool.ruff]

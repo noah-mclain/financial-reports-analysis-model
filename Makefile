@@ -29,7 +29,7 @@ $(error FRA_LLM_PORT is empty: set it in $(ENV_FILE))
 endif
 export FRA_API_PORT FRA_LLM_PORT
 
-.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping eval-gates dry-run expected-drafts eval-extraction verify-expected dev worker docker-up docker-health ci-workflows-check container-smoke hygiene-check
+.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds dataset-build clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping eval-gates dry-run expected-drafts eval-extraction verify-expected dev worker docker-up docker-health ci-workflows-check container-smoke hygiene-check
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -64,6 +64,8 @@ typecheck: ## Type check the packages, apps, the analytics golden test, eval har
 	$(UV) run mypy training/sec_crosswalk.py
 	$(UV) run mypy --strict training/sec_source_access.py
 	$(UV) run mypy --strict training/dataset_builder.py
+	$(UV) run mypy --strict training/chat_tokenizer.py
+	MYPYPATH=scripts:eval $(UV) run mypy --strict training/build_dataset.py
 
 test: ## Fast tests (no models, no OCR)
 	@$(MAKE) --no-print-directory unhide-pth
@@ -131,6 +133,11 @@ corpus-fetch: ## Download, measure and dedupe the corpus into var/corpus (NEW=1:
 sec-fsds: ## SEC statement labels for training (needs FRA_SEC_USER_AGENT; QUARTERS=8 the latest N, ONLY="2024q3 2024q4" these quarters)
 	@$(MAKE) --no-print-directory unhide-pth
 	PYTHONPATH=scripts $(UV) run python training/sources/sec_fsds.py $(or $(ONLY),--last $(or $(QUARTERS),8))
+
+dataset-build: ## Normalization train/valid files (EXAMPLES, SOURCES, APPROVED, TOKENIZER_DIR, OUT_DIR required; MAX_PER_ISSUER optional)
+	$(foreach var,EXAMPLES SOURCES APPROVED TOKENIZER_DIR OUT_DIR,$(if $($(var)),,$(error $(var) is required)))
+	@$(MAKE) --no-print-directory unhide-pth
+	PYTHONPATH=scripts:eval $(UV) run python training/build_dataset.py --examples "$(EXAMPLES)" --sources "$(SOURCES)" --approved "$(APPROVED)" --tokenizer-dir "$(TOKENIZER_DIR)" --out-dir "$(OUT_DIR)" $(if $(MAX_PER_ISSUER),--max-per-issuer $(MAX_PER_ISSUER))
 
 dev: ## Serve the API natively (profile native) on FRA_API_PORT
 	@$(MAKE) --no-print-directory unhide-pth

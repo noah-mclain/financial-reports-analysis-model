@@ -30,9 +30,36 @@ functions and one writer. It reads no files, calls no network and loads no model
 ## Length audit
 
 `count_tokens` is an injected callable: it receives the message list and returns the token count
-of the chat-templated sequence. No tokenizer adapter exists yet, because the pinned tokenizer is
-not on disk; tests use a synthetic counter. A real run needs an adapter around the pinned
-tokenizer and its chat template, and its `tokenizer_id` is recorded in the manifest.
+of the chat-templated sequence. `training/chat_tokenizer.py` provides it:
+`load_chat_counter(tokenizer_dir)` loads a tokenizer from a local directory with no network,
+refuses a directory without `tokenizer.json`, `tokenizer_config.json` or a chat template, and
+counts `apply_chat_template(messages, tokenize=True)` with no generation prompt, because the
+training sequence ends with the assistant turn. It also returns the tokenizer identity recorded
+as `tokenizer_id`: a SHA-256 over the contents of the tokenizer files present
+(`tokenizer.json`, `tokenizer_config.json`, `chat_template.jinja`, `special_tokens_map.json`,
+`added_tokens.json`, `vocab.json`, `merges.txt`), never a path.
+
+The owner must place the Qwen2.5-7B-Instruct tokenizer files in a local directory. None is on
+disk now, so the audit has run only against a tiny synthetic tokenizer in tests, not on real
+tokens.
+
+## Command
+
+    make dataset-build EXAMPLES=examples.jsonl SOURCES=sources.jsonl APPROVED=approved.txt \
+        TOKENIZER_DIR=path/to/tokenizer OUT_DIR=path/to/out [MAX_PER_ISSUER=n]
+
+- `EXAMPLES`: JSONL, one `NormalizationExample` (`model_dump(mode="json")`) per line.
+- `SOURCES`: JSONL, one `SourceRecord` per line, the authoritative train roster.
+- `APPROVED`: text file of example `content_sha256` values, one per line; blank lines and `#`
+  comments are ignored. This file is the caller's trust boundary: the command only checks that
+  each example's hash is listed and cannot tell whether anyone reviewed it.
+- The pool registry, holdout moves and scoring log default to the repository's files
+  (`var/issuer-pools.json`, `eval/corpus/holdout_moves.yaml`, `eval/corpus/scoring_log.tsv`);
+  `--registry`, `--moves` and `--looks` override them when running the script directly.
+
+It runs `partition_examples`, `build_dataset` (token limit 2048) and `write_dataset`, prints the
+row counts and the manifest path, and exits nonzero with the error message on a refusal. A
+malformed input line is reported with its file and line number.
 
 ## Manifest
 
@@ -54,6 +81,5 @@ Writes are not atomic: a failure part-way leaves earlier files behind, to be rem
 
 - No real dataset can be built yet: no reviewed crosswalk, approvals or independent bilingual
   annotations exist, so it has run on no real data and no counts are claimed.
-- No tokenizer adapter and no command line entry point.
 - No bag-of-words or bilingual-pair example generation.
 - No semantic deduplication, period weighting or long-tail coverage policy.
