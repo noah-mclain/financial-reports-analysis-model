@@ -319,6 +319,24 @@ def test_the_analysis_lists_computed_metrics_first_and_refuses_an_unreviewed_sta
         analysis_view(analysis.model_copy(update={"reviews": []}))
 
 
+def test_a_stored_narrative_with_an_unexpected_language_is_withheld_not_a_server_error() -> None:
+    sha = "a" * 64
+    narrative = claimed("The ratio is 2.00x.", "2.00x").model_copy(update={"language": "fr"})
+    analysis = Analysis(
+        job_id="b" * 32,
+        upload_sha256=sha,
+        page_count=1,
+        language="en",
+        statements=[statement(sha)],
+        reviews=[review()],
+        metrics=[metric(MetricUnit.TIMES, 2.0)],
+        narrative=narrative,
+    )
+    view = analysis_view(analysis)
+    assert view.narrative is None
+    assert view.summary_notice == "Summary withheld: its text or references could not be verified."
+
+
 # ---- pages ------------------------------------------------------------------------------------
 
 
@@ -450,7 +468,10 @@ def test_a_narrative_is_shown_with_how_it_was_checked(tmp_path: Path) -> None:
     with TestClient(create_app(Profile.NATIVE, settings)) as client:
         job_id = finished_job(settings, client, narrative=narrative)
         page = client.get(f"/analyses/{job_id}/view").text
-    assert "The current ratio is 1.50." in page and "checked against the computed metrics" in page
+    assert (
+        "The current ratio is 1.50." in page
+        and "Stored summary; not verified as a direct template." in page
+    )
     assert "No written summary yet" not in page
 
 
@@ -624,7 +645,7 @@ def test_a_claimed_figure_in_the_summary_links_to_its_metric_row(tmp_path: Path)
     with TestClient(create_app(Profile.NATIVE, settings)) as client:
         job_id = finished_job(settings, client, narrative=narrative)
         page = client.get(f"/analyses/{job_id}/view").text
-    assert 'href="#metric-current_ratio-2025-12-31"' in page and ">1.50</a>" in page
+    assert 'href="#metric-current_ratio-2025-12-31"' in page and ">1.50</bdi></a>" in page
     assert '<tr id="metric-current_ratio-2025-12-31">' in page
     assert "The current ratio is " in page and " at year end." in page
 
@@ -784,6 +805,77 @@ def test_summary_caveats_use_the_summary_language_and_preserve_cross_statement_s
     assert shown.footnotes[0].language == "ar"
     assert (
         shown.footnotes[0].text
-        == "لم تذكر القائمة عملتها. اعتُمد SAR لأنه العملة الأكثر ذكراً في المستند."
+        == "لم تذكر القائمة عملتها. اعتُمد \u2066SAR\u2069 لأنه العملة الأكثر ذكراً في المستند."
     )
     assert shown.footnotes[0].evidence == caveat.evidence
+
+
+def direct_summary_analysis(language: str = "en") -> Analysis:
+    from fra_model import SummaryBuilt, build_summary
+
+    printed = statement("a" * 64, language)
+    cell = printed.line_items[0].cells[0]
+    cell.reported = Decimal("1234567")
+    cell.flags = []
+    source = Analysis(
+        job_id="b" * 32,
+        upload_sha256="a" * 64,
+        page_count=1,
+        language=language,
+        statements=[printed],
+        reviews=[review()],
+        metrics=[metric(MetricUnit.TIMES, 1.5)],
+    )
+    result = build_summary(source)
+    assert isinstance(result, SummaryBuilt)
+    source.narrative = result.narrative
+    return source
+
+
+@pytest.mark.parametrize("language", ["en", "ar"])
+def test_direct_summary_is_checked_again_at_render_and_links_to_sources(language: str) -> None:
+    source = direct_summary_analysis(language)
+    view = analysis_view(source)
+    assert view.narrative is not None
+    assert view.summary_notice is None
+    assert any(
+        part.href == "#metric-current_ratio-2025-12-31"
+        for section in view.narrative
+        for parts in section.sentences
+        for part in parts
+    )
+    assert "/pages/1?" in view.metrics[0].inputs[0].source
+    assert ("قالب" if language == "ar" else "Direct template") in view.origin_text
+    assert source.narrative is not None
+    source.narrative.sections[0].sentences[0].text += " rose 20%."
+    withheld = analysis_view(source)
+    assert withheld.narrative is None and withheld.summary_notice
+
+
+def test_arabic_direct_template_page_has_isolated_numeric_links_and_honest_copy(
+    tmp_path: Path,
+) -> None:
+    from fra_model import SummaryBuilt, build_summary
+
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(settings, client)
+        store = JobStore(settings.root)
+        saved = store.load_analysis(job_id)
+        assert saved is not None
+        source = direct_summary_analysis("ar")
+        source.job_id = job_id
+        source.upload_sha256 = saved.upload_sha256
+        source.statements[0].document_sha256 = saved.upload_sha256
+        result = build_summary(source)
+        assert isinstance(result, SummaryBuilt)
+        source.narrative = result.narrative
+        # JobStore.finish accepts only a running job; replace the stored artifact atomically
+        # through its existing path for this rendering test.
+        path = settings.root / "analyses" / f"{job_id}.json"
+        assert path.is_file()
+        path.write_text(source.model_dump_json())
+        page = client.get(f"/analyses/{job_id}/view").text
+    assert 'dir="rtl" lang="ar"' in page
+    assert '<bdi dir="ltr">1.50×</bdi>' in page
+    assert "قالب مباشر" in page and "Written by the model" not in page

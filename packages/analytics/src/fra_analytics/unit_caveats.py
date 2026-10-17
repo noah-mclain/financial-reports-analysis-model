@@ -25,7 +25,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from fra_analytics.frame import FrameStatement
-from fra_core.schemas import MetricUnit
+from fra_core.schemas import MetricUnit, Statement
 from fra_core.schemas.caveat import CaveatId
 
 # Statement flags that say a unit or a currency was contradicted or missing. An assumed one is a
@@ -47,7 +47,7 @@ class UnitNotes:
     """The statements cannot be combined into this unit: the metric is null."""
 
 
-def unit_notes(unit: MetricUnit, statements: Sequence[FrameStatement]) -> UnitNotes:
+def unit_notes(unit: MetricUnit, statements: Sequence[FrameStatement | Statement]) -> UnitNotes:
     """The caveats and flags a metric of ``unit`` takes from the statements it was built from."""
     ordered = sorted({s.id: s for s in statements}.values(), key=lambda s: s.id)
     flags: list[str] = []
@@ -61,6 +61,10 @@ def unit_notes(unit: MetricUnit, statements: Sequence[FrameStatement]) -> UnitNo
     caveats: set[CaveatId] = set()
     if (unit in _AMOUNTS or len(ordered) > 1) and not blocked:
         for statement in ordered:
-            caveats.update(statement.caveats)
+            caveats.update(
+                (c.id for c in statement.caveats)
+                if isinstance(statement, Statement)
+                else statement.caveats
+            )
             flags.extend(f"{f}:{statement.id}" for f in UNIT_FLAGS if f in statement.flags)
     return UnitNotes(caveats=tuple(sorted(caveats)), flags=tuple(flags), blocked=blocked)

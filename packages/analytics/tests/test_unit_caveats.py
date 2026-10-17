@@ -149,3 +149,10 @@ def test_a_statement_with_no_figures_gives_null_metrics_that_name_what_is_missin
     assert margin.value is None
     assert margin.flags == ["missing_input:net_income", "missing_input:revenue"]
     assert margin.inputs == {"numerator": [], "denominator": []}
+
+
+@pytest.mark.parametrize("unit", list(MetricUnit))
+def test_statement_metadata_and_frame_metadata_use_identical_caveat_rules(unit: MetricUnit) -> None:
+    statements = acme(caveats=["scale_assumed_units"], flags=["scale_missing"])
+    assert unit_notes(unit, statements) == unit_notes(unit, to_frame(statements).statements)
+    assert unit_notes(unit, statements[:1]) == unit_notes(unit, to_frame(statements[:1]).statements)
