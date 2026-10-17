@@ -189,7 +189,9 @@ def forbidden_text(text: str, *, allow_codex_review_reference: bool = False) -> 
 def has_forbidden_name(text: str, *, allow_codex_review_reference: bool = False) -> bool:
     lowered = text.lower()
     for match in NAME_PATTERN.finditer(text):
-        if allow_codex_review_reference and lowered[match.start() :].startswith(CODEX_REVIEW_REFERENCE):
+        if allow_codex_review_reference and lowered[match.start() :].startswith(
+            CODEX_REVIEW_REFERENCE
+        ):
             continue
         return True
     return False

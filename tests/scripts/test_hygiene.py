@@ -236,7 +236,9 @@ def test_assistant_name_in_a_message_fails(repository: Path, commit: Commit, nam
     assert "message" in result.stderr
 
 
-def test_codex_review_feature_reference_in_a_message_passes(repository: Path, commit: Commit) -> None:
+def test_codex_review_feature_reference_in_a_message_passes(
+    repository: Path, commit: Commit
+) -> None:
     base = git(repository, "rev-parse", "HEAD")
     commit("Describe Codex's own GitHub review feature")
 
