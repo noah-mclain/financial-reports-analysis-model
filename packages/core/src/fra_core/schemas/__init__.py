@@ -18,7 +18,7 @@ from fra_core.schemas.job import (
     Upload,
 )
 from fra_core.schemas.metric import MetricInput, MetricUnit, MetricValue
-from fra_core.schemas.narrative import Claim, Narrative, NarrativeSection, Sentence
+from fra_core.schemas.narrative import Claim, Footnote, Narrative, NarrativeSection, Sentence
 from fra_core.schemas.review import StatementReview
 from fra_core.schemas.statement import (
     BBox,
@@ -49,6 +49,7 @@ __all__ = [
     "Claim",
     "Decline",
     "Document",
+    "Footnote",
     "Framework",
     "Job",
     "JobEvent",

@@ -64,19 +64,20 @@
 </section>
 {% endif %}
 
-<h2>Summary</h2>
-{% if analysis.narrative %}
+<h2>{{ 'الملخص' if analysis.language == 'ar' else 'Summary' }}</h2>
+{% if view.narrative %}
 <div class="panel" dir="{{ 'rtl' if analysis.narrative.language == 'ar' else 'ltr' }}" lang="{{ analysis.narrative.language }}">
   {% for section in view.narrative %}
     <h3>{{ section.heading }}</h3>
-    {% for parts in section.sentences %}<p>{% for part in parts %}{% if part.href %}<a href="{{ part.href }}" title="the computed metric and its inputs">{{ part.text }}</a>{% else %}{{ part.text }}{% endif %}{{ caveat_marks(part.caveats) }}{% endfor %}</p>{% endfor %}
+    {% for parts in section.sentences %}<p>{% for part in parts %}{% if part.href %}<a href="{{ part.href }}" title="the computed metric and its inputs"><bdi dir="ltr">{{ part.text }}</bdi></a>{% else %}{{ part.text }}{% endif %}{{ caveat_marks(part.caveats) }}{% endfor %}</p>{% endfor %}
   {% endfor %}
   {% for note in view.footnotes %}{{ caveat_text(note) }}{% endfor %}
-  <p class="muted" dir="ltr" lang="en">{{ 'Written by the model and checked against the computed metrics.' if analysis.narrative.grounding.value == 'passed' else 'Template sentences: the generated text failed the check against the computed metrics.' }}</p>
+  <p class="muted">{{ view.origin_text }}</p>
 </div>
+{% elif view.summary_notice %}
+<div class="panel muted" dir="{{ 'rtl' if analysis.language == 'ar' else 'ltr' }}" lang="{{ analysis.language }}">{{ view.summary_notice }}</div>
 {% else %}
-<div class="panel muted">No written summary yet: narration is not built in this version. The
-  statements and metrics below are as extracted and computed.</div>
+<div class="panel muted">{{ 'لا يوجد ملخص محفوظ بعد. القوائم والمقاييس أدناه كما استُخرجت وحُسبت.' if analysis.language == 'ar' else 'No written summary yet. The statements and metrics below are as extracted and computed.' }}</div>
 {% endif %}
 
 {% set primary = view.statements | rejectattr('duplicate') | list %}

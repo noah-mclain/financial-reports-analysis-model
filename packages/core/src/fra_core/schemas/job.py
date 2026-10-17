@@ -40,6 +40,7 @@ class JobStage(StrEnum):
     CONVERT = "convert"
     STRUCTURE = "structure"
     METRICS = "metrics"
+    NARRATE = "narrate"
 
 
 class Upload(BaseModel):
@@ -114,6 +115,8 @@ class Analysis(BaseModel):
     narrative: Narrative | None = Field(
         default=None, description="None until narration is built; never a placeholder text"
     )
+
+    narrative_suppression: list[str] = Field(default_factory=list)
 
     def status(self) -> JobStatus:
         """``completed`` only when there are statements and every one passed review; a

@@ -10,14 +10,16 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field, replace
-from decimal import Context, Decimal, localcontext
+from decimal import Decimal
 from urllib.parse import urlencode
 
+from fra_analytics import format_amount, format_metric
+from fra_core.citations import place_claims
+from fra_core.presentation import caveat_text
 from fra_core.schemas import (
     Analysis,
     BBox,
     MetricInput,
-    MetricUnit,
     MetricValue,
     Narrative,
     Provenance,
@@ -27,6 +29,7 @@ from fra_core.schemas import (
     StatementType,
 )
 from fra_core.schemas.caveat import CaveatId
+from fra_model import GroundingError, validate_summary
 
 STATEMENT_TITLES = {
     StatementType.BALANCE: "Statement of financial position",
@@ -38,24 +41,6 @@ STATEMENT_TITLES = {
 SCALE_WORDS = {1: "", 1_000: "thousands", 1_000_000: "millions", 1_000_000_000: "billions"}
 RTL_LANGUAGES = frozenset({"ar"})
 DUPLICATE_CELL = "duplicate_cell"
-# Fixed language templates from blueprint 13, shared by statement, metric and summary views.
-CAVEAT_TEXT: dict[str, dict[CaveatId, str]] = {
-    "en": {
-        "scale_assumed_units": "Amounts are shown as printed. The statement names no unit "
-        "multiplier such as thousands or millions, so they are taken to be in single {currency}.",
-        "currency_from_domicile": "The statement does not name its currency. {currency} is "
-        "taken from the company's country of incorporation.",
-        "currency_inferred": "The statement does not name its currency. {currency} is the "
-        "currency named most often in the document.",
-    },
-    "ar": {
-        "scale_assumed_units": "المبالغ معروضة كما وردت. لم تذكر القائمة مضاعفاً للوحدة مثل "
-        "الآلاف أو الملايين، ولذلك اعتُبرت بالـ{currency} دون مضاعف.",
-        "currency_from_domicile": "لم تذكر القائمة عملتها. اعتُمد {currency} بحسب بلد تأسيس الشركة.",
-        "currency_inferred": "لم تذكر القائمة عملتها. اعتُمد {currency} لأنه العملة الأكثر ذكراً "
-        "في المستند.",
-    },
-}
 
 
 def source_url(sha256: str, provenance: Provenance) -> str:
@@ -65,9 +50,7 @@ def source_url(sha256: str, provenance: Provenance) -> str:
 
 
 def amount(value: Decimal) -> str:
-    """A printed amount as statements print it: grouped, a negative in parentheses."""
-    text = f"{value.copy_abs():,f}"
-    return f"({text})" if value < 0 else text
+    return format_amount(value)
 
 
 @dataclass(frozen=True)
@@ -80,7 +63,9 @@ class CaveatView:
 
     @property
     def text(self) -> str:
-        return CAVEAT_TEXT[self.language][self.id].format(currency=self.currency)
+        if self.language not in ("en", "ar"):
+            raise ValueError(f"unsupported caveat language: {self.language}")
+        return caveat_text(self.id, self.currency, "ar" if self.language == "ar" else "en")
 
 
 @dataclass(frozen=True)
@@ -208,23 +193,7 @@ def statement_view(statement: Statement, review: StatementReview) -> StatementVi
 
 
 def metric_text(metric: MetricValue) -> str | None:
-    """The computed value rounded for display, or None when it was not computed."""
-    if metric.value is None:
-        return None
-    value = metric.value
-    if metric.unit is MetricUnit.RATIO:
-        # Float scaling can overflow even when the stored ratio is finite. The decimal
-        # display context is independent of callers' precision and does not change the metric.
-        with localcontext(Context(prec=34)):
-            return f"{Decimal(str(value)) * 100:.1f}%"
-    if metric.unit is MetricUnit.TIMES:
-        return f"{value:.2f}×"
-    if metric.unit is MetricUnit.DAYS:
-        return f"{value:.0f} days"
-    currencies = sorted({i.currency for cells in metric.inputs.values() for i in cells})
-    if metric.unit is MetricUnit.PER_SHARE:
-        return f"{amount(Decimal(str(value)))} {'/'.join(currencies)} per share".strip()
-    return f"{value:,.0f} {'/'.join(currencies)}".strip()
+    return format_metric(metric)
 
 
 def _input_view(sha256: str, cell: MetricInput, caveats: tuple[CaveatView, ...]) -> InputView:
@@ -256,39 +225,23 @@ class SectionView:
     sentences: tuple[tuple[SentencePart, ...], ...]
 
 
-def _span_pattern(span: str) -> re.Pattern[str]:
-    """The span as printed, not as part of a longer figure: ``1.5`` is not found inside
-    ``1.50``, nor ``50`` inside ``1,250``."""
-    before = r"(?<!\w)(?<!\d[.,])" if span[0].isalnum() else ""
-    after = r"(?!\w)(?![.,]\d)" if span[-1].isalnum() else ""
-    return re.compile(before + re.escape(span) + after)
-
-
 def sentence_parts(sentence: Sentence, anchors: frozenset[str]) -> tuple[SentencePart, ...]:
     """The sentence with each claimed span a link to the metric it states. Each claim takes
     the first occurrence of its span that no earlier claim took, so the same figure claimed
-    twice links each occurrence in turn. A span with no free occurrence, or naming a metric
-    the analysis did not compute, is an error: a figure in the summary is shown only with
-    its trace."""
-    placed: list[tuple[int, int, str]] = []
-    for claim in sentence.claims:
-        anchor = metric_anchor(claim.metric_id, claim.period_key)
+    twice links each occurrence in turn. A span with no free occurrence, or appearing more
+    times in the text than claims name it (so which occurrence is meant is ambiguous), or
+    naming a metric the analysis did not compute, is an error: a figure in the summary is
+    shown only with its trace."""
+    placed = place_claims(sentence)
+    for item in placed:
+        anchor = metric_anchor(item.claim.metric_id, item.claim.period_key)
         if anchor not in anchors:
-            raise ValueError(f"claim {claim.text_span!r} names no computed metric ({anchor})")
-        found = next(
-            (
-                m
-                for m in _span_pattern(claim.text_span).finditer(sentence.text)
-                if all(m.end() <= start or m.start() >= end for start, end, _ in placed)
-            ),
-            None,
-        )
-        if found is None:
-            raise ValueError(f"claim {claim.text_span!r} is not in {sentence.text!r}")
-        placed.append((found.start(), found.end(), anchor))
+            raise ValueError(f"claim {item.claim.text_span!r} names no computed metric ({anchor})")
     parts: list[SentencePart] = []
     cursor = 0
-    for start, end, anchor in sorted(placed):
+    for item in placed:
+        start, end = item.start, item.end
+        anchor = metric_anchor(item.claim.metric_id, item.claim.period_key)
         if start > cursor:
             parts.append(SentencePart(sentence.text[cursor:start], None))
         parts.append(SentencePart(sentence.text[start:end], f"#{anchor}"))
@@ -316,7 +269,17 @@ def narrative_view(
 
     return tuple(
         SectionView(
-            heading=section.heading.value.replace("_", " "),
+            heading=(
+                {
+                    "overview": "نظرة عامة",
+                    "liquidity": "السيولة",
+                    "leverage": "المديونية",
+                    "profitability": "الربحية",
+                    "watch_items": "بنود للمتابعة",
+                }[section.heading.value]
+                if narrative.language == "ar"
+                else section.heading.value.replace("_", " ")
+            ),
             sentences=tuple(parts(s) for s in section.sentences),
         )
         for section in narrative.sections
@@ -359,6 +322,8 @@ class AnalysisView:
     computed: int
     narrative: tuple[SectionView, ...] | None
     footnotes: tuple[CaveatView, ...]
+    summary_notice: str | None
+    origin_text: str
 
 
 def analysis_view(analysis: Analysis) -> AnalysisView:
@@ -371,31 +336,70 @@ def analysis_view(analysis: Analysis) -> AnalysisView:
     statements = tuple(statement_view(s, reviews[s.id]) for s in analysis.statements)
     statement_notes = {s.id: s.caveats for s in statements}
     metrics = [metric_view(analysis.upload_sha256, m, statement_notes) for m in analysis.metrics]
+    artifact = analysis.narrative
+    ar = analysis.language == "ar"
+    summary_notice = None
+    origin_text = ""
+    if artifact is not None and artifact.language not in ("en", "ar"):
+        artifact = None
+        summary_notice = (
+            "حُجب الملخص: تعذر التحقق من النص أو مراجعه."
+            if ar
+            else "Summary withheld: its text or references could not be verified."
+        )
+    elif artifact is not None and artifact.origin == "direct_template":
+        try:
+            artifact = validate_summary(analysis, artifact)
+            origin_text = (
+                "قالب مباشر تم التحقق منه مقابل المقاييس المحسوبة."
+                if ar
+                else "Direct template checked against the computed metrics."
+            )
+        except GroundingError:
+            artifact = None
+            summary_notice = (
+                "حُجب الملخص: تعذر التحقق من النص أو مراجعه."
+                if ar
+                else "Summary withheld: its text or references could not be verified."
+            )
+    elif artifact is not None:
+        origin_text = (
+            "ملخص محفوظ؛ لم يتم التحقق منه كقالب مباشر."
+            if ar
+            else "Stored summary; not verified as a direct template."
+        )
+    elif analysis.narrative_suppression:
+        summary_notice = (
+            "حُجب الملخص: لا تتوفر حقائق مؤهلة من أحدث فترة."
+            if ar
+            else "Summary withheld: no eligible latest-period facts are available."
+        )
     summary_notes = (
         {
             m.anchor: tuple(
                 replace(
-                    note,
-                    anchor=f"summary-{note.id}-{note.currency}",
-                    language=analysis.narrative.language,
+                    note, anchor=f"summary-{note.id}-{note.currency}", language=artifact.language
                 )
                 for note in m.notes
             )
             for m in metrics
             if m.value is not None
         }
-        if analysis.narrative is not None
+        if artifact is not None
         else {}
     )
-    narrative = (
-        narrative_view(
-            analysis.narrative,
-            frozenset(m.anchor for m in metrics if m.value is not None),
-            summary_notes,
-        )
-        if analysis.narrative is not None
-        else None
-    )
+    narrative = None
+    if artifact is not None:
+        try:
+            narrative = narrative_view(
+                artifact, frozenset(m.anchor for m in metrics if m.value is not None), summary_notes
+            )
+        except ValueError:
+            summary_notice = (
+                "حُجب الملخص: تعذر التحقق من النص أو مراجعه."
+                if ar
+                else "Summary withheld: its text or references could not be verified."
+            )
     footnotes = {
         note.anchor: note
         for section in narrative or ()
@@ -411,4 +415,6 @@ def analysis_view(analysis: Analysis) -> AnalysisView:
         computed=sum(1 for m in metrics if m.value is not None),
         narrative=narrative,
         footnotes=tuple(footnotes.values()),
+        summary_notice=summary_notice,
+        origin_text=origin_text,
     )

@@ -417,3 +417,18 @@ def compute(statements: Sequence[Statement], policy: Policy) -> list[MetricValue
 
 METRIC_IDS = (*MARGIN_IDS, *(spec.id for spec in REGISTRY))
 """Every metric id ``compute`` can produce, in the order it produces them."""
+
+
+@dataclass(frozen=True)
+class MetricDescriptor:
+    metric_id: str
+    unit: MetricUnit
+    anchor: StatementType
+
+
+def metric_descriptor(metric_id: str) -> MetricDescriptor | None:
+    """Public display metadata, derived from the formula registry."""
+    if metric_id in MARGIN_IDS:
+        return MetricDescriptor(metric_id, MetricUnit.RATIO, StatementType.INCOME)
+    spec = next((s for s in REGISTRY if s.id == metric_id), None)
+    return None if spec is None else MetricDescriptor(spec.id, spec.unit, spec.anchor)

@@ -34,6 +34,7 @@ from fra_ingest.pages import page_count
 from fra_ingest.results import ConvertResult, LocateResult, StructureResult
 from fra_ingest.stage import load_or_locate
 from fra_ingest.structure import current_convert, range_conversion_flags, structure_pdf
+from fra_model import SummaryBuilt, SummarySuppressed, build_summary, validate_summary
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,7 @@ class Pipeline:
     convert: Callable[[Path, LocateResult], ConvertResult]
     structure: Callable[[Path, ConvertResult | None], StructureResult]
     metrics: Callable[[Sequence[Statement]], list[MetricValue]]
+    summarize: Callable[[Analysis], SummaryBuilt | SummarySuppressed] = build_summary
 
 
 def real_pipeline(
@@ -144,6 +146,15 @@ def run_job(store: JobStore, job: Job, pipeline: Pipeline, max_pages: int) -> Jo
             store.finish_stage(
                 job.id, JobStage.METRICS, f"{computed} of {len(metrics)} values computed"
             )
-        return store.finish(analysis_of(job, located, converted, result, metrics))
+        analysis = analysis_of(job, located, converted, result, metrics)
+        store.start_stage(job.id, JobStage.NARRATE)
+        summary = pipeline.summarize(analysis)
+        if isinstance(summary, SummaryBuilt):
+            analysis.narrative = validate_summary(analysis, summary.narrative)
+            store.finish_stage(job.id, JobStage.NARRATE, "checked direct-template summary")
+        else:
+            analysis.narrative_suppression = list(summary.reasons)
+            store.finish_stage(job.id, JobStage.NARRATE, "skipped: " + "; ".join(summary.reasons))
+        return store.finish(analysis)
     except Exception as exc:  # the job's own failure: recorded on the job, never retried
         return store.fail(job.id, f"{type(exc).__name__}: {exc}")

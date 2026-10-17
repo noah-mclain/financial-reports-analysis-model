@@ -6,6 +6,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
   "fra-analytics",
   "fra-core",
+  "fra-model",
   "fra-ingest",
 ]
 
@@ -15,6 +16,7 @@ fra-worker = "fra_worker.main:main"
 [tool.uv.sources]
 fra-analytics = { workspace = true }
 fra-core = { workspace = true }
+fra-model = { workspace = true }
 fra-ingest = { workspace = true }
 
 [build-system]

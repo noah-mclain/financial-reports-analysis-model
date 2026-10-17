@@ -227,6 +227,8 @@ def test_a_job_runs_each_stage_in_order_and_leaves_its_analysis(tmp_path: Path) 
         ("finished", JobStage.STRUCTURE, "1 statements"),
         ("started", JobStage.METRICS, None),
         ("finished", JobStage.METRICS, "1 of 2 values computed"),
+        ("started", JobStage.NARRATE, None),
+        ("finished", JobStage.NARRATE, "skipped: duplicate metric-period pairs"),
         ("completed", None, None),
     ]
     analysis = store.load_analysis(job.id)
@@ -416,3 +418,76 @@ def test_no_statements_keeps_the_document_failure_reasons(tmp_path: Path) -> Non
     analysis = store.load_analysis(job.id)
     assert job.status is JobStatus.NEEDS_REVIEW
     assert analysis is not None and analysis.flags == ["statement_not_extracted:balance"]
+
+
+def test_summary_suppression_is_a_visible_stage_without_upgrading_review(tmp_path: Path) -> None:
+    store, sha = queued(tmp_path)
+    job = run_one(store, pipeline_for(sha, Calls(), result=structured(sha, "needs_review")))
+    saved = store.load_analysis(job.id)
+    assert saved is not None and saved.narrative is None and saved.narrative_suppression
+    assert job.status is JobStatus.NEEDS_REVIEW
+    events = [e for e in store.events(job.id) if e.stage is JobStage.NARRATE]
+    assert [e.kind for e in events] == ["started", "finished"]
+    assert events[-1].detail is not None and events[-1].detail.startswith("skipped:")
+
+
+def test_summary_internal_failure_follows_failed_job_path_without_retry(tmp_path: Path) -> None:
+    from fra_core.schemas import Analysis
+    from fra_model import SummaryBuilt, SummarySuppressed
+
+    store, sha = queued(tmp_path)
+    called = []
+
+    def fail_summary(analysis: Analysis) -> SummaryBuilt | SummarySuppressed:
+        called.append(analysis.job_id)
+        raise ValueError("grounding failed")
+
+    pipeline = replace(pipeline_for(sha, Calls()), summarize=fail_summary)
+    job = run_one(store, pipeline)
+    assert job.status is JobStatus.FAILED and job.stage is JobStage.NARRATE
+    assert job.error == "ValueError: grounding failed" and called == [job.id]
+    assert store.load_analysis(job.id) is None
+
+
+def test_valid_source_reaches_checked_summary_in_existing_store(tmp_path: Path) -> None:
+    from fra_core.schemas import Cell, LineItem
+
+    store, sha = queued(tmp_path)
+    result = structured(sha)
+    ref = metric(1.5).inputs["numerator"][0]
+    result.statements[0].source_pages = [3]
+    result.statements[0].line_items = [
+        LineItem(
+            id=ref.line_item_id,
+            raw_label="Current assets",
+            canonical_id=ref.canonical_id,
+            cells=[
+                Cell(
+                    period_key=ref.period_key,
+                    reported=ref.reported,
+                    raw_text="3",
+                    provenance=ref.provenance,
+                )
+            ],
+        )
+    ]
+    pipeline = replace(pipeline_for(sha, Calls(), result=result), metrics=lambda _: [metric(1.5)])
+    job = run_one(store, pipeline)
+    saved = store.load_analysis(job.id)
+    assert job.status is JobStatus.COMPLETED and saved is not None
+    assert saved.narrative is not None and saved.narrative.origin == "direct_template"
+    assert saved.narrative.grounding.value == "passed" and not saved.narrative_suppression
+    assert "نسبة التداول: 1.50×" in saved.narrative.sections[0].sentences[0].text
+    assert store.events(job.id)[-2].detail == "checked direct-template summary"
+
+
+def test_unchecked_summary_callback_cannot_persist_unverified_text(tmp_path: Path) -> None:
+    from fra_core.schemas import Narrative
+    from fra_model import SummaryBuilt
+
+    store, sha = queued(tmp_path)
+    narrative = Narrative(origin="direct_template", template_version="1")
+    pipeline = replace(pipeline_for(sha, Calls()), summarize=lambda _: SummaryBuilt(narrative))
+    job = run_one(store, pipeline)
+    assert job.status is JobStatus.FAILED and job.stage is JobStage.NARRATE
+    assert store.load_analysis(job.id) is None
