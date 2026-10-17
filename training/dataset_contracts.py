@@ -141,7 +141,7 @@ class NormalizationExample(Contract):
 
     def content_sha256(self) -> str:
         """Bind approval to every field, including target, source hashes and review evidence."""
-        return _digest(self.model_dump(mode="json"))
+        return digest(self.model_dump(mode="json"))
 
 
 class PartitionConfig(Contract):
@@ -176,7 +176,7 @@ def canonical_json(value: object) -> str:
     )
 
 
-def _digest(value: object) -> str:
+def digest(value: object) -> str:
     return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
 
 
@@ -190,11 +190,11 @@ def _target_items(taxonomy: Taxonomy) -> dict[str, CanonicalItem]:
 
 def example_digest(examples: Sequence[NormalizationExample]) -> str:
     # Sorting full records retains duplicate occurrences in the input fingerprint.
-    return _digest(sorted(canonical_json(e.model_dump(mode="json")) for e in examples))
+    return digest(sorted(canonical_json(e.model_dump(mode="json")) for e in examples))
 
 
 def _taxonomy_digest(taxonomy: Taxonomy) -> str:
-    return _digest(
+    return digest(
         {
             "version": taxonomy.version,
             "items": [
@@ -315,15 +315,15 @@ def partition_examples(
         manifest=DatasetManifest(
             input_examples=len(examples),
             input_sha256=example_digest(examples),
-            sources_sha256=_digest(
+            sources_sha256=digest(
                 [s.model_dump(mode="json") for s in sorted(sources, key=lambda s: s.source_id)]
             ),
-            registry_sha256=_digest(metadata),
-            split_records_sha256=_digest(
+            registry_sha256=digest(metadata),
+            split_records_sha256=digest(
                 {"moves": [asdict(m) for m in moves], "looks": [asdict(look) for look in looks]}
             ),
             taxonomy_sha256=_taxonomy_digest(taxonomy),
-            config_sha256=_digest(
+            config_sha256=digest(
                 {
                     "approved_example_sha256": sorted(config.approved_example_sha256),
                     "max_per_issuer": config.max_per_issuer,

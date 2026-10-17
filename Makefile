@@ -29,7 +29,7 @@ $(error FRA_LLM_PORT is empty: set it in $(ENV_FILE))
 endif
 export FRA_API_PORT FRA_LLM_PORT
 
-.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds dataset-build clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping eval-gates dry-run expected-drafts eval-extraction verify-expected dev worker docker-up docker-health ci-workflows-check container-smoke hygiene-check
+.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds dataset-build sec-crosswalk-draft sec-crosswalk-approve clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping eval-gates dry-run expected-drafts eval-extraction verify-expected dev worker docker-up docker-health ci-workflows-check container-smoke hygiene-check
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -66,6 +66,9 @@ typecheck: ## Type check the packages, apps, the analytics golden test, eval har
 	$(UV) run mypy --strict training/dataset_builder.py
 	$(UV) run mypy --strict training/chat_tokenizer.py
 	MYPYPATH=scripts:eval $(UV) run mypy --strict training/build_dataset.py
+	$(UV) run mypy --strict training/sec_crosswalk_draft.py
+	$(UV) run mypy --strict training/sec_crosswalk_review.py
+	$(UV) run mypy --strict training/sec_crosswalk_cli.py
 
 test: ## Fast tests (no models, no OCR)
 	@$(MAKE) --no-print-directory unhide-pth
@@ -138,6 +141,16 @@ dataset-build: ## Normalization train/valid files (EXAMPLES, SOURCES, APPROVED, 
 	$(foreach var,EXAMPLES SOURCES APPROVED TOKENIZER_DIR OUT_DIR,$(if $($(var)),,$(error $(var) is required)))
 	@$(MAKE) --no-print-directory unhide-pth
 	PYTHONPATH=scripts:eval $(UV) run python training/build_dataset.py --examples "$(EXAMPLES)" --sources "$(SOURCES)" --approved "$(APPROVED)" --tokenizer-dir "$(TOKENIZER_DIR)" --out-dir "$(OUT_DIR)" $(if $(MAX_PER_ISSUER),--max-per-issuer $(MAX_PER_ISSUER))
+
+sec-crosswalk-draft: ## Draft SEC crosswalk, policies and review packet from tag.txt (ARCHIVES="a.zip b.zip", OUT_DIR required)
+	$(foreach var,ARCHIVES OUT_DIR,$(if $($(var)),,$(error $(var) is required)))
+	@$(MAKE) --no-print-directory unhide-pth
+	$(UV) run python training/sec_crosswalk_cli.py draft --archives $(ARCHIVES) --out-dir "$(OUT_DIR)"
+
+sec-crosswalk-approve: ## Approval records from a complete verdict file (CROSSWALK, POLICIES, VERDICTS, REVIEWER_ID, AUTHORITY_ID, EVIDENCE_REFERENCE, OUT_DIR required)
+	$(foreach var,CROSSWALK POLICIES VERDICTS REVIEWER_ID AUTHORITY_ID EVIDENCE_REFERENCE OUT_DIR,$(if $($(var)),,$(error $(var) is required)))
+	@$(MAKE) --no-print-directory unhide-pth
+	$(UV) run python training/sec_crosswalk_cli.py approve --crosswalk "$(CROSSWALK)" --policies "$(POLICIES)" --verdicts "$(VERDICTS)" --reviewer-id "$(REVIEWER_ID)" --authority-id "$(AUTHORITY_ID)" --evidence-reference "$(EVIDENCE_REFERENCE)" --out-dir "$(OUT_DIR)"
 
 dev: ## Serve the API natively (profile native) on FRA_API_PORT
 	@$(MAKE) --no-print-directory unhide-pth
