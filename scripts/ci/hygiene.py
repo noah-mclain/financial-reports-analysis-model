@@ -47,6 +47,7 @@ DIFF_SCAN_EXCLUDED_PATHS = (
     "tests/scripts/test_hygiene.py",
 )
 GITHUB_WEB_COMMITTER = "noreply@github.com"
+ALLOWED_AUTOMATION_AUTHORS = frozenset({"198982749+copilot@users.noreply.github.com"})
 
 # A session id carries a digit: `session_01AbCdEfGhIj`, not `session_management`.
 SESSION_ID = r"session_(?=[A-Za-z]*\d)[0-9A-Za-z]{10,}"
@@ -152,7 +153,12 @@ def owner_noreply(login: str) -> re.Pattern[str]:
 
 
 def is_owner_email(email: str, owner: str, login: str) -> bool:
-    return email.lower() == owner.lower() or owner_noreply(login).fullmatch(email) is not None
+    lowered = email.lower()
+    return (
+        lowered == owner.lower()
+        or owner_noreply(login).fullmatch(email) is not None
+        or lowered in ALLOWED_AUTOMATION_AUTHORS
+    )
 
 
 def check_identity(commit: Commit, owner: str, login: str) -> list[str]:

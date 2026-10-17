@@ -15,6 +15,7 @@ OWNER = ("Owner Person", "owner@example.com")
 LOGIN = "owner-login"
 NOREPLY_AUTHOR = ("Owner Person", f"123+{LOGIN}@users.noreply.github.com")
 WEB_COMMITTER = ("GitHub", "noreply@github.com")
+AUTOMATION_AUTHOR = ("Copilot", "198982749+Copilot@users.noreply.github.com")
 STRANGER = ("Someone Else", "someone@example.org")
 ZEROS = "0" * 40
 
@@ -140,6 +141,15 @@ def test_github_web_merge_with_noreply_identities_passes(repository: Path, commi
         author=NOREPLY_AUTHOR,
         committer=WEB_COMMITTER,
     )
+
+    result = run_check(repository, base)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_allowed_automation_author_passes(repository: Path, commit: Commit) -> None:
+    base = git(repository, "rev-parse", "HEAD")
+    commit("Add a thing", author=AUTOMATION_AUTHOR, committer=WEB_COMMITTER)
 
     result = run_check(repository, base)
 
