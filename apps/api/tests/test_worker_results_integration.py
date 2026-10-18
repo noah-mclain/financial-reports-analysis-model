@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import date
@@ -14,6 +15,7 @@ from api_support import settings_at
 from fastapi.testclient import TestClient
 
 from fra_api.app import create_app
+from fra_api.views import source_url
 from fra_core.jobs import JobStore
 from fra_core.profile import Profile
 from fra_core.schemas import (
@@ -41,7 +43,21 @@ from fra_ingest.results import (
 )
 from fra_worker.pipeline import Pipeline, run_job
 
+
+def summary_panel(page: str) -> str:
+    """The written-summary panel alone, so its direction and language are not read off another."""
+    match = re.search(r'<div class="panel" dir=.*?</div>', page, re.S)
+    assert match is not None
+    return match.group(0)
+
+
 PDF = b"%PDF-1.7\nsynthetic integration fixture\n"
+SOURCE_A = Provenance(
+    page_no=1, bbox=BBox(left=10, top=20, right=30, bottom=40), table_ref="#/tables/0", row=1, col=1
+)
+SOURCE_B = Provenance(
+    page_no=1, bbox=BBox(left=50, top=60, right=70, bottom=80), table_ref="#/tables/0", row=2, col=1
+)
 PERIOD = Period(key="2025-12-31", end_date=date(2025, 12, 31), kind=PeriodKind.INSTANT)
 
 
@@ -50,18 +66,11 @@ def pipeline_for(
     language: str,
     review_status: Literal["passed", "needs_review"] = "passed",
 ) -> Pipeline:
-    source = Provenance(
-        page_no=1,
-        bbox=BBox(left=10, top=20, right=30, bottom=40),
-        table_ref="#/tables/0",
-        row=1,
-        col=1,
-    )
     cell = Cell(
         period_key=PERIOD.key,
         reported=Decimal("3"),
         raw_text="3",
-        provenance=source,
+        provenance=SOURCE_A,
     )
     statement = Statement(
         id="assets",
@@ -88,7 +97,7 @@ def pipeline_for(
                         period_key=PERIOD.key,
                         reported=Decimal("2"),
                         raw_text="2",
-                        provenance=source,
+                        provenance=SOURCE_B,
                     )
                 ],
             ),
@@ -97,8 +106,8 @@ def pipeline_for(
     review = StatementReview(
         statement_id="assets",
         status=review_status,
-        numeric_cells=1,
-        checked_cells=1,
+        numeric_cells=2,
+        checked_cells=2,
         flagged_cells=0,
     )
     metric_input = MetricInput(
@@ -109,7 +118,7 @@ def pipeline_for(
         reported=Decimal("3"),
         scale=1000,
         currency="SAR",
-        provenance=source,
+        provenance=SOURCE_A,
     )
     computed = MetricValue(
         metric_id="current_ratio",
@@ -127,7 +136,7 @@ def pipeline_for(
                     reported=Decimal("2"),
                     scale=1000,
                     currency="SAR",
-                    provenance=source,
+                    provenance=SOURCE_B,
                 )
             ],
         },
@@ -237,9 +246,21 @@ def test_upload_runs_through_worker_and_renders_grounded_result(
         assert response.status_code == 200
         page = response.text
 
-    assert f'dir="{"rtl" if language == "ar" else "ltr"}" lang="{language}"' in page
-    assert 'href="#metric-current_ratio-2025-12-31"' in page
-    assert "/pages/1?box=" in page
+    panel = summary_panel(page)
+    assert panel.startswith(f'<div class="panel" dir="{"rtl" if language == "ar" else "ltr"}"')
+    assert f'lang="{language}"' in panel.split(">", 1)[0]
+    heading, sentence = (
+        ("liquidity", "Current ratio") if language == "en" else ("السيولة", "نسبة التداول")
+    )
+    assert f"<h3>{heading}</h3>" in panel and sentence in panel
+    assert 'href="#metric-current_ratio-2025-12-31"' in panel
+    for ids, source in (
+        (("total_current_assets", "current-assets"), SOURCE_A),
+        (("total_current_liabilities", "current-liabilities"), SOURCE_B),
+    ):
+        url = source_url(sha256, source)
+        assert f'<a href="{url}" title="2025-12-31">{ids[0]}</a>' in page
+        assert page.count(f'href="{url}"') == 2  # the statement cell and the metric input
     assert "total_current_assets" in page and "current_ratio" in page
     assert "total_current_assets / total_current_liabilities" in page
     assert "1.5" in page and "total_current_liabilities" in page
@@ -274,11 +295,14 @@ def test_held_statement_stays_visible_without_a_confident_summary(tmp_path: Path
 
     assert "Some figures did not pass their own checks." in page
     assert 'class="badge needs_review">held for review</span>' in page
-    assert "Summary withheld: no eligible latest-period facts are available." in page
+    assert "Summary withheld: the analysis is held for review." in page
+    assert "no eligible latest-period facts" not in page
+    for label, printed in (("Current assets", "3"), ("Current liabilities", "2")):
+        assert label in page and f'title="printed: {printed}"' in page
     assert "Direct template" not in page and "Written by the model" not in page
 
 
-def test_worker_failure_is_visible_in_the_job_timeline(tmp_path: Path) -> None:
+def test_worker_failure_is_recorded_on_the_job_and_its_event_stream(tmp_path: Path) -> None:
     settings = settings_at(tmp_path)
     with TestClient(create_app(Profile.NATIVE, settings)) as client:
         uploaded = client.post(
@@ -298,13 +322,12 @@ def test_worker_failure_is_visible_in_the_job_timeline(tmp_path: Path) -> None:
         failed_pipeline = replace(pipeline_for(sha256, "en"), convert=fail_convert)
         failed = run_job(store, job, failed_pipeline, settings.max_pages)
         assert failed.status.value == "failed"
-        timeline = client.get(f"/jobs/{job_id}/view").text
+        job_page = client.get(f"/jobs/{job_id}/view").text
         events = client.get(f"/jobs/{job_id}/events").text
         api_job = client.get(f"/jobs/{job_id}").json()
 
     assert api_job["status"] == "failed"
     assert api_job["error"] == "RuntimeError: synthetic conversion failure"
-    assert 'class="badge failed">failed</span>' in timeline
-    assert 'data-stage="convert"' in timeline
+    assert 'class="badge failed">failed</span>' in job_page
     assert '"stage":"convert"' in events and '"kind":"failed"' in events
     assert "synthetic conversion failure" in events
