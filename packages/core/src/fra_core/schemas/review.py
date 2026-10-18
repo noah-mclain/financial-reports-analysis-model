@@ -9,6 +9,16 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Warnings that only record how a cell's label or blank was recovered. A person sees them on the
+# review; they say nothing about the figures, so they neither hold a statement nor reach the model.
+PROVENANCE_WARNINGS = ("label_merged", "label_words_from_page", "blank_confirmed")
+
+
+def is_provenance_warning(warning: str) -> bool:
+    """A provenance warning, with or without its numeric ``:count`` suffix."""
+    name, colon, count = warning.partition(":")
+    return name in PROVENANCE_WARNINGS and (not colon or count.isdecimal())
+
 
 class StatementReview(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)

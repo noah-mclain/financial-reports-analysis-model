@@ -8,6 +8,7 @@ from test_summary import analysis
 
 from fra_core.schemas import Analysis, Caveat
 from fra_model import SummaryBuilt, SummarySuppressed, build_summary
+from fra_model.payload import summary_payload
 
 
 @pytest.mark.parametrize(
@@ -201,4 +202,69 @@ def test_an_original_cell_from_the_wrong_period_is_not_an_authorized_current_fac
     assert (
         isinstance(result, SummaryBuilt)
         and "current_ratio" not in result.narrative.cited_metric_ids
+    )
+
+
+def test_provenance_warnings_do_not_block_or_reach_the_narrative() -> None:
+    baseline = build_summary(analysis())
+    assert isinstance(baseline, SummaryBuilt)
+    source = analysis()
+    source.reviews = [
+        r.model_copy(update={"warnings": ["label_merged:6", "label_words_from_page:70"]})
+        for r in source.reviews
+    ]
+    result = build_summary(source)
+    assert isinstance(result, SummaryBuilt)
+    assert result.narrative == baseline.narrative
+    assert "label_" not in result.narrative.model_dump_json()
+
+
+@pytest.mark.parametrize(
+    "warning", ["label_merged_x:1", "label_merged:x", "label_merged:", "other"]
+)
+def test_an_unknown_review_warning_still_suppresses_the_summary(warning: str) -> None:
+    source = analysis()
+    source.reviews[0] = source.reviews[0].model_copy(update={"warnings": [warning]})
+    assert isinstance(build_summary(source), SummarySuppressed)
+
+
+def _recomputed(source: Analysis) -> Analysis:
+    from fra_analytics import Policy, compute
+
+    source.metrics = compute(
+        source.statements,
+        Policy(
+            negative_margin_denominator="compute_and_flag",
+            include_lease_liabilities=True,
+            day_count_basis=365,
+        ),
+    )
+    return source
+
+
+def test_provenance_flags_on_source_cells_do_not_block_or_reach_the_narrative() -> None:
+    baseline = build_summary(_recomputed(analysis()))
+    assert isinstance(baseline, SummaryBuilt)
+    source = analysis()
+    for statement in source.statements:
+        for row in statement.line_items:
+            for cell in row.cells:
+                cell.flags = ["label_words_from_page", "label_merged"]
+    result = build_summary(_recomputed(source))
+    assert isinstance(result, SummaryBuilt)
+    assert result.narrative == baseline.narrative
+    assert "label_" not in result.narrative.model_dump_json()
+    payload = summary_payload(_recomputed(source))
+    assert not isinstance(payload, SummarySuppressed)
+    assert all("label_" not in flag for fact in payload.facts for flag in fact.metric.flags)
+
+
+def test_a_non_provenance_cell_flag_still_blocks_its_facts() -> None:
+    source = analysis()
+    for row in source.statements[0].line_items:
+        for cell in row.cells:
+            cell.flags = ["digit_suspect"]
+    result = build_summary(_recomputed(source))
+    assert isinstance(result, SummarySuppressed) or (
+        "current_ratio" not in result.narrative.cited_metric_ids
     )

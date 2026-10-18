@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Sequence
 
-from fra_core.schemas import Cell, CheckResult, Statement, StatementType
+from fra_core.schemas import PROVENANCE_WARNINGS, Cell, CheckResult, Statement, StatementType
 
 # Defined in core so the worker and the API can read it; imported from here by ingest.
 from fra_core.schemas import StatementReview as StatementReview
@@ -44,12 +44,7 @@ _WARNING_FLAGS = (
     "words_reversed",
     "word_order_uncertain",
 )
-_WARNING_CELL_FLAGS = (
-    "label_merged",
-    "label_words_from_page",
-    "blank_confirmed",
-    "numeric_columns_split",
-)
+_WARNING_CELL_FLAGS = (*PROVENANCE_WARNINGS, "numeric_columns_split")
 _FAILED = (
     ("subtotal", "subtotal_failed"),
     ("balance_identity", "identity_failed"),
@@ -59,6 +54,11 @@ _FAILED = (
 
 def _lost(cell: Cell) -> bool:
     return "numbers_missing" in cell.flags and "blank_confirmed" not in cell.flags
+
+
+def vouched_cells(checks: Sequence[CheckResult]) -> set[tuple[str, str]]:
+    """(line item id, period key) of every figure a passing check covers."""
+    return {(i, c.period_key) for c in checks if c.status == "pass" for i in c.line_item_ids}
 
 
 def is_critical(cell: Cell) -> bool:
@@ -98,7 +98,7 @@ def review_statement(
         reasons = [*kept, "duplicate_statement"]
     warnings = [f for f in statement.flags if f in _WARNING_FLAGS]
     warnings += [f"{flag}:{counts[flag]}" for flag in _WARNING_CELL_FLAGS if counts[flag]]
-    vouched = {(i, c.period_key) for c in checks if c.status == "pass" for i in c.line_item_ids}
+    vouched = vouched_cells(checks)
     numeric = [(i, c) for i, c in cells if c.reported is not None]
     return StatementReview(
         statement_id=statement.id,

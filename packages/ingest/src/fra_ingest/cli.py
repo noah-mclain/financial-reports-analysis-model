@@ -24,6 +24,7 @@ from pathlib import Path
 
 from fra_ingest.config import IngestConfig, load_config, transported_config
 from fra_ingest.convert import convert_pdf
+from fra_ingest.coverage import UncheckedCell, document_unchecked, tally
 from fra_ingest.errors import IngestError
 from fra_ingest.ocr import (
     PER_DOCUMENT_OCR_ERRORS,
@@ -69,6 +70,12 @@ def main(argv: list[str] | None = None) -> int:
     report.add_argument("sha256", help="a document's sha256, or a unique prefix of it")
     report.add_argument("--config", type=Path, default=None)
     report.add_argument("--artifacts", type=Path, default=None, help="artifact root override")
+    cover = commands.add_parser(
+        "coverage", help="list the figures no passing check covers, weighed by statement share"
+    )
+    cover.add_argument("sha256", nargs="+", help="documents' sha256, or unique prefixes")
+    cover.add_argument("--config", type=Path, default=None)
+    cover.add_argument("--artifacts", type=Path, default=None, help="artifact root override")
     args = parser.parse_args(argv)
 
     try:
@@ -86,6 +93,14 @@ def main(argv: list[str] | None = None) -> int:
         except IngestError as exc:
             print(f"{args.sha256}: {exc.reason} {exc.detail}".rstrip(), file=sys.stderr)
             return EXIT_DECLINED if exc.reason == "declined" else EXIT_ERROR
+        return 0
+
+    if args.command == "coverage":
+        try:
+            print(_coverage_summary(args.sha256, config))
+        except IngestError as exc:
+            print(f"{exc.reason} {exc.detail}".rstrip(), file=sys.stderr)
+            return EXIT_ERROR
         return 0
 
     try:
@@ -175,6 +190,31 @@ def _convert_summary(result: ConvertResult) -> str:
     lines.append(f"pages  {len(result.page_images)} images  peak {peak}")
     lines.append(f"flags  {', '.join(result.flags) or 'none'}")
     lines.append("time  " + "  ".join(f"{k} {v:.1f}s" for k, v in result.timings.items()))
+    return "\n".join(lines)
+
+
+def _coverage_summary(hashes: list[str], config: IngestConfig) -> str:
+    lines: list[str] = []
+    groups: list[list[UncheckedCell]] = []
+    for sha in hashes:
+        per_statement = document_unchecked(sha, config)
+        groups += per_statement.values()
+        lines.append(f"{sha[:12]}")
+        for statement_id, cells in per_statement.items():
+            lines.append(f"  {statement_id}: {len(cells)} unchecked")
+            lines += [
+                f"    {c.item_id:14} {c.period_key:12} {c.reported!s:>16}  "
+                f"{c.weight:.1%}  {c.canonical_id or '-'}  {c.label}"
+                for c in cells
+            ]
+    lines.append(
+        "by item (statements, cells, mean weight); weight is the share of the statement's "
+        "largest figure, so it means nothing for per-share items"
+    )
+    lines += [
+        f"  {t.key:40} {t.statements:3} {t.cells:4} {t.mean_weight:.1%}"
+        for t in tally(groups, key=lambda c: c.canonical_id or f"unmapped: {c.label}")
+    ]
     return "\n".join(lines)
 
 
