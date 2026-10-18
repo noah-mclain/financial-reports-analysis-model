@@ -15,7 +15,8 @@ node_modules/
 apps/web/dist/
 
 # Model and training artifacts (weights are never committed)
-training/data/
+training/data/*
+!training/data/sec_crosswalk/
 training/adapters/*/
 !training/adapters/*/manifest.json
 

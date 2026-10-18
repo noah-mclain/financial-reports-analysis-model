@@ -149,7 +149,8 @@ entries for negative controls. This module does not produce `NormalizationExampl
 labels, infer numbers, duration, sign or hierarchy, or import the unfinished source-access
 sibling. The presentation-label duration clarification is a separate decision.
 
-Real crosswalk YAML, approval archives, source acquisition, historical reconciliation,
+The draft package built from the tag vocabulary is described in
+[sec-crosswalk-data.md](sec-crosswalk-data.md). Real approval archives, source acquisition, historical reconciliation,
 annotation, dataset deduplication/capping, model calls, training, scoring and taxonomy changes
 are deliberately omitted. No aliases are used to guess real tags. D13/D16/D17/D18 remain
 unchanged: issuer-separated fit/validation and authorized provisional train-holdout

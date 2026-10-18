@@ -1,0 +1,647 @@
+# Curated mapping of standard us-gaap tags to canonical item ids, with explicit nulls.
+# Consumed by training/sec_crosswalk_draft.py. A row is (statement code, tag, target, reason):
+#   statement  BS (balance sheet) or IS (income statement), the pre.txt stmt code of the line.
+#   canonical_id  a taxonomy item id on that statement, or null for an explicit abstention.
+#   doc_phrases  words from the tag's own definition in tag.txt. A definition can be reworded
+#                between tag taxonomy versions, so several phrases may be listed; the draft
+#                builder refuses a tag whose definition in any version holds none of them,
+#                so a reworded definition is looked at again before it is used.
+#   reason  why the tag means exactly that item, or why it is left null.
+#   excluded  tags whose item depends on whether a noncontrolling interest is shown. The decoder
+#             drops them before resolution (reason ambiguous_semantics); they are neither mapped,
+#             null nor covered by an abstention policy.
+# Alias rule: map when the item's aliases list the concept without a qualifier; null when the tag
+# is narrower than, broader than or ambiguous between items.
+# Only exact equivalence is mapped. Near-synonyms and tags that cover two items are null.
+# Nothing here is approved; see docs/runbooks/sec-crosswalk-data.md.
+version: 1
+namespace: us-gaap
+unmapped_items:
+  net_income_attributable_parent: Its only standard tag, NetIncomeLoss, is excluded as ambiguous with net_income.
+  equity_attributable_parent: Its only standard tag, StockholdersEquity, is excluded as ambiguous with total_equity.
+  other_reserves: No standard tag means reserves in the IFRS sense; accumulated other comprehensive income and paid-in capital are different things.
+excluded:
+- statement: IS
+  tag: NetIncomeLoss
+  reason: Defined as the parent's share only. Filers without a noncontrolling interest print it as plain net income, so the tag alone cannot choose between net_income and net_income_attributable_parent. Dropped before resolution, not taught as abstention.
+- statement: BS
+  tag: StockholdersEquity
+  reason: Defined as the parent's share only. Filers without a noncontrolling interest print it as total equity, so the tag alone cannot choose between equity_attributable_parent and total_equity. Dropped before resolution, not taught as abstention.
+rows:
+- statement: IS
+  tag: Revenues
+  canonical_id: revenue
+  doc_phrases:
+  - Amount of revenue recognized from goods sold, services rendered, insurance
+  reason: Total revenue from goods, services or other earning activities; the plain revenue line.
+- statement: IS
+  tag: RevenueFromContractWithCustomerExcludingAssessedTax
+  canonical_id: revenue
+  doc_phrases:
+  - Amount, excluding tax collected from customer, of revenue from satisfaction of
+  reason: Revenue from contracts with customers, which the taxonomy lists as an alias of revenue; collected tax excluded.
+- statement: IS
+  tag: RevenueFromContractWithCustomerIncludingAssessedTax
+  canonical_id: null
+  doc_phrases:
+  - Amount, including tax collected from customer, of revenue from satisfaction of
+  reason: Gross of the sales tax collected from customers, while the revenue item is the net revenue line; the tag alone does not say which a filer shows.
+- statement: IS
+  tag: RevenueNotFromContractWithCustomer
+  canonical_id: null
+  doc_phrases:
+  - Amount of revenue that is not accounted for under Topic 606
+  reason: Only the part of revenue outside contracts with customers; a component, not total revenue.
+- statement: IS
+  tag: RevenuesNetOfInterestExpense
+  canonical_id: null
+  doc_phrases:
+  - Amount of revenue recognized from goods sold, services rendered, insurance
+  reason: Revenue reduced by interest expense, as banks present it; differs from gross revenue.
+- statement: IS
+  tag: RevenuesExcludingInterestAndDividends
+  canonical_id: null
+  doc_phrases:
+  - Revenues from operations, excluding interest and dividend income. Includes
+  reason: Excludes interest and dividends, so it is a subset of total revenue.
+- statement: IS
+  tag: CostOfRevenue
+  canonical_id: cost_of_revenue
+  doc_phrases:
+  - The aggregate cost of goods produced and sold and services rendered during the
+  reason: Cost of goods and services sold; the taxonomy aliases cost of sales and cost of revenue.
+- statement: IS
+  tag: CostOfGoodsAndServicesSold
+  canonical_id: cost_of_revenue
+  doc_phrases:
+  - The aggregate costs related to goods produced and sold and services rendered by
+  reason: Cost of goods produced and sold and services rendered; the same line as cost of sales.
+- statement: IS
+  tag: CostOfGoodsAndServiceExcludingDepreciationDepletionAndAmortization
+  canonical_id: null
+  doc_phrases:
+  - Cost of product sold and service rendered, excluding depreciation, depletion,
+  reason: Excludes depreciation, depletion and amortization, so it is narrower than cost of sales.
+- statement: IS
+  tag: GrossProfit
+  canonical_id: gross_profit
+  doc_phrases:
+  - Aggregate revenue less cost of goods and services sold or operating expenses
+  reason: Revenue less cost of goods and services sold; the gross profit subtotal.
+- statement: IS
+  tag: SellingGeneralAndAdministrativeExpense
+  canonical_id: selling_general_admin
+  doc_phrases:
+  - The aggregate total costs related to selling a firm's product and services, as
+  reason: Combined selling, general and administrative expense; the item's own scope.
+- statement: IS
+  tag: GeneralAndAdministrativeExpense
+  canonical_id: selling_general_admin
+  doc_phrases:
+  - The aggregate total of expenses of managing and administering the affairs of an
+  reason: General and administrative expenses is a listed alias of the item.
+- statement: IS
+  tag: SellingExpense
+  canonical_id: selling_general_admin
+  doc_phrases:
+  - Expenses recognized in the period that are directly related to the selling and
+  reason: Selling and distribution expenses is a listed alias of the item.
+- statement: IS
+  tag: SellingAndMarketingExpense
+  canonical_id: null
+  doc_phrases:
+  - The aggregate total amount of expenses directly related to the marketing or
+  reason: Marketing is not distribution; near-synonym of the listed selling and distribution alias, not an exact match.
+- statement: IS
+  tag: Depreciation
+  canonical_id: depreciation_amortization
+  doc_phrases:
+  - The amount of expense recognized in the current period that reflects the
+  reason: Depreciation of tangible assets; depreciation is a listed alias of the item.
+- statement: IS
+  tag: DepreciationAndAmortization
+  canonical_id: depreciation_amortization
+  doc_phrases:
+  - The current period expense charged against earnings on long-lived, physical
+  reason: Depreciation of physical assets and amortization of intangibles; the combined line.
+- statement: IS
+  tag: DepreciationDepletionAndAmortization
+  canonical_id: null
+  doc_phrases:
+  - The aggregate expense recognized in the current period that allocates the cost
+  reason: Adds depletion, which the item does not name; not an exact match.
+- statement: IS
+  tag: OperatingIncomeLoss
+  canonical_id: operating_income
+  doc_phrases:
+  - The net result for the period of deducting operating expenses from operating
+  reason: Operating revenues less operating expenses; the operating profit subtotal.
+- statement: IS
+  tag: InvestmentIncomeInterest
+  canonical_id: finance_income
+  doc_phrases:
+  - Amount before accretion (amortization) of purchase discount (premium) of
+  reason: Interest income on nonoperating securities; interest income is a listed alias of the item.
+- statement: IS
+  tag: InvestmentIncomeInterestAndDividend
+  canonical_id: null
+  doc_phrases:
+  - Amount before accretion (amortization) of purchase discount (premium) of
+  reason: Interest and dividend income together; dividends are not part of the finance income aliases, so the tag is broader than the item.
+- statement: IS
+  tag: InterestIncomeExpenseNet
+  canonical_id: null
+  doc_phrases:
+  - Amount of interest income (expense) classified as operating
+  - The net amount of operating interest income (expense)
+  reason: Net of interest income and expense; mixes finance income and finance costs.
+- statement: IS
+  tag: InterestExpense
+  canonical_id: finance_costs
+  doc_phrases:
+  - Amount of interest expense classified as operating and nonoperating. Includes,
+  - Amount of the cost of borrowed funds accounted for as interest expense
+  reason: Cost of borrowed funds as interest expense; interest expense is a listed alias of the item.
+- statement: IS
+  tag: InterestExpenseNonoperating
+  canonical_id: finance_costs
+  doc_phrases:
+  - Amount of interest expense classified as nonoperating
+  reason: Interest expense classified as nonoperating; the same finance cost line.
+- statement: IS
+  tag: InterestExpenseDebt
+  canonical_id: null
+  doc_phrases:
+  - Amount of the cost of borrowed funds accounted for as interest expense for debt
+  reason: Interest on debt only; narrower than total finance costs.
+- statement: IS
+  tag: IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest
+  canonical_id: profit_before_tax
+  doc_phrases:
+  - Amount of income (loss) from continuing operations, including income (loss)
+  reason: Income from continuing operations before income tax and before the noncontrolling share; the profit before tax subtotal.
+- statement: IS
+  tag: IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments
+  canonical_id: null
+  doc_phrases:
+  - Amount of income (loss) from continuing operations before deduction of income
+  reason: Before the addition of equity method income, so it is not the full profit before tax.
+- statement: IS
+  tag: IncomeLossIncludingPortionAttributableToNoncontrollingInterest
+  canonical_id: null
+  doc_phrases:
+  - Amount, before tax, of income (loss) including portion attributable to
+  reason: Also includes discontinued operations and equity method investments; not profit before tax from continuing operations.
+- statement: IS
+  tag: IncomeTaxExpenseBenefit
+  canonical_id: income_tax_expense
+  doc_phrases:
+  - Amount of current income tax expense (benefit) and deferred income tax expense
+  reason: Current and deferred income tax expense of continuing operations; the income tax line.
+- statement: IS
+  tag: ProfitLoss
+  canonical_id: net_income
+  doc_phrases:
+  - The consolidated profit or loss for the period, net of income taxes, including
+  reason: Consolidated profit or loss including the noncontrolling share; the total net profit line.
+- statement: IS
+  tag: IncomeLossFromContinuingOperationsIncludingPortionAttributableToNoncontrollingInterest
+  canonical_id: null
+  doc_phrases:
+  - Amount after tax of income (loss) from continuing operations including portion
+  reason: Continuing operations only; excludes discontinued operations, so not total net profit.
+- statement: IS
+  tag: NetIncomeLossAttributableToNoncontrollingInterest
+  canonical_id: net_income_attributable_nci
+  doc_phrases:
+  - Amount of Net Income (Loss) attributable to noncontrolling interest
+  reason: Net income attributable to the noncontrolling interest; the item's own scope.
+- statement: IS
+  tag: NetIncomeLossAvailableToCommonStockholdersBasic
+  canonical_id: null
+  doc_phrases:
+  - Amount, after deduction of tax, noncontrolling interests, dividends on
+  reason: After preferred dividends and participating securities; an earnings-per-share numerator, not net profit.
+- statement: IS
+  tag: EarningsPerShareBasic
+  canonical_id: eps_basic
+  doc_phrases:
+  - The amount of net income (loss) for the period per each share of common stock
+  reason: Net income per share of common stock, basic.
+- statement: IS
+  tag: EarningsPerShareDiluted
+  canonical_id: eps_diluted
+  doc_phrases:
+  - The amount of net income (loss) for the period available to each share of
+  reason: Net income per share, diluted.
+- statement: IS
+  tag: EarningsPerShareBasicAndDiluted
+  canonical_id: null
+  doc_phrases:
+  - The amount of net income or loss for the period per each share in instances
+  reason: One line standing for both basic and diluted; the tag alone cannot choose one item.
+- statement: IS
+  tag: IncomeLossFromContinuingOperationsPerBasicShare
+  canonical_id: null
+  doc_phrases:
+  - The amount of net income (loss) from continuing operations per each share of
+  reason: Continuing operations only, per share; not total basic earnings per share.
+- statement: IS
+  tag: IncomeLossFromContinuingOperationsPerDilutedShare
+  canonical_id: null
+  doc_phrases:
+  - The amount of net income (loss) derived from continuing operations during the
+  reason: Continuing operations only, per share; not total diluted earnings per share.
+- statement: BS
+  tag: CashAndCashEquivalentsAtCarryingValue
+  canonical_id: cash_and_equivalents
+  doc_phrases:
+  - Amount of cash and cash equivalent. Cash includes, but is not limited to,
+  - Amount of currency on hand as well as demand deposits with banks or financial
+  reason: Currency on hand and demand deposits plus cash equivalents; the cash and cash equivalents line.
+- statement: BS
+  tag: Cash
+  canonical_id: null
+  doc_phrases:
+  - Amount of currency on hand as well as demand deposits with banks or financial
+  reason: Cash without cash equivalents; narrower than the item.
+- statement: BS
+  tag: CashAndDueFromBanks
+  canonical_id: null
+  doc_phrases:
+  - 'For banks and other depository institutions: Includes cash on hand (currency'
+  reason: Defined for banks and depository institutions; a bank line, not the general cash item.
+- statement: BS
+  tag: CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents
+  canonical_id: null
+  doc_phrases:
+  - Amount of cash and cash equivalent, and cash and cash equivalent restricted to
+  - Amount of cash and cash equivalents, and cash and cash equivalents restricted
+  reason: Includes restricted cash; not the unrestricted cash and equivalents line.
+- statement: BS
+  tag: ShortTermInvestments
+  canonical_id: short_term_investments
+  doc_phrases:
+  - Amount of investments including trading securities, available-for-sale
+  reason: Short-term investments classified as such; the item's own scope.
+- statement: BS
+  tag: MarketableSecuritiesCurrent
+  canonical_id: null
+  doc_phrases:
+  - Amount of investment in marketable security, classified as current
+  reason: Marketable securities are one kind of short-term investment; narrower than the item.
+- statement: BS
+  tag: AccountsReceivableNetCurrent
+  canonical_id: trade_receivables
+  doc_phrases:
+  - Amount, after allowance for credit loss, of right to consideration from
+  reason: Receivable from customers for products sold and services rendered, after allowance, current.
+- statement: BS
+  tag: AccountsReceivableNet
+  canonical_id: trade_receivables
+  doc_phrases:
+  - Amount, after allowance for credit loss, of right to consideration from
+  reason: Receivable from customers net of allowance, with no current or non-current qualifier; accounts receivable is a listed unqualified alias.
+- statement: BS
+  tag: ReceivablesNetCurrent
+  canonical_id: trade_receivables
+  doc_phrases:
+  - The total amount due to the entity within one year of the balance sheet date
+  reason: Trade and nontrade receivables due within a year; trade and other receivables is a listed alias.
+- statement: BS
+  tag: NontradeReceivablesCurrent
+  canonical_id: null
+  doc_phrases:
+  - The sum of amounts currently receivable other than from customers. For
+  reason: Excludes customer receivables, so it is not trade receivables.
+- statement: BS
+  tag: InventoryNet
+  canonical_id: inventories
+  doc_phrases:
+  - Amount after valuation and LIFO reserves of inventory expected to be sold, or
+  reason: Inventory expected to be sold or consumed within a year, net of reserves; the inventories line.
+- statement: BS
+  tag: InventoryFinishedGoods
+  canonical_id: null
+  doc_phrases:
+  - Amount before valuation and LIFO reserves of completed merchandise or goods
+  reason: Finished goods only, before reserves; a component of inventories.
+- statement: BS
+  tag: OtherAssetsCurrent
+  canonical_id: other_current_assets
+  doc_phrases:
+  - Amount of current assets classified as other
+  reason: Current assets classified as other; the item's own scope.
+- statement: BS
+  tag: PrepaidExpenseAndOtherAssetsCurrent
+  canonical_id: other_current_assets
+  doc_phrases:
+  - Amount of asset related to consideration paid in advance for costs that provide
+  reason: Prepaid expenses and other current assets; prepayments and other current assets is a listed alias.
+- statement: BS
+  tag: PrepaidExpenseCurrent
+  canonical_id: other_current_assets
+  doc_phrases:
+  - Amount of asset related to consideration paid in advance for costs that provide
+  reason: Prepaid expenses is a listed alias of the item.
+- statement: BS
+  tag: AssetsCurrent
+  canonical_id: total_current_assets
+  doc_phrases:
+  - Amount of asset recognized for present right to economic benefit, classified as
+  - Sum of the carrying amounts as of the balance sheet date of all assets that are
+  reason: Sum of assets expected to be realized within a year; the total current assets subtotal.
+- statement: BS
+  tag: PropertyPlantAndEquipmentNet
+  canonical_id: ppe_net
+  doc_phrases:
+  - Amount after accumulated depreciation, depletion and amortization of physical
+  reason: Physical assets net of accumulated depreciation; the property and equipment line.
+- statement: BS
+  tag: PropertyPlantAndEquipmentAndFinanceLeaseRightOfUseAssetAfterAccumulatedDepreciationAndAmortization
+  canonical_id: null
+  doc_phrases:
+  - Amount, after accumulated depreciation and amortization, of property, plant,
+  reason: Combines property and equipment with finance lease assets; two items in one.
+- statement: BS
+  tag: OperatingLeaseRightOfUseAsset
+  canonical_id: right_of_use_assets
+  doc_phrases:
+  - Amount of lessee's right to use underlying asset under operating lease
+  reason: Lessee's right to use an asset under an operating lease; a right-of-use asset line.
+- statement: BS
+  tag: FinanceLeaseRightOfUseAsset
+  canonical_id: right_of_use_assets
+  doc_phrases:
+  - Amount, after accumulated amortization, of right-of-use asset from finance
+  reason: Right-of-use asset from a finance lease, after accumulated amortization; a right-of-use asset line.
+- statement: BS
+  tag: Goodwill
+  canonical_id: goodwill
+  doc_phrases:
+  - Amount after accumulated impairment loss of an asset representing future
+  - Amount, after accumulated impairment loss, of asset representing future
+  reason: Asset from business combinations after impairment; the goodwill line.
+- statement: BS
+  tag: IntangibleAssetsNetExcludingGoodwill
+  canonical_id: intangible_assets
+  doc_phrases:
+  - Sum of the carrying amounts of all intangible assets, excluding goodwill, as of
+  reason: Intangible assets other than goodwill, net; the intangible assets line.
+- statement: BS
+  tag: FiniteLivedIntangibleAssetsNet
+  canonical_id: null
+  doc_phrases:
+  - Amount after amortization of assets, excluding financial assets and goodwill,
+  reason: Finite-lived assets only; leaves out indefinite-lived intangibles, so narrower than the item.
+- statement: BS
+  tag: IntangibleAssetsNetIncludingGoodwill
+  canonical_id: null
+  doc_phrases:
+  - Amount, after accumulated amortization, of finite- and indefinite-lived
+  - Amount, after impairment and amortization, of goodwill, indefinite-lived, and
+  - Carrying amount of finite-lived intangible assets, indefinite-lived intangible
+  reason: Includes goodwill, which is a separate item.
+- statement: BS
+  tag: EquityMethodInvestments
+  canonical_id: investments_in_associates
+  doc_phrases:
+  - This item represents the carrying amount on the entity's balance sheet of its
+  reason: Investment in an equity method investee; investments accounted for using the equity method is a listed alias.
+- statement: BS
+  tag: LongTermInvestments
+  canonical_id: null
+  doc_phrases:
+  - The total amount of investments that are intended to be held for an extended
+  reason: All long-term investments, not only associates.
+- statement: BS
+  tag: OtherAssetsNoncurrent
+  canonical_id: other_non_current_assets
+  doc_phrases:
+  - Amount of noncurrent assets classified as other
+  reason: Noncurrent assets classified as other; the item's own scope.
+- statement: BS
+  tag: AssetsNoncurrent
+  canonical_id: total_non_current_assets
+  doc_phrases:
+  - Sum of the carrying amounts as of the balance sheet date of all assets that are
+  reason: Sum of assets realized after one year; the total non-current assets subtotal.
+- statement: BS
+  tag: Assets
+  canonical_id: total_assets
+  doc_phrases:
+  - Amount of asset recognized for present right to economic benefit
+  - Sum of the carrying amounts as of the balance sheet date of all assets that are
+  reason: Sum of all recognized assets; the total assets subtotal.
+- statement: BS
+  tag: AccountsPayableCurrent
+  canonical_id: trade_payables
+  doc_phrases:
+  - Carrying value as of the balance sheet date of liabilities incurred (and for
+  reason: Payable to vendors for goods and services received; the accounts payable line.
+- statement: BS
+  tag: AccountsPayableTradeCurrent
+  canonical_id: trade_payables
+  doc_phrases:
+  - Carrying value as of the balance sheet date of obligations incurred (and for
+  reason: Trade payable to vendors, current; the trade payables line.
+- statement: BS
+  tag: AccountsPayableAndAccruedLiabilitiesCurrent
+  canonical_id: null
+  doc_phrases:
+  - Sum of the carrying values as of the balance sheet date of obligations incurred
+  reason: Joins payables with accrued liabilities, which the taxonomy files under other current liabilities.
+- statement: BS
+  tag: ShortTermBorrowings
+  canonical_id: short_term_borrowings
+  doc_phrases:
+  - Reflects the total carrying amount as of the balance sheet date of debt having
+  reason: Debt with initial terms under a year; short-term borrowings.
+- statement: BS
+  tag: BankOverdrafts
+  canonical_id: short_term_borrowings
+  doc_phrases:
+  - Carrying value as of the balance sheet date of payments made in excess of
+  reason: Payments in excess of cash balances honored by the bank; bank overdraft is a listed alias.
+- statement: BS
+  tag: ShortTermBankLoansAndNotesPayable
+  canonical_id: short_term_borrowings
+  doc_phrases:
+  - Amount of borrowings from a bank classified as other, maturing within one year
+  reason: Bank borrowings maturing within a year; short-term loans is a listed alias.
+- statement: BS
+  tag: CommercialPaper
+  canonical_id: null
+  doc_phrases:
+  - Carrying value as of the balance sheet date of short-term borrowings using
+  reason: A single borrowing instrument; narrower than short-term borrowings.
+- statement: BS
+  tag: NotesPayableCurrent
+  canonical_id: current_portion_long_term_debt
+  doc_phrases:
+  - Sum of the carrying values as of the balance sheet date of the portions of
+  reason: Portion of long-term notes payable due within a year, which LoansPayableCurrent defines the same way for loans; both are the current portion of long-term borrowings.
+- statement: BS
+  tag: DebtCurrent
+  canonical_id: null
+  doc_phrases:
+  - Amount of debt and lease obligation, classified as current
+  reason: Debt and lease obligations together, so it spans two items.
+- statement: BS
+  tag: LongTermDebtCurrent
+  canonical_id: current_portion_long_term_debt
+  doc_phrases:
+  - Amount, after deduction of unamortized premium (discount) and debt issuance
+  reason: Long-term debt classified as current; current portion of long-term debt is a listed alias.
+- statement: BS
+  tag: LoansPayableCurrent
+  canonical_id: current_portion_long_term_debt
+  doc_phrases:
+  - Carrying value as of the balance sheet date of portion of long-term loans
+  reason: Portion of long-term loans payable due within a year; current portion of long-term loans is a listed alias. NotesPayableCurrent defines the same for notes.
+- statement: BS
+  tag: OperatingLeaseLiabilityCurrent
+  canonical_id: lease_liabilities_current
+  doc_phrases:
+  - Present value of lessee's discounted obligation for lease payments from
+  reason: Current lease obligation under an operating lease; a current lease liability line.
+- statement: BS
+  tag: FinanceLeaseLiabilityCurrent
+  canonical_id: lease_liabilities_current
+  doc_phrases:
+  - Present value of lessee's discounted obligation for lease payments from finance
+  reason: Current lease obligation under a finance lease; a current lease liability line.
+- statement: BS
+  tag: OtherLiabilitiesCurrent
+  canonical_id: other_current_liabilities
+  doc_phrases:
+  - Amount of liabilities classified as other, due within one year or the normal
+  reason: Current liabilities classified as other; the item's own scope.
+- statement: BS
+  tag: AccruedLiabilitiesCurrent
+  canonical_id: other_current_liabilities
+  doc_phrases:
+  - Carrying value as of the balance sheet date of obligations incurred and
+  reason: Accrued obligations due within a year; accrued expenses is a listed alias.
+- statement: BS
+  tag: LiabilitiesCurrent
+  canonical_id: total_current_liabilities
+  doc_phrases:
+  - Total obligations incurred as part of normal operations that are expected to be
+  reason: Obligations expected within twelve months; the total current liabilities subtotal.
+- statement: BS
+  tag: LongTermDebtNoncurrent
+  canonical_id: long_term_borrowings
+  doc_phrases:
+  - Amount, after deduction of unamortized premium (discount) and debt issuance
+  reason: Long-term debt excluding current maturities; the long-term borrowings line.
+- statement: BS
+  tag: LongTermLoansPayable
+  canonical_id: long_term_borrowings
+  doc_phrases:
+  - Carrying value as of the balance sheet date of loans payable (with maturities
+  reason: Loans payable due after one year; long-term loans is a listed alias.
+- statement: BS
+  tag: LongTermDebt
+  canonical_id: null
+  doc_phrases:
+  - Amount, after deduction of unamortized premium (discount) and debt issuance
+  reason: Includes the current portion, so it spans two items.
+- statement: BS
+  tag: LongTermDebtAndCapitalLeaseObligations
+  canonical_id: null
+  doc_phrases:
+  - Amount of long-term debt and lease obligation, classified as noncurrent
+  reason: Debt and lease obligation together, so it spans two items.
+- statement: BS
+  tag: OperatingLeaseLiabilityNoncurrent
+  canonical_id: lease_liabilities_non_current
+  doc_phrases:
+  - Present value of lessee's discounted obligation for lease payments from
+  reason: Noncurrent lease obligation under an operating lease; a non-current lease liability line.
+- statement: BS
+  tag: FinanceLeaseLiabilityNoncurrent
+  canonical_id: lease_liabilities_non_current
+  doc_phrases:
+  - Present value of lessee's discounted obligation for lease payments from finance
+  reason: Noncurrent lease obligation under a finance lease; a non-current lease liability line.
+- statement: BS
+  tag: OperatingLeaseLiability
+  canonical_id: null
+  doc_phrases:
+  - Present value of lessee's discounted obligation for lease payments from
+  reason: Operating lease liability without a current or non-current split; the taxonomy has only classified lease items.
+- statement: BS
+  tag: OtherLiabilitiesNoncurrent
+  canonical_id: other_non_current_liabilities
+  doc_phrases:
+  - Amount of liabilities classified as other, due after one year or the normal
+  reason: Noncurrent liabilities classified as other; the item's own scope.
+- statement: BS
+  tag: PensionAndOtherPostretirementDefinedBenefitPlansLiabilitiesNoncurrent
+  canonical_id: other_non_current_liabilities
+  doc_phrases:
+  - Amount of liability, recognized in statement of financial position, for defined
+  reason: Noncurrent defined benefit plan liability; employee benefit obligations is a listed alias.
+- statement: BS
+  tag: LiabilitiesNoncurrent
+  canonical_id: total_non_current_liabilities
+  doc_phrases:
+  - Amount of obligation due after one year or beyond the normal operating cycle,
+  reason: Obligations due after one year; the total non-current liabilities subtotal.
+- statement: BS
+  tag: Liabilities
+  canonical_id: total_liabilities
+  doc_phrases:
+  - Amount of liability recognized for present obligation requiring transfer or
+  - Sum of the carrying amounts as of the balance sheet date of all liabilities
+  reason: Sum of all recognized liabilities; the total liabilities subtotal.
+- statement: BS
+  tag: CommonStockValue
+  canonical_id: share_capital
+  doc_phrases:
+  - Aggregate par or stated value of issued nonredeemable common stock (or common
+  reason: Par or stated value of issued common stock; the share capital line.
+- statement: BS
+  tag: CommonStockValueOutstanding
+  canonical_id: null
+  doc_phrases:
+  - Value of all classes of common stock held by shareholders. May be all or
+  - Value of common shares held by shareholders. Excludes common shares repurchased
+  reason: Value of shares held by shareholders, which can differ from issued capital.
+- statement: BS
+  tag: AdditionalPaidInCapital
+  canonical_id: null
+  doc_phrases:
+  - Amount of excess of issue price over par or stated value of stock and from
+  reason: Share premium has no item in the taxonomy; it is not share capital.
+- statement: BS
+  tag: RetainedEarningsAccumulatedDeficit
+  canonical_id: retained_earnings
+  doc_phrases:
+  - Amount of accumulated undistributed earnings (deficit)
+  reason: Accumulated undistributed earnings or deficit; the retained earnings line.
+- statement: BS
+  tag: AccumulatedOtherComprehensiveIncomeLossNetOfTax
+  canonical_id: null
+  doc_phrases:
+  - Amount, after tax, of accumulated increase (decrease) in equity from
+  reason: Accumulated other comprehensive income is not the same as the reserves the item names.
+- statement: BS
+  tag: MinorityInterest
+  canonical_id: non_controlling_interests
+  doc_phrases:
+  - Amount of equity (deficit) attributable to noncontrolling interest. Excludes
+  reason: Equity attributable to the noncontrolling interest; the item's own scope.
+- statement: BS
+  tag: StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest
+  canonical_id: total_equity
+  doc_phrases:
+  - Amount of equity (deficit) attributable to parent and noncontrolling interest.
+  reason: Equity of the parent and the noncontrolling interest; the total equity subtotal.
+- statement: BS
+  tag: LiabilitiesAndStockholdersEquity
+  canonical_id: total_liabilities_and_equity
+  doc_phrases:
+  - Amount of liabilities and equity items, including the portion of equity
+  reason: Liabilities and equity including the noncontrolling share; the balancing total.
