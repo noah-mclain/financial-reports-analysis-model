@@ -90,7 +90,11 @@ def test_packet_has_one_row_per_entry_and_policy_with_target_semantics() -> None
     }
     shown = next(r for r in excluded if r["tag"] == "NetIncomeLoss")
     assert shown["reason"]
-    assert shown["definitions"]["us-gaap/2024"]["doc"] == "NetIncomeLoss excluded definition"
+    assert shown["definitions"]["us-gaap/2024"]["doc"] == "attributable to the parent (synthetic)"
+    assert shown["companion"]["tag"] == "ProfitLoss"
+    assert shown["companion"]["canonical_id"] == "net_income_attributable_parent"
+    parent = next(r for r in entries if r["tag"] == "NetIncomeLoss")
+    assert parent["companion"] == shown["companion"]
     assert len({row["key"] for row in packet[1:]}) == len(packet) - 1
     assets = next(r for r in entries if r["tag"] == "Assets" and r["version"] == "us-gaap/2024")
     assert assets["key"] == "us-gaap|2024|balance|Assets"

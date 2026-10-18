@@ -14,14 +14,20 @@ import json
 import re
 import zlib
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 from dataset_contracts import DatasetError, text_lines
 from pydantic import ValidationError
 from sec_crosswalk import Crosswalk, CrosswalkEntry, TagKey
-from sec_crosswalk_draft import CUSTOM_NAMESPACE, CUSTOM_VERSION, STATEMENT_CODES, CuratedMapping
+from sec_crosswalk_draft import (
+    CUSTOM_NAMESPACE,
+    CUSTOM_VERSION,
+    STATEMENT_CODES,
+    CompanionRule,
+    CuratedMapping,
+)
 from sec_source_access import VerifiedPayload
 from sec_source_pass import PayloadRow
 
@@ -85,9 +91,31 @@ class Classifier:
         self._mapping = mapping
         self._entries = _index(crosswalk)
         self._excluded = _excluded(mapping)
+        self._rules: dict[tuple[str, str], CompanionRule] = {
+            (x.statement, x.tag): x.companion for x in mapping.excluded if x.companion is not None
+        }
 
     def classify(self, row: PayloadRow) -> Dropped | Resolved:
         return _classify(row, self._mapping, self._entries, self._excluded)
+
+    def classify_rows(
+        self, rows: Sequence[PayloadRow]
+    ) -> Iterator[tuple[PayloadRow, Dropped | Resolved]]:
+        """Index standard companions once per payload, scoped to adsh/stmt/report."""
+        companions = {
+            (row.adsh, row.stmt, row.report, row.tag)
+            for row in rows
+            if not row.inpth
+            and row.version != row.adsh
+            and (parsed := _VERSION.fullmatch(row.version)) is not None
+            and parsed.group(1) == self._mapping.namespace
+        }
+        for row in rows:
+            excluded = self._excluded
+            rule = self._rules.get((row.stmt, row.tag))
+            if rule is not None and (row.adsh, row.stmt, row.report, rule.tag) in companions:
+                excluded = excluded - {(row.stmt, row.tag)}
+            yield row, _classify(row, self._mapping, self._entries, excluded)
 
     def has_entry(self, key: TagKey) -> bool:
         return key in self._entries
@@ -161,13 +189,12 @@ class Coverage:
 def coverage_report(
     payloads: Iterable[VerifiedPayload], mapping: CuratedMapping, crosswalk: Crosswalk
 ) -> Coverage:
-    entries, excluded = _index(crosswalk), _excluded(mapping)
-    listed = {(r.statement, r.tag) for r in mapping.rows} | excluded
+    classifier = Classifier(mapping, crosswalk)
+    listed = {(r.statement, r.tag) for r in mapping.rows} | _excluded(mapping)
     report = Coverage()
     for verified in payloads:
-        for row in decode_payload(verified):
+        for row, result in classifier.classify_rows(decode_payload(verified)):
             report.rows += 1
-            result = _classify(row, mapping, entries, excluded)
             if isinstance(result, Dropped):
                 report.drops[result.reason] += 1
                 continue

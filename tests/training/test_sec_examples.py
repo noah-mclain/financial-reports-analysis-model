@@ -281,6 +281,35 @@ def test_the_batch_size_changes_nothing(pipeline: Pipeline, tmp_path: Path) -> N
         assert (first / name).read_bytes() == (second / name).read_bytes()
 
 
+def test_parent_share_examples_resolve_through_the_approved_conditional_entries(
+    tmp_path: Path,
+) -> None:
+    pipeline = Pipeline(
+        tmp_path / "pipeline",
+        rows=[
+            pre_line(1, 1, "Parent income", stmt="IS", tag="NetIncomeLoss"),
+            pre_line(1, 2, "Total income", stmt="IS", tag="ProfitLoss"),
+            pre_line(1, 3, "Parent equity", tag="StockholdersEquity"),
+            pre_line(
+                1,
+                4,
+                "Total equity",
+                tag="StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+            ),
+            pre_line(2, 1, "Income without companion", stmt="IS", tag="NetIncomeLoss"),
+        ],
+    )
+    out = tmp_path / "examples"
+    assert main(pipeline.examples_args(out)) == 0
+    examples = [json.loads(line) for line in (out / "examples.jsonl").read_text().splitlines()]
+    targets = {example["tag"]: example["canonical_id"] for example in examples}
+    assert targets["us-gaap:NetIncomeLoss"] == "net_income_attributable_parent"
+    assert targets["us-gaap:StockholdersEquity"] == "equity_attributable_parent"
+    counts = json.loads((out / "counts.json").read_text())
+    assert counts["dropped"] == {"ambiguous_semantics": 1}
+    assert counts["resolved"] == {"mapped": 4}
+
+
 def test_the_output_directory_is_never_reused(pipeline: Pipeline, tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
     out = tmp_path / "examples"
     assert main(pipeline.examples_args(out)) == 0

@@ -8,8 +8,8 @@
 #                so a reworded definition is looked at again before it is used.
 #   reason  why the tag means exactly that item, or why it is left null.
 #   excluded  tags whose item depends on whether a noncontrolling interest is shown. The decoder
-#             drops them before resolution (reason ambiguous_semantics); they are neither mapped,
-#             null nor covered by an abstention policy.
+#             drops them before resolution (reason ambiguous_semantics) unless a typed companion
+#             rule is satisfied in the same adsh/stmt/report by a standard nonparenthetical tag.
 # Alias rule: map when the item's aliases list the concept without a qualifier; null when the tag
 # is narrower than, broader than or ambiguous between items.
 # Only exact equivalence is mapped. Near-synonyms and tags that cover two items are null.
@@ -17,16 +17,24 @@
 version: 1
 namespace: us-gaap
 unmapped_items:
-  net_income_attributable_parent: Its only standard tag, NetIncomeLoss, is excluded as ambiguous with net_income.
-  equity_attributable_parent: Its only standard tag, StockholdersEquity, is excluded as ambiguous with total_equity.
   other_reserves: No standard tag means reserves in the IFRS sense; accumulated other comprehensive income and paid-in capital are different things.
 excluded:
 - statement: IS
   tag: NetIncomeLoss
-  reason: Defined as the parent's share only. Filers without a noncontrolling interest print it as plain net income, so the tag alone cannot choose between net_income and net_income_attributable_parent. Dropped before resolution, not taught as abstention.
+  reason: Defined as the parent's share only. Label as net_income_attributable_parent only when a standard nonparenthetical ProfitLoss line appears in the same adsh/stmt/report. Otherwise ambiguous with plain net income and dropped before resolution, not taught as abstention.
+  companion:
+    tag: ProfitLoss
+    canonical_id: net_income_attributable_parent
+    doc_phrases:
+    - attributable to the parent
 - statement: BS
   tag: StockholdersEquity
-  reason: Defined as the parent's share only. Filers without a noncontrolling interest print it as total equity, so the tag alone cannot choose between equity_attributable_parent and total_equity. Dropped before resolution, not taught as abstention.
+  reason: Defined as the parent's share only. Label as equity_attributable_parent only when a standard nonparenthetical StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest line appears in the same adsh/stmt/report. Otherwise ambiguous with total equity and dropped before resolution, not taught as abstention.
+  companion:
+    tag: StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest
+    canonical_id: equity_attributable_parent
+    doc_phrases:
+    - attributable to parent
 - statement: BS
   tag: MembersEquity
   reason: Defined as the parent entity's share in 2023 to 2025 and as plain members' equity (deficit) in 2026, so the tag alone cannot say whether the noncontrolling share is included. Filers without a noncontrolling interest print it as total equity, so it cannot choose between equity_attributable_parent and total_equity. Dropped before resolution, not taught as abstention.

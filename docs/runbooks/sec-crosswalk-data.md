@@ -34,7 +34,7 @@ Approval records go to the owner's local trust store `var/approvals/`, which is 
     `StatementType`.
   - `unsupported_namespace`: a standard tag outside the mapping's namespace (for example `ifrs`
     or `us-gaap-ebp`), for which there is no mapping or policy.
-  - `ambiguous_semantics`: a tag listed under `excluded:` in the mapping.
+  - `ambiguous_semantics`: a tag listed under `excluded:` without a satisfied companion rule.
 - **Mapping rows** exist for BS and IS only, because the taxonomy has items for those two
   statements. CI, CF and EQ lines are covered by an outside-crosswalk policy.
 - **Definitions change between versions.** A tag's `doc` can be reworded from one tag taxonomy
@@ -59,12 +59,19 @@ mapping's (for example `ifrs`) have no policy, so they stay unresolved.
 The mapping maps only tags that mean exactly the item. Near-synonyms and tags that cover two
 items are explicit nulls with a reason.
 
-Five tags are `excluded` instead. `NetIncomeLoss` and `StockholdersEquity` are each defined as
+Five tags are listed under `excluded`. `NetIncomeLoss` and `StockholdersEquity` are each defined as
 the parent's share, while filers without a noncontrolling interest print it as the plain total,
 so the tag alone cannot choose between `net_income` and `net_income_attributable_parent`, or
-between `total_equity` and `equity_attributable_parent`. An excluded tag is neither mapped,
-null nor covered by an abstention policy; the decoder drops its rows (`ambiguous_semantics`)
-before resolution, and `load_mapping` exposes them typed as `CuratedMapping.excluded`. The
+between `total_equity` and `equity_attributable_parent`. Each now has a typed `companion` rule:
+`NetIncomeLoss` maps to `net_income_attributable_parent` only alongside `ProfitLoss`, and
+`StockholdersEquity` maps to `equity_attributable_parent` only alongside
+`StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest`. Both lines must share
+the exact `adsh`, `stmt` and presentation `report` number. No values or reporting periods are
+used or inferred. Parenthetical and filer-custom lines never count as companions. The decoder
+builds the companion set once per filing payload, for both coverage and example generation.
+Without the companion it still drops the row as `ambiguous_semantics`, before resolution.
+`load_mapping` exposes these as `CuratedMapping.excluded` and rejects a self-reference, a
+companion without a positive mapping in the same statement, and an invalid target. The
 other three, `MembersEquity`, `PartnersCapital` and `MembersCapital`, are limited liability
 company and partnership equity tags whose definitions do not say whether the noncontrolling
 share is included (`MembersEquity` says the parent's share for 2023 to 2025 and plain members'
@@ -73,13 +80,13 @@ noncontrolling interest is shown (the continuing-operations and comprehensive-in
 analogues) found none to add: they either name a narrower quantity than any item, so they are
 null rows, or sit on statements the taxonomy does not cover.
 
-The cost: `net_income` and `total_equity` supervision comes only from the unambiguous tags
+The remaining cost: `net_income` and `total_equity` supervision comes only from the unambiguous tags
 (`ProfitLoss` and `StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest`).
-That is a coverage bias toward filers that show a noncontrolling interest, not a label error.
-It is to be measured in task B and revisited.
+Parent-share supervision is conditional on those total lines being presented alongside it.
+Filers without a companion remain excluded, preserving the coverage bias toward presentations
+that separate parent and total shares. The measurements below count this remaining cost.
 
-Three items have no tag (`net_income_attributable_parent`, `equity_attributable_parent`,
-`other_reserves`) and are listed under `unmapped_items` with the reason.
+`other_reserves` remains the sole item without a tag, listed under `unmapped_items` with its reason.
 
 ## Counts
 
@@ -89,12 +96,12 @@ Measured with the eight archives `2024q3` to `2026q2` in `var/sec_fsds/`:
 make sec-crosswalk-draft ARCHIVES="var/sec_fsds/2024q3.zip ... var/sec_fsds/2026q2.zip" OUT_DIR=/tmp/draft
 ```
 
-- 444 entries over 112 distinct (statement, tag) pairs: 279 mapped and 165 null. The pairs
-  appear under 2023 (111 entries), 2024 (112), 2025 (111) and 2026 (110) tag taxonomy versions.
+- 452 entries over 114 distinct (statement, tag) pairs: 287 mapped and 165 null. The pairs
+  appear under 2023 (113 entries), 2024 (114), 2025 (113) and 2026 (112) tag taxonomy versions.
   Five tags are excluded (`NetIncomeLoss`, `StockholdersEquity`, `MembersEquity`,
   `PartnersCapital`, `MembersCapital`).
-- 70 mapped (statement, tag) pairs reach 44 of the 47 items. The mapping file has 112 rows: 70
-  mapped and 42 null.
+- 72 mapped (statement, tag) pairs reach 46 of the 47 items, including two conditional pairs.
+  The mapping file has 112 unconditional rows: 70 mapped and 42 null.
 - Plan-critical items: `revenue` has two tags (`Revenues` and
   `RevenueFromContractWithCustomerExcludingAssessedTax`; the Including variant is null because
   it is gross of collected sales tax). `net_income` has `ProfitLoss`, `total_assets` has
@@ -111,6 +118,58 @@ make sec-crosswalk-draft ARCHIVES="var/sec_fsds/2024q3.zip ... var/sec_fsds/2026
   `LongTermNotesPayable`: "single borrowing instrument; narrower than the item") and excluded
   `MembersEquity`, `PartnersCapital` and `MembersCapital`, whose definitions do not say whether
   the noncontrolling share is included.
+
+### Conditional parent-share draft and measured cost (2026-10-19)
+
+The companion-rule draft adds eight entries (two tags in each of 2023 to 2026); all 444
+previous entries are unchanged. The two excluded review rows gain the typed `companion`
+object and a reason stating the exact presentation condition. The three LLC/partnership
+review rows are unchanged. Full content hashes from the draft comparison:
+
+| Subject | Before | After |
+| --- | --- | --- |
+| Mapping | `cd856f9a3f26db2aa15cf6c1ddf36e2799aea2156dad505f4b9ff29c2d36710a` | `77a2e5d61944501e97c4be9ae63bed346dcd4ab0c0607324154800100f20c3cf` |
+| Draft crosswalk | `68d44b3f11d7a5c07750a13b2b3e162803d4f242e41ab05ff235c1634f306ed8` | `bd4937f424e096e303c45798a8fbf6e4c56b444144fa56cce25014a1de8ce01c` |
+
+All five policy hashes also change because their review metadata binds the new mapping hash;
+their kinds, scopes and reasons are unchanged. Old approvals cannot authorize this package.
+The draft crosswalk, policies, review packet, full comparison and measurement artifacts are
+in `/private/tmp/sec-parent-share-evidence/`. No approvals were issued or changed.
+
+Read-only measurement over the eight prepared archives (2024q3 to 2026q2), before role override
+and deduplication:
+
+| Tag | Tag taxonomy version | Newly mapped | Still ambiguous | Other drops |
+| --- | --- | --- | --- | --- |
+| `NetIncomeLoss` | 2023 | 243 | 623 | 1 |
+| `NetIncomeLoss` | 2024 | 3,704 | 11,860 | 7 |
+| `NetIncomeLoss` | 2025 | 3,422 | 10,718 | 6 |
+| `NetIncomeLoss` | 2026 | 195 | 973 | 0 |
+| `NetIncomeLoss` | total | 7,564 | 24,174 | 14 |
+| `StockholdersEquity` | 2023 | 245 | 607 | 2 |
+| `StockholdersEquity` | 2024 | 3,680 | 11,189 | 22 |
+| `StockholdersEquity` | 2025 | 3,353 | 10,079 | 17 |
+| `StockholdersEquity` | 2026 | 193 | 899 | 2 |
+| `StockholdersEquity` | total | 7,471 | 22,774 | 43 |
+
+Other drops are parenthetical rows, plus 14 empty equity labels in 2024. Of the newly mapped
+rows, income has 6,536 corporate, 1,020 negative-control and 8 unknown-role rows; equity has
+6,463 corporate, 997 negative-control and 11 unknown-role rows. Corporate rows have the
+parent-share target; negative controls retain the null override; unknown roles remain dropped.
+
+The audit used the existing `dedupe_group_key` and `dedupe_lowest` on every role-eligible
+candidate sharing an issuer/statement/normalized-label group with a new row, including rows
+with other targets and nulls. It found:
+
+| New label | New role-eligible rows | New rows in conflicting groups | Row conflict rate | Conflicting groups / new groups |
+| --- | --- | --- | --- | --- |
+| `net_income_attributable_parent` | 7,556 | 430 | 5.69% | 181 / 2,252 (8.04%) |
+| `equity_attributable_parent` | 7,460 | 127 | 1.70% | 43 / 1,676 (2.57%) |
+
+Across these groups there are 15,806 candidates and 1,276 rows in 224 conflicting groups.
+These are subset rates, not a measurement of the full example builder's 5% conflict gate.
+The two-pass coverage/conflict audit took 72.767 seconds. No examples or dataset were rebuilt,
+no training or held-out scoring ran, and no new rebuild duration was measured.
 
 ## Alias rule and tags that share an item
 

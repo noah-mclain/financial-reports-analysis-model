@@ -81,7 +81,12 @@ def review_packet(
     """The subjects header, then one JSON-ready row per entry, policy and excluded tag."""
     items = {item.id: item for item in taxonomy.items}
     rows: dict[tuple[str, str], MappingRow] = {
-        (row.statement, row.tag): row for row in mapping.rows
+        (row.statement, row.tag): row for row in mapping.entry_rows
+    }
+    companions: dict[tuple[str, str], Row] = {
+        (x.statement, x.tag): x.companion.model_dump(mode="json")
+        for x in mapping.excluded
+        if x.companion is not None
     }
     packet: list[Row] = []
     for entry in crosswalk.entries:
@@ -110,6 +115,11 @@ def review_packet(
                     "headings": list(item.headings_for("en")),
                 },
                 "reason": mapped.reason,
+                **(
+                    {"companion": companions[(_CODE_BY_STATEMENT[key.statement], key.tag)]}
+                    if (_CODE_BY_STATEMENT[key.statement], key.tag) in companions
+                    else {}
+                ),
             }
         )
     for policy in policies:
@@ -130,6 +140,11 @@ def review_packet(
                 "statement": exclusion.statement,
                 "tag": exclusion.tag,
                 "reason": exclusion.reason,
+                **(
+                    {"companion": exclusion.companion.model_dump(mode="json")}
+                    if exclusion.companion is not None
+                    else {}
+                ),
                 "definitions": {
                     version: {"tlabel": tags[exclusion.tag].tlabel, "doc": tags[exclusion.tag].doc}
                     for version, tags in sorted(vocabulary.items())

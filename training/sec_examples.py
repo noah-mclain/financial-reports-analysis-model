@@ -222,11 +222,10 @@ class ExampleBuilder:
             raise DatasetError(f"{source_id}: no role assessment in the trust directory")
         self._authorize_filing(role, source_id)
         cik = int(str(filing.source_record.issuer.cik))
-        for row in decode_payload(verified):
+        for row, outcome in self._classifier.classify_rows(decode_payload(verified)):
             self.counts["rows_read"] += 1
             if self._progress is not None:
                 self._progress.advance()
-            outcome = self._classifier.classify(row)
             if isinstance(outcome, Dropped):
                 self.dropped[outcome.reason] += 1
                 continue

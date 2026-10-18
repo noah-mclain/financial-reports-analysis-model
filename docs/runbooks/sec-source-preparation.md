@@ -419,6 +419,32 @@ The draft package was regenerated (444 entries; mapping hash `cd856f9a...`, cros
 
 Custom rows (370,216) and the other drop counts are unchanged.
 
+## Coverage with conditional parent-share companions
+
+Measured read-only on 2026-10-19 across the same 3,742,460 prepared rows in 33,942 filings,
+using the companion-rule draft described in [sec-crosswalk-data.md](sec-crosswalk-data.md):
+
+| Resolution or drop reason | Before companions | With companions |
+| --- | --- | --- |
+| mapped by the crosswalk | 771,591 | 786,626 |
+| null entry | 107,899 | 107,899 |
+| outside crosswalk | 2,021,579 | 2,021,579 |
+| custom extension | 370,216 | 370,216 |
+| dropped: `ambiguous_semantics` | 62,676 | 47,641 |
+| dropped: `parenthetical` | 270,744 | 270,744 |
+| dropped: `unsupported_namespace` | 82,489 | 82,489 |
+| dropped: `unsupported_statement_code` | 54,161 | 54,161 |
+| dropped: `empty_label` | 1,105 | 1,105 |
+
+Resolved rows plus dropped rows still sum to 3,742,460. `NetIncomeLoss` contributes 7,564
+new parent-income classifications and `StockholdersEquity` 7,471 new parent-equity
+classifications. A companion must be a standard nonparenthetical line in the same
+`adsh`/`stmt`/presentation `report`; it is not a reporting-period match. The absent-companion
+rows and all three LLC/partnership tags remain `ambiguous_semantics`.
+These are draft classification counts, before negative-control override and unknown-role
+drops. The linked data runbook gives the per-version drops, role counts, dedupe conflict rates,
+changed approval hashes and scratch artifact location. No approvals or datasets were changed.
+
 ## Roles
 
 `training/sec_roles.py` and `training/data/sec_crosswalk/role_rules.yaml` implement the rule
