@@ -17,7 +17,7 @@ from typing import Any, Literal
 import pypdfium2 as pdfium
 import yaml
 
-from fra_core.schemas import LineItem, Statement
+from fra_core.schemas import LineItem, Statement, StatementType
 from fra_ingest.config import REPO_ROOT, load_config
 from fra_ingest.ocr import make_engine
 from fra_ingest.pages import sha256_file
@@ -27,6 +27,33 @@ from harness.expected import draft_expected
 from harness.independent_gold import FrozenGold, Reading
 
 MANIFEST = REPO_ROOT / "eval/golden/manifest.yaml"
+ROW_PREFIXES = {
+    StatementType.BALANCE: "bc",
+    StatementType.INCOME: "ic",
+    StatementType.COMPREHENSIVE_INCOME: "oci",
+    StatementType.CASH_FLOW: "cf",
+    StatementType.EQUITY: "eq",
+}
+
+
+def row_reference(statement_type: StatementType, row_id: str) -> str:
+    """Return a display-only, statement-namespaced extraction row reference."""
+    try:
+        prefix = ROW_PREFIXES[statement_type]
+    except KeyError as error:
+        raise ValueError(f"no review row reference prefix for {statement_type.value}") from error
+    return f"{prefix}:{row_id}"
+
+
+def render_row_identity(observation: dict[str, Any]) -> str:
+    """Render extraction identity and duplicate-category context for the review table."""
+    identity = (
+        f"{html.escape(observation['row_ref'])}: {html.escape(str(observation['canonical_id']))}"
+    )
+    if observation["shared_count"] is None:
+        return identity
+    peers = html.escape(", ".join(observation["peer_row_refs"]))
+    return f"{identity} · shared canonical ID ({observation['shared_count']} rows): {peers}."
 
 
 def approved_gold(
@@ -74,6 +101,12 @@ def cell_map(results: list[StructureResult]) -> list[dict[str, Any]]:
     records: dict[tuple[str, str, tuple[int, str, int], str], dict[str, Any]] = {}
     for run, result in enumerate(results):
         for statement in result.statements:
+            row_groups: dict[str, dict[tuple[int, str, int], str]] = {}
+            for row in statement.line_items:
+                if row.cells and row.canonical_id is not None:
+                    row_groups.setdefault(row.canonical_id, {})[source_position(row)] = (
+                        row_reference(statement.type, row.id)
+                    )
             for row in statement.line_items:
                 if not row.cells:
                     continue
@@ -98,6 +131,23 @@ def cell_map(results: list[StructureResult]) -> list[dict[str, Any]]:
                         "value": None if cell.reported is None else str(cell.reported),
                         "raw_text": cell.raw_text,
                         "canonical_id": row.canonical_id,
+                        "row_ref": row_reference(statement.type, row.id),
+                        "shared_count": (
+                            len(row_groups[row.canonical_id])
+                            if row.canonical_id is not None
+                            and len(row_groups[row.canonical_id]) > 1
+                            else None
+                        ),
+                        "peer_row_refs": (
+                            sorted(
+                                ref
+                                for peer_position, ref in row_groups[row.canonical_id].items()
+                                if peer_position != position
+                            )
+                            if row.canonical_id is not None
+                            and len(row_groups[row.canonical_id]) > 1
+                            else []
+                        ),
                         "source": cell.provenance.model_dump(mode="json"),
                         "flags": cell.flags,
                     }
@@ -207,8 +257,7 @@ def build_review(document_id: str, snapshots: list[Path], output: Path) -> Path:
                 f"<div>Snapshot {run + 1}: <b>{html.escape(str(observation['value']))}</b> "
                 f'<a href="#page-{source["page_no"]}">page {source["page_no"]}</a>, '
                 f"table {html.escape(source['table_ref'])}, row {source['row']}, "
-                f"col {source['col']} "
-                f"— {html.escape(str(observation['canonical_id']))}</div>"
+                f"col {source['col']} — {render_row_identity(observation)}</div>"
             )
         status = "agrees" if cell["consistent"] else "REVIEW: differs / missing / only one snapshot"
         where = cell["position"]

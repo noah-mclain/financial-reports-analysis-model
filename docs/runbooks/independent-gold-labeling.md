@@ -28,6 +28,10 @@ omits an earlier repeat does not shift the later ones. Each record carries this 
 (page_no, table_ref, row), replacing the earlier `occurrence` ordinal; hand-built value
 agreement evidence still uses its own `occurrence` field;
 `map.json` includes exact PDF-point bounding boxes and original raw text from every snapshot.
+The viewer also prefixes extraction row ids for display (`bc:`, `ic:`, `oci:`, `cf:` or `eq:`);
+these are per-extraction references, not stable source positions or taxonomy ids. A shared canonical-id
+badge lists peer row references only when distinct printed rows in the same statement and
+snapshot use that id. Neither display field is part of the editable answer or frozen gold.
 Full inputs are copied into the packet: the viewer uses a statement/cell projection and may
 not render ancillary fields from newer snapshot schemas. Source page images show highlighted
 regions. Paragraph/line numbers are unavailable in the table contract; do not invent them.
