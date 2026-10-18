@@ -7,9 +7,10 @@ import json
 import re
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import asdict
+from pathlib import Path
 from typing import Literal
 
-from dataset_contracts import Sha256, SourceRecord, Text
+from dataset_contracts import DatasetError, Sha256, SourceRecord, Text
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from fra_core.pools import Pool, PoolRegistry, Source
@@ -22,6 +23,7 @@ from fra_core.split import (
     cik_key,
     development_documents,
 )
+from pool_store import load_registry
 
 
 class SourceAccessError(ValueError):
@@ -155,6 +157,17 @@ def _digest(value: object) -> str:
         value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def read_registry(path: Path) -> PoolRegistry:
+    """The recorded registry. A missing file is refused: ``load_registry`` would return an
+    empty one, and every pool lookup after that would be a silent mismatch."""
+    if not path.is_file():
+        raise DatasetError(f"{path}: pool registry not found")
+    try:
+        return load_registry(path)
+    except json.JSONDecodeError as exc:
+        raise DatasetError(f"{path}: {exc}") from exc
 
 
 def registry_sha256(registry: PoolRegistry) -> str:

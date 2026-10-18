@@ -46,6 +46,7 @@ from sec_source_access import (
     SourceManifest,
     VerifiedPayload,
     iter_payloads,
+    read_registry,
 )
 from sec_source_decoder import Classifier, Dropped, decode_payload
 from sec_source_pass import directory_opener
@@ -53,7 +54,6 @@ from sec_source_pass import directory_opener
 from fra_core.schemas.statement import StatementType
 from fra_core.split import Look, Move
 from fra_core.taxonomy import Taxonomy
-from pool_store import load_registry
 
 TRUST_FILES = {
     "crosswalk": "reviewed_crosswalk.json",
@@ -154,7 +154,7 @@ class ExampleBuilder:
         self._prepared = prepared
         self._bundle = bundle
         self._taxonomy = taxonomy
-        self._registry = load_registry(registry_path)
+        self._registry = read_registry(registry_path)
         self._moves = moves
         self._looks = looks
         self._batch = batch_issuers

@@ -34,6 +34,7 @@ from sec_source_access import (
     SecIndex,
     SourceManifest,
     authorize_payloads,
+    read_registry,
     registry_sha256,
     split_records_sha256,
 )
@@ -48,7 +49,6 @@ from sec_source_preparation import (
 
 from fra_core.pools import Pool, Source
 from fra_core.split import Part
-from pool_store import load_registry
 
 WRITER_VERSION = "sec-pass-1"
 PRE_MEMBER = "pre.txt"
@@ -335,7 +335,7 @@ def run_pass(
     started = clock()
     inputs = (registry_path, moves_path, looks_path)
     fingerprints = [_sha256_file(path) for path in inputs]
-    registry = load_registry(registry_path)
+    registry = read_registry(registry_path)
     looks = read_looks(looks_path)
     moves = read_moves(moves_path, looks)
     names = {}

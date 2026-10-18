@@ -10,7 +10,6 @@ It composes ``partition_examples``, ``build_dataset`` and ``write_dataset``; the
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import sys
 from collections.abc import Sequence
@@ -31,11 +30,12 @@ from dataset_contracts import (
 from harness.holdout_records import read_looks, read_moves
 from harness.paths import HOLDOUT_MOVES, ROOT, SCORING_LOG
 from pydantic import ValidationError
+from sec_source_access import read_registry
 
-from fra_core.pools import PoolError, PoolRegistry
-from fra_core.split import Look, Move, SplitError
+from fra_core.pools import PoolError
+from fra_core.split import Look, Move, SplitError, cik_key, issuer_key
 from fra_core.taxonomy import load_taxonomy
-from pool_store import REGISTRY_RELATIVE_PATH, load_registry
+from pool_store import REGISTRY_RELATIVE_PATH
 
 SHA256 = re.compile(r"[0-9a-f]{64}")
 
@@ -81,21 +81,19 @@ def _positive(text: str) -> int:
     return value
 
 
-def _registry(path: Path) -> PoolRegistry:
-    # load_registry treats a missing file as an empty registry; here that would hide a mistake.
-    if not path.is_file():
-        raise DatasetError(f"{path}: pool registry not found")
-    try:
-        return load_registry(path)
-    except json.JSONDecodeError as exc:
-        raise DatasetError(f"{path}: {exc}") from exc
-
-
 def _moves(path: Path, looks: list[Look]) -> list[Move]:
     try:
         return read_moves(path, looks)
     except yaml.YAMLError as exc:
         raise DatasetError(f"{path}: {exc}") from exc
+
+
+def _roster_moves(moves: list[Move], sources: list[SourceRecord]) -> list[Move]:
+    """The recorded moves of issuers in this roster; the record also covers other corpora."""
+    keys = {issuer_key(s.issuer.name or cik_key(str(s.issuer.cik))) for s in sources}
+    kept = [m for m in moves if m.key in keys]
+    print(f"moves applied: {len(kept)} of {len(moves)} recorded")
+    return kept
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -115,16 +113,16 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        examples = read_jsonl(args.examples, NormalizationExample)
         sources = read_jsonl(args.sources, SourceRecord)
         approved = read_approved(args.approved)
         looks = read_looks(args.looks)
-        moves = _moves(args.moves, looks)
+        moves = _roster_moves(_moves(args.moves, looks), sources)
+        examples = read_jsonl(args.examples, NormalizationExample)
         count_tokens, tokenizer_id = load_chat_counter(args.tokenizer_dir)
         partitioned = partition_examples(
             examples,
             sources=sources,
-            registry=_registry(args.registry),
+            registry=read_registry(args.registry),
             config=PartitionConfig(
                 approved_example_sha256=approved, max_per_issuer=args.max_per_issuer
             ),

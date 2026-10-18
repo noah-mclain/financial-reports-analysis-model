@@ -3,9 +3,10 @@
 import hashlib
 from dataclasses import dataclass, replace
 from datetime import date
+from pathlib import Path
 
 import pytest
-from dataset_contracts import SourceRecord
+from dataset_contracts import DatasetError, SourceRecord
 from pydantic import ValidationError
 from sec_source_access import (
     AccessContext,
@@ -18,6 +19,7 @@ from sec_source_access import (
     authorize_payloads,
     iter_payloads,
     read_payloads,
+    read_registry,
     registry_sha256,
     split_records_sha256,
 )
@@ -815,3 +817,15 @@ def test_iter_payloads_verifies_each_payload_when_it_is_reached() -> None:
     next(stream)
     with pytest.raises(SourceAccessError, match="payload_sha256"):
         next(stream)
+
+
+def test_missing_registry_file_is_refused_not_read_as_empty(tmp_path: Path) -> None:
+    with pytest.raises(DatasetError, match="pool registry not found"):
+        read_registry(tmp_path / "issuer-pools.json")
+
+
+def test_malformed_registry_file_is_a_dataset_error(tmp_path: Path) -> None:
+    path = tmp_path / "issuer-pools.json"
+    path.write_text("{", encoding="utf-8")
+    with pytest.raises(DatasetError, match=str(path)):
+        read_registry(path)

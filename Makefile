@@ -62,7 +62,7 @@ typecheck: ## Type check the packages, apps, the analytics golden test, eval har
 	$(UV) run mypy scripts/pool_store.py
 	$(UV) run mypy training/dataset_contracts.py
 	$(UV) run mypy training/sec_crosswalk.py
-	$(UV) run mypy --strict training/sec_source_access.py
+	MYPYPATH=scripts:eval $(UV) run mypy --strict training/sec_source_access.py
 	$(UV) run mypy --strict training/dataset_builder.py
 	$(UV) run mypy --strict training/chat_tokenizer.py
 	MYPYPATH=scripts:eval $(UV) run mypy --strict training/build_dataset.py
@@ -144,10 +144,10 @@ sec-fsds: ## SEC statement labels for training (needs FRA_SEC_USER_AGENT; QUARTE
 	@$(MAKE) --no-print-directory unhide-pth
 	PYTHONPATH=scripts $(UV) run python training/sources/sec_fsds.py $(or $(ONLY),--last $(or $(QUARTERS),8))
 
-dataset-build: ## Normalization train/valid files (EXAMPLES, SOURCES, APPROVED, TOKENIZER_DIR, OUT_DIR required; MAX_PER_ISSUER optional)
+dataset-build: ## Normalization train/valid files (EXAMPLES, SOURCES, APPROVED, TOKENIZER_DIR, OUT_DIR required; MAX_PER_ISSUER, REGISTRY optional)
 	$(foreach var,EXAMPLES SOURCES APPROVED TOKENIZER_DIR OUT_DIR,$(if $($(var)),,$(error $(var) is required)))
 	@$(MAKE) --no-print-directory unhide-pth
-	PYTHONPATH=scripts:eval $(UV) run python training/build_dataset.py --examples "$(EXAMPLES)" --sources "$(SOURCES)" --approved "$(APPROVED)" --tokenizer-dir "$(TOKENIZER_DIR)" --out-dir "$(OUT_DIR)" $(if $(MAX_PER_ISSUER),--max-per-issuer $(MAX_PER_ISSUER))
+	PYTHONPATH=scripts:eval $(UV) run python training/build_dataset.py --examples "$(EXAMPLES)" --sources "$(SOURCES)" --approved "$(APPROVED)" --tokenizer-dir "$(TOKENIZER_DIR)" --out-dir "$(OUT_DIR)" $(if $(MAX_PER_ISSUER),--max-per-issuer $(MAX_PER_ISSUER)) $(if $(REGISTRY),--registry "$(REGISTRY)")
 
 sec-crosswalk-draft: ## Draft SEC crosswalk, policies and review packet from tag.txt (ARCHIVES="a.zip b.zip", OUT_DIR required)
 	$(foreach var,ARCHIVES OUT_DIR,$(if $($(var)),,$(error $(var) is required)))

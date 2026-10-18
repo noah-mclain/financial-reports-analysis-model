@@ -33,6 +33,7 @@ from sec_source_access import (
     SourceManifest,
     VerifiedPayload,
     iter_payloads,
+    read_registry,
 )
 from sec_source_decoder import coverage_report, report_json, top_unlisted, unlisted_jsonl
 from sec_source_pass import directory_opener, run_pass
@@ -41,7 +42,7 @@ from sec_source_preparation import FilingRow, read_roster
 from fra_core.pools import PoolError
 from fra_core.split import SplitError
 from fra_core.taxonomy import load_taxonomy
-from pool_store import REGISTRY_RELATIVE_PATH, load_registry
+from pool_store import REGISTRY_RELATIVE_PATH
 
 
 def _read(path: Path) -> bytes:
@@ -74,7 +75,7 @@ def prepare(args: argparse.Namespace) -> None:
 def _payloads(
     prepared: Path, args: argparse.Namespace, applicable: set[str]
 ) -> Iterator[VerifiedPayload]:
-    registry = load_registry(args.registry)
+    registry = read_registry(args.registry)
     looks = read_looks(args.looks)
     moves = [m for m in read_moves(args.moves, looks) if m.key in applicable]
     for base in sorted(p for p in prepared.iterdir() if p.is_dir()):

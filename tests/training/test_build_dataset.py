@@ -137,6 +137,18 @@ def test_missing_moves_file_is_a_reported_error(
     assert str(files.moves) in capsys.readouterr().err
 
 
+def test_move_of_an_issuer_outside_the_roster_is_not_applied(files: Files) -> None:
+    # The recorded moves also cover issuers of other corpora; only roster issuers can be placed.
+    files.write(pair())
+    files.moves.write_text(
+        "moves:\n"
+        "  - {issuer: Elsewhere Co, kind: override, from: holdout, to: fit,"
+        " date: 2026-01-01, looks_before: 0, reason: owner}\n",
+        encoding="utf-8",
+    )
+    assert main(files.args()) == 0
+
+
 def test_malformed_moves_yaml_is_a_reported_error(
     files: Files, capsys: pytest.CaptureFixture[str]
 ) -> None:
