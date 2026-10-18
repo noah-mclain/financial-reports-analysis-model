@@ -15,6 +15,7 @@ from fra_core.schemas import (
     PeriodKind,
     Statement,
     StatementType,
+    is_provenance_flag,
     is_provenance_warning,
 )
 from fra_core.schemas.caveat import CaveatId
@@ -57,6 +58,7 @@ def _row_provenance(flag: str, statement: Statement) -> bool:
     name, colon, row = flag.partition(":")
     return (
         bool(colon)
+        and bool(row)
         and name in PROVENANCE_WARNINGS
         and any(item.id == row for item in statement.line_items)
     )
@@ -155,7 +157,7 @@ def _fact(
             or not cell.reported.is_finite()
             or cell.reported != ref.reported
             or cell.provenance != ref.provenance
-            or not all(is_provenance_warning(f) for f in cell.flags)
+            or not all(is_provenance_flag(f) for f in cell.flags)
             or statement.currency != ref.currency
             or statement.scale != ref.scale
         ):
@@ -182,7 +184,7 @@ def _fact(
     flags = [
         f
         for f in metric.flags
-        if not is_provenance_warning(f) and not any(_row_provenance(f, s) for s in sources.values())
+        if not is_provenance_flag(f) and not any(_row_provenance(f, s) for s in sources.values())
     ]
     for flag in flags:
         caveat = _ASSUMPTIONS.get(flag)

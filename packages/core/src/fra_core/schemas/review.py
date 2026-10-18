@@ -14,6 +14,23 @@ from pydantic import BaseModel, ConfigDict, Field
 PROVENANCE_WARNINGS = ("label_merged", "label_words_from_page", "blank_confirmed")
 
 
+# Notes on how a number was read, kept on the cell for people. They are not doubts about a
+# figure, so they do not hold a statement or reach the model, and unlike the warnings above they
+# are not listed on the review.
+READ_NOTES = (
+    "digits_reversed",
+    "arabic_indic_digits",
+    "parentheses_negative",
+    "dash_as_zero",
+    "per_share",
+)
+
+
+def is_provenance_flag(flag: str) -> bool:
+    """A flag on a cell or metric that records how the figure or its label was read."""
+    return flag in READ_NOTES or is_provenance_warning(flag)
+
+
 def is_provenance_warning(warning: str) -> bool:
     """A provenance warning, with or without its numeric ``:count`` suffix."""
     name, colon, count = warning.partition(":")

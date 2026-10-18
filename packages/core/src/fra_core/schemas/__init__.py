@@ -19,7 +19,13 @@ from fra_core.schemas.job import (
 )
 from fra_core.schemas.metric import MetricInput, MetricUnit, MetricValue
 from fra_core.schemas.narrative import Claim, Footnote, Narrative, NarrativeSection, Sentence
-from fra_core.schemas.review import PROVENANCE_WARNINGS, StatementReview, is_provenance_warning
+from fra_core.schemas.review import (
+    PROVENANCE_WARNINGS,
+    READ_NOTES,
+    StatementReview,
+    is_provenance_flag,
+    is_provenance_warning,
+)
 from fra_core.schemas.statement import (
     BBox,
     Cell,
@@ -42,6 +48,7 @@ from fra_core.schemas.statement import (
 __all__ = [
     "FINISHED",
     "PROVENANCE_WARNINGS",
+    "READ_NOTES",
     "Analysis",
     "BBox",
     "Caveat",
@@ -79,5 +86,6 @@ __all__ = [
     "StatementType",
     "TextSource",
     "Upload",
+    "is_provenance_flag",
     "is_provenance_warning",
 ]
