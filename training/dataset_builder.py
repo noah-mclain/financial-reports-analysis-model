@@ -16,21 +16,39 @@ from dataset_contracts import (
     Contract,
     DatasetError,
     DatasetManifest,
+    NormalizationAnswer,
     NormalizationExample,
     PartitionedExamples,
+    _taxonomy_digest,
     canonical_json,
     example_digest,
 )
 from progress import Progress
 
 from fra_core.split import cik_key
+from fra_core.taxonomy import Taxonomy, load_taxonomy
 
-BUILDER_VERSION = 1
+BUILDER_VERSION = 2
 TOKEN_LIMIT = 2048
-SYSTEM_PROMPT = (
-    "Map the financial statement line item to a canonical id from the taxonomy, "
-    "or null if no canonical id applies."
-)
+
+
+def normalization_prompt(taxonomy: Taxonomy) -> str:
+    """One instruction, closed catalog and response schema for training and inference."""
+    catalog: dict[str, list[str]] = {}
+    for item in sorted(taxonomy.items, key=lambda i: i.id):
+        catalog.setdefault(item.statement.value, []).append(item.id)
+    return "\n".join(
+        (
+            "Map the financial statement line item to an id listed for its statement in the "
+            "catalog below. If the statement has no listed ids or none matches, use null. "
+            "Return only a JSON object matching the schema below. No explanation or markdown.",
+            canonical_json(catalog),
+            canonical_json(NormalizationAnswer.model_json_schema()),
+        )
+    )
+
+
+SYSTEM_PROMPT = normalization_prompt(load_taxonomy())
 TRAIN_FILE = "train.jsonl"
 VALID_FILE = "valid.jsonl"
 MANIFEST_FILE = "manifest.json"
@@ -82,7 +100,7 @@ def normalize_label(label: str) -> str:
 def render_row(example: NormalizationExample) -> Row:
     """One mlx_lm chat row: the label and statement in, the canonical id (or null) out."""
     prompt = canonical_json({"label": example.label, "statement": example.statement.value})
-    answer = canonical_json({"canonical_id": example.canonical_id})
+    answer = canonical_json(NormalizationAnswer(canonical_id=example.canonical_id).model_dump())
     return {
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -207,6 +225,8 @@ def build_dataset(
     """
     if type(token_limit) is not int or token_limit < 1:
         raise DatasetError(f"token_limit must be a positive int, got {token_limit!r}")
+    if partitioned.manifest.taxonomy_sha256 != _taxonomy_digest(load_taxonomy()):
+        raise DatasetError("partition taxonomy differs from the shared prompt catalog")
     parts: dict[str, tuple[tuple[NormalizationExample, ...], list[int], tuple[Row, ...]]] = {}
     over: list[str] = []
     originals = (
