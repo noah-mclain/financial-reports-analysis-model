@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from fra_analytics import metric_descriptor, unit_notes
 from fra_core.presentation import Language, caveat_text
 from fra_core.schemas import (
+    PROVENANCE_WARNINGS,
     Analysis,
     Footnote,
     JobStatus,
@@ -51,6 +52,16 @@ def _unique(values: list[object], name: str) -> None:
         raise ValueError(f"duplicate {name}")
 
 
+def _row_provenance(flag: str, statement: Statement) -> bool:
+    """A provenance flag that names a row of this statement: ``label_words_from_page:<row id>``."""
+    name, colon, row = flag.partition(":")
+    return (
+        bool(colon)
+        and name in PROVENANCE_WARNINGS
+        and any(item.id == row for item in statement.line_items)
+    )
+
+
 def _source_contract(analysis: Analysis) -> None:
     _unique([s.id for s in analysis.statements], "statement ids")
     _unique([s.type for s in analysis.statements], "statement types")
@@ -77,7 +88,8 @@ def _source_contract(analysis: Analysis) -> None:
         _unique([c.id for c in statement.caveats], "source caveats")
         caveats = {c.id for c in statement.caveats}
         if any(
-            flag not in _ASSUMPTIONS or _ASSUMPTIONS[flag] not in caveats
+            not _row_provenance(flag, statement)
+            and (flag not in _ASSUMPTIONS or _ASSUMPTIONS[flag] not in caveats)
             for flag in statement.flags
         ):
             raise ValueError(f"unsupported statement notices: {statement.id}")
@@ -167,7 +179,11 @@ def _fact(
     notes = unit_notes(metric.unit, list(sources.values()))
     if notes.blocked or notes.flags or sorted(metric.caveats) != list(notes.caveats):
         raise ValueError("metric unit caveats do not match sources")
-    flags = [f for f in metric.flags if not is_provenance_warning(f)]
+    flags = [
+        f
+        for f in metric.flags
+        if not is_provenance_warning(f) and not any(_row_provenance(f, s) for s in sources.values())
+    ]
     for flag in flags:
         caveat = _ASSUMPTIONS.get(flag)
         if caveat is None or not any(c.id == caveat for s in sources.values() for c in s.caveats):

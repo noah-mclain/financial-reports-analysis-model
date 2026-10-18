@@ -268,3 +268,19 @@ def test_a_non_provenance_cell_flag_still_blocks_its_facts() -> None:
     assert isinstance(result, SummarySuppressed) or (
         "current_ratio" not in result.narrative.cited_metric_ids
     )
+
+
+def test_a_provenance_flag_naming_a_row_of_its_own_statement_does_not_block() -> None:
+    source = analysis()
+    statement = source.statements[0]
+    statement.flags = [f"label_words_from_page:{statement.line_items[0].id}"]
+    result = build_summary(_recomputed(source))
+    assert isinstance(result, SummaryBuilt)
+    assert "label_" not in result.narrative.model_dump_json()
+
+
+@pytest.mark.parametrize("flag", ["label_words_from_page:no-such-row", "label_words_from_page"])
+def test_a_provenance_statement_flag_must_name_a_row_of_its_own_statement(flag: str) -> None:
+    source = analysis()
+    source.statements[0].flags = [flag]
+    assert isinstance(build_summary(_recomputed(source)), SummarySuppressed)
