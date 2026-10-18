@@ -27,6 +27,15 @@ excluded:
 - statement: BS
   tag: StockholdersEquity
   reason: Defined as the parent's share only. Filers without a noncontrolling interest print it as total equity, so the tag alone cannot choose between equity_attributable_parent and total_equity. Dropped before resolution, not taught as abstention.
+- statement: BS
+  tag: MembersEquity
+  reason: Defined as the parent entity's share in 2023 to 2025 and as plain members' equity (deficit) in 2026, so the tag alone cannot say whether the noncontrolling share is included. Filers without a noncontrolling interest print it as total equity, so it cannot choose between equity_attributable_parent and total_equity. Dropped before resolution, not taught as abstention.
+- statement: BS
+  tag: PartnersCapital
+  reason: Defined without saying whether the noncontrolling share is included (ownership interest of the classes of partners). Filers without a noncontrolling interest print it as total equity, so the tag alone cannot choose between equity_attributable_parent and total_equity. Dropped before resolution, not taught as abstention.
+- statement: BS
+  tag: MembersCapital
+  reason: Defined without saying whether the noncontrolling share is included (member capital in a limited liability company). Filers without a noncontrolling interest print it as total equity, so the tag alone cannot choose between equity_attributable_parent and total_equity. Dropped before resolution, not taught as abstention.
 rows:
 - statement: IS
   tag: Revenues
@@ -309,6 +318,12 @@ rows:
   - The total amount due to the entity within one year of the balance sheet date
   reason: Trade and nontrade receivables due within a year; trade and other receivables is a listed alias.
 - statement: BS
+  tag: AccountsAndOtherReceivablesNetCurrent
+  canonical_id: trade_receivables
+  doc_phrases:
+  - Amount, after allowance, receivable from customers, clients, or other
+  reason: Customer and other receivables net of allowance due within a year; trade and other receivables is a listed alias.
+- statement: BS
   tag: NontradeReceivablesCurrent
   canonical_id: null
   doc_phrases:
@@ -389,6 +404,12 @@ rows:
   - Sum of the carrying amounts of all intangible assets, excluding goodwill, as of
   reason: Intangible assets other than goodwill, net; the intangible assets line.
 - statement: BS
+  tag: OtherIntangibleAssetsNet
+  canonical_id: intangible_assets
+  doc_phrases:
+  - Amount after accumulated amortization of finite-lived and indefinite-lived
+  reason: Net intangible assets classified as other, other than goodwill; other intangible assets is a listed alias.
+- statement: BS
   tag: FiniteLivedIntangibleAssetsNet
   canonical_id: null
   doc_phrases:
@@ -420,6 +441,12 @@ rows:
   doc_phrases:
   - Amount of noncurrent assets classified as other
   reason: Noncurrent assets classified as other; the item's own scope.
+- statement: BS
+  tag: OtherAssetsMiscellaneousNoncurrent
+  canonical_id: other_non_current_assets
+  doc_phrases:
+  - Amount of other miscellaneous assets expected to be realized or consumed after
+  reason: Other miscellaneous assets realized after one year; the same residual bucket as OtherAssetsNoncurrent.
 - statement: BS
   tag: AssetsNoncurrent
   canonical_id: total_non_current_assets
@@ -465,10 +492,10 @@ rows:
   reason: Payments in excess of cash balances honored by the bank; bank overdraft is a listed alias.
 - statement: BS
   tag: ShortTermBankLoansAndNotesPayable
-  canonical_id: short_term_borrowings
+  canonical_id: null
   doc_phrases:
   - Amount of borrowings from a bank classified as other, maturing within one year
-  reason: Bank borrowings maturing within a year; short-term loans is a listed alias.
+  reason: single borrowing instrument; narrower than the item
 - statement: BS
   tag: CommercialPaper
   canonical_id: null
@@ -477,10 +504,10 @@ rows:
   reason: A single borrowing instrument; narrower than short-term borrowings.
 - statement: BS
   tag: NotesPayableCurrent
-  canonical_id: current_portion_long_term_debt
+  canonical_id: null
   doc_phrases:
   - Sum of the carrying values as of the balance sheet date of the portions of
-  reason: Portion of long-term notes payable due within a year, which LoansPayableCurrent defines the same way for loans; both are the current portion of long-term borrowings.
+  reason: single borrowing instrument; narrower than the item
 - statement: BS
   tag: DebtCurrent
   canonical_id: null
@@ -498,7 +525,25 @@ rows:
   canonical_id: current_portion_long_term_debt
   doc_phrases:
   - Carrying value as of the balance sheet date of portion of long-term loans
-  reason: Portion of long-term loans payable due within a year; current portion of long-term loans is a listed alias. NotesPayableCurrent defines the same for notes.
+  reason: Portion of long-term loans payable due within a year; current portion of long-term loans is a listed alias.
+- statement: BS
+  tag: LoansPayableToBankCurrent
+  canonical_id: null
+  doc_phrases:
+  - Carrying value as of the balance sheet date of current portion of long-term
+  reason: single borrowing instrument; narrower than the item
+- statement: BS
+  tag: NotesPayableToBankCurrent
+  canonical_id: null
+  doc_phrases:
+  - Current portion of the total carrying amount as of the balance sheet date due
+  reason: single borrowing instrument; narrower than the item
+- statement: BS
+  tag: NotesAndLoansPayableCurrent
+  canonical_id: current_portion_long_term_debt
+  doc_phrases:
+  - Sum of the carrying values as of the balance sheet date of the portions of all
+  reason: Portions of all long-term notes and loans payable due within a year; it covers loans as well as notes, so it is not a single instrument.
 - statement: BS
   tag: OperatingLeaseLiabilityCurrent
   canonical_id: lease_liabilities_current
@@ -542,6 +587,24 @@ rows:
   - Carrying value as of the balance sheet date of loans payable (with maturities
   reason: Loans payable due after one year; long-term loans is a listed alias.
 - statement: BS
+  tag: LongTermLoansFromBank
+  canonical_id: null
+  doc_phrases:
+  - Carrying value as of the balance sheet date of loans from a bank with
+  reason: single borrowing instrument; narrower than the item
+- statement: BS
+  tag: LongTermNotesAndLoans
+  canonical_id: long_term_borrowings
+  doc_phrases:
+  - Carrying value as of the balance sheet date of all notes and loans payable
+  reason: All notes and loans payable due after one year, excluding the current portion; long-term loans and borrowings are listed aliases.
+- statement: BS
+  tag: LongTermNotesPayable
+  canonical_id: null
+  doc_phrases:
+  - Carrying value as of the balance sheet date of notes payable (with maturities
+  reason: single borrowing instrument; narrower than the item
+- statement: BS
   tag: LongTermDebt
   canonical_id: null
   doc_phrases:
@@ -583,6 +646,12 @@ rows:
   doc_phrases:
   - Amount of liability, recognized in statement of financial position, for defined
   reason: Noncurrent defined benefit plan liability; employee benefit obligations is a listed alias.
+- statement: BS
+  tag: PensionAndOtherPostretirementAndPostemploymentBenefitPlansLiabilitiesNoncurrent
+  canonical_id: other_non_current_liabilities
+  doc_phrases:
+  - Amount of liability, recognized in statement of financial position, for
+  reason: Non-current pension, postretirement and postemployment benefit liability; employee benefit obligations is a listed alias.
 - statement: BS
   tag: LiabilitiesNoncurrent
   canonical_id: total_non_current_liabilities
@@ -639,6 +708,12 @@ rows:
   doc_phrases:
   - Amount of equity (deficit) attributable to parent and noncontrolling interest.
   reason: Equity of the parent and the noncontrolling interest; the total equity subtotal.
+- statement: BS
+  tag: PartnersCapitalIncludingPortionAttributableToNoncontrollingInterest
+  canonical_id: total_equity
+  doc_phrases:
+  - Amount of partners' capital (deficit), including portions attributable to both
+  reason: Partners' capital including the noncontrolling share, excluding temporary equity; the partnership counterpart of the total equity tag.
 - statement: BS
   tag: LiabilitiesAndStockholdersEquity
   canonical_id: total_liabilities_and_equity

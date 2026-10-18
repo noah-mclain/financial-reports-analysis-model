@@ -9,6 +9,8 @@ from dataset_builder import (
     SYSTEM_PROMPT,
     BuiltDataset,
     build_dataset,
+    dedupe_group_key,
+    dedupe_lowest,
     dedupe_per_issuer,
     normalize_label,
     render_row,
@@ -365,3 +367,29 @@ def test_length_stats_and_arabic_interim_strata_are_computed_per_row() -> None:
     stats = built.manifest.fit_lengths
     assert (stats.count, stats.max, stats.mean, stats.p95) == (21, 21, "11.000", 20)
     assert built.manifest.fit_strata == {"pdf|ar|interim": 1, "sec|en|annual": 20}
+
+
+def test_the_dedupe_key_is_one_shared_definition() -> None:
+    assert dedupe_group_key(7, "income", "  NET   Sales ") == dedupe_group_key(
+        7, "income", "net sales"
+    )
+    assert dedupe_group_key(7, "income", "net sales") != dedupe_group_key(8, "income", "net sales")
+    assert dedupe_group_key(7, "income", "net sales") != dedupe_group_key(7, "balance", "net sales")
+
+
+def test_generic_dedupe_keeps_the_lowest_id_and_reports_conflicts_without_raising() -> None:
+    items = [
+        ("b-2", 1, "revenue"),
+        ("a-1", 1, "revenue"),
+        ("c-3", 2, "revenue"),
+        ("d-4", 3, "revenue"),
+        ("e-5", 3, None),
+    ]
+    kept, conflicts = dedupe_lowest(
+        items,
+        group=lambda i: dedupe_group_key(i[1], "income", "label"),
+        target=lambda i: i[2],
+        ident=lambda i: i[0],
+    )
+    assert [k[0] for k in kept] == ["a-1", "c-3"]
+    assert conflicts == [("d-4", "e-5")]

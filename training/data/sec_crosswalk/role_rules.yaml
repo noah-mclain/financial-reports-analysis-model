@@ -1,0 +1,10 @@
+# Role rule table for SEC filings: the one definition a reviewer approves.
+# A filing's role comes from the SIC code in its submission record (sub.txt):
+#   a four-digit SIC from min to max inclusive is a negative control (banks, insurers and other
+#   financial filers, which the crosswalk does not teach); any other four-digit SIC is corporate;
+#   a missing SIC, or one that is not exactly four ASCII digits, is unknown.
+# The role assessments are generated from this table and checked mechanically against the roster.
+version: 1
+negative_control_sic:
+  min: 6000
+  max: 6499

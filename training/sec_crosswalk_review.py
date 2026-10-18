@@ -14,7 +14,7 @@ import random
 from collections.abc import Sequence
 from typing import Any, Literal
 
-from dataset_contracts import Contract, DatasetError
+from dataset_contracts import Contract, DatasetError, text_lines
 from pydantic import ValidationError
 from sec_crosswalk import AbstentionPolicy, ApprovalRecord, Crosswalk, TagKey
 from sec_crosswalk_draft import (
@@ -170,10 +170,10 @@ def owner_sample(packet: Sequence[Row], n: int, seed: int) -> list[Row]:
 def parse_verdicts(data: bytes) -> tuple[Row, dict[str, Verdict]]:
     """The echoed subjects header and the verdicts by key; malformed lines are refused."""
     try:
-        lines = data.decode("utf-8").splitlines()
+        text = data.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise DatasetError(f"the verdict file is not UTF-8: {exc.reason}") from exc
-    numbered = [(n, line) for n, line in enumerate(lines, start=1) if line.strip()]
+    numbered = list(text_lines(text))
     if not numbered:
         raise DatasetError("the verdict file holds no verdicts")
     number, first = numbered[0]

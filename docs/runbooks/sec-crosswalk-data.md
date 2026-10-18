@@ -59,13 +59,16 @@ mapping's (for example `ifrs`) have no policy, so they stay unresolved.
 The mapping maps only tags that mean exactly the item. Near-synonyms and tags that cover two
 items are explicit nulls with a reason.
 
-Two tags are `excluded` instead: `NetIncomeLoss` and `StockholdersEquity`. Each is defined as
+Five tags are `excluded` instead. `NetIncomeLoss` and `StockholdersEquity` are each defined as
 the parent's share, while filers without a noncontrolling interest print it as the plain total,
 so the tag alone cannot choose between `net_income` and `net_income_attributable_parent`, or
 between `total_equity` and `equity_attributable_parent`. An excluded tag is neither mapped,
 null nor covered by an abstention policy; the decoder drops its rows (`ambiguous_semantics`)
-before resolution, and `load_mapping` exposes them typed as `CuratedMapping.excluded`. A tag
-cannot be both a row and excluded. The search for other tags whose item depends on whether a
+before resolution, and `load_mapping` exposes them typed as `CuratedMapping.excluded`. The
+other three, `MembersEquity`, `PartnersCapital` and `MembersCapital`, are limited liability
+company and partnership equity tags whose definitions do not say whether the noncontrolling
+share is included (`MembersEquity` says the parent's share for 2023 to 2025 and plain members'
+equity for 2026). A tag cannot be both a row and excluded. The search for other tags whose item depends on whether a
 noncontrolling interest is shown (the continuing-operations and comprehensive-income
 analogues) found none to add: they either name a narrower quantity than any item, so they are
 null rows, or sit on statements the taxonomy does not cover.
@@ -86,18 +89,28 @@ Measured with the eight archives `2024q3` to `2026q2` in `var/sec_fsds/`:
 make sec-crosswalk-draft ARCHIVES="var/sec_fsds/2024q3.zip ... var/sec_fsds/2026q2.zip" OUT_DIR=/tmp/draft
 ```
 
-- 400 entries over 101 distinct (statement, tag) pairs: 259 mapped and 141 null. The pairs
-  appear under 2023 (100 entries), 2024 (101), 2025 (100) and 2026 (99) tag taxonomy versions.
-  Two tags are excluded; both are defined in all four versions.
-- 65 mapped (statement, tag) pairs reach 44 of the 47 items. The mapping file has 101 rows: 65
-  mapped and 36 null.
+- 444 entries over 112 distinct (statement, tag) pairs: 279 mapped and 165 null. The pairs
+  appear under 2023 (111 entries), 2024 (112), 2025 (111) and 2026 (110) tag taxonomy versions.
+  Five tags are excluded (`NetIncomeLoss`, `StockholdersEquity`, `MembersEquity`,
+  `PartnersCapital`, `MembersCapital`).
+- 70 mapped (statement, tag) pairs reach 44 of the 47 items. The mapping file has 112 rows: 70
+  mapped and 42 null.
 - Plan-critical items: `revenue` has two tags (`Revenues` and
   `RevenueFromContractWithCustomerExcludingAssessedTax`; the Including variant is null because
   it is gross of collected sales tax). `net_income` has `ProfitLoss`, `total_assets` has
-  `Assets`, `total_equity` has
-  `StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest`,
+  `Assets`, `total_equity` has two (`StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest`
+  and `PartnersCapitalIncludingPortionAttributableToNoncontrollingInterest`),
   `total_current_assets` has `AssetsCurrent` and `total_current_liabilities` has
   `LiabilitiesCurrent`.
+- Eleven tags were added after the first coverage audit (see
+  [sec-source-preparation.md](sec-source-preparation.md)). Three audit proposals were left
+  unlisted as borderline (`InterestAndDebtExpense`, `OtherAccruedLiabilitiesCurrent`,
+  `OtherAccruedLiabilitiesNoncurrent`). An independent review then set six single-instrument
+  borrowing tags to explicit nulls (`NotesPayableCurrent`, `ShortTermBankLoansAndNotesPayable`,
+  `LoansPayableToBankCurrent`, `NotesPayableToBankCurrent`, `LongTermLoansFromBank`,
+  `LongTermNotesPayable`: "single borrowing instrument; narrower than the item") and excluded
+  `MembersEquity`, `PartnersCapital` and `MembersCapital`, whose definitions do not say whether
+  the noncontrolling share is included.
 
 ## Alias rule and tags that share an item
 
@@ -112,25 +125,28 @@ on one item. These do (read from the mapping file):
 | `selling_general_admin` | `SellingGeneralAndAdministrativeExpense`, `GeneralAndAdministrativeExpense`, `SellingExpense` |
 | `depreciation_amortization` | `Depreciation`, `DepreciationAndAmortization` |
 | `finance_costs` | `InterestExpense`, `InterestExpenseNonoperating` |
-| `trade_receivables` | `AccountsReceivableNetCurrent`, `AccountsReceivableNet`, `ReceivablesNetCurrent` |
+| `trade_receivables` | `AccountsReceivableNetCurrent`, `AccountsReceivableNet`, `ReceivablesNetCurrent`, `AccountsAndOtherReceivablesNetCurrent` |
 | `other_current_assets` | `OtherAssetsCurrent`, `PrepaidExpenseAndOtherAssetsCurrent`, `PrepaidExpenseCurrent` |
 | `right_of_use_assets` | `OperatingLeaseRightOfUseAsset`, `FinanceLeaseRightOfUseAsset` |
+| `intangible_assets` | `IntangibleAssetsNetExcludingGoodwill`, `OtherIntangibleAssetsNet` |
+| `other_non_current_assets` | `OtherAssetsNoncurrent`, `OtherAssetsMiscellaneousNoncurrent` |
 | `trade_payables` | `AccountsPayableCurrent`, `AccountsPayableTradeCurrent` |
-| `short_term_borrowings` | `ShortTermBorrowings`, `BankOverdrafts`, `ShortTermBankLoansAndNotesPayable` |
-| `current_portion_long_term_debt` | `NotesPayableCurrent`, `LongTermDebtCurrent`, `LoansPayableCurrent` |
+| `short_term_borrowings` | `ShortTermBorrowings`, `BankOverdrafts` |
+| `current_portion_long_term_debt` | `LongTermDebtCurrent`, `LoansPayableCurrent`, `NotesAndLoansPayableCurrent` |
 | `lease_liabilities_current` | `OperatingLeaseLiabilityCurrent`, `FinanceLeaseLiabilityCurrent` |
 | `other_current_liabilities` | `OtherLiabilitiesCurrent`, `AccruedLiabilitiesCurrent` |
-| `long_term_borrowings` | `LongTermDebtNoncurrent`, `LongTermLoansPayable` |
+| `long_term_borrowings` | `LongTermDebtNoncurrent`, `LongTermLoansPayable`, `LongTermNotesAndLoans` |
 | `lease_liabilities_non_current` | `OperatingLeaseLiabilityNoncurrent`, `FinanceLeaseLiabilityNoncurrent` |
-| `other_non_current_liabilities` | `OtherLiabilitiesNoncurrent`, `PensionAndOtherPostretirementDefinedBenefitPlansLiabilitiesNoncurrent` |
+| `other_non_current_liabilities` | `OtherLiabilitiesNoncurrent`, `PensionAndOtherPostretirementDefinedBenefitPlansLiabilitiesNoncurrent`, `PensionAndOtherPostretirementAndPostemploymentBenefitPlansLiabilitiesNoncurrent` |
+| `total_equity` | `StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest`, `PartnersCapitalIncludingPortionAttributableToNoncontrollingInterest` |
 
-`NotesPayableCurrent` and `LoansPayableCurrent` both define the portion of long-term notes or
-loans payable due within one year in all four versions, so both map to the current portion of
-long-term debt. `OperatingLeaseLiability` (no current split) and `InvestmentIncomeInterestAndDividend`
-(includes dividends) are explicit nulls.
+`LoansPayableCurrent` ("loans" is a listed alias) and the combined `NotesAndLoansPayableCurrent`
+map to the current portion of long-term debt; the notes-only and bank-only siblings are
+explicit nulls because each is a single borrowing instrument. `OperatingLeaseLiability` (no current
+split) and `InvestmentIncomeInterestAndDividend` (includes dividends) are explicit nulls.
 
-Tags the vocabulary does not hold are not listed. Coverage of unlisted tags is to be audited
-from real tag frequencies in task B before approval.
+Tags the vocabulary does not hold are not listed. Coverage of unlisted tags is audited from the
+real tag frequencies (`make sec-coverage`) before approval.
 
 ## Review procedure
 
@@ -167,6 +183,39 @@ The reviewer is a separate agent and the owner checks a sample. A reviewer from 
 family can share this draft's errors, so the owner's sample is the independent check, not a
 formality. The approval records are an input to the trust snapshot the caller builds; the
 caller still authenticates reviewers and authorities.
+
+## The trust directory
+
+`make sec-examples` reads the reviewed artifacts and their approvals from one directory the
+owner controls (`var/approvals/` by default, untracked). Nothing in the repository writes there:
+the owner copies the files in after checking them. All files are JSON.
+
+| File | Produced by | Shape |
+| --- | --- | --- |
+| `reviewed_crosswalk.json` | `make sec-crosswalk-approve` | one `Crosswalk` object, `review.status` `reviewed` |
+| `reviewed_policies.json` | `make sec-crosswalk-approve` | array of `AbstentionPolicy` objects, each `reviewed` |
+| `approvals.json` | `make sec-crosswalk-approve` | array of `ApprovalRecord` objects: one for the crosswalk, one per policy |
+| `reviewed_role_assessments.json` | `make sec-roles-approve` | array of `RoleAssessment` objects, one per prepared filing, each `reviewed` |
+| `role_approvals.json` | `make sec-roles-approve` | array of `ApprovalRecord` objects, one per role assessment |
+| `authorities.json` | the owner, by hand | array of strings: the authority ids the owner accepts |
+
+An `ApprovalRecord` has `subject_kind` (`crosswalk`, `abstention_policy` or `role_assessment`),
+`subject_sha256`, `producer_id`, `reviewer_id`, `authority_id`, `status` (`approved`),
+`evidence_reference` and `evidence_sha256`. The adapter accepts a record only if its
+`authority_id` is in `authorities.json`, its producer matches the artifact's, its status is
+`approved` and its `subject_sha256` equals the artifact's content hash. A draft artifact, a
+missing record, an unlisted authority or a role without a record stops the run.
+
+`authorities.json` is the owner's own statement of whose approvals count, so only the owner
+writes it. An example, using the authority id that the review commands take as `AUTHORITY_ID`
+(a proposal; any string works if the two agree):
+
+```json
+["owner-sample-check-2026-10"]
+```
+
+The reviewer agent's own id goes to `REVIEWER_ID` and must differ from the draft producers
+(`crosswalk-draft-1` and `role-rules-1`).
 
 ## Not done
 

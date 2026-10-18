@@ -6,14 +6,14 @@ import hashlib
 import json
 import math
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import asdict
 from datetime import date
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
-from fra_core.pools import Identity, Pool, PoolRegistry, Source
+from fra_core.pools import Identity, Pool, PoolError, PoolRegistry, Source
 from fra_core.schemas.statement import BBox, Provenance, StatementType
 from fra_core.split import (
     Look,
@@ -103,7 +103,11 @@ class NormalizationExample(Contract):
             raise ValueError(f"{self.example_id}: null target requires an abstention reason only")
         if self.role == "negative_control" and self.canonical_id is not None:
             raise ValueError(f"{self.example_id}: negative control must abstain")
-        if self.statement == StatementType.BALANCE:
+        if self.source_record.source == Source.SEC:
+            # A presentation row names a line, not a column; the filing's columns carry durations.
+            if self.months is not None:
+                raise ValueError(f"{self.example_id}: SEC presentation rows have no column months")
+        elif self.statement == StatementType.BALANCE:
             if self.months is not None:
                 raise ValueError(f"{self.example_id}: instant balance has no duration months")
         elif self.months is None:
@@ -176,6 +180,17 @@ def canonical_json(value: object) -> str:
     )
 
 
+def text_lines(text: str) -> Iterator[tuple[int, str]]:
+    """Numbered non-blank lines, split on newline only.
+
+    ``str.splitlines`` also breaks at U+0085, U+2028 and U+2029, which JSON text written with
+    ``ensure_ascii=False`` can hold inside a string, so it must not read JSON lines.
+    """
+    for number, line in enumerate(text.split("\n"), start=1):
+        if line.strip():
+            yield number, line
+
+
 def digest(value: object) -> str:
     return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
 
@@ -186,6 +201,32 @@ def _target_items(taxonomy: Taxonomy) -> dict[str, CanonicalItem]:
     if len(targets) != len(taxonomy.items):
         raise DatasetError("canonical taxonomy has duplicate ids")
     return targets
+
+
+def _require_recorded(sources: Sequence[SourceRecord], metadata: dict[str, object]) -> None:
+    """Refuse a roster identity the registry does not already record.
+
+    One clone serves the whole roster: registering a recorded identity changes nothing, so any
+    change in its metadata, or an error from the registry, means some source is not recorded.
+    The offender is then found with a fresh clone per source, in roster order.
+    """
+    probe = PoolRegistry.from_metadata(metadata, "injected registry")
+    try:
+        for record in sources:
+            probe.register(record.issuer, record.pool)
+        changed = probe.metadata() != metadata
+    except PoolError:
+        changed = True
+    if not changed:
+        return
+    for record in sources:
+        alone = PoolRegistry.from_metadata(metadata, "injected registry")
+        alone.register(record.issuer, record.pool)  # its own PoolError, as for a single source
+        if alone.metadata() != metadata:
+            raise DatasetError(
+                f"{record.source_id}: identity/pool is not fully recorded in registry"
+            )
+    raise DatasetError("registry changed while checking the roster, but no single source did")
 
 
 def example_digest(examples: Sequence[NormalizationExample]) -> str:
@@ -223,6 +264,7 @@ def partition_examples(
     taxonomy: Taxonomy,
     moves: Sequence[Move],
     looks: Sequence[Look],
+    on_example: Callable[[], None] | None = None,
 ) -> PartitionedExamples:
     """Return fit/validation supervision only; reject every unauthorized original row.
 
@@ -230,11 +272,18 @@ def partition_examples(
     selection inferred from examples. Callers must select permitted content using metadata
     before opening labels. No assignments or scoring records are changed by this function.
     Name-only identities are refused pending a shared public alias/split-key contract.
+    When supplied, ``on_example`` is called three times per input example: once in each
+    revalidation, authorization, and deduplication pass.
     """
     # Revalidate model instances too: model_copy/model_construct can bypass field validation.
     config = PartitionConfig.model_validate(config)
     sources = tuple(SourceRecord.model_validate(s) for s in sources)
-    examples = tuple(NormalizationExample.model_validate(e) for e in examples)
+    validated_examples: list[NormalizationExample] = []
+    for example in examples:
+        validated_examples.append(NormalizationExample.model_validate(example))
+        if on_example is not None:
+            on_example()
+    examples = tuple(validated_examples)
     check_looks(looks)
     check_moves(moves, looks)
     targets = _target_items(taxonomy)
@@ -248,12 +297,6 @@ def partition_examples(
             raise DatasetError(
                 f"{record.source_id}: reviewed CIK required for alias-safe splitting"
             )
-        probe = PoolRegistry.from_metadata(metadata, "injected registry")
-        probe.register(record.issuer, record.pool)
-        if probe.metadata() != metadata:
-            raise DatasetError(
-                f"{record.source_id}: identity/pool is not fully recorded in registry"
-            )
         if record.source_id in by_source:
             raise DatasetError(f"{record.source_id}: duplicate source_id in metadata roster")
         by_source[record.source_id] = record
@@ -265,6 +308,7 @@ def partition_examples(
                 "pool": record.pool,
             }
         )
+    _require_recorded(sources, metadata)
     source_parts: dict[str, Part] = {}
     for part in (Part.FIT, Part.VALIDATION):
         for document in development_documents(documents, moves, {part}):
@@ -275,6 +319,8 @@ def partition_examples(
 
     # Authorize all original examples before deduplication or caps can discard anything.
     for row in examples:
+        if on_example is not None:
+            on_example()
         source_id = row.source_record.source_id
         if row.source_record != by_source.get(source_id):
             raise DatasetError(f"{row.example_id}: source record differs from authorized roster")
@@ -293,6 +339,8 @@ def partition_examples(
 
     unique: dict[str, NormalizationExample] = {}
     for row in examples:
+        if on_example is not None:
+            on_example()
         previous = unique.setdefault(row.example_id, row)
         if previous != row:
             raise DatasetError(f"{row.example_id}: example_id identifies conflicting content")

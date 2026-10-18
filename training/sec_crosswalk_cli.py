@@ -18,7 +18,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-from dataset_contracts import DatasetError
+from dataset_contracts import DatasetError, text_lines
+from exclusive_write import write_new
 from pydantic import BaseModel, TypeAdapter, ValidationError
 from sec_crosswalk import AbstentionPolicy, Crosswalk, CrosswalkError
 from sec_crosswalk_draft import (
@@ -51,28 +52,6 @@ def _json[T: BaseModel](path: Path, model: type[T]) -> T:
         raise DatasetError(f"{path}: {exc}") from exc
 
 
-def write_new(files: dict[Path, str]) -> None:
-    """Create all files or none; an existing path, even a dangling link, is never overwritten."""
-    created: list[Path] = []
-    try:
-        for path, text in files.items():
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("x", encoding="utf-8") as handle:
-                created.append(path)
-                handle.write(text)
-    except FileExistsError as exc:
-        _remove(created)
-        raise DatasetError(f"{exc.filename} already exists; refusing to overwrite") from exc
-    except Exception:
-        _remove(created)
-        raise
-
-
-def _remove(paths: list[Path]) -> None:
-    for path in paths:
-        path.unlink(missing_ok=True)
-
-
 def _dump(value: object) -> str:
     return json.dumps(value, sort_keys=True, indent=2, ensure_ascii=False) + "\n"
 
@@ -91,13 +70,11 @@ _REQUIRED = {
 
 def _read_packet(path: Path) -> list[dict[str, Any]]:
     try:
-        lines = _read(path).decode("utf-8").splitlines()
+        text = _read(path).decode("utf-8")
     except UnicodeDecodeError as exc:
         raise DatasetError(f"{path}: not UTF-8: {exc.reason}") from exc
     rows: list[dict[str, Any]] = []
-    for number, line in enumerate(lines, start=1):
-        if not line.strip():
-            continue
+    for number, line in text_lines(text):
         try:
             row = json.loads(line)
         except json.JSONDecodeError as exc:

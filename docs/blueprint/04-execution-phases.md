@@ -444,9 +444,11 @@ builder does is what it will do.
   corpus rule 1, risk R7). Period kind is recorded and reported instead, at four points. (1)
   *Data.* Every document records `period: annual | interim` in `candidates.yaml`, and the dataset
   builder (`training/dataset_builder.py`, run on no real data) counts every training example by
-  source, language and this period value in its manifest, and keeps the example's column length in
-  months on the example record (`Period.months` in `fra_core.schemas.statement`; `Period.kind`
-  there is duration or instant, not annual or interim); neither is in the prompt the model sees.
+  source, language and this period value in its manifest. A PDF example keeps the column length in
+  months on its record (`Period.months` in `fra_core.schemas.statement`; `Period.kind` there is
+  duration or instant, not annual or interim). An SEC presentation row has no column, so its months
+  is none and its period value comes from the filing's form (10-K family annual, 10-Q family
+  interim). Neither value is in the prompt the model sees.
   (2) *Weight.* The builder will keep identical (issuer, printed label, canonical item)
   rows once per issuer, so an issuer with several quarterly filings does not count several times
   for the same labels. Interim-only headers (for example "for the three months ended") are period

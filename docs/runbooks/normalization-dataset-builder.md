@@ -83,3 +83,39 @@ Writes are not atomic: a failure part-way leaves earlier files behind, to be rem
   annotations exist, so it has run on no real data and no counts are claimed.
 - No bag-of-words or bilingual-pair example generation.
 - No semantic deduplication, period weighting or long-tail coverage policy.
+
+## Monitoring a run
+
+`dataset-build` reports input reading, contract validation and partitioning, token counting,
+and train/valid writing on stderr. A terminal shows an in-place progress bar; redirected stderr
+and CI logs show timestamped stage and progress lines.
+
+Each stage writes a start line and a finish line with its elapsed time; stages with a countable
+total (reading, line validation, contract validation and partition, rendering, token counting)
+also log count, rate and ETA at most every 30 s. Timestamps are UTC (`Z`).
+
+## Measured: first real SEC run (2026-10-18)
+
+Inputs: the 811,629 examples of `sec-examples` over eight quarterly archives (2024q3 to 2026q2),
+the `TOKENIZER_DIR` for Qwen2.5-7B-Instruct fetched from `main` (not a pinned revision), no
+`--max-per-issuer`. Measured with `dataset-build` on the author's Mac:
+
+| | fit | validation |
+| --- | --- | --- |
+| rows | 672,895 | 138,734 |
+| `sec\|en\|annual` | 217,185 | 45,056 |
+| `sec\|en\|interim` | 455,710 | 93,678 |
+| mean / p95 / max tokens | 63.1 / 99 / 325 | 63.0 / 98 / 262 |
+| abstain rows | 80.6% | 80.7% |
+| canonical ids present | 44 | 44 |
+| fewest rows for one id | 363 (`investments_in_associates`) | 76 (`investments_in_associates`) |
+
+No row came near the 2048-token limit and none was dropped. None of the 4 recorded moves
+applies to this roster (`moves applied: 0 of 4 recorded`), so the split is the plain issuer
+hash. The thinnest ids in fit after `investments_in_associates` are `short_term_borrowings`
+(457) and `short_term_investments` (484). These are counts, not accuracy: no model has been
+trained or scored on this dataset, and it has no PDF or Arabic rows.
+
+Run time: 1h44m before the roster check was fixed to use one registry clone for the whole
+roster (it rebuilt the registry once per source); 5m30s after, with byte-identical
+`train.jsonl`, `valid.jsonl` and `manifest.json`.

@@ -3,9 +3,10 @@
 import hashlib
 from dataclasses import dataclass, replace
 from datetime import date
+from pathlib import Path
 
 import pytest
-from dataset_contracts import SourceRecord
+from dataset_contracts import DatasetError, SourceRecord
 from pydantic import ValidationError
 from sec_source_access import (
     AccessContext,
@@ -18,6 +19,7 @@ from sec_source_access import (
     authorize_payloads,
     iter_payloads,
     read_payloads,
+    read_registry,
     registry_sha256,
     split_records_sha256,
 )
@@ -31,6 +33,10 @@ OTHER_HASH = "b" * 64
 
 def cik_in(part: Part) -> int:
     return next(c for c in range(1, 1000) if hashed_part(cik_key(c)) == part)
+
+
+def fit_ciks(n: int) -> list[int]:
+    return [c for c in range(1, 3000) if hashed_part(cik_key(c)) == Part.FIT][:n]
 
 
 def filing(cik: int, *, name: str | None = None, suffix: str = "") -> SecFiling:
@@ -701,6 +707,47 @@ def test_authorization_builds_one_registry_probe_per_call(
     assert {d.part for d in expected} == {Part.FIT, Part.VALIDATION}
 
 
+def snapshot_builds(monkeypatch: pytest.MonkeyPatch, filings: int) -> int:
+    records = [filing(cik) for cik in fit_ciks(filings)]
+    case = fixture(*records)
+    original = PoolRegistry.metadata
+    calls: list[int] = []
+
+    def counting(self: PoolRegistry) -> dict[str, object]:
+        calls.append(1)
+        return original(self)
+
+    monkeypatch.setattr(PoolRegistry, "metadata", counting)
+    case.authorize(())
+    monkeypatch.setattr(PoolRegistry, "metadata", original)
+    return len(calls)
+
+
+def test_the_registry_snapshot_is_built_once_per_call_not_once_per_filing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    few, many = snapshot_builds(monkeypatch, 2), snapshot_builds(monkeypatch, 12)
+    assert few == many
+    assert many <= 3
+
+
+def test_a_late_filing_that_would_add_an_alias_is_still_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ciks = fit_ciks(5)
+    records = [filing(cik) for cik in ciks]
+    case = fixture(*records)
+    renamed = filing(ciks[4], name="Unrecorded Rename", suffix="-late")
+    case.index = case.index.model_copy(update={"filings": (*records[:4], renamed)})
+    index_hash = case.index.content_sha256()
+    case.manifest = case.manifest.model_copy(update={"index_sha256": index_hash})
+    case.context = case.context.model_copy(
+        update={"index_sha256": index_hash, "manifest_sha256": case.manifest.content_sha256()}
+    )
+    with pytest.raises(SourceAccessError, match="not fully recorded"):
+        case.authorize(())
+
+
 def test_iter_payloads_authorizes_up_front_and_retrieves_one_payload_at_a_time() -> None:
     fit, valid = filing(cik_in(Part.FIT)), filing(cik_in(Part.VALIDATION))
     case = fixture(fit, valid)
@@ -770,3 +817,15 @@ def test_iter_payloads_verifies_each_payload_when_it_is_reached() -> None:
     next(stream)
     with pytest.raises(SourceAccessError, match="payload_sha256"):
         next(stream)
+
+
+def test_missing_registry_file_is_refused_not_read_as_empty(tmp_path: Path) -> None:
+    with pytest.raises(DatasetError, match="pool registry not found"):
+        read_registry(tmp_path / "issuer-pools.json")
+
+
+def test_malformed_registry_file_is_a_dataset_error(tmp_path: Path) -> None:
+    path = tmp_path / "issuer-pools.json"
+    path.write_text("{", encoding="utf-8")
+    with pytest.raises(DatasetError, match=str(path)):
+        read_registry(path)
