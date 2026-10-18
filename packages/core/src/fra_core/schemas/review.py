@@ -22,7 +22,6 @@ READ_NOTES = (
     "arabic_indic_digits",
     "parentheses_negative",
     "dash_as_zero",
-    "per_share",
 )
 
 

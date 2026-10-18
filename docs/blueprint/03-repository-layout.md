@@ -61,7 +61,7 @@ financial-reports-analysis-model/
 │   ├── ingest/                       # fra-ingest: the only package importing docling
 │   │   ├── pyproject.toml
 │   │   ├── src/fra_ingest/
-│   │   │   ├── cli.py                # fra-ingest locate|convert|structure|review-report
+│   │   │   ├── cli.py                # fra-ingest locate|convert|structure|review-report|coverage
 │   │   │   ├── config.py             # IngestConfig loaded from configs/ingest.toml
 │   │   │   ├── locate.py             # text pass -> candidate statement page ranges
 │   │   │   ├── ocr_policy.py         # per-page text-layer coverage -> OcrMode

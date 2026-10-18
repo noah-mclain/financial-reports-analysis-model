@@ -95,10 +95,17 @@ def document_unchecked(sha256: str, config: IngestConfig) -> dict[str, list[Unch
     for name in ("statements.raw.json", "table_checks.json"):
         if not (out / name).is_file():
             raise IngestError("artifact_missing", name)
-    result = StructureResult.model_validate_json((out / "statements.raw.json").read_text("utf-8"))
-    checks = TypeAdapter(list[CheckResult]).validate_json(
-        (out / "table_checks.json").read_text("utf-8")
-    )
+    try:
+        result = StructureResult.model_validate_json(
+            (out / "statements.raw.json").read_text("utf-8")
+        )
+        checks = TypeAdapter(list[CheckResult]).validate_json(
+            (out / "table_checks.json").read_text("utf-8")
+        )
+    except (OSError, ValueError) as exc:  # ValidationError is a ValueError
+        raise IngestError("artifact_unreadable", str(exc).splitlines()[0]) from exc
+    if result.industry is not None and result.industry.outcome == "declined":
+        raise IngestError("declined", result.industry.reason)
     ties = [c for c in checks if c.kind == "net_profit_tie"]
     first_income = next((s.id for s in result.statements if s.type is StatementType.INCOME), None)
     return {

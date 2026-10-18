@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Callable
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,8 @@ from support import make_blank_pdf
 
 from fra_ingest import cli
 from fra_ingest.cli import main
+from fra_ingest.coverage import UncheckedCell
+from fra_ingest.errors import IngestError
 from fra_ingest.ocr import OcrEngineError, OcrTimeoutError, OcrUnavailableError
 from fra_ingest.progress import parse_progress_line
 from fra_ingest.results import ConvertResult, LocateResult, RangeConversion, StructureResult
@@ -195,6 +198,43 @@ def test_review_report_prints_where_it_wrote(
     monkeypatch.setattr(cli, "write_review_report", fake_report)
     assert main(["review-report", "ab", "--artifacts", str(tmp_path)]) == 0
     assert capsys.readouterr().out.strip() == str(written)
+
+
+def test_coverage_counts_a_repeated_document_once_and_escapes_labels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cell = UncheckedCell(
+        statement_id="s",
+        item_id="r1",
+        label="a\x1b[2Jb \u0627",
+        canonical_id=None,
+        period_key="2025-12-31",
+        reported=Decimal("1"),
+        weight=Decimal("1"),
+    )
+    monkeypatch.setattr(cli, "document_unchecked", lambda sha, config: {"s": [cell]})
+    assert main(["coverage", "ab", "ab", "--artifacts", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert "\x1b" not in out and "\\x1b[2Jb \u0627" in out
+    assert "   1    1" in out  # one statement, one cell: the repeat was not counted
+
+
+@pytest.mark.parametrize(
+    ("raise_reason", "code"), [("declined", 4), ("artifact_unreadable", 2), ("unknown_document", 2)]
+)
+def test_coverage_exits_by_why_it_could_not_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    raise_reason: str,
+    code: int,
+) -> None:
+    def fail(sha: str, config: object) -> dict[str, list[UncheckedCell]]:
+        raise IngestError(raise_reason, "detail")  # type: ignore[arg-type]
+
+    monkeypatch.setattr(cli, "document_unchecked", fail)
+    assert main(["coverage", "ab", "--artifacts", str(tmp_path)]) == code
+    assert raise_reason in capsys.readouterr().err
 
 
 def test_an_engine_that_cannot_run_exits_naming_the_setting(

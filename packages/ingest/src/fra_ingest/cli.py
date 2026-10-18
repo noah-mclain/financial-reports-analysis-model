@@ -4,6 +4,7 @@ fra-ingest locate <pdf> [--json] [--no-ocr] [--no-cache] [--config PATH] [--arti
 fra-ingest convert <pdf> [--json] [--no-ocr] [--no-cache] [--config PATH] [--artifacts DIR]
 fra-ingest structure <pdf> [--json] [--no-ocr] [--no-cache] [--config PATH] [--artifacts DIR]
 fra-ingest review-report <sha256> [--config PATH] [--artifacts DIR]
+fra-ingest coverage <sha256...> [--config PATH] [--artifacts DIR]
 
 convert exits 0 when it wrote a result, 2 on an ingest error (an OCR timeout or engine failure
 included: ocr_timeout, ocr_engine) and 3 when every range it
@@ -13,6 +14,8 @@ an insurer: the reason is printed on stderr, no convert ran, no statements were 
 review-report takes a document's sha256 under the artifact root, or a unique prefix of it,
 writes review.html beside the stored results and prints its path; it runs no stage, exits 2
 when the document or an artifact is missing and 4 for a declined document, with the reason.
+coverage lists the figures no passing check covers, for one or more documents, with the same
+exit codes.
 """
 
 from __future__ import annotations
@@ -100,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
             print(_coverage_summary(args.sha256, config))
         except IngestError as exc:
             print(f"{exc.reason} {exc.detail}".rstrip(), file=sys.stderr)
-            return EXIT_ERROR
+            return EXIT_DECLINED if exc.reason == "declined" else EXIT_ERROR
         return 0
 
     try:
@@ -193,10 +196,15 @@ def _convert_summary(result: ConvertResult) -> str:
     return "\n".join(lines)
 
 
+def _printable(text: str) -> str:
+    """Labels come from documents: show control characters escaped, not acted on."""
+    return "".join(ch if ch.isprintable() else ch.encode("unicode_escape").decode() for ch in text)
+
+
 def _coverage_summary(hashes: list[str], config: IngestConfig) -> str:
     lines: list[str] = []
     groups: list[list[UncheckedCell]] = []
-    for sha in hashes:
+    for sha in dict.fromkeys(hashes):
         per_statement = document_unchecked(sha, config)
         groups += per_statement.values()
         lines.append(f"{sha[:12]}")
@@ -204,7 +212,7 @@ def _coverage_summary(hashes: list[str], config: IngestConfig) -> str:
             lines.append(f"  {statement_id}: {len(cells)} unchecked")
             lines += [
                 f"    {c.item_id:14} {c.period_key:12} {c.reported!s:>16}  "
-                f"{c.weight:.1%}  {c.canonical_id or '-'}  {c.label}"
+                f"{c.weight:.1%}  {c.canonical_id or '-'}  {_printable(c.label)}"
                 for c in cells
             ]
     lines.append(
@@ -213,7 +221,7 @@ def _coverage_summary(hashes: list[str], config: IngestConfig) -> str:
     )
     lines += [
         f"  {t.key:40} {t.statements:3} {t.cells:4} {t.mean_weight:.1%}"
-        for t in tally(groups, key=lambda c: c.canonical_id or f"unmapped: {c.label}")
+        for t in tally(groups, key=lambda c: c.canonical_id or f"unmapped: {_printable(c.label)}")
     ]
     return "\n".join(lines)
 
