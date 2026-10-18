@@ -184,6 +184,14 @@ def test_build_review_renders_display_identity_without_exporting_it(
     reading_file = tmp_path / "reviewed.json"
     reading_file.write_text(json.dumps(reviewed))
     frozen_file = tmp_path / "frozen.json"
+    display_only = {"row_ref": "bc:x", "shared_count": 2, "peer_row_refs": ["bc:y"]}
+    smuggled = json.loads(reading_file.read_text())
+    smuggled["statements"][0]["rows"][0].update(display_only)
+    smuggled_file = tmp_path / "smuggled.json"
+    smuggled_file.write_text(json.dumps(smuggled))
+    with pytest.raises(ValidationError, match="row_ref"):
+        approved_gold(smuggled_file, tmp_path / "never.json")
+    assert not (tmp_path / "never.json").exists()
     approved_gold(reading_file, frozen_file)
     frozen = json.loads(frozen_file.read_text())
     assert frozen["readings"][0]["statements"][0]["rows"][0]["canonical_id"] == "total_assets"
