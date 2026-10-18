@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from fra_analytics import metric_descriptor, unit_notes
 from fra_core.presentation import Language, caveat_text
 from fra_core.schemas import (
+    PROVENANCE_WARNINGS,
     Analysis,
     Footnote,
     JobStatus,
@@ -14,6 +15,8 @@ from fra_core.schemas import (
     PeriodKind,
     Statement,
     StatementType,
+    is_provenance_flag,
+    is_provenance_warning,
 )
 from fra_core.schemas.caveat import CaveatId
 
@@ -50,6 +53,17 @@ def _unique(values: list[object], name: str) -> None:
         raise ValueError(f"duplicate {name}")
 
 
+def _row_provenance(flag: str, statement: Statement) -> bool:
+    """A provenance flag that names a row of this statement: ``label_words_from_page:<row id>``."""
+    name, colon, row = flag.partition(":")
+    return (
+        bool(colon)
+        and bool(row)
+        and name in PROVENANCE_WARNINGS
+        and any(item.id == row for item in statement.line_items)
+    )
+
+
 def _source_contract(analysis: Analysis) -> None:
     _unique([s.id for s in analysis.statements], "statement ids")
     _unique([s.type for s in analysis.statements], "statement types")
@@ -63,7 +77,7 @@ def _source_contract(analysis: Analysis) -> None:
             review.reasons
             or review.flagged_cells
             or review.checked_cells != review.numeric_cells
-            or any(w not in _ASSUMPTIONS for w in review.warnings)
+            or any(w not in _ASSUMPTIONS and not is_provenance_warning(w) for w in review.warnings)
         ):
             raise ValueError(f"contradictory or unsupported review: {review.statement_id}")
     for statement in analysis.statements:
@@ -76,7 +90,8 @@ def _source_contract(analysis: Analysis) -> None:
         _unique([c.id for c in statement.caveats], "source caveats")
         caveats = {c.id for c in statement.caveats}
         if any(
-            flag not in _ASSUMPTIONS or _ASSUMPTIONS[flag] not in caveats
+            not _row_provenance(flag, statement)
+            and (flag not in _ASSUMPTIONS or _ASSUMPTIONS[flag] not in caveats)
             for flag in statement.flags
         ):
             raise ValueError(f"unsupported statement notices: {statement.id}")
@@ -142,7 +157,7 @@ def _fact(
             or not cell.reported.is_finite()
             or cell.reported != ref.reported
             or cell.provenance != ref.provenance
-            or cell.flags
+            or not all(is_provenance_flag(f) for f in cell.flags)
             or statement.currency != ref.currency
             or statement.scale != ref.scale
         ):
@@ -166,7 +181,12 @@ def _fact(
     notes = unit_notes(metric.unit, list(sources.values()))
     if notes.blocked or notes.flags or sorted(metric.caveats) != list(notes.caveats):
         raise ValueError("metric unit caveats do not match sources")
-    for flag in metric.flags:
+    flags = [
+        f
+        for f in metric.flags
+        if not is_provenance_flag(f) and not any(_row_provenance(f, s) for s in sources.values())
+    ]
+    for flag in flags:
         caveat = _ASSUMPTIONS.get(flag)
         if caveat is None or not any(c.id == caveat for s in sources.values() for c in s.caveats):
             raise ValueError("metric has unsupported flags")
@@ -180,7 +200,7 @@ def _fact(
         )
         for c in notes.caveats
     )
-    return SummaryFact(metric.model_copy(deep=True), period, footnotes)
+    return SummaryFact(metric.model_copy(update={"flags": flags}, deep=True), period, footnotes)
 
 
 def summary_payload(analysis: Analysis) -> SummaryPayload | SummarySuppressed:
