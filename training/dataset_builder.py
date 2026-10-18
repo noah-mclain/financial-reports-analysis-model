@@ -21,6 +21,7 @@ from dataset_contracts import (
     canonical_json,
     example_digest,
 )
+from progress import Progress
 
 from fra_core.split import cik_key
 
@@ -175,8 +176,12 @@ def _count(
     count_tokens: TokenCounter,
     token_limit: int,
     over: list[str],
+    progress: Progress,
 ) -> list[int]:
-    counts = [count_tokens(r["messages"]) for r in rows]
+    counts: list[int] = []
+    for row in rows:
+        counts.append(count_tokens(row["messages"]))
+        progress.advance()
     for example, n in zip(examples, counts, strict=True):
         if type(n) is not int or n < 0:
             raise DatasetError(
@@ -202,20 +207,33 @@ def build_dataset(
     """
     if type(token_limit) is not int or token_limit < 1:
         raise DatasetError(f"token_limit must be a positive int, got {token_limit!r}")
-    for name, original, expected in (
-        ("fit", partitioned.fit, partitioned.manifest.fit_sha256),
-        ("validation", partitioned.validation, partitioned.manifest.validation_sha256),
-    ):
-        if example_digest(original) != expected:
-            raise DatasetError(f"{name} examples do not match the upstream manifest digest")
     parts: dict[str, tuple[tuple[NormalizationExample, ...], list[int], tuple[Row, ...]]] = {}
     over: list[str] = []
-    for name, original in (("fit", partitioned.fit), ("validation", partitioned.validation)):
-        kept = dedupe_per_issuer(original)
+    originals = (
+        ("fit", partitioned.fit, partitioned.manifest.fit_sha256),
+        ("validation", partitioned.validation, partitioned.manifest.validation_sha256),
+    )
+    for name, original, expected in originals:
+        with Progress(f"dataset-build example digest {name}"):
+            if example_digest(original) != expected:
+                raise DatasetError(f"{name} examples do not match the upstream manifest digest")
+        with Progress(f"dataset-build dedupe {name}"):
+            kept = dedupe_per_issuer(original)
         if not kept:
             raise DatasetError(f"{name} part is empty after deduplication")
-        rows = tuple(render_row(e) for e in kept)
-        parts[name] = (kept, _count(kept, rows, count_tokens, token_limit, over), rows)
+        rows_list: list[Row] = []
+        with Progress(
+            f"dataset-build rendering {name}", total=len(kept), unit="rows"
+        ) as render_progress:
+            for example in kept:
+                rows_list.append(render_row(example))
+                render_progress.advance()
+        rows = tuple(rows_list)
+        with Progress(
+            f"dataset-build token counting {name}", total=len(rows), unit="rows"
+        ) as token_progress:
+            counts = _count(kept, rows, count_tokens, token_limit, over, token_progress)
+        parts[name] = (kept, counts, rows)
     if over:
         raise DatasetError(f"rows exceed {token_limit} tokens: {', '.join(over)}")
     (fit, fit_counts, fit_rows), (valid, valid_counts, valid_rows) = (
@@ -255,10 +273,14 @@ def write_dataset(built: BuiltDataset, out_dir: Path) -> None:
         if hashlib.sha256(data).hexdigest() != expected:
             raise DatasetError(f"{name} rows do not match the manifest sha256")
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / TRAIN_FILE).write_bytes(train)
-    (out_dir / VALID_FILE).write_bytes(valid)
-    manifest = json.loads(built.manifest.model_dump_json())
-    (out_dir / MANIFEST_FILE).write_text(
-        json.dumps(manifest, sort_keys=True, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    with Progress("dataset-build writing dataset files", total=3, unit="files") as progress:
+        (out_dir / TRAIN_FILE).write_bytes(train)
+        progress.advance()
+        (out_dir / VALID_FILE).write_bytes(valid)
+        progress.advance()
+        manifest = json.loads(built.manifest.model_dump_json())
+        (out_dir / MANIFEST_FILE).write_text(
+            json.dumps(manifest, sort_keys=True, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
+        progress.advance()

@@ -29,6 +29,7 @@ from dataset_contracts import (
 )
 from harness.holdout_records import read_looks, read_moves
 from harness.paths import HOLDOUT_MOVES, ROOT, SCORING_LOG
+from progress import Progress
 from pydantic import ValidationError
 from sec_source_access import read_registry
 
@@ -42,7 +43,21 @@ SHA256 = re.compile(r"[0-9a-f]{64}")
 
 def _read_text(path: Path) -> str:
     try:
-        return path.read_text(encoding="utf-8")
+        with Progress(
+            f"dataset-build read {path.name}", total=path.stat().st_size, unit="bytes"
+        ) as progress:
+            chunks: list[bytes] = []
+            with path.open("rb") as handle:
+                while chunk := handle.read(1 << 20):
+                    chunks.append(chunk)
+                    progress.advance(len(chunk))
+        data = b"".join(chunks)
+        del chunks
+        text = data.decode("utf-8")
+        del data
+        if "\r" in text:
+            text = text.replace("\r\n", "\n").replace("\r", "\n")
+        return text
     except OSError as exc:
         raise DatasetError(f"{path}: cannot read: {exc.strerror}") from exc
 
@@ -50,11 +65,15 @@ def _read_text(path: Path) -> str:
 def read_jsonl[T: Contract](path: Path, model: type[T]) -> list[T]:
     """One model per non-blank line; a bad line is reported with its file and number."""
     records: list[T] = []
-    for number, line in text_lines(_read_text(path)):
-        try:
-            records.append(model.model_validate_json(line))
-        except ValidationError as exc:
-            raise DatasetError(f"{path}:{number}: {exc}") from exc
+    lines = _read_text(path)
+    total = sum(1 for _ in text_lines(lines))
+    with Progress(f"dataset-build validate {path.name}", total=total, unit="lines") as progress:
+        for number, line in text_lines(lines):
+            try:
+                records.append(model.model_validate_json(line))
+            except ValidationError as exc:
+                raise DatasetError(f"{path}:{number}: {exc}") from exc
+            progress.advance()
     return records
 
 
@@ -93,6 +112,9 @@ def _roster_moves(moves: list[Move], sources: list[SourceRecord]) -> list[Move]:
     keys = {issuer_key(s.issuer.name or cik_key(str(s.issuer.cik))) for s in sources}
     kept = [m for m in moves if m.key in keys]
     print(f"moves applied: {len(kept)} of {len(moves)} recorded")
+    for move in moves:
+        if move.key not in keys:
+            print(f"move not applied, issuer not in the roster: {move.issuer}", file=sys.stderr)
     return kept
 
 
@@ -119,17 +141,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         moves = _roster_moves(_moves(args.moves, looks), sources)
         examples = read_jsonl(args.examples, NormalizationExample)
         count_tokens, tokenizer_id = load_chat_counter(args.tokenizer_dir)
-        partitioned = partition_examples(
-            examples,
-            sources=sources,
-            registry=read_registry(args.registry),
-            config=PartitionConfig(
-                approved_example_sha256=approved, max_per_issuer=args.max_per_issuer
-            ),
-            taxonomy=load_taxonomy(),
-            moves=moves,
-            looks=looks,
-        )
+        with Progress(
+            "dataset-build contract validation and partition",
+            total=3 * len(examples),
+            unit="rows",
+        ) as progress:
+            partitioned = partition_examples(
+                examples,
+                sources=sources,
+                registry=read_registry(args.registry),
+                config=PartitionConfig(
+                    approved_example_sha256=approved, max_per_issuer=args.max_per_issuer
+                ),
+                taxonomy=load_taxonomy(),
+                moves=moves,
+                looks=looks,
+                on_example=progress.advance,
+            )
         built = build_dataset(
             partitioned,
             count_tokens=count_tokens,

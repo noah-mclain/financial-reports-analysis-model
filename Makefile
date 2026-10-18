@@ -64,6 +64,7 @@ typecheck: ## Type check the packages, apps, the analytics golden test, eval har
 	$(UV) run mypy training/sec_crosswalk.py
 	MYPYPATH=scripts:eval $(UV) run mypy --strict training/sec_source_access.py
 	$(UV) run mypy --strict training/dataset_builder.py
+	$(UV) run mypy --strict training/progress.py
 	$(UV) run mypy --strict training/chat_tokenizer.py
 	MYPYPATH=scripts:eval $(UV) run mypy --strict training/build_dataset.py
 	$(UV) run mypy --strict training/sec_crosswalk_draft.py

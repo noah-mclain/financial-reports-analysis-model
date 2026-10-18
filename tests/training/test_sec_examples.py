@@ -229,6 +229,10 @@ def test_examples_are_resolved_deduplicated_and_counted(
 ) -> None:
     out = tmp_path / "examples"
     assert main(pipeline.examples_args(out)) == 0
+    captured = capsys.readouterr()
+    assert "sec-examples started" in captured.err
+    assert "sec-examples issuer batch 1/1\n" in captured.err
+    assert "sec-examples" not in captured.out
     assert sorted(p.name for p in out.iterdir()) == [
         "approved.txt",
         "counts.json",

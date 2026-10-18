@@ -127,6 +127,31 @@ def test_partitions_are_reproducible_and_manifest_retains_provenance() -> None:
     )
 
 
+def test_partition_progress_hook_does_not_change_output() -> None:
+    fit = source(cik_in(Part.FIT))
+    valid = source(cik_in(Part.VALIDATION), name="Other Widgets")
+    rows = (example(fit), example(valid))
+    calls = 0
+
+    def on_example() -> None:
+        nonlocal calls
+        calls += 1
+
+    plain = build((fit, valid), rows)
+    hooked = partition_examples(
+        rows,
+        sources=(fit, valid),
+        registry=registry_for(fit, valid),
+        config=config(*rows),
+        taxonomy=load_taxonomy(),
+        moves=(),
+        looks=(),
+        on_example=on_example,
+    )
+    assert hooked == plain
+    assert calls == 3 * len(rows)
+
+
 @pytest.mark.parametrize("pool", [Pool.DEV, Pool.MODEL_TEST, Pool.BLIND])
 def test_non_train_roster_is_refused_before_empty_input_filtering(pool: Pool) -> None:
     record = source(cik_in(Part.FIT), pool=pool)
@@ -194,6 +219,45 @@ def test_name_key_move_releases_reviewed_cik_aliases_without_mutating_registry(k
     assert len(result.fit) == len(rows)
     assert all(row in result.fit for row in rows)
     assert registry.metadata() == before
+
+
+def _many_sources(count: int) -> tuple[SourceRecord, ...]:
+    return tuple(source(cik, name=f"Issuer {cik}") for cik in range(1, count + 1))
+
+
+def test_roster_check_does_not_rebuild_the_registry_per_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records = _many_sources(40)
+    registry = registry_for(*records)
+    rebuilt = 0
+    original = PoolRegistry.from_metadata.__func__  # type: ignore[attr-defined]
+
+    def counting(cls: type[PoolRegistry], data: object, label: str) -> PoolRegistry:
+        nonlocal rebuilt
+        rebuilt += 1
+        return original(cls, data, label)  # type: ignore[no-any-return]
+
+    monkeypatch.setattr(PoolRegistry, "from_metadata", classmethod(counting))
+    build(records, (), registry=registry)
+    assert rebuilt <= 2
+
+
+def test_unrecorded_source_among_recorded_ones_is_named() -> None:
+    records = _many_sources(10)
+    registry = registry_for(*records[:4], *records[5:])
+    with pytest.raises(DatasetError, match=records[4].source_id):
+        build(records, (), registry=registry)
+
+
+def test_first_unrecorded_source_is_named_even_when_a_later_one_conflicts() -> None:
+    records = _many_sources(6)
+    registry = registry_for(*records[:2], *records[3:5])
+    # source 2 is unrecorded; the last source reuses its name under another CIK, which only
+    # conflicts once source 2 has been registered
+    clash = source(records[5].issuer.cik or 1, name=records[2].issuer.name or "x")
+    with pytest.raises((DatasetError, ValueError), match=records[2].source_id):
+        build((*records[:5], clash), (), registry=registry)
 
 
 def test_registry_is_authoritative_and_is_not_mutated() -> None:

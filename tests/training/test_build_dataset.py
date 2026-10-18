@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from build_dataset import main
+from build_dataset import _read_text, main
 from dataset_contracts import NormalizationExample, SourceRecord
 from harness.holdout_records import LOG_HEADER
 from test_chat_tokenizer import make_tokenizer
@@ -82,7 +82,11 @@ def test_builds_the_three_files(files: Files, capsys: pytest.CaptureFixture[str]
     manifest = json.loads((files.out / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["fit_rows_after"] == 1
     assert manifest["token_limit"] == 2048
-    assert str(files.out / "manifest.json") in capsys.readouterr().out
+    captured = capsys.readouterr()
+    assert str(files.out / "manifest.json") in captured.out
+    assert "dataset-build read examples.jsonl started" in captured.err
+    assert "dataset-build token counting fit started" in captured.err
+    assert "dataset-build writing dataset files started" in captured.err
 
 
 def test_unapproved_example_is_refused(files: Files, capsys: pytest.CaptureFixture[str]) -> None:
@@ -149,6 +153,34 @@ def test_move_of_an_issuer_outside_the_roster_is_not_applied(files: Files) -> No
     assert main(files.args()) == 0
 
 
+def test_dropped_move_is_named_on_stderr(files: Files, capsys: pytest.CaptureFixture[str]) -> None:
+    files.write(pair())
+    files.moves.write_text(
+        "moves:\n"
+        "  - {issuer: Elsewhere Co, kind: override, from: holdout, to: fit,"
+        " date: 2026-01-01, looks_before: 0, reason: owner}\n",
+        encoding="utf-8",
+    )
+    assert main(files.args()) == 0
+    captured = capsys.readouterr()
+    assert "moves applied: 0 of 1 recorded" in captured.out
+    assert "Elsewhere Co" in captured.err
+
+
+def test_move_of_a_roster_issuer_is_applied(files: Files) -> None:
+    held = source(cik_in(Part.HOLDOUT), name="Moved Widgets")
+    files.write((*pair(), example(held, example_id="m-1")))
+    files.moves.write_text(
+        "moves:\n"
+        "  - {issuer: Moved Widgets, kind: override, from: holdout, to: fit,"
+        " date: 2026-01-01, looks_before: 0, reason: owner}\n",
+        encoding="utf-8",
+    )
+    assert main(files.args()) == 0
+    manifest = json.loads((files.out / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["fit_rows_after"] == 2
+
+
 def test_malformed_moves_yaml_is_a_reported_error(
     files: Files, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -191,3 +223,9 @@ def test_a_label_with_unicode_line_separators_is_one_line(files: Files) -> None:
     odd = row(record, "a-1", label="Net\u2028sales\u0085and\u2029other")
     files.examples.write_text(odd.model_dump_json() + "\n" + odd.model_dump_json() + "\n", "utf-8")
     assert [e.label for e in read_jsonl(files.examples, NormalizationExample)] == [odd.label] * 2
+
+
+def test_read_text_translates_crlf_and_lone_cr(tmp_path: Path) -> None:
+    path = tmp_path / "newlines.txt"
+    path.write_bytes(b"one\r\ntwo\rthree\n")
+    assert _read_text(path) == "one\ntwo\nthree\n"

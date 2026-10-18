@@ -30,7 +30,11 @@ def test_prepare_runs_the_pass_and_prints_counts(
     world = World(tmp_path)
     out = tmp_path / "prepared"
     assert main(prepare_args(world, out)) == 0
-    shown = capsys.readouterr().out
+    captured = capsys.readouterr()
+    shown = captured.out
+    assert "sec-prepare 2024q3 started" in captured.err
+    assert "sec-prepare 2024q3 finished" in captured.err
+    assert "sec-prepare" not in shown
     assert "routed fit 1, validation 1" in shown
     assert str(out / "pass-log.json") in shown
     assert (
@@ -92,6 +96,7 @@ def test_coverage_reports_counts_and_unlisted_tags_from_prepared_payloads(
         "--unlisted-out", str(tmp_path / "unlisted.jsonl"),
     ]  # fmt: skip
     assert main(argv) == 0
+    assert "sec-coverage started" in capsys.readouterr().err
     data = json.loads(report.read_text(encoding="utf-8"))
     assert data["rows"] == 12
     assert data["by_kind"] == {"custom_extension": 1, "mapped": 3, "outside_crosswalk": 5}

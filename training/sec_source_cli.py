@@ -16,11 +16,13 @@ import json
 import sys
 from collections.abc import Iterator, Sequence
 from pathlib import Path
+from typing import Any
 
 from dataset_contracts import DatasetError
 from exclusive_write import write_new
 from harness.holdout_records import read_looks, read_moves
 from harness.paths import HOLDOUT_MOVES, ROOT, SCORING_LOG
+from progress import Progress
 from pydantic import TypeAdapter, ValidationError
 from sec_crosswalk import Crosswalk, CrosswalkError, RoleAssessment
 from sec_crosswalk_draft import MAPPING_PATH, load_mapping, merge_vocabularies, read_tag_vocabulary
@@ -73,7 +75,7 @@ def prepare(args: argparse.Namespace) -> None:
 
 
 def _payloads(
-    prepared: Path, args: argparse.Namespace, applicable: set[str]
+    prepared: Path, args: argparse.Namespace, applicable: set[str], progress: Progress | None = None
 ) -> Iterator[VerifiedPayload]:
     registry = read_registry(args.registry)
     looks = read_looks(args.looks)
@@ -82,7 +84,7 @@ def _payloads(
         index = SecIndex.model_validate_json(_read(base / "index.json"))
         manifest = SourceManifest.model_validate_json(_read(base / "manifest.json"))
         context = AccessContext.model_validate_json(_read(base / "context.json"))
-        yield from iter_payloads(
+        payloads = iter_payloads(
             [a.artifact_id for a in manifest.artifacts],
             index=index,
             manifest=manifest,
@@ -92,6 +94,10 @@ def _payloads(
             looks=looks,
             opener=directory_opener(prepared),
         )
+        for payload in payloads:
+            yield payload
+            if progress is not None:
+                progress.advance(payload.descriptor.artifact.row_count)
 
 
 def _routed_filings(prepared: Path, archives: Sequence[Path]) -> list[FilingRow]:
@@ -177,6 +183,7 @@ def examples(args: argparse.Namespace) -> None:
         looks=looks,
         batch_issuers=args.batch_issuers,
         allow_conflicts_up_to=args.allow_conflicts_up_to,
+        progress_total=_kept_rows(log),
     )
     counts = builder.run(args.out_dir)
     print(f"conflicting_groups {counts['conflicting_groups']}")
@@ -198,13 +205,22 @@ def coverage(args: argparse.Namespace) -> None:
     if crosswalk.review.sha256 != mapping.sha256:
         raise DatasetError(f"{args.crosswalk}: not drafted from the mapping {args.mapping}")
     vocabulary = merge_vocabularies(d for a in args.archives for d in read_tag_vocabulary(a))
-    report = coverage_report(_payloads(prepared, args, applicable), mapping, crosswalk)
+    with Progress("sec-coverage", total=_kept_rows(log), unit="rows") as progress:
+        report = coverage_report(
+            _payloads(prepared, args, applicable, progress), mapping, crosswalk
+        )
     text = report_json(report, top_unlisted(report, args.top, vocabulary))
     files = {args.out: text + "\n"}
     if args.unlisted_out is not None:
         files[args.unlisted_out] = unlisted_jsonl(report, vocabulary)
     write_new(files)
     print(text)
+
+
+def _kept_rows(log: dict[str, Any]) -> int | None:
+    """Return a valid kept-row progress total from a pass log, when present."""
+    total = log.get("totals", {}).get("kept_rows")
+    return total if isinstance(total, int) else None
 
 
 def _parser() -> argparse.ArgumentParser:

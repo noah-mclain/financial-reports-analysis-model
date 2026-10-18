@@ -493,3 +493,19 @@ candidates cost about 16 MB over the interpreter's own footprint. Throughput was
 rows per second in the first case. One role check costs about 12 ms, so the real roster of
 33,942 filings needs roughly 7 minutes of checks plus the row work for 3.7 million rows; that
 estimate is not a measurement of a real run.
+
+## Monitoring a run
+
+`sec-prepare`, `sec-coverage` and `sec-examples` report stage progress on stderr. A terminal
+shows an in-place progress bar; redirected stderr and CI logs show timestamped start, periodic
+and finish lines. Existing summaries and generated files remain unchanged.
+
+## Measured: `sec-examples` over eight quarters (2026-10-18)
+
+On the prepared payloads of 2024q3 to 2026q2 (33,942 filings of 5,547 issuers): 3,742,460 rows
+read, 3,188,389 rows resolved (696,722 mapped, 2,491,667 abstain), 811,629 examples after
+deduplication. Dropped before resolution: 270,744 parenthetical, 82,896 unknown role,
+82,489 unsupported namespace, 62,676 ambiguous semantics, 54,161 unsupported statement code,
+1,105 empty label. Conflicting-target groups: 4,848 (36,151 rows, 1.1% of rows before
+deduplication), dropped and counted. Elapsed 1h53m34s, peak RSS 388,169,728 bytes. This run
+had no progress output; the elapsed time is from `time`.

@@ -25,6 +25,7 @@ from typing import Any
 
 from dataset_builder import dedupe_group_key, dedupe_lowest
 from dataset_contracts import DatasetError, NormalizationExample, Verification
+from progress import Progress
 from pydantic import TypeAdapter, ValidationError
 from sec_crosswalk import (
     AbstainResult,
@@ -146,6 +147,7 @@ class ExampleBuilder:
         looks: Sequence[Look],
         batch_issuers: int = 100,
         allow_conflicts_up_to: int | None = None,
+        progress_total: int | None = None,
     ) -> None:
         if mapping.sha256 != bundle.crosswalk.review.sha256:
             raise DatasetError("the reviewed crosswalk was not drafted from the mapping given")
@@ -159,6 +161,8 @@ class ExampleBuilder:
         self._looks = looks
         self._batch = batch_issuers
         self._allowed = allow_conflicts_up_to
+        self._progress_total = progress_total
+        self._progress: Progress | None = None
         self._classifier = Classifier(mapping, bundle.crosswalk)
         self._decisions: dict[tuple[str, object], Any] = {}
         self._authorized: set[str] = set()
@@ -220,6 +224,8 @@ class ExampleBuilder:
         cik = int(str(filing.source_record.issuer.cik))
         for row in decode_payload(verified):
             self.counts["rows_read"] += 1
+            if self._progress is not None:
+                self._progress.advance()
             outcome = self._classifier.classify(row)
             if isinstance(outcome, Dropped):
                 self.dropped[outcome.reason] += 1
@@ -272,13 +278,22 @@ class ExampleBuilder:
             out_dir.mkdir(parents=True)
         except FileExistsError:
             raise DatasetError(f"{out_dir} already exists; refusing to reuse it") from None
+        self._progress = Progress("sec-examples", total=self._progress_total, unit="rows")
         partial = {name: out_dir / f"{name}.partial" for name in OUTPUT_FILES[:3]}
         try:
             with (
                 partial["examples.jsonl"].open("x", encoding="utf-8") as examples_file,
                 partial["approved.txt"].open("x", encoding="utf-8") as approved_file,
             ):
-                for batch in _batches(sorted(by_issuer), self._batch):
+                batch_count = (len(by_issuer) + self._batch - 1) // self._batch
+                for batch_number, batch in enumerate(
+                    _batches(sorted(by_issuer), self._batch), start=1
+                ):
+                    if not sys.stderr.isatty():
+                        print(
+                            f"sec-examples issuer batch {batch_number}/{batch_count}",
+                            file=sys.stderr,
+                        )
                     wanted = {sid for cik in batch for sid in by_issuer[cik]}
                     candidates: list[Candidate] = []
                     for archive, index, manifest, context in archives:
@@ -314,6 +329,8 @@ class ExampleBuilder:
                 path.unlink()
             out_dir.rmdir()
             raise
+        finally:
+            self._progress.finish()
         return counts
 
     def _check_conflicts(self) -> None:

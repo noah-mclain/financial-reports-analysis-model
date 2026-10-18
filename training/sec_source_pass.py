@@ -25,6 +25,7 @@ from typing import Any
 from dataset_contracts import Contract, DatasetError, SourceRecord, digest
 from exclusive_write import write_new
 from harness.holdout_records import read_looks, read_moves
+from progress import Progress
 from pydantic import ValidationError
 from sec_source_access import (
     AccessContext,
@@ -83,7 +84,7 @@ def _fail(archive: Path, number: int, adsh: str, problem: str) -> DatasetError:
 
 
 def stream_routed_rows(
-    archive: Path, routed: Collection[str]
+    archive: Path, routed: Collection[str], progress: Progress | None = None
 ) -> tuple[dict[str, list[PayloadRow]], StreamStats]:
     """Rows of the routed filings; every other line is counted and never read further."""
     wanted = {accession.encode("ascii") for accession in routed}
@@ -103,6 +104,8 @@ def stream_routed_rows(
             at = {name: header.index(name) for name in PRE_REQUIRED}
             for number, line in enumerate(raw, start=2):
                 stats.lines += 1
+                if progress is not None:
+                    progress.advance()
                 end = line.find(b"\t")
                 if (line[:end] if end >= 0 else line.rstrip(b"\r\n")) not in wanted:
                     stats.discarded += 1
@@ -235,9 +238,10 @@ def _prepare_archive(
     registry: Any,
     moves: Sequence[Any],
     looks: Sequence[Any],
+    progress: Progress,
 ) -> dict[str, Any]:
     source_sha = _sha256_file(archive)
-    rows, stats = stream_routed_rows(archive, [f.adsh for f in filings])
+    rows, stats = stream_routed_rows(archive, [f.adsh for f in filings], progress)
     artifacts: list[PayloadArtifact] = []
     roster: list[SecFiling] = []
     payload_bytes = 0
@@ -357,16 +361,18 @@ def run_pass(
         archive_logs: dict[str, Any] = {}
         for archive_id, path in sorted(names.items()):
             filings = [f for f in rosters[archive_id] if f.adsh in routing.parts]
-            archive_logs[archive_id] = _prepare_archive(
-                archive_id,
-                path,
-                filings,
-                out_dir=out_dir,
-                config_sha=config_sha,
-                registry=registry,
-                moves=routing.applicable_moves,
-                looks=looks,
-            )
+            with Progress(f"sec-prepare {archive_id}", unit="lines") as progress:
+                archive_logs[archive_id] = _prepare_archive(
+                    archive_id,
+                    path,
+                    filings,
+                    out_dir=out_dir,
+                    config_sha=config_sha,
+                    registry=registry,
+                    moves=routing.applicable_moves,
+                    looks=looks,
+                    progress=progress,
+                )
             if on_archive is not None:
                 on_archive(archive_id)
         if [_sha256_file(path) for path in inputs] != fingerprints:
