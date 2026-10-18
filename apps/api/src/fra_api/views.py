@@ -19,6 +19,7 @@ from fra_core.presentation import caveat_text
 from fra_core.schemas import (
     Analysis,
     BBox,
+    JobStatus,
     MetricInput,
     MetricValue,
     Narrative,
@@ -369,11 +370,19 @@ def analysis_view(analysis: Analysis) -> AnalysisView:
             else "Stored summary; not verified as a direct template."
         )
     elif analysis.narrative_suppression:
-        summary_notice = (
-            "حُجب الملخص: لا تتوفر حقائق مؤهلة من أحدث فترة."
-            if ar
-            else "Summary withheld: no eligible latest-period facts are available."
-        )
+        held = analysis.status() is not JobStatus.COMPLETED
+        if held:
+            summary_notice = (
+                "حُجب الملخص: التحليل قيد المراجعة."
+                if ar
+                else "Summary withheld: the analysis is held for review."
+            )
+        else:
+            summary_notice = (
+                "حُجب الملخص: لا تتوفر حقائق مؤهلة من أحدث فترة."
+                if ar
+                else "Summary withheld: no eligible latest-period facts are available."
+            )
     summary_notes = (
         {
             m.anchor: tuple(
