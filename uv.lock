@@ -621,6 +621,8 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "tokenizers" },
+    { name = "transformers" },
     { name = "truststore" },
     { name = "types-pyyaml" },
 ]
@@ -649,6 +651,8 @@ dev = [
     { name = "pytest", specifier = ">=8.4" },
     { name = "pytest-cov", specifier = ">=6.0" },
     { name = "ruff", specifier = ">=0.14" },
+    { name = "tokenizers", specifier = "==0.23.2" },
+    { name = "transformers", specifier = "==5.17.0" },
     { name = "truststore", specifier = ">=0.10" },
     { name = "types-pyyaml", specifier = ">=6.0" },
 ]

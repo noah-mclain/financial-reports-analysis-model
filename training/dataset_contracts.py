@@ -34,13 +34,13 @@ class DatasetError(ValueError):
     """Invalid supervision, authorization or dataset identity."""
 
 
-class _Contract(BaseModel):
+class Contract(BaseModel):
     model_config = ConfigDict(
         extra="forbid", frozen=True, strict=True, revalidate_instances="always"
     )
 
 
-class SourceRecord(_Contract):
+class SourceRecord(Contract):
     """Caller-supplied source metadata, checked against a reviewed registry."""
 
     source_id: Text
@@ -62,7 +62,7 @@ class SourceRecord(_Contract):
         return self
 
 
-class Verification(_Contract):
+class Verification(Contract):
     """Evidence description, which alone does not authorize supervision."""
 
     method: Literal["extraction_draft", "reviewed_crosswalk", "independent_review"]
@@ -81,7 +81,7 @@ class Verification(_Contract):
         return self
 
 
-class NormalizationExample(_Contract):
+class NormalizationExample(Contract):
     """One label/target with source and verification identity; no numeric payload."""
 
     example_id: Text
@@ -126,9 +126,9 @@ class NormalizationExample(_Contract):
             bbox = checked.bbox
             if not all(math.isfinite(v) for v in (bbox.left, bbox.top, bbox.right, bbox.bottom)):
                 raise ValueError(f"{self.example_id}: provenance coordinates must be finite")
-            if not isinstance(self.provenance.bbox, BBox) or _json(
+            if not isinstance(self.provenance.bbox, BBox) or canonical_json(
                 checked.model_dump(mode="json")
-            ) != _json(stored):
+            ) != canonical_json(stored):
                 raise ValueError(f"{self.example_id}: provenance differs from its validated form")
             if not checked.table_ref.strip():
                 raise ValueError(f"{self.example_id}: provenance needs a table reference")
@@ -144,14 +144,14 @@ class NormalizationExample(_Contract):
         return _digest(self.model_dump(mode="json"))
 
 
-class PartitionConfig(_Contract):
+class PartitionConfig(Contract):
     """Approvals established independently by the caller, plus an optional issuer cap."""
 
     approved_example_sha256: frozenset[Sha256]
     max_per_issuer: int | None = Field(default=None, ge=1)
 
 
-class DatasetManifest(_Contract):
+class DatasetManifest(Contract):
     version: Literal[1] = 1
     input_examples: int
     input_sha256: Sha256
@@ -164,20 +164,20 @@ class DatasetManifest(_Contract):
     validation_sha256: Sha256
 
 
-class PartitionedExamples(_Contract):
+class PartitionedExamples(Contract):
     fit: tuple[NormalizationExample, ...]
     validation: tuple[NormalizationExample, ...]
     manifest: DatasetManifest
 
 
-def _json(value: object) -> str:
+def canonical_json(value: object) -> str:
     return json.dumps(
         value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
     )
 
 
 def _digest(value: object) -> str:
-    return hashlib.sha256(_json(value).encode("utf-8")).hexdigest()
+    return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
 
 
 def _target_items(taxonomy: Taxonomy) -> dict[str, CanonicalItem]:
@@ -188,9 +188,9 @@ def _target_items(taxonomy: Taxonomy) -> dict[str, CanonicalItem]:
     return targets
 
 
-def _example_digest(examples: Sequence[NormalizationExample]) -> str:
+def example_digest(examples: Sequence[NormalizationExample]) -> str:
     # Sorting full records retains duplicate occurrences in the input fingerprint.
-    return _digest(sorted(_json(e.model_dump(mode="json")) for e in examples))
+    return _digest(sorted(canonical_json(e.model_dump(mode="json")) for e in examples))
 
 
 def _taxonomy_digest(taxonomy: Taxonomy) -> str:
@@ -314,7 +314,7 @@ def partition_examples(
         validation=validation,
         manifest=DatasetManifest(
             input_examples=len(examples),
-            input_sha256=_example_digest(examples),
+            input_sha256=example_digest(examples),
             sources_sha256=_digest(
                 [s.model_dump(mode="json") for s in sorted(sources, key=lambda s: s.source_id)]
             ),
@@ -329,7 +329,7 @@ def partition_examples(
                     "max_per_issuer": config.max_per_issuer,
                 }
             ),
-            fit_sha256=_example_digest(fit),
-            validation_sha256=_example_digest(validation),
+            fit_sha256=example_digest(fit),
+            validation_sha256=example_digest(validation),
         ),
     )
