@@ -33,7 +33,7 @@ from fra_core.schemas import (
     StatementType,
 )
 from fra_core.taxonomy.loader import CanonicalItem
-from fra_ingest.label_match import CLOSING_TOTAL_ID, LabelIndex
+from fra_ingest.label_match import CLOSING_TOTAL_ID, LabelIndex, squash
 
 MAPPED_TYPES = (StatementType.BALANCE, StatementType.INCOME)
 # A total printed over totals: the parts it must have as checked children. The closing total
@@ -234,6 +234,33 @@ def _settle_duplicates(rows: list[LineItem]) -> list[LineItem]:
     ]
 
 
+def eps_heading(label: str) -> bool:
+    """An earnings-per-share heading, distinct from dividends or other per-share amounts."""
+    text = squash(label)
+    return "earningspershare" in text or squash("ربحية السهم") in text
+
+
+def _eps_anchors(statement: Statement, index: LabelIndex) -> dict[str, tuple[CanonicalItem, ...]]:
+    aliases: dict[str, tuple[CanonicalItem, ...]] = {}
+    under_eps = False
+    short = {
+        squash(label): kind
+        for kind, labels in (
+            ("basic", ("basic", "الأساسية", "أساسي")),
+            ("diluted", ("diluted", "المخفضة", "مخفض")),
+        )
+        for label in labels
+    }
+    for item in statement.line_items:
+        if not item.cells:
+            under_eps = eps_heading(item.raw_label)
+        elif under_eps and (kind := short.get(squash(item.raw_label))) is not None:
+            match = index.match(f"{kind} earnings per share", StatementType.INCOME)
+            if match is not None:
+                aliases[item.id] = (match,)
+    return aliases
+
+
 def map_statement(
     statement: Statement, index: LabelIndex, checks: Sequence[CheckResult]
 ) -> Statement:
@@ -243,9 +270,12 @@ def map_statement(
         i.id: index.match_past_headings(i.raw_label, statement.type) for i in statement.line_items
     }
     aliased = {row: found for row, (found, _) in matched.items()}
+    contextual = _eps_anchors(statement, index) if statement.type is StatementType.INCOME else {}
     checked = checked_totals(checks)
     confirmed = confirmed_totals(checks)
     anchors: _Anchors = defaultdict(list)
+    for row_id, matches in contextual.items():
+        anchors[row_id].extend(("eps_heading", match.id) for match in matches)
     _section_anchors(statement, index, checked, anchors)
     first_pass = {
         i.id: found

@@ -201,6 +201,57 @@ Steps 1 to 6 of spec 11 are unchanged. Step numbers below continue spec 11's.
       statement in every period the two share. Kind `net_profit_tie`, recorded on the
       comprehensive income statement with both rows. No equal row: fail, and both statements
       carry `tie_failed`.
+    - **EPS note.** Basic and diluted subrows under an explicit earnings-per-share heading
+      map in the label-mapping layer; ambiguous aliases or duplicate claims remain flagged.
+      A note table with printed weighted average ordinary shares is structured with the same
+      header, period, cell and provenance builder as statements. It is not a primary statement.
+      Check kind `eps` requires the statement row's explicit note reference to identify one
+      note with known, equal consolidated/separate scope. Entity names must match
+      case-insensitively when both are known; a missing name does not prevent verification.
+      The note needs matching period identities and a unique numerator tied within rounding to
+      the statement's profit attributable to shareholders. Consolidated profit is never a
+      substitute for a missing attributable line. Each variant needs its own printed shares.
+      Monetary and share scales come from the note's own row, section or column header;
+      missing or conflicting units, ambiguous references, periods or operands skip the check
+      with the evidence needed to settle it. With no note there is no EPS check result.
+      Unknown or conflicting consolidation scope, or conflicting known entity names, skips
+      verification; competing references use only notes that pass these scope rules, and
+      multiple matches stay ambiguous. Two entities with the same consolidation scope and
+      unknown names inside one document are not told apart. Whole-word share cues reject
+      compound basic/diluted labels; negated diluted labels identify basic shares only.
+      A table is an EPS note only when its heading names earnings per share and carries a note
+      reference, and no statement title follows that heading on the page; a share-count row
+      alone leaves a statement table a statement. EPS printed in a
+      currency subunit (halalas, fils, cents, matched as whole words in the statement header, the
+      EPS heading, the captions above the rows or the row label) is never vouched against profit
+      divided by shares. The check compares the printed figure with profit divided by shares in the
+      statement's currency, so a figure printed in a subunit (about 100 times larger) fails the
+      check; the subunit words only turn that false failure into a skip. A pass additionally
+      needs a rounding interval narrow enough to tell the figure from the same figure with a
+      100-fold unit slip; otherwise the check is skipped as `precision_insufficient`. An EPS
+      label naming a currency other than the statement's is skipped as `currency_conflict`.
+      A share-count label is classified only when all
+      its words (apart from a unit marker) belong to the expected phrase "weighted average
+      number of ordinary shares for the purposes of basic/diluted earnings"; any other word
+      (not, un-, excl., fully, a modifier) leaves it unsettled, so the check is skipped.
+      Decimal interval arithmetic intersects the note and attributable-statement profit
+      intervals, each with its own half printed-unit uncertainty (D6), before division by
+      the share interval, then adds half the EPS printed decimal unit.
+      A value outside that interval fails; it is never corrected. The check records only the
+      EPS row and period as vouched cells, with note path, operand rows, provenance and scales
+      in its detail. An EPS failure holds review; missing or unsettled notes leave the EPS
+      cells unchecked without adding a review hold. Narration still requires every numeric
+      cell to be checked. Structure cache version 52 invalidates earlier results.
+      Known limits, all of which cost coverage or a review hold and none a false pass: the
+      subunit list omits some words (baisa, øre, sen, a bare "p"), and such figures fail on the
+      arithmetic; a descriptive line after the EPS heading that names a statement returns the
+      table to the statement path and leaves the EPS unchecked; the numerator label is matched
+      as a phrase, so a qualified label ("from continuing operations") is tied to the
+      statement's attributable profit and fails loudly if they differ; a heading "3.1 Earnings
+      per share" is read as note 3; a statement without a detected scale fails the profit tie;
+      the 100-fold test does not exclude a tenfold slip when profit and shares are both
+      single-digit figures; currency labels are detected only for the currencies the units
+      module knows.
     - **Single digit.** A failed sum or identity whose difference is one digit times a power
       of ten gets `single_digit:10^k`. A cell is a candidate when changing that one digit of
       it settles the difference, or when the figure read is the settling figure with its leading
@@ -220,7 +271,7 @@ Steps 1 to 6 of spec 11 are unchanged. Step numbers below continue spec 11's.
       fifth of all amounts are fractional is printed with decimals and is left alone.
 10a. **Review.** A statement is `passed` when all of these hold, else `needs_review` with one
    reason per rule broken:
-   - no check on it failed (`subtotal_failed`, `identity_failed`, `tie_failed`);
+   - no check on it failed (`subtotal_failed`, `identity_failed`, `tie_failed`, `eps_failed`);
    - no subtotal check on it was skipped, for whatever cause (`subtotal_not_checked` with the
      count): a total nothing could be checked against vouches for nothing;
    - a balance sheet's identity passed in every period (`identity_not_checked` with the

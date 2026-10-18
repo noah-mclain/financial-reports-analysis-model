@@ -32,13 +32,14 @@ from fra_ingest.continuation import continues_part, inherit_periods, is_closed, 
 from fra_ingest.convert import cached_convert, invalidate_convert, settings_hash
 from fra_ingest.converter import docling_version
 from fra_ingest.docling_json import DlDocument, load_docling_json
+from fra_ingest.eps_checks import EpsNote, check_eps, structure_eps_note
 from fra_ingest.errors import IngestError
 from fra_ingest.figure_checks import check_net_profit_tie
 from fra_ingest.header import HeaderLayout, parse_header
 from fra_ingest.header_recovery import recover_header
 from fra_ingest.hierarchy import RowInput, infer_hierarchy
 from fra_ingest.industry import industry_decision
-from fra_ingest.label_mapping import map_statement
+from fra_ingest.label_mapping import eps_heading, map_statement
 from fra_ingest.label_match import LabelIndex
 from fra_ingest.locate import TITLE_LINE_MAX_WORDS, TitleBook, load_title_book
 from fra_ingest.metadata import Metadata, detect_metadata, statement_title_scope
@@ -75,7 +76,7 @@ from fra_ingest.visual_order import (
     restore_word_order,
 )
 
-STRUCTURE_VERSION = "44"  # partly converted ranges flagged
+STRUCTURE_VERSION = "52"  # EPS needs a precise interval and a governing note heading
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -218,6 +219,14 @@ def _local_statement_titles(
     return tuple(recognized[-1:])
 
 
+def _statement_title_follows_eps_heading(headings: Sequence[str], book: TitleBook) -> bool:
+    """Whether a statement title sits below the last EPS heading above the table."""
+    eps = [i for i, h in enumerate(headings) if eps_heading(h)]
+    return bool(eps) and any(
+        _local_statement_titles(headings[eps[-1] + 1 :], kind, book) for kind in StatementType
+    )
+
+
 def _candidate_order(candidate: _Candidate) -> tuple[int, str, int]:
     tail = candidate.grid.table_ref.rsplit("/", 1)[-1]
     return candidate.grid.page_no, candidate.grid.docling_path, int(tail) if tail.isdigit() else -1
@@ -271,7 +280,9 @@ def structure_document(
         config.pad_pages,
     )
     index = LabelIndex(load_taxonomy())
+    book = load_title_book()
     decisions: list[TableDecision] = []
+    eps_notes: list[EpsNote] = []
     # Every grid classify accepted, or rejected only for low confidence (a possible tail page).
     candidates: list[_Candidate] = []
     remaining = set(range(len(inputs.period_evidence)))
@@ -310,6 +321,20 @@ def structure_document(
             # Merge by actual column, without overwriting readings from either producer.
             scoped = merge_evidence(collected, scoped)
             headings = _headings(document, grid, visual)
+            note = structure_eps_note(
+                grid.model_copy(update={"period_evidence": scoped}),
+                headings,
+                index,
+                source=TextSource.OCR
+                if inputs.page_modes.get(grid.page_no) is PageMode.IMAGE
+                else TextSource.TEXT,
+                visual=visual,
+                context_texts=reading_variants(inputs.page_texts.get(grid.page_no, ""), visual),
+            )
+            if note is not None and _statement_title_follows_eps_heading(headings, book):
+                note = None  # a later statement title governs this table
+            if note is not None:
+                eps_notes.append(note)
             hint = _date_hint(headings)
             context = TableContext(
                 title_types=inputs.title_types.get(grid.page_no, ()),
@@ -358,7 +383,10 @@ def structure_document(
                 period_evidence=scoped,
             )
             decisions.append(decision)
-            if result.proposed_type is not None:
+            if note is not None:
+                decision.type = None
+                decision.evidence.append("eps_note")
+            if result.proposed_type is not None and note is None:
                 candidates.append(_Candidate(grid, result, headings, hint, decision, scoped))
 
     if remaining:
@@ -383,7 +411,6 @@ def structure_document(
     parts: list[PartialStatement] = []
     metas: dict[str, Metadata] = {}
     # Scope evidence is reserved from located primary titles, even if extraction fails.
-    book = load_title_book()
     local_titles: dict[int, tuple[str, ...]] = {}
     scopes: dict[int, bool | None] = {}
     data_rows: dict[int, int] = {}
@@ -611,6 +638,7 @@ def structure_document(
             _statement(part, metas[part.table_refs[0]], inputs, index, number), index
         )
         statement = map_statement(statement, index, results)
+        results += check_eps(statement, eps_notes, part.header_text)
         statements.append(statement)
         checks.extend(results)
         for ref in part.table_refs:

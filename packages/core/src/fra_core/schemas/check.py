@@ -14,7 +14,7 @@ class CheckResult(BaseModel):
 
     id: str
     statement_id: str
-    kind: Literal["subtotal", "balance_identity", "net_profit_tie"]
+    kind: Literal["subtotal", "balance_identity", "net_profit_tie", "eps"]
     period_key: str
     status: Literal["pass", "fail", "skipped"]
     expected: Decimal | None = None

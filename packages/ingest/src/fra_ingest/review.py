@@ -49,6 +49,7 @@ _FAILED = (
     ("subtotal", "subtotal_failed"),
     ("balance_identity", "identity_failed"),
     ("net_profit_tie", "tie_failed"),
+    ("eps", "eps_failed"),
 )
 
 
