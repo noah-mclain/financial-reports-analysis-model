@@ -113,4 +113,5 @@ markers = [
   "slow: needs model weights or OCR, excluded from the default run",
   "golden: reads documents from eval/golden",
   "mac: needs Apple Vision or the Metal device",
+  "sockets: binds a local TCP socket, which a sandboxed worker may not do",
 ]

@@ -20,6 +20,8 @@ from fra_api.app import create_app
 from fra_api.healthcheck import HealthCheckError, check, main
 from fra_core.profile import Profile
 
+pytestmark = pytest.mark.sockets
+
 Serve = Callable[[FastAPI], int]
 ServeRaw = Callable[[bytes], int]
 

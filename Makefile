@@ -29,7 +29,7 @@ $(error FRA_LLM_PORT is empty: set it in $(ENV_FILE))
 endif
 export FRA_API_PORT FRA_LLM_PORT
 
-.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds dataset-build sec-crosswalk-draft sec-crosswalk-approve sec-prepare sec-coverage sec-roles-draft sec-roles-approve sec-examples clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping eval-gates dry-run expected-drafts eval-extraction verify-expected dev worker docker-up docker-health ci-workflows-check container-smoke hygiene-check
+.PHONY: help setup unhide-pth fmt lint typecheck test test-sandboxed test-all eval corpus-check corpus-split corpus-fetch sec-fsds dataset-build sec-crosswalk-draft sec-crosswalk-approve sec-prepare sec-coverage sec-roles-draft sec-roles-approve sec-examples clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping eval-gates dry-run expected-drafts eval-extraction verify-expected dev worker docker-up docker-health ci-workflows-check container-smoke hygiene-check
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -81,6 +81,10 @@ typecheck: ## Type check the packages, apps, the analytics golden test, eval har
 test: ## Fast tests (no models, no OCR)
 	@$(MAKE) --no-print-directory unhide-pth
 	$(UV) run pytest -m "not slow"
+
+test-sandboxed: ## Fast tests minus those that bind a local socket, for a sandboxed worker; `make test` stays the gate
+	@$(MAKE) --no-print-directory unhide-pth
+	$(UV) run pytest -m "not slow and not sockets"
 
 test-all: ## Every test, including slow ones
 	@$(MAKE) --no-print-directory unhide-pth
