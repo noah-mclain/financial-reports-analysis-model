@@ -29,7 +29,7 @@ $(error FRA_LLM_PORT is empty: set it in $(ENV_FILE))
 endif
 export FRA_API_PORT FRA_LLM_PORT
 
-.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds dataset-build sec-crosswalk-draft sec-crosswalk-approve clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping eval-gates dry-run expected-drafts eval-extraction verify-expected dev worker docker-up docker-health ci-workflows-check container-smoke hygiene-check
+.PHONY: help setup unhide-pth fmt lint typecheck test test-all eval corpus-check corpus-split corpus-fetch sec-fsds dataset-build sec-crosswalk-draft sec-crosswalk-approve sec-prepare sec-coverage sec-roles-draft sec-roles-approve sec-examples clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping eval-gates dry-run expected-drafts eval-extraction verify-expected dev worker docker-up docker-health ci-workflows-check container-smoke hygiene-check
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -69,6 +69,13 @@ typecheck: ## Type check the packages, apps, the analytics golden test, eval har
 	$(UV) run mypy --strict training/sec_crosswalk_draft.py
 	$(UV) run mypy --strict training/sec_crosswalk_review.py
 	$(UV) run mypy --strict training/sec_crosswalk_cli.py
+	MYPYPATH=scripts:eval $(UV) run mypy --strict training/sec_source_preparation.py
+	MYPYPATH=scripts:eval $(UV) run mypy --strict training/sec_source_pass.py
+	MYPYPATH=scripts:eval $(UV) run mypy --strict training/sec_source_decoder.py
+	$(UV) run mypy --strict training/exclusive_write.py
+	MYPYPATH=scripts:eval $(UV) run mypy --strict training/sec_roles.py
+	MYPYPATH=scripts:eval $(UV) run mypy --strict training/sec_examples.py
+	MYPYPATH=scripts:eval $(UV) run mypy --strict training/sec_source_cli.py
 
 test: ## Fast tests (no models, no OCR)
 	@$(MAKE) --no-print-directory unhide-pth
@@ -151,6 +158,31 @@ sec-crosswalk-approve: ## Approval records from a complete verdict file (CROSSWA
 	$(foreach var,CROSSWALK POLICIES VERDICTS REVIEWER_ID AUTHORITY_ID EVIDENCE_REFERENCE OUT_DIR,$(if $($(var)),,$(error $(var) is required)))
 	@$(MAKE) --no-print-directory unhide-pth
 	$(UV) run python training/sec_crosswalk_cli.py approve --crosswalk "$(CROSSWALK)" --policies "$(POLICIES)" --verdicts "$(VERDICTS)" --reviewer-id "$(REVIEWER_ID)" --authority-id "$(AUTHORITY_ID)" --evidence-reference "$(EVIDENCE_REFERENCE)" --out-dir "$(OUT_DIR)"
+
+sec-prepare: ## Routed pass over SEC archives (ARCHIVES="a.zip b.zip", OUT_DIR, AUTHORIZATION required; OUT_DIR must not exist; REGISTRY optional)
+	$(foreach var,ARCHIVES OUT_DIR AUTHORIZATION,$(if $($(var)),,$(error $(var) is required)))
+	@$(MAKE) --no-print-directory unhide-pth
+	PYTHONPATH=scripts:eval $(UV) run python training/sec_source_cli.py prepare --archives $(ARCHIVES) --out-dir "$(OUT_DIR)" --authorization "$(AUTHORIZATION)" $(if $(REGISTRY),--registry "$(REGISTRY)")
+
+sec-coverage: ## Crosswalk coverage of prepared SEC payloads (PREPARED, CROSSWALK, ARCHIVES for tag.txt, OUT required; TOP=40, UNLISTED jsonl, REGISTRY optional)
+	$(foreach var,PREPARED CROSSWALK ARCHIVES OUT,$(if $($(var)),,$(error $(var) is required)))
+	@$(MAKE) --no-print-directory unhide-pth
+	PYTHONPATH=scripts:eval $(UV) run python training/sec_source_cli.py coverage --prepared "$(PREPARED)" --crosswalk "$(CROSSWALK)" --archives $(ARCHIVES) --top $(or $(TOP),40) --out "$(OUT)" $(if $(UNLISTED),--unlisted-out "$(UNLISTED)") $(if $(REGISTRY),--registry "$(REGISTRY)")
+
+sec-roles-draft: ## Draft role assessments from the SIC rule table (PREPARED, ARCHIVES for sub.txt, OUT_DIR required)
+	$(foreach var,PREPARED ARCHIVES OUT_DIR,$(if $($(var)),,$(error $(var) is required)))
+	@$(MAKE) --no-print-directory unhide-pth
+	PYTHONPATH=scripts:eval $(UV) run python training/sec_source_cli.py roles-draft --prepared "$(PREPARED)" --archives $(ARCHIVES) --out-dir "$(OUT_DIR)"
+
+sec-roles-approve: ## Approval records for role assessments under one rule-table verdict (PREPARED, ARCHIVES, ASSESSMENTS, VERDICTS, REVIEWER_ID, AUTHORITY_ID, EVIDENCE_REFERENCE, OUT_DIR required)
+	$(foreach var,PREPARED ARCHIVES ASSESSMENTS VERDICTS REVIEWER_ID AUTHORITY_ID EVIDENCE_REFERENCE OUT_DIR,$(if $($(var)),,$(error $(var) is required)))
+	@$(MAKE) --no-print-directory unhide-pth
+	PYTHONPATH=scripts:eval $(UV) run python training/sec_source_cli.py roles-approve --prepared "$(PREPARED)" --archives $(ARCHIVES) --assessments "$(ASSESSMENTS)" --verdicts "$(VERDICTS)" --reviewer-id "$(REVIEWER_ID)" --authority-id "$(AUTHORITY_ID)" --evidence-reference "$(EVIDENCE_REFERENCE)" --out-dir "$(OUT_DIR)"
+
+sec-examples: ## Approved training examples from prepared SEC payloads (PREPARED, OUT_DIR required; TRUST_DIR default var/approvals, REGISTRY optional)
+	$(foreach var,PREPARED OUT_DIR,$(if $($(var)),,$(error $(var) is required)))
+	@$(MAKE) --no-print-directory unhide-pth
+	PYTHONPATH=scripts:eval $(UV) run python training/sec_source_cli.py examples --prepared "$(PREPARED)" --out-dir "$(OUT_DIR)" $(if $(TRUST_DIR),--trust-dir "$(TRUST_DIR)") $(if $(REGISTRY),--registry "$(REGISTRY)")
 
 dev: ## Serve the API natively (profile native) on FRA_API_PORT
 	@$(MAKE) --no-print-directory unhide-pth

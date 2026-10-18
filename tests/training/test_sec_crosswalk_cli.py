@@ -5,7 +5,8 @@ import re
 from pathlib import Path
 
 import pytest
-from sec_crosswalk_cli import main, write_new
+from exclusive_write import write_new
+from sec_crosswalk_cli import main
 from sec_crosswalk_draft import MAPPING_PATH
 from sec_crosswalk_fixtures import committed_mapping, synthetic_vocabulary, tag_line, write_archive
 
@@ -47,7 +48,8 @@ def test_draft_writes_the_three_files_and_prints_hashes(
     assert crosswalk["review"]["status"] == "draft"
     assert len(json.loads((out / "policies.json").read_text(encoding="utf-8"))) == 5
     packet = [json.loads(x) for x in (out / "review_packet.jsonl").read_text("utf-8").splitlines()]
-    assert len(packet) == len(crosswalk["entries"]) + 8
+    # the header, five policies and five excluded tags
+    assert len(packet) == len(crosswalk["entries"]) + 11
     assert "crosswalk sha256" in shown
     assert "mapping sha256" in shown
 

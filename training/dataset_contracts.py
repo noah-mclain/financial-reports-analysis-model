@@ -6,7 +6,7 @@ import hashlib
 import json
 import math
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import asdict
 from datetime import date
 from typing import Annotated, Literal
@@ -103,7 +103,11 @@ class NormalizationExample(Contract):
             raise ValueError(f"{self.example_id}: null target requires an abstention reason only")
         if self.role == "negative_control" and self.canonical_id is not None:
             raise ValueError(f"{self.example_id}: negative control must abstain")
-        if self.statement == StatementType.BALANCE:
+        if self.source_record.source == Source.SEC:
+            # A presentation row names a line, not a column; the filing's columns carry durations.
+            if self.months is not None:
+                raise ValueError(f"{self.example_id}: SEC presentation rows have no column months")
+        elif self.statement == StatementType.BALANCE:
             if self.months is not None:
                 raise ValueError(f"{self.example_id}: instant balance has no duration months")
         elif self.months is None:
@@ -174,6 +178,17 @@ def canonical_json(value: object) -> str:
     return json.dumps(
         value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
     )
+
+
+def text_lines(text: str) -> Iterator[tuple[int, str]]:
+    """Numbered non-blank lines, split on newline only.
+
+    ``str.splitlines`` also breaks at U+0085, U+2028 and U+2029, which JSON text written with
+    ``ensure_ascii=False`` can hold inside a string, so it must not read JSON lines.
+    """
+    for number, line in enumerate(text.split("\n"), start=1):
+        if line.strip():
+            yield number, line
 
 
 def digest(value: object) -> str:

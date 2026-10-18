@@ -84,6 +84,9 @@ def test_packet_has_one_row_per_entry_and_policy_with_target_semantics() -> None
     assert {row["key"] for row in excluded} == {
         "excluded:IS:NetIncomeLoss",
         "excluded:BS:StockholdersEquity",
+        "excluded:BS:MembersEquity",
+        "excluded:BS:PartnersCapital",
+        "excluded:BS:MembersCapital",
     }
     shown = next(r for r in excluded if r["tag"] == "NetIncomeLoss")
     assert shown["reason"]
@@ -381,3 +384,13 @@ def test_duplicate_policies_entries_and_exclusions_are_refused() -> None:
             authority_id=AUTHORITY,
             evidence_reference="verdicts.jsonl",
         )
+
+
+def test_a_verdict_note_with_unicode_line_separators_is_one_line() -> None:
+    from sec_crosswalk_review import parse_verdicts
+
+    header = {"kind": "subjects"}
+    verdict = {"key": "k", "verdict": "approve", "note": "a\u2028b\u0085c\u2029d"}
+    data = (json.dumps(header) + "\n" + json.dumps(verdict, ensure_ascii=False) + "\n").encode()
+    parsed_header, verdicts = parse_verdicts(data)
+    assert parsed_header == header and verdicts["k"].note == "a\u2028b\u0085c\u2029d"

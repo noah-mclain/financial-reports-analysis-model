@@ -16,7 +16,8 @@ the caller must compute them from the retained source and exact configuration.
 
 `NormalizationExample` records a stable example id, its source record, statement, printed
 label, explicit canonical id or `None`, role, column duration, source locator and verification.
-Balance-sheet instants have no duration; flow statements require months. Period stratum and
+SEC presentation rows have no column, so their months is always `None`. For PDF rows,
+balance-sheet instants have no duration and flow statements require months. Period stratum and
 duration remain distinct. Canonical ids are validated against the injected core taxonomy and
 must belong to the example's statement. Targets are looked up in the taxonomy's items, the
 same items the manifest fingerprints, and a taxonomy with a duplicate id is refused. A null

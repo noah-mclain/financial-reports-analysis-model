@@ -173,6 +173,24 @@ def split_records_sha256(moves: Sequence[Move], looks: Sequence[Look]) -> str:
     )
 
 
+def _recorded_identities(metadata: dict[str, object]) -> dict[int, tuple[str, frozenset[str]]]:
+    """The snapshot's CIK assignments: CIK to its pool and recorded names."""
+    assignments = metadata["assignments"]
+    assert isinstance(assignments, list)
+    return {
+        int(a["cik"]): (str(a["pool"]), frozenset(a["names"]))
+        for a in assignments
+        if a["cik"] is not None
+    }
+
+
+def _is_recorded(recorded: dict[int, tuple[str, frozenset[str]]], source: SourceRecord) -> bool:
+    entry = recorded.get(int(str(source.issuer.cik)))
+    if entry is None or entry[0] != str(source.pool):
+        return False
+    return source.issuer.name is None or source.issuer.name in entry[1]
+
+
 def _require_hash(actual: str, expected: str, field: str, subject: str) -> None:
     if actual != expected:
         raise SourceAccessError(f"{subject}: {field} differs from reviewed context")
@@ -225,6 +243,7 @@ def authorize_payloads(
     # One disposable probe serves every filing: any assignment or alias it would add is
     # refused below, so it never drifts from the reviewed snapshot between filings.
     probe = PoolRegistry.from_metadata(metadata, "injected reviewed registry")
+    recorded = _recorded_identities(metadata)
     by_source: dict[str, SecFiling] = {}
     locators: set[str] = set()
     documents: list[dict[str, object]] = []
@@ -238,9 +257,12 @@ def authorize_payloads(
         locators.add(filing.raw_locator)
         for field in ("source_sha256", "config_sha256"):
             _require_hash(getattr(source, field), getattr(index, field), field, source.source_id)
-        # Public register validates conflicts on the probe, never the authority.
+        # Public register validates conflicts on the probe, never the authority. The probe
+        # equals the snapshot before every filing, so registering changes it exactly when the
+        # identity or pool is not already in the snapshot; that is checked against the
+        # one-time index of the snapshot instead of rebuilding the probe's metadata.
         probe.register(source.issuer, source.pool)
-        if probe.metadata() != metadata:
+        if not _is_recorded(recorded, source):
             raise SourceAccessError(
                 f"{source.source_id}: identity/pool is not fully recorded in registry"
             )

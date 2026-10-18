@@ -7,7 +7,7 @@ import json
 import math
 import unicodedata
 from collections import Counter, defaultdict
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -91,31 +91,57 @@ def render_row(example: NormalizationExample) -> Row:
     }
 
 
+def dedupe_group_key(cik: int | str, statement: str, label: str) -> tuple[str, str, str]:
+    """The deduplication group: issuer (the split's CIK key), statement and normalized label."""
+    return (cik_key(cik), statement, normalize_label(label))
+
+
+def dedupe_lowest[T](
+    items: Iterable[T],
+    *,
+    group: Callable[[T], tuple[str, str, str]],
+    target: Callable[[T], str | None],
+    ident: Callable[[T], str],
+) -> tuple[list[T], list[tuple[str, ...]]]:
+    """Keep one item per group and target (lowest id), in id order.
+
+    A group whose members have different targets is not resolved: it is left out of the kept
+    items and its ids are returned, so the caller decides whether that is an error.
+    """
+    groups: defaultdict[tuple[str, str, str], list[T]] = defaultdict(list)
+    for item in sorted(items, key=ident):
+        groups[group(item)].append(item)
+    kept: list[T] = []
+    conflicts: list[tuple[str, ...]] = []
+    for members in groups.values():
+        if len({target(m) for m in members}) > 1:
+            conflicts.append(tuple(ident(m) for m in members))
+            continue
+        kept.append(members[0])
+    return sorted(kept, key=ident), conflicts
+
+
 def dedupe_per_issuer(
     examples: Sequence[NormalizationExample],
 ) -> tuple[NormalizationExample, ...]:
     """Keep one example per issuer, statement, normalized label and target (lowest example_id)."""
-    groups: defaultdict[tuple[str, str, str], list[NormalizationExample]] = defaultdict(list)
-    for example in sorted(examples, key=lambda e: e.example_id):
-        # Same issuer key the split uses; the contracts require a CIK for every authorized row.
-        cik = example.source_record.issuer.cik
-        if cik is None:
+    for example in examples:
+        # The contracts require a CIK for every authorized row.
+        if example.source_record.issuer.cik is None:
             raise DatasetError(
                 f"{example.example_id}: issuer has no CIK for per-issuer deduplication"
             )
-        issuer = cik_key(cik)
-        groups[(issuer, example.statement.value, normalize_label(example.label))].append(example)
-    kept: list[NormalizationExample] = []
-    for members in groups.values():
-        if len({m.canonical_id for m in members}) > 1:
-            ids = ", ".join(m.example_id for m in members)
-            raise DatasetError(f"conflicting targets for one issuer label: {ids}")
-        seen: set[str | None] = set()
-        for member in members:
-            if member.canonical_id not in seen:
-                seen.add(member.canonical_id)
-                kept.append(member)
-    return tuple(sorted(kept, key=lambda e: e.example_id))
+    kept, conflicts = dedupe_lowest(
+        examples,
+        group=lambda e: dedupe_group_key(
+            str(e.source_record.issuer.cik), e.statement.value, e.label
+        ),
+        target=lambda e: e.canonical_id,
+        ident=lambda e: e.example_id,
+    )
+    if conflicts:
+        raise DatasetError(f"conflicting targets for one issuer label: {', '.join(conflicts[0])}")
+    return tuple(kept)
 
 
 def _serialize(rows: Sequence[Row]) -> bytes:

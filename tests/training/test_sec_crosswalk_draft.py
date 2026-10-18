@@ -366,7 +366,7 @@ def test_policies_need_a_vocabulary_for_the_mapping_namespace() -> None:
 def test_committed_mapping_excludes_the_parent_share_tags_instead_of_nulling_them() -> None:
     mapping = committed_mapping()
     excluded = {(x.statement, x.tag) for x in mapping.excluded}
-    assert excluded == {("IS", "NetIncomeLoss"), ("BS", "StockholdersEquity")}
+    assert excluded >= {("IS", "NetIncomeLoss"), ("BS", "StockholdersEquity")}
     # An excluded tag is neither mapped nor an explicit null.
     assert not excluded & {(r.statement, r.tag) for r in mapping.rows}
     assert all(x.reason for x in mapping.excluded)
@@ -434,16 +434,76 @@ def committed_targets() -> dict[tuple[str, str], str | None]:
     [
         ("BS", "AccountsReceivableNet", "trade_receivables"),
         ("BS", "AccountsReceivableNetCurrent", "trade_receivables"),
-        ("BS", "NotesPayableCurrent", "current_portion_long_term_debt"),
+        ("BS", "NotesPayableCurrent", None),
         ("BS", "LoansPayableCurrent", "current_portion_long_term_debt"),
         ("IS", "RevenueFromContractWithCustomerIncludingAssessedTax", None),
         ("IS", "RevenueFromContractWithCustomerExcludingAssessedTax", "revenue"),
         ("BS", "OperatingLeaseLiability", None),
         ("IS", "InvestmentIncomeInterestAndDividend", None),
+        ("BS", "OtherIntangibleAssetsNet", "intangible_assets"),
+        ("BS", "AccountsAndOtherReceivablesNetCurrent", "trade_receivables"),
+        ("BS", "OtherAssetsMiscellaneousNoncurrent", "other_non_current_assets"),
+        ("BS", "LongTermLoansFromBank", None),
+        ("BS", "LongTermNotesAndLoans", "long_term_borrowings"),
+        ("BS", "LongTermNotesPayable", None),
+        ("BS", "LoansPayableToBankCurrent", None),
+        ("BS", "NotesPayableToBankCurrent", None),
+        ("BS", "ShortTermBankLoansAndNotesPayable", None),
+        ("BS", "NotesAndLoansPayableCurrent", "current_portion_long_term_debt"),
+        (
+            "BS",
+            "PensionAndOtherPostretirementAndPostemploymentBenefitPlansLiabilitiesNoncurrent",
+            "other_non_current_liabilities",
+        ),
+        (
+            "BS",
+            "PartnersCapitalIncludingPortionAttributableToNoncontrollingInterest",
+            "total_equity",
+        ),
+        ("BS", "InterestAndDebtExpense", "absent"),
+        ("BS", "OtherAccruedLiabilitiesCurrent", "absent"),
+        ("BS", "OtherAccruedLiabilitiesNoncurrent", "absent"),
     ],
 )
 def test_reviewed_tag_decisions(statement: str, tag: str, target: str | None) -> None:
-    assert committed_targets()[(statement, tag)] == target
+    targets = committed_targets()
+    if target == "absent":
+        # Borderline tags are left unlisted on purpose.
+        assert (statement, tag) not in targets
+    else:
+        assert targets[(statement, tag)] == target
+
+
+def test_single_instrument_borrowing_tags_are_null_with_the_stated_reason() -> None:
+    rows = {(r.statement, r.tag): r for r in committed_mapping().rows}
+    for tag in (
+        "NotesPayableCurrent",
+        "ShortTermBankLoansAndNotesPayable",
+        "LoansPayableToBankCurrent",
+        "NotesPayableToBankCurrent",
+        "LongTermLoansFromBank",
+        "LongTermNotesPayable",
+    ):
+        assert rows[("BS", tag)].canonical_id is None
+        assert rows[("BS", tag)].reason == "single borrowing instrument; narrower than the item"
+    assert rows[("BS", "LoansPayableCurrent")].canonical_id == "current_portion_long_term_debt"
+
+
+def test_equity_tags_that_do_not_say_whether_a_noncontrolling_share_is_included_are_excluded() -> (
+    None
+):
+    mapping = committed_mapping()
+    assert {(x.statement, x.tag) for x in mapping.excluded} == {
+        ("IS", "NetIncomeLoss"),
+        ("BS", "StockholdersEquity"),
+        ("BS", "MembersEquity"),
+        ("BS", "PartnersCapital"),
+        ("BS", "MembersCapital"),
+    }
+    listed = {(r.statement, r.tag) for r in mapping.rows}
+    assert ("BS", "PartnersCapital") not in listed and ("BS", "MembersEquity") not in listed
+    # The partnership tag that says it includes the noncontrolling share stays mapped.
+    assert ("BS", "PartnersCapitalIncludingPortionAttributableToNoncontrollingInterest") in listed
 
 
 def test_tags_that_land_on_one_item_are_the_documented_collisions() -> None:
@@ -458,5 +518,35 @@ def test_tags_that_land_on_one_item_are_the_documented_collisions() -> None:
     assert sorted(by_item["current_portion_long_term_debt"]) == [
         "LoansPayableCurrent",
         "LongTermDebtCurrent",
-        "NotesPayableCurrent",
+        "NotesAndLoansPayableCurrent",
     ]
+    assert sorted(by_item["long_term_borrowings"]) == [
+        "LongTermDebtNoncurrent",
+        "LongTermLoansPayable",
+        "LongTermNotesAndLoans",
+    ]
+    assert sorted(by_item["short_term_borrowings"]) == ["BankOverdrafts", "ShortTermBorrowings"]
+
+
+def test_a_mapped_reason_never_leans_on_a_tag_that_is_null_or_excluded() -> None:
+    import re
+
+    mapping = committed_mapping()
+    status = {r.tag: r.canonical_id for r in mapping.rows}
+    status.update({x.tag: "excluded" for x in mapping.excluded})
+    for row in mapping.rows:
+        if row.canonical_id is None:
+            continue
+        for tag, target in status.items():
+            if tag != row.tag and re.search(rf"\b{tag}\b", row.reason):
+                assert target not in (None, "excluded"), f"{row.tag} cites {tag}"
+
+
+def test_reasons_that_were_stale_after_the_review_are_corrected() -> None:
+    mapping = committed_mapping()
+    rows = {r.tag: r for r in mapping.rows}
+    assert "siblings" not in rows["NotesAndLoansPayableCurrent"].reason
+    assert "NotesPayableCurrent" not in rows["LoansPayableCurrent"].reason
+    members = next(x for x in mapping.excluded if x.tag == "MembersEquity")
+    assert "parent entity's share" in members.reason and "2026" in members.reason
+    assert "does not say" not in members.reason and "without saying" not in members.reason

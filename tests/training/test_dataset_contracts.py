@@ -47,6 +47,9 @@ def source(cik: int, *, name: str = "Synthetic Widgets", **changes: object) -> S
 
 
 def example(record: SourceRecord, **changes: object) -> NormalizationExample:
+    # SEC presentation rows have no column duration; a PDF flow statement needs one.
+    statement = changes.get("statement", StatementType.INCOME)
+    instant = record.source == Source.SEC or statement == StatementType.BALANCE
     return NormalizationExample.model_validate(
         {
             "example_id": f"example-{record.source_id}",
@@ -56,7 +59,7 @@ def example(record: SourceRecord, **changes: object) -> NormalizationExample:
             "canonical_id": "revenue",
             "abstention_reason": None,
             "role": "corporate",
-            "months": 12,
+            "months": None if instant else 12,
             "source_locator": "accession:synthetic/pre:1",
             "tag": "us-gaap:Revenues",
             "provenance": None,
@@ -385,6 +388,36 @@ def test_pdf_requires_real_provenance_and_duration_rules() -> None:
             canonical_id="total_assets",
             months=12,
         )
+
+
+def test_months_rule_depends_on_the_source() -> None:
+    sec = source(cik_in(Part.FIT))
+    pdf = source(cik_in(Part.FIT), source=Source.PDF)
+    bbox = BBox(left=0, top=0, right=10, bottom=10)
+    provenance = Provenance(page_no=1, bbox=bbox, table_ref="table-1", row=1, col=0)
+    pdf_args: dict[str, object] = {"tag": None, "provenance": provenance}
+    # SEC presentation rows have no column: months is None for every statement.
+    for statement, target in (
+        (StatementType.INCOME, "revenue"),
+        (StatementType.BALANCE, "total_assets"),
+    ):
+        assert example(sec, statement=statement, canonical_id=target).months is None
+        with pytest.raises(ValidationError, match="SEC"):
+            example(sec, statement=statement, canonical_id=target, months=12)
+    # PDF flow statements keep requiring months, and balance sheets still forbid them.
+    assert example(pdf, **pdf_args).months == 12
+    with pytest.raises(ValidationError, match="months"):
+        example(pdf, months=None, **pdf_args)
+    with pytest.raises(ValidationError, match="instant"):
+        example(
+            pdf, statement=StatementType.BALANCE, canonical_id="total_assets", months=12, **pdf_args
+        )
+    assert (
+        example(
+            pdf, statement=StatementType.BALANCE, canonical_id="total_assets", **pdf_args
+        ).months
+        is None
+    )
 
 
 def test_numeric_payload_and_missing_explicit_target_are_refused() -> None:

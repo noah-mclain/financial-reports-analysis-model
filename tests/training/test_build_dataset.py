@@ -170,3 +170,12 @@ def test_max_per_issuer_must_be_positive(files: Files) -> None:
     with pytest.raises(SystemExit) as stop:
         main([*files.args(), "--max-per-issuer", "0"])
     assert stop.value.code == 2
+
+
+def test_a_label_with_unicode_line_separators_is_one_line(files: Files) -> None:
+    from build_dataset import read_jsonl
+
+    record = fit_source()
+    odd = row(record, "a-1", label="Net\u2028sales\u0085and\u2029other")
+    files.examples.write_text(odd.model_dump_json() + "\n" + odd.model_dump_json() + "\n", "utf-8")
+    assert [e.label for e in read_jsonl(files.examples, NormalizationExample)] == [odd.label] * 2

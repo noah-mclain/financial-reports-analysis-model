@@ -26,6 +26,7 @@ from dataset_contracts import (
     PartitionConfig,
     SourceRecord,
     partition_examples,
+    text_lines,
 )
 from harness.holdout_records import read_looks, read_moves
 from harness.paths import HOLDOUT_MOVES, ROOT, SCORING_LOG
@@ -49,9 +50,7 @@ def _read_text(path: Path) -> str:
 def read_jsonl[T: Contract](path: Path, model: type[T]) -> list[T]:
     """One model per non-blank line; a bad line is reported with its file and number."""
     records: list[T] = []
-    for number, line in enumerate(_read_text(path).splitlines(), start=1):
-        if not line.strip():
-            continue
+    for number, line in text_lines(_read_text(path)):
         try:
             records.append(model.model_validate_json(line))
         except ValidationError as exc:
@@ -62,9 +61,9 @@ def read_jsonl[T: Contract](path: Path, model: type[T]) -> list[T]:
 def read_approved(path: Path) -> frozenset[str]:
     """Example content hashes, one per line; blank lines and ``#`` comments are ignored."""
     hashes: set[str] = set()
-    for number, line in enumerate(_read_text(path).splitlines(), start=1):
+    for number, line in text_lines(_read_text(path)):
         text = line.strip()
-        if not text or text.startswith("#"):
+        if text.startswith("#"):
             continue
         if not SHA256.fullmatch(text):
             raise DatasetError(f"{path}:{number}: not a lowercase sha256 hex digest")
