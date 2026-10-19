@@ -68,6 +68,7 @@ These hold for every change, from the first commit to the last.
 ```sh
 make setup          # uv workspace into .venv
 make test           # fast tests; must pass before every commit
+make test-sandboxed # same minus tests that bind a local socket, for a sandboxed worker; not the gate
 make lint           # ruff format check and ruff check
 make typecheck      # mypy --strict over packages, apps and the eval harness
 make docs-check     # no placeholder left in docs
