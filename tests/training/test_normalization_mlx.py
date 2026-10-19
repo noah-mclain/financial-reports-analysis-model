@@ -1,8 +1,10 @@
 """The local inference boundary sees no gold and reuses identical prompts only."""
 
 import json
+import sys
 from pathlib import Path
 
+import normalization_mlx
 import pytest
 from chat_tokenizer import load_chat_counter
 from dataset_contracts import DatasetError
@@ -10,6 +12,33 @@ from normalization_mlx import LocalModelManifest, model_identity, predict_rows
 from normalization_validation import PredictionRun, Selection, file_sha256, score_run
 from test_chat_tokenizer import make_tokenizer
 from test_normalization_validation import files, prepare  # noqa: F401
+
+
+def test_main_refuses_non_macos_before_touching_inputs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(normalization_mlx.platform, "system", lambda: "Linux")
+    out = tmp_path / "predictions.json"
+    mlx_modules_before = {name for name in sys.modules if name.startswith("mlx")}
+
+    result = normalization_mlx.main(
+        [
+            "--selection",
+            str(tmp_path / "selection.json"),
+            "--model-dir",
+            str(tmp_path / "model"),
+            "--model-manifest",
+            str(tmp_path / "manifest.json"),
+            "--out",
+            str(out),
+        ]
+    )
+
+    mlx_modules_after = {name for name in sys.modules if name.startswith("mlx")}
+    assert result == 1
+    assert "MLX runner requires macOS" in capsys.readouterr().err
+    assert not out.exists()
+    assert mlx_modules_after == mlx_modules_before
 
 
 def test_generation_gets_only_the_prompt_and_reuses_identical_inputs(files) -> None:  # type: ignore[no-untyped-def] # noqa: F811
