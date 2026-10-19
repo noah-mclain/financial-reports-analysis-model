@@ -40,6 +40,12 @@ class Contract(BaseModel):
     )
 
 
+class NormalizationAnswer(Contract):
+    """The one normalization reply schema, shared by the prompt, dataset and scorer."""
+
+    canonical_id: str | None
+
+
 class SourceRecord(Contract):
     """Caller-supplied source metadata, checked against a reviewed registry."""
 

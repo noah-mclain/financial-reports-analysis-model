@@ -31,6 +31,8 @@ export FRA_API_PORT FRA_LLM_PORT
 
 .PHONY: help setup unhide-pth fmt lint typecheck test test-sandboxed test-all eval corpus-check corpus-split corpus-fetch sec-fsds dataset-build sec-crosswalk-draft sec-crosswalk-approve sec-prepare sec-coverage sec-roles-draft sec-roles-approve sec-examples clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping eval-gates dry-run expected-drafts eval-extraction verify-expected dev worker docker-up docker-health ci-workflows-check container-smoke hygiene-check
 
+.PHONY: normalization-prepare normalization-score normalization-predict
+
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-14s %s\n", $$1, $$2}'
 
@@ -77,6 +79,7 @@ typecheck: ## Type check the packages, apps, the analytics golden test, eval har
 	MYPYPATH=scripts:eval $(UV) run mypy --strict training/sec_roles.py
 	MYPYPATH=scripts:eval $(UV) run mypy --strict training/sec_examples.py
 	MYPYPATH=scripts:eval $(UV) run mypy --strict training/sec_source_cli.py
+	MYPYPATH=scripts:eval:training $(UV) run mypy --strict training/normalization_eval.py training/normalization_validation.py training/normalization_mlx.py
 
 test: ## Fast tests (no models, no OCR)
 	@$(MAKE) --no-print-directory unhide-pth
@@ -153,6 +156,18 @@ dataset-build: ## Normalization train/valid files (EXAMPLES, SOURCES, APPROVED, 
 	$(foreach var,EXAMPLES SOURCES APPROVED TOKENIZER_DIR OUT_DIR,$(if $($(var)),,$(error $(var) is required)))
 	@$(MAKE) --no-print-directory unhide-pth
 	PYTHONPATH=scripts:eval $(UV) run python training/build_dataset.py --examples "$(EXAMPLES)" --sources "$(SOURCES)" --approved "$(APPROVED)" --tokenizer-dir "$(TOKENIZER_DIR)" --out-dir "$(OUT_DIR)" $(if $(MAX_PER_ISSUER),--max-per-issuer $(MAX_PER_ISSUER)) $(if $(REGISTRY),--registry "$(REGISTRY)")
+
+normalization-prepare: ## Verified validation selection and lexicon baseline (DATASET_DIR, EXAMPLES, SOURCES, APPROVED, REGISTRY, OUT_DIR required)
+	$(foreach var,DATASET_DIR EXAMPLES SOURCES APPROVED REGISTRY OUT_DIR,$(if $($(var)),,$(error $(var) is required)))
+	PYTHONPATH=scripts:eval $(UV) run python training/normalization_validation.py prepare --dataset-dir "$(DATASET_DIR)" --examples "$(EXAMPLES)" --sources "$(SOURCES)" --approved "$(APPROVED)" --registry "$(REGISTRY)" --moves eval/corpus/holdout_moves.yaml --looks eval/corpus/scoring_log.tsv --out-dir "$(OUT_DIR)" $(if $(LIMIT),--limit $(LIMIT)) $(if $(SEED),--seed $(SEED)) $(if $(MAX_PER_ISSUER),--max-per-issuer $(MAX_PER_ISSUER))
+
+normalization-score: ## Score predictions on their frozen selection (SELECTION, PREDICTIONS, OUT required; BASE optional)
+	$(foreach var,SELECTION PREDICTIONS OUT,$(if $($(var)),,$(error $(var) is required)))
+	PYTHONPATH=scripts:eval $(UV) run python training/normalization_validation.py score --selection "$(SELECTION)" --predictions "$(PREDICTIONS)" --out "$(OUT)" $(if $(BASE),--base "$(BASE)") $(if $(SEED),--seed $(SEED))
+
+normalization-predict: ## Local MLX predictions (SELECTION, MODEL_DIR, MODEL_MANIFEST, OUT required; ADAPTER_DIR optional)
+	$(foreach var,SELECTION MODEL_DIR MODEL_MANIFEST OUT,$(if $($(var)),,$(error $(var) is required)))
+	PYTHONPATH=scripts:eval $(UV) run python training/normalization_mlx.py --selection "$(SELECTION)" --model-dir "$(MODEL_DIR)" --model-manifest "$(MODEL_MANIFEST)" --out "$(OUT)" $(if $(ADAPTER_DIR),--adapter-dir "$(ADAPTER_DIR)")
 
 sec-crosswalk-draft: ## Draft SEC crosswalk, policies and review packet from tag.txt (ARCHIVES="a.zip b.zip", OUT_DIR required)
 	$(foreach var,ARCHIVES OUT_DIR,$(if $($(var)),,$(error $(var) is required)))
