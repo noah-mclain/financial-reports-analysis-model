@@ -24,7 +24,7 @@ shared prompt; the command owns reading the input records. It calls no network a
 3. `build_dataset` deduplicates and renders both parts, then audits lengths. `mlx_lm` truncates a
    sequence over `max_seq_length` silently, so any row above `token_limit` (default 2048) raises
    `DatasetError` listing every offending example id and count. Rows are never truncated or
-   dropped. An empty fit or validation part after deduplication is an error.
+   dropped by the length audit. An empty fit or validation part after deduplication is an error.
 4. `write_dataset` writes `train.jsonl` (fit), `valid.jsonl` (validation) and `manifest.json`,
    all UTF-8 and ordered by `example_id`. It refuses to write if any of the three files, or a
    `test.jsonl`, already exists in the directory.
@@ -157,3 +157,68 @@ The separate build took 539.31 seconds. Its timing wrapper exited 1 after writin
 files because sandboxed `sysctl kern.clockrate` was refused; no peak-memory measurement is
 claimed from that wrapper. The validation preparation separately checks file hashes and
 reconstructs every rendered row before accepting the dataset.
+
+## Frozen train equity exclusions
+
+`training/dataset_exclusions.py` freezes exact `messages[1].content` strings that have both
+`equity_attributable_parent` and `total_equity` targets in train. Validation targets never
+select keys. `build_dataset.py --exclusions` applies that stored list to train, including
+matching null and other targets; it never reselects keys. Builder version, system prompt,
+upstream dataset hashes, tokenizer identity and both source file hashes must match. Removal
+counts, target breakdown and retained row count must reconcile or raise `DatasetError`.
+Validation bytes stay unchanged. The optional manifest `exclusion` audit records the key-list
+hash, source train hash, before/after counts and removed targets; `train_sha256` describes
+the filtered bytes. Without exclusions, manifest serialization is unchanged.
+
+A read-only dry run on 2026-10-19 against `dataset_sec_4_v2` measured 35 selected keys,
+997 matching train rows (216 parent equity, 649 total equity, 130 null and 2 total liabilities
+and equity), leaving 674,930 of 675,927 train rows. The canonical sorted key-list SHA-256 is
+`439bc67ab2d09af7a475d809923690b47719b6646a210cfbf3dbe14e51406109`.
+Source train/validation and example hashes matched the task's pinned artifacts; the tokenizer
+identity matched `9e3c11a4a87d85a72b6f2d1e4b29ab88532f72d03189b6fa2793da735a2d98aa`.
+These examples are consumed as hash-bound decoder artifacts; this change does not independently
+reproduce `sec_examples_4`. Dropping conflicting supervision does not teach abstention or
+establish a clean dataset. Broader label-versus-null discordance (scope B) remains unresolved;
+there is no global discordance filter.
+
+The coordinator runs the commands below outside the worker sandbox. They use the existing
+local environment, create new outputs and refuse overwrites. No real exclusion file, rebuilt
+dataset or population report was produced by the dry run. Run from the assigned checkout:
+
+```sh
+cd /Users/nadamohamed/.herdr/worktrees/financial-reports-analysis-model/equity-train-exclusion
+V=/Users/nadamohamed/Developer/GitHub/financial-reports-analysis-model/var
+PYTHON_BIN=/Users/nadamohamed/Developer/GitHub/financial-reports-analysis-model/.venv/bin/python
+export PYTHONPATH=training:scripts:eval:packages/core/src:packages/ingest/src
+
+"$PYTHON_BIN" training/dataset_exclusions.py \
+    --dataset-dir "$V/dataset_sec_4_v2" \
+    --out "$V/dataset_sec_4_v2_exclusions/exclusions.json" \
+    --provenance 'Consumes hash-bound sec_examples_4 decoder artifacts; does not independently reproduce them.'
+
+"$PYTHON_BIN" training/build_dataset.py \
+    --examples "$V/sec_examples_4/examples.jsonl" \
+    --sources "$V/sec_examples_4/sources.jsonl" --approved "$V/sec_examples_4/approved.txt" \
+    --registry "$V/issuer-pools.json" --moves eval/corpus/holdout_moves.yaml \
+    --looks eval/corpus/scoring_log.tsv \
+    --tokenizer-dir /private/tmp/normalization-validation/var/models/qwen2.5-7b-instruct-4bit \
+    --exclusions "$V/dataset_sec_4_v2_exclusions/exclusions.json" \
+    --out-dir "$V/dataset_sec_4_v3"
+
+"$PYTHON_BIN" training/normalization_validation.py prepare \
+    --dataset-dir "$V/dataset_sec_4_v2" \
+    --examples "$V/sec_examples_4/examples.jsonl" \
+    --sources "$V/sec_examples_4/sources.jsonl" --approved "$V/sec_examples_4/approved.txt" \
+    --registry "$V/issuer-pools.json" --moves eval/corpus/holdout_moves.yaml \
+    --looks eval/corpus/scoring_log.tsv \
+    --exclusions "$V/dataset_sec_4_v2_exclusions/exclusions.json" \
+    --out-dir "$V/normalization-validation-sec4-equity-populations"
+```
+
+The last command runs only the lexicon. Its `report.json` preserves the full validation score
+and adds three labelled `populations`: full validation for continuity, validation excluding
+ambiguity (a different, non-comparable population), and ambiguity-only diagnostics with
+per-input targets and predictions. Fixture tests verify membership and full-score continuity.
+The coordinator must check the real 173 ambiguity rows / 21 inputs and compare the full
+lexicon result with the existing `normalization-validation-sec4/RECORD.txt` baseline
+(accuracy 85.35%, macro-F1 42.08%); these real population results remain unverified here.

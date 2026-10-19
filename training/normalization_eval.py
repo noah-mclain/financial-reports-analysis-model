@@ -10,8 +10,9 @@ from collections import Counter, defaultdict
 from collections.abc import Sequence
 from typing import Any, Literal
 
-from dataset_builder import SYSTEM_PROMPT
-from dataset_contracts import Contract, DatasetError, NormalizationAnswer, Text, canonical_json
+from dataset_builder import SYSTEM_PROMPT, render_input
+from dataset_contracts import Contract, DatasetError, NormalizationAnswer, Text
+from dataset_exclusions import FrozenExclusions, checked, target_name
 
 from fra_core.schemas import StatementType
 from fra_core.taxonomy import Taxonomy, load_taxonomy
@@ -43,7 +44,7 @@ def inference_messages(row: EvalRow) -> list[dict[str, str]]:
         {"role": "system", "content": SYSTEM_PROMPT},
         {
             "role": "user",
-            "content": canonical_json({"label": row.label, "statement": row.statement.value}),
+            "content": render_input(row.label, row.statement.value),
         },
     ]
 
@@ -268,6 +269,65 @@ def score(
         "SEC supervision comes from approved crosswalks, not independent PDF gold labels.",
     ]
     return result
+
+
+def population_report(
+    rows: Sequence[EvalRow], predictions: Sequence[Prediction], artifact: FrozenExclusions
+) -> dict[str, Any]:
+    """Continuity score and two separately labelled diagnostic populations."""
+    checked(artifact)
+    full = score(rows, predictions)
+    keys = frozenset(artifact.keys)
+    ambiguous: dict[str, list[EvalRow]] = defaultdict(list)
+    retained = []
+    for row in rows:
+        key = inference_messages(row)[1]["content"]
+        if key in keys:
+            ambiguous[key].append(row)
+        else:
+            retained.append(row)
+    replies = {p.example_id: p for p in predictions}
+
+    def population(part: Sequence[EvalRow], label: str) -> dict[str, Any]:
+        return {
+            "label": label,
+            "rows": len(part),
+            "score": score(part, tuple(replies[r.example_id] for r in part)) if part else None,
+        }
+
+    diagnostic = population(
+        [r for group in ambiguous.values() for r in group],
+        "Ambiguity-only validation diagnostic; not an acceptance population",
+    )
+    diagnostic["distinct_inputs"] = len(ambiguous)
+    diagnostic["inputs"] = [
+        {
+            "input": key,
+            "rows": len(group),
+            "target_breakdown": dict(
+                sorted(Counter(target_name(r.canonical_id) for r in group).items())
+            ),
+            "predictions": [
+                {**replies[r.example_id].model_dump(mode="json"), "target": r.canonical_id}
+                for r in group
+            ],
+        }
+        for key, group in sorted(ambiguous.items())
+    ]
+    return {
+        "exclusion_keys_sha256": artifact.keys_sha256,
+        "full_validation": {
+            "label": "Full validation, continuity population",
+            "rows": len(rows),
+            "score": full,
+        },
+        "validation_excluding_ambiguity": population(
+            retained,
+            "Validation excluding ambiguity; different population, "
+            "not comparable to full validation",
+        ),
+        "ambiguity_only": diagnostic,
+    }
 
 
 def compare(
