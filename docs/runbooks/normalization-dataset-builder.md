@@ -2,8 +2,9 @@
 
 `training/dataset_builder.py` turns the fit and validation parts returned by
 `partition_examples` (see [normalization-dataset-contracts.md](normalization-dataset-contracts.md))
-into the `train.jsonl` and `valid.jsonl` that `mlx_lm` reads, plus a manifest. It holds pure
-functions and one writer. It reads no files, calls no network and loads no model.
+into the `train.jsonl` and `valid.jsonl` that `mlx_lm` reads, plus a manifest. It renders and
+audits rows and writes the output files. It loads the canonical taxonomy resource for the
+shared prompt; the command owns reading the input records. It calls no network and loads no model.
 
 ## What it does
 
@@ -17,7 +18,8 @@ functions and one writer. It reads no files, calls no network and loads no model
    source of the instruction), a user message and an assistant message.
    - User: `{"label": ..., "statement": ...}` as JSON with sorted keys and no escaping of
      non-ASCII text. Nothing else is in the prompt: no period or months, no numbers, no
-     neighbouring rows and no list of valid ids.
+     neighbouring rows. The shared system message supplies the allowed ids by statement
+     and the response schema; the per-example target never changes that catalog.
    - Assistant: `{"canonical_id": <id>}`, or `{"canonical_id": null}` for an abstention.
 3. `build_dataset` deduplicates and renders both parts, then audits lengths. `mlx_lm` truncates a
    sequence over `max_seq_length` silently, so any row above `token_limit` (default 2048) raises
@@ -39,9 +41,8 @@ as `tokenizer_id`: a SHA-256 over the contents of the tokenizer files present
 (`tokenizer.json`, `tokenizer_config.json`, `chat_template.jinja`, `special_tokens_map.json`,
 `added_tokens.json`, `vocab.json`, `merges.txt`), never a path.
 
-The owner must place the Qwen2.5-7B-Instruct tokenizer files in a local directory. None is on
-disk now, so the audit has run only against a tiny synthetic tokenizer in tests, not on real
-tokens.
+The Qwen2.5-7B-Instruct tokenizer files must be in a local directory. The measured real SEC
+build below records its tokenizer identity; tests also use a tiny synthetic tokenizer.
 
 ## Command
 
@@ -79,8 +80,7 @@ Writes are not atomic: a failure part-way leaves earlier files behind, to be rem
 
 ## What it does not do
 
-- No real dataset can be built yet: no reviewed crosswalk, approvals or independent bilingual
-  annotations exist, so it has run on no real data and no counts are claimed.
+- The measured real dataset is SEC English only. It supplies no PDF or Arabic evidence.
 - No bag-of-words or bilingual-pair example generation.
 - No semantic deduplication, period weighting or long-tail coverage policy.
 
@@ -95,6 +95,9 @@ total (reading, line validation, contract validation and partition, rendering, t
 also log count, rate and ETA at most every 30 s. Timestamps are UTC (`Z`).
 
 ## Measured: first real SEC run (2026-10-18)
+
+These measurements describe builder version 1 and its original prompt. Version 2 below changes
+the prompt, so its token statistics and file hashes must be measured separately.
 
 Inputs: the 811,629 examples of `sec-examples` over eight quarterly archives (2024q3 to 2026q2),
 the `TOKENIZER_DIR` for Qwen2.5-7B-Instruct fetched from `main` (not a pinned revision), no
@@ -119,3 +122,38 @@ trained or scored on this dataset, and it has no PDF or Arabic rows.
 Run time: 1h44m before the roster check was fixed to use one registry clone for the whole
 roster (it rebuilt the registry once per source); 5m30s after, with byte-identical
 `train.jsonl`, `valid.jsonl` and `manifest.json`.
+
+## Version 2: explicit normalization output contract
+
+The first local unadapted-model smoke returned prose on all 16 selected validation prompts;
+the scorer correctly rejected all 16. Version 1's instruction did not specify the expected
+JSON format or list the canonical ids, so this demonstrated an output-contract failure rather
+than an estimate of normalization ability.
+
+Version 2 generates one shared system prompt from the taxonomy and `NormalizationAnswer`
+schema. It supplies allowed ids by statement, instructs null for unsupported statements or
+unmatched labels, and requires JSON without explanation or markdown. Dataset rendering and
+MLX inference import the same prompt and response schema. A partition with a different
+taxonomy fingerprint is refused. No example's target, issuer or period changes the prompt.
+
+Build version 2 into a new directory and rerun the length audit. Do not overwrite the original
+dataset. Earlier prompt/file hashes remain evidence of the original build; validation
+selections must be reconstructed against the new manifest before comparing base and adapter.
+
+Measured on 2026-10-19 with the same SEC inputs and tokenizer identity as version 1:
+
+| | fit | validation |
+| --- | --- | --- |
+| rows retained | 672,895 | 138,734 |
+| mean / p95 / max tokens | 380.099 / 416 / 642 | 380.044 / 415 / 579 |
+
+The upstream partition manifest is identical to version 1. No row was truncated or dropped.
+The system prompt SHA-256 is
+`bba5f9cdf6ea3e553c9b899a0d4419128e84f6255f73870dba2090ded1bc0606`;
+train and validation SHA-256 values are
+`87d2254a8e52ae2b2073257302c354a20c18c1b1fdc684e04f64f5e221e29957` and
+`0e3e8c479c586b15bb78ec38b291a1c583ddb1bb4a598c44d29485ff4a98d2e7`.
+The separate build took 539.31 seconds. Its timing wrapper exited 1 after writing all three
+files because sandboxed `sysctl kern.clockrate` was refused; no peak-memory measurement is
+claimed from that wrapper. The validation preparation separately checks file hashes and
+reconstructs every rendered row before accepting the dataset.
