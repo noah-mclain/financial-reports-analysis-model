@@ -32,9 +32,10 @@ from dataset_contracts import (
     digest,
     partition_examples,
 )
+from dataset_exclusions import FrozenExclusions, load_exclusions, retained_indices, verify_source
 from exclusive_write import write_new
 from harness.holdout_records import read_looks, read_moves
-from normalization_eval import EvalRow, Prediction, compare, score, select_rows
+from normalization_eval import EvalRow, Prediction, compare, population_report, score, select_rows
 from progress import Progress
 from pydantic import Field, ValidationError, model_validator
 from sec_source_access import read_registry
@@ -91,6 +92,7 @@ def execution_metadata() -> dict[str, Any]:
         "training/normalization_validation.py",
         "training/normalization_mlx.py",
         "training/dataset_builder.py",
+        "training/dataset_exclusions.py",
         "training/dataset_contracts.py",
         "packages/ingest/src/fra_ingest/label_match.py",
         "pyproject.toml",
@@ -137,6 +139,7 @@ def prepare_validation(
     max_per_issuer: int | None = None,
     limit: int | None = None,
     seed: int = 0,
+    exclusions: FrozenExclusions | None = None,
 ) -> Selection:
     """Check metadata before opening labels, then reproduce the original build identities."""
     registry = read_registry(registry_path)
@@ -179,6 +182,13 @@ def prepare_validation(
     if partitioned.manifest != manifest.dataset:
         raise DatasetError("reconstructed partition manifest differs from dataset")
     fit, validation = dedupe_per_issuer(partitioned.fit), dedupe_per_issuer(partitioned.validation)
+    if exclusions is not None:
+        verify_source(exclusions, manifest, allow_applied=True)
+    if manifest.exclusion is not None:
+        if exclusions is None:
+            raise DatasetError("reconstructing excluded train requires --exclusions")
+        indices = retained_indices(tuple(render_row(e) for e in fit), exclusions)
+        fit = tuple(fit[i] for i in indices)
     if (len(fit), len(validation)) != (manifest.fit_rows_after, manifest.validation_rows_after):
         raise DatasetError("reconstructed row counts differ from dataset manifest")
     _verify_rendered(dataset_dir / "train.jsonl", fit, manifest.train_sha256, "fit")
@@ -237,10 +247,12 @@ def lexicon_run(selection: Selection) -> PredictionRun:
     )
 
 
-def score_run(selection: Selection, run: PredictionRun) -> dict[str, Any]:
+def score_run(
+    selection: Selection, run: PredictionRun, exclusions: FrozenExclusions | None = None
+) -> dict[str, Any]:
     if run.selection_sha256 != selection.fingerprint():
         raise DatasetError("predictions belong to a different selection sha256")
-    return {
+    result = {
         "selection_sha256": run.selection_sha256,
         "predictor": run.predictor,
         "metadata": run.metadata,
@@ -249,6 +261,12 @@ def score_run(selection: Selection, run: PredictionRun) -> dict[str, Any]:
         "scorer_execution": execution_metadata(),
         **score(selection.rows, run.predictions),
     }
+    if exclusions is not None:
+        verify_source(exclusions, selection.dataset_manifest, allow_applied=True)
+        if len(selection.rows) != selection.available_rows:
+            raise DatasetError("exclusion population reporting requires full validation, no limit")
+        result["populations"] = population_report(selection.rows, run.predictions, exclusions)
+    return result
 
 
 def _json(value: Contract | dict[str, Any]) -> str:
@@ -274,11 +292,13 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument("--limit", type=int)
     prepare.add_argument("--seed", type=int, default=0)
     prepare.add_argument("--max-per-issuer", type=int)
+    prepare.add_argument("--exclusions", type=Path)
     scoring = commands.add_parser("score")
     for name in ("selection", "predictions", "out"):
         scoring.add_argument(f"--{name}", type=Path, required=True)
     scoring.add_argument("--base", type=Path)
     scoring.add_argument("--seed", type=int, default=0)
+    scoring.add_argument("--exclusions", type=Path)
     return parser
 
 
@@ -286,6 +306,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     started = time.monotonic()
     try:
+        exclusions = load_exclusions(args.exclusions) if args.exclusions else None
         if args.command == "prepare":
             if args.out_dir.exists():
                 raise DatasetError("evaluation output directory already exists")
@@ -300,9 +321,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 max_per_issuer=args.max_per_issuer,
                 limit=args.limit,
                 seed=args.seed,
+                exclusions=exclusions,
             )
             run = lexicon_run(selected)
-            report = score_run(selected, run)
+            report = score_run(selected, run, exclusions)
             report["elapsed_seconds"] = time.monotonic() - started
             write_new(
                 {
@@ -314,7 +336,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             selected = load_selection(args.selection)
             run = PredictionRun.model_validate_json(args.predictions.read_bytes())
-            report = score_run(selected, run)
+            report = score_run(selected, run, exclusions)
             if args.base:
                 base = PredictionRun.model_validate_json(args.base.read_bytes())
                 if base.selection_sha256 != selected.fingerprint():

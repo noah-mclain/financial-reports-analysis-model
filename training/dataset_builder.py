@@ -23,7 +23,9 @@ from dataset_contracts import (
     canonical_json,
     example_digest,
 )
+from dataset_exclusions import ExclusionAudit, FrozenExclusions, retained_indices, verify_source
 from progress import Progress
+from pydantic import Field
 
 from fra_core.split import cik_key
 from fra_core.taxonomy import Taxonomy, load_taxonomy
@@ -83,6 +85,7 @@ class DatasetBuildManifest(Contract):
     validation_strata: dict[str, int]
     train_sha256: str
     valid_sha256: str
+    exclusion: ExclusionAudit | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 @dataclass(frozen=True)
@@ -97,9 +100,14 @@ def normalize_label(label: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", label).casefold().split())
 
 
+def render_input(label: str, statement: str) -> str:
+    """Exact model-input identity shared by dataset rendering and evaluation."""
+    return canonical_json({"label": label, "statement": statement})
+
+
 def render_row(example: NormalizationExample) -> Row:
     """One mlx_lm chat row: the label and statement in, the canonical id (or null) out."""
-    prompt = canonical_json({"label": example.label, "statement": example.statement.value})
+    prompt = render_input(example.label, example.statement.value)
     answer = canonical_json(NormalizationAnswer(canonical_id=example.canonical_id).model_dump())
     return {
         "messages": [
@@ -217,6 +225,7 @@ def build_dataset(
     count_tokens: TokenCounter,
     token_limit: int = TOKEN_LIMIT,
     tokenizer_id: str,
+    exclusions: FrozenExclusions | None = None,
 ) -> BuiltDataset:
     """Deduplicate, render and length-audit both parts; an over-length row is an error.
 
@@ -277,6 +286,21 @@ def build_dataset(
         train_sha256=hashlib.sha256(_serialize(fit_rows)).hexdigest(),
         valid_sha256=hashlib.sha256(_serialize(valid_rows)).hexdigest(),
     )
+    if exclusions is not None:
+        verify_source(exclusions, manifest)
+        indices = retained_indices(fit_rows, exclusions)
+        fit = tuple(fit[i] for i in indices)
+        fit_rows = tuple(fit_rows[i] for i in indices)
+        fit_counts = [fit_counts[i] for i in indices]
+        manifest = manifest.model_copy(
+            update={
+                "fit_rows_after": len(fit_rows),
+                "fit_lengths": _stats(fit_counts),
+                "fit_strata": _strata(fit),
+                "train_sha256": hashlib.sha256(_serialize(fit_rows)).hexdigest(),
+                "exclusion": exclusions.audit(),
+            }
+        )
     return BuiltDataset(fit_rows=fit_rows, validation_rows=valid_rows, manifest=manifest)
 
 

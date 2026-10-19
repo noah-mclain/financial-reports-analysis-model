@@ -27,6 +27,7 @@ from dataset_contracts import (
     partition_examples,
     text_lines,
 )
+from dataset_exclusions import load_exclusions
 from harness.holdout_records import read_looks, read_moves
 from harness.paths import HOLDOUT_MOVES, ROOT, SCORING_LOG
 from progress import Progress
@@ -129,6 +130,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--moves", type=Path, default=HOLDOUT_MOVES)
     parser.add_argument("--looks", type=Path, default=SCORING_LOG)
     parser.add_argument("--max-per-issuer", type=_positive, default=None)
+    parser.add_argument("--exclusions", type=Path, help="frozen train exclusion artifact")
     return parser
 
 
@@ -163,6 +165,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             count_tokens=count_tokens,
             token_limit=TOKEN_LIMIT,
             tokenizer_id=tokenizer_id,
+            exclusions=load_exclusions(args.exclusions) if args.exclusions else None,
         )
         write_dataset(built, args.out_dir)
     except (DatasetError, SplitError, PoolError, OSError, ValidationError) as exc:
