@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import resource
 import sys
 import time
@@ -125,7 +126,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--max-tokens", type=int, default=128)
     args = parser.parse_args(argv)
     try:
-        if sys.platform != "darwin":
+        if platform.system() != "Darwin":
             raise DatasetError("MLX runner requires macOS")
         if args.out.exists() or args.out.is_symlink():
             raise DatasetError("prediction output already exists")
