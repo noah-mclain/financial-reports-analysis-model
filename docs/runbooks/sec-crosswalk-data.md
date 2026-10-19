@@ -96,12 +96,12 @@ Measured with the eight archives `2024q3` to `2026q2` in `var/sec_fsds/`:
 make sec-crosswalk-draft ARCHIVES="var/sec_fsds/2024q3.zip ... var/sec_fsds/2026q2.zip" OUT_DIR=/tmp/draft
 ```
 
-- 452 entries over 114 distinct (statement, tag) pairs: 287 mapped and 165 null. The pairs
+- 452 entries over 114 distinct (statement, tag) pairs: 283 mapped and 169 null. The pairs
   appear under 2023 (113 entries), 2024 (114), 2025 (113) and 2026 (112) tag taxonomy versions.
   Five tags are excluded (`NetIncomeLoss`, `StockholdersEquity`, `MembersEquity`,
   `PartnersCapital`, `MembersCapital`).
-- 72 mapped (statement, tag) pairs reach 46 of the 47 items, including two conditional pairs.
-  The mapping file has 112 unconditional rows: 70 mapped and 42 null.
+- 71 mapped (statement, tag) pairs reach 46 of the 47 items, including two conditional pairs.
+  The mapping file has 112 unconditional rows: 69 mapped and 43 null.
 - Plan-critical items: `revenue` has two tags (`Revenues` and
   `RevenueFromContractWithCustomerExcludingAssessedTax`; the Including variant is null because
   it is gross of collected sales tax). `net_income` has `ProfitLoss`, `total_assets` has
@@ -121,15 +121,17 @@ make sec-crosswalk-draft ARCHIVES="var/sec_fsds/2024q3.zip ... var/sec_fsds/2026
 
 ### Conditional parent-share draft and measured cost (2026-10-19)
 
-The companion-rule draft adds eight entries (two tags in each of 2023 to 2026); all 444
-previous entries are unchanged. The two excluded review rows gain the typed `companion`
+The companion-rule draft adds eight entries (two tags in each of 2023 to 2026); 440 of the
+444 previous entries are unchanged. The other four, `DepreciationAndAmortization` on the income
+statement in each version, became explicit nulls after review: the tag is defined for assets not
+used in production, so it is narrower than `depreciation_amortization`. The two excluded review rows gain the typed `companion`
 object and a reason stating the exact presentation condition. The three LLC/partnership
 review rows are unchanged. Full content hashes from the draft comparison:
 
 | Subject | Before | After |
 | --- | --- | --- |
-| Mapping | `cd856f9a3f26db2aa15cf6c1ddf36e2799aea2156dad505f4b9ff29c2d36710a` | `77a2e5d61944501e97c4be9ae63bed346dcd4ab0c0607324154800100f20c3cf` |
-| Draft crosswalk | `68d44b3f11d7a5c07750a13b2b3e162803d4f242e41ab05ff235c1634f306ed8` | `bd4937f424e096e303c45798a8fbf6e4c56b444144fa56cce25014a1de8ce01c` |
+| Mapping | `cd856f9a3f26db2aa15cf6c1ddf36e2799aea2156dad505f4b9ff29c2d36710a` | `eec5f173051cc428e0207070dd418a8299b5ccbad5ba0ef196b5918bf2538116` |
+| Draft crosswalk | `68d44b3f11d7a5c07750a13b2b3e162803d4f242e41ab05ff235c1634f306ed8` | `6ba68b9304e4ca64046a8a084aebb0c504b55446a044c197be24ba40be64981f` |
 
 All five policy hashes also change because their review metadata binds the new mapping hash;
 their kinds, scopes and reasons are unchanged. Old approvals cannot authorize this package.
@@ -182,7 +184,7 @@ on one item. These do (read from the mapping file):
 | `revenue` | `Revenues`, `RevenueFromContractWithCustomerExcludingAssessedTax` |
 | `cost_of_revenue` | `CostOfRevenue`, `CostOfGoodsAndServicesSold` |
 | `selling_general_admin` | `SellingGeneralAndAdministrativeExpense`, `GeneralAndAdministrativeExpense`, `SellingExpense` |
-| `depreciation_amortization` | `Depreciation`, `DepreciationAndAmortization` |
+| `depreciation_amortization` | `Depreciation` |
 | `finance_costs` | `InterestExpense`, `InterestExpenseNonoperating` |
 | `trade_receivables` | `AccountsReceivableNetCurrent`, `AccountsReceivableNet`, `ReceivablesNetCurrent`, `AccountsAndOtherReceivablesNetCurrent` |
 | `other_current_assets` | `OtherAssetsCurrent`, `PrepaidExpenseAndOtherAssetsCurrent`, `PrepaidExpenseCurrent` |

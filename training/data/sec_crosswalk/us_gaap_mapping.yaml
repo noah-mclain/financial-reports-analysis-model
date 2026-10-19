@@ -137,10 +137,10 @@ rows:
   reason: Depreciation of tangible assets; depreciation is a listed alias of the item.
 - statement: IS
   tag: DepreciationAndAmortization
-  canonical_id: depreciation_amortization
+  canonical_id: null
   doc_phrases:
   - The current period expense charged against earnings on long-lived, physical
-  reason: Depreciation of physical assets and amortization of intangibles; the combined line.
+  reason: Defined for assets not used in production and not intended for resale; narrower than the item.
 - statement: IS
   tag: DepreciationDepletionAndAmortization
   canonical_id: null
