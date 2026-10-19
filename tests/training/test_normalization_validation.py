@@ -9,8 +9,10 @@ from dataset_contracts import DatasetError
 from normalization_validation import load_selection, main, prepare_validation
 from test_build_dataset import Files, pair
 from test_dataset_builder import row, valid_source
+from test_dataset_contracts import cik_in, source
 
 from fra_core.pools import Pool
+from fra_core.split import Part
 
 
 @pytest.fixture
@@ -18,6 +20,16 @@ def files(tmp_path: Path) -> Files:
     files = Files(tmp_path)
     # A later duplicate must not shift the identity/metadata aligned to the one rendered row.
     files.write((*pair(), row(valid_source(), "z-duplicate")))
+    assert build(files.args()) == 0
+    return files
+
+
+@pytest.fixture
+def holdout_roster(tmp_path: Path) -> Files:
+    files = Files(tmp_path)
+    examples = pair()
+    held = source(cik_in(Part.HOLDOUT))
+    files.write(examples, records=(*(e.source_record for e in examples), held))
     assert build(files.args()) == 0
     return files
 
@@ -62,6 +74,38 @@ def test_reconstruction_keeps_deduped_example_identity(files: Files) -> None:
     assert selected.rows[0].example_id == "b-1"
     assert selected.rows[0].issuer.startswith("cik:")
     assert selected.rows[0].period == "annual"
+
+
+def test_holdout_metadata_preserves_builder_partition(holdout_roster: Files) -> None:
+    selected = prepare(holdout_roster)
+    manifest = json.loads((holdout_roster.out / "manifest.json").read_text())
+    assert selected.dataset_manifest.model_dump(mode="json") == manifest
+    assert selected.dataset_manifest.fit_rows_after == manifest["fit_rows_after"] == 1
+    assert selected.available_rows == manifest["validation_rows_after"] == 1
+    assert [r.example_id for r in selected.rows] == ["b-1"]
+
+
+def test_holdout_example_is_refused_without_outputs(
+    holdout_roster: Files, capsys: pytest.CaptureFixture[str]
+) -> None:
+    files = holdout_roster
+    original_dataset = {p.name: p.read_bytes() for p in files.out.iterdir()}
+    held = source(cik_in(Part.HOLDOUT))
+    files.write((*pair(), row(held, "held-1")))
+    message = "holdout source is excluded from supervision"
+    with pytest.raises(DatasetError, match=message):
+        prepare(files)
+    assert main(args(files)) == 1
+    assert message in capsys.readouterr().err
+    assert not (files.root / "evaluation").exists()
+    assert {p.name: p.read_bytes() for p in files.out.iterdir()} == original_dataset
+
+    rejected_dataset = files.root / "rejected-dataset"
+    build_args = files.args()
+    build_args[build_args.index("--out-dir") + 1] = str(rejected_dataset)
+    assert build(build_args) == 1
+    assert message in capsys.readouterr().err
+    assert not rejected_dataset.exists()
 
 
 def test_cli_writes_a_bound_selection_and_predictions_and_refuses_overwrite(files: Files) -> None:
