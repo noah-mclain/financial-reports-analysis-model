@@ -5,6 +5,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
+import yaml
 from dataset_contracts import DatasetError, canonical_json
 from pydantic import ValidationError
 from sec_crosswalk import AbstentionPolicy, TagKey, taxonomy_sha256
@@ -72,6 +73,20 @@ AMBIGUOUS = MappingRow(
     doc_phrases=("portion of",),
     reason="two items",
 )
+
+
+@pytest.mark.parametrize("companion", ["NetIncomeLoss", "MissingTag"])
+def test_mapping_refuses_self_or_missing_companion(tmp_path: Path, companion: str) -> None:
+    data = yaml.safe_load(MAPPING_PATH.read_text())
+    data["excluded"][0]["companion"] = {
+        "tag": companion,
+        "canonical_id": "net_income_attributable_parent",
+        "doc_phrases": ["parent"],
+    }
+    path = tmp_path / "mapping.yaml"
+    path.write_text(yaml.safe_dump(data))
+    with pytest.raises(DatasetError, match=r"companion.*(self|missing)"):
+        load_mapping(path, taxonomy())
 
 
 def test_reads_standard_tags_and_parses_namespace_and_version(tmp_path: Path) -> None:
@@ -160,7 +175,7 @@ def test_committed_mapping_is_valid_against_the_taxonomy() -> None:
             ).read_bytes()
         ).hexdigest()
     )
-    mapped = {row.canonical_id for row in mapping.rows if row.canonical_id}
+    mapped = {row.canonical_id for row in mapping.entry_rows if row.canonical_id}
     # Every taxonomy item is either mapped by some tag or recorded as having none.
     assert mapped | set(mapping.unmapped_items) == set(items)
     assert not mapped & set(mapping.unmapped_items)
@@ -295,6 +310,20 @@ def test_draft_is_independent_of_input_order() -> None:
     assert forward.content_sha256() == backward.content_sha256()
 
 
+def test_only_companion_exclusions_add_requirements_to_draft_entries() -> None:
+    mapping = committed_mapping()
+    draft = build_draft(synthetic_vocabulary(mapping), mapping, taxonomy())
+    conditional = {
+        entry.key.tag: entry.requires_companion
+        for entry in draft.entries
+        if entry.requires_companion is not None
+    }
+    assert conditional == {
+        "NetIncomeLoss": "ProfitLoss",
+        "StockholdersEquity": "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+    }
+
+
 def test_draft_refuses_a_phrase_missing_from_the_definition() -> None:
     with pytest.raises(DatasetError, match=r"Assets.*us-gaap/2024"):
         build_draft(
@@ -367,7 +396,7 @@ def test_committed_mapping_excludes_the_parent_share_tags_instead_of_nulling_the
     mapping = committed_mapping()
     excluded = {(x.statement, x.tag) for x in mapping.excluded}
     assert excluded >= {("IS", "NetIncomeLoss"), ("BS", "StockholdersEquity")}
-    # An excluded tag is neither mapped nor an explicit null.
+    # Excluded tags are not unconditional mapping rows.
     assert not excluded & {(r.statement, r.tag) for r in mapping.rows}
     assert all(x.reason for x in mapping.excluded)
 

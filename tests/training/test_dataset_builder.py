@@ -100,6 +100,31 @@ def test_render_english_row_exact_bytes() -> None:
     }
 
 
+def test_shared_prompt_supplies_the_closed_catalog_and_json_response_schema() -> None:
+    from dataset_builder import normalization_prompt
+
+    taxonomy = load_taxonomy()
+    prompt = normalization_prompt(taxonomy)
+    # The two JSON lines are inputs the model consumes, not copies of source text.
+    catalog, schema = [json.loads(line) for line in prompt.splitlines()[1:]]
+    assert set(catalog["income"]) == {i.id for i in taxonomy.for_statement(StatementType.INCOME)}
+    assert set(catalog["balance"]) == {i.id for i in taxonomy.for_statement(StatementType.BALANCE)}
+    assert schema["required"] == ["canonical_id"]
+    assert schema["additionalProperties"] is False
+    assert schema["properties"]["canonical_id"]["anyOf"] == [
+        {"type": "string"},
+        {"type": "null"},
+    ]
+
+
+def test_dataset_cannot_use_a_taxonomy_different_from_the_prompt_catalog() -> None:
+    parts = partitioned((row(fit_source(), "a"),), (row(valid_source(), "b"),))
+    manifest = parts.manifest.model_copy(update={"taxonomy_sha256": "f" * 64})
+    parts = parts.model_copy(update={"manifest": manifest})
+    with pytest.raises(DatasetError, match=r"taxonomy.*prompt"):
+        build_dataset(parts, count_tokens=lambda messages: 1, tokenizer_id=TOKENIZER)
+
+
 def test_render_arabic_label_is_not_escaped() -> None:
     record = fit_source(source=Source.PDF, language="ar")
     pdf_row = row(

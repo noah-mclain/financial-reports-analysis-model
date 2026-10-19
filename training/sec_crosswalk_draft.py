@@ -12,7 +12,8 @@ Interpretations fixed here, in one place:
 - The statement codes of ``pre.txt`` are listed in ``STATEMENT_CODES``. The decoder drops, with a
   counted reason and before resolution, any other code (``unsupported_statement_code``), any
   standard namespace other than the mapping's (``unsupported_namespace``) and any tag under the
-  mapping's ``excluded`` section (``ambiguous_semantics``). It never turns a drop into a null.
+  mapping's ``excluded`` section without its required presentation companion
+  (``ambiguous_semantics``). It never turns a drop into a null.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from dataset_contracts import Contract, DatasetError, Sha256, canonical_json, digest
+from dataset_contracts import Contract, DatasetError, Sha256, Text, canonical_json, digest
 from pydantic import Field, ValidationError
 from sec_crosswalk import (
     AbstentionPolicy,
@@ -146,12 +147,21 @@ class MappingRow(Contract):
     reason: str
 
 
+class CompanionRule(Contract):
+    """A conditional target when a standard total line shares the presentation report."""
+
+    tag: Text
+    canonical_id: Text
+    doc_phrases: tuple[Text, ...] = Field(min_length=1)
+
+
 class MappingExclusion(Contract):
-    """A tag the decoder drops before resolution because its item cannot be told from the tag."""
+    """A tag dropped unless its optional presentation companion disambiguates it."""
 
     statement: Literal["BS", "IS"]
     tag: str
     reason: str
+    companion: CompanionRule | None = None
 
 
 class CuratedMapping(Contract):
@@ -163,6 +173,21 @@ class CuratedMapping(Contract):
     sha256: Sha256
     source_name: str
 
+    @property
+    def entry_rows(self) -> tuple[MappingRow, ...]:
+        """Unconditional and conditional entries share target and vocabulary validation."""
+        return self.rows + tuple(
+            MappingRow(
+                statement=x.statement,
+                tag=x.tag,
+                canonical_id=x.companion.canonical_id,
+                doc_phrases=x.companion.doc_phrases,
+                reason=x.reason,
+            )
+            for x in self.excluded
+            if x.companion is not None
+        )
+
 
 def _check_targets(mapping: CuratedMapping, taxonomy: Taxonomy) -> None:
     items = {item.id: item for item in taxonomy.items}
@@ -173,7 +198,20 @@ def _check_targets(mapping: CuratedMapping, taxonomy: Taxonomy) -> None:
     for statement, tag in dropped:
         if any((row.statement, row.tag) == (statement, tag) for row in mapping.rows):
             raise DatasetError(f"{statement} {tag}: both a mapping row and excluded")
-    for row in mapping.rows:
+    for exclusion in mapping.excluded:
+        rule = exclusion.companion
+        if rule is None:
+            continue
+        if rule.tag == exclusion.tag:
+            raise DatasetError(f"{exclusion.tag}: companion is self-referencing")
+        if not any(
+            row.statement == exclusion.statement
+            and row.tag == rule.tag
+            and row.canonical_id is not None
+            for row in mapping.rows
+        ):
+            raise DatasetError(f"{exclusion.tag}: companion {rule.tag!r} missing positive mapping")
+    for row in mapping.entry_rows:
         if (row.statement, row.tag) in seen:
             raise DatasetError(f"{row.statement} {row.tag}: mapped twice")
         seen.add((row.statement, row.tag))
@@ -208,7 +246,7 @@ def load_mapping(path: Path, taxonomy: Taxonomy) -> CuratedMapping:
         _check_targets(mapping, taxonomy)
     except DatasetError as exc:
         raise DatasetError(f"{path}: {exc}") from exc
-    mapped = {row.canonical_id for row in mapping.rows if row.canonical_id}
+    mapped = {row.canonical_id for row in mapping.entry_rows if row.canonical_id}
     ids = {item.id for item in taxonomy.items}
     both = mapped & set(mapping.unmapped_items)
     if both or set(mapping.unmapped_items) - ids:
@@ -253,7 +291,7 @@ def build_draft(vocabulary: Vocabulary, mapping: CuratedMapping, taxonomy: Taxon
         raise DatasetError(f"no {mapping.namespace} vocabulary version was supplied")
     entries: list[CrosswalkEntry] = []
     for version in versions:
-        for row in mapping.rows:
+        for row in mapping.entry_rows:
             definition = vocabulary[version].get(row.tag)
             if definition is None:
                 continue
@@ -274,6 +312,16 @@ def build_draft(vocabulary: Vocabulary, mapping: CuratedMapping, taxonomy: Taxon
                     abstention_reason=None if row.canonical_id else row.reason,
                     semantic_reference=f"{TAG_MEMBER} {version} {row.tag}",
                     semantic_evidence_sha256=_evidence_sha256(definition),
+                    requires_companion=next(
+                        (
+                            exclusion.companion.tag
+                            for exclusion in mapping.excluded
+                            if exclusion.statement == row.statement
+                            and exclusion.tag == row.tag
+                            and exclusion.companion is not None
+                        ),
+                        None,
+                    ),
                 )
             )
     return Crosswalk(

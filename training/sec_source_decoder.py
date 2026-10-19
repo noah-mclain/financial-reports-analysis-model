@@ -14,14 +14,20 @@ import json
 import re
 import zlib
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 from dataset_contracts import DatasetError, text_lines
 from pydantic import ValidationError
 from sec_crosswalk import Crosswalk, CrosswalkEntry, TagKey
-from sec_crosswalk_draft import CUSTOM_NAMESPACE, CUSTOM_VERSION, STATEMENT_CODES, CuratedMapping
+from sec_crosswalk_draft import (
+    CUSTOM_NAMESPACE,
+    CUSTOM_VERSION,
+    STATEMENT_CODES,
+    CompanionRule,
+    CuratedMapping,
+)
 from sec_source_access import VerifiedPayload
 from sec_source_pass import PayloadRow
 
@@ -29,6 +35,7 @@ DROP_REASONS = (
     "unsupported_statement_code",
     "unsupported_namespace",
     "ambiguous_semantics",
+    "contradictory_presentation",
     "parenthetical",
     "empty_label",
 )
@@ -48,6 +55,7 @@ class Resolved:
     kind: str
     key: TagKey
     canonical_id: str | None
+    companion: bool = False
 
 
 def decode_payload(verified: VerifiedPayload) -> list[PayloadRow]:
@@ -85,16 +93,94 @@ class Classifier:
         self._mapping = mapping
         self._entries = _index(crosswalk)
         self._excluded = _excluded(mapping)
+        self._rules: dict[tuple[str, str], CompanionRule] = {
+            (x.statement, x.tag): x.companion for x in mapping.excluded if x.companion is not None
+        }
 
     def classify(self, row: PayloadRow) -> Dropped | Resolved:
+        """Classify without filing context; use classify_rows for conditional parent tags."""
         return _classify(row, self._mapping, self._entries, self._excluded)
+
+    def classify_rows(
+        self, rows: Sequence[PayloadRow]
+    ) -> Iterator[tuple[PayloadRow, Dropped | Resolved]]:
+        """Index standard companions once per payload, scoped to adsh/stmt/report."""
+        required: dict[tuple[str, str], str | None] = {
+            (row.statement, row.tag): row.canonical_id
+            for row in self._mapping.rows
+            if any(
+                statement == row.statement and rule.tag == row.tag
+                for (statement, _), rule in self._rules.items()
+            )
+        }
+        companions = set()
+        labels: dict[tuple[str, str, int, str], set[str]] = defaultdict(set)
+        for row in rows:
+            target = required.get((row.stmt, row.tag))
+            if target is None:
+                continue
+            outcome = self.classify(row)
+            if isinstance(outcome, Resolved) and outcome.canonical_id == target:
+                key = (row.adsh, row.stmt, row.report, row.tag)
+                companions.add(key)
+                labels[key].add(_label_key(row.plabel))
+        for row in rows:
+            excluded = self._excluded
+            rule = self._rules.get((row.stmt, row.tag))
+            companion_key = (row.adsh, row.stmt, row.report, rule.tag) if rule else None
+            initial = _classify(row, self._mapping, self._entries, excluded)
+            if rule is not None and companion_key in companions:
+                if (
+                    isinstance(initial, Dropped)
+                    and initial.reason == "ambiguous_semantics"
+                    and (
+                        _label_key(row.plabel) in labels[companion_key]
+                        or _contradicts_parent(row.plabel)
+                    )
+                ):
+                    yield row, Dropped("contradictory_presentation")
+                    continue
+                if initial == Dropped("ambiguous_semantics"):
+                    excluded = excluded - {(row.stmt, row.tag)}
+            outcome = _classify(row, self._mapping, self._entries, excluded)
+            if (
+                isinstance(outcome, Resolved)
+                and outcome.kind == "mapped"
+                and rule is not None
+                and companion_key in companions
+            ):
+                outcome = Resolved(outcome.kind, outcome.key, outcome.canonical_id, companion=True)
+            yield row, outcome
 
     def has_entry(self, key: TagKey) -> bool:
         return key in self._entries
 
 
 def classify(row: PayloadRow, mapping: CuratedMapping, crosswalk: Crosswalk) -> Dropped | Resolved:
+    """Without filing context, conditional tags are dropped; use Classifier.classify_rows."""
     return Classifier(mapping, crosswalk).classify(row)
+
+
+# A parent-share line is never printed with these words: they mean the line is, or includes, the
+# noncontrolling share. Dropping a label that names one loses an example; keeping it mislabels.
+_TOTAL_LABEL_WORDS = ("noncontrolling", "minority", "consolidated", "غيرالمسيطرة", "الأقلية")
+_TOTAL_LABEL_ABBREVIATIONS = frozenset({"nci", "ncis"})
+_BARE_TOTAL_LABELS = frozenset({"totalequity"})
+
+
+def _contradicts_parent(label: str) -> bool:
+    """The label names the noncontrolling share, or is the bare total, so it is not the parent's."""
+    key = _label_key(label)
+    return (
+        key in _BARE_TOTAL_LABELS
+        or any(word in key for word in _TOTAL_LABEL_WORDS)
+        or not _TOTAL_LABEL_ABBREVIATIONS.isdisjoint(re.findall(r"[a-z]+", label.casefold()))
+    )
+
+
+def _label_key(label: str) -> str:
+    """A label with case, spacing and punctuation removed: ``NET(LOSS)`` equals ``Net (loss)``."""
+    return "".join(c for c in label.casefold() if c.isalnum())
 
 
 def _index(crosswalk: Crosswalk) -> dict[TagKey, CrosswalkEntry]:
@@ -161,13 +247,12 @@ class Coverage:
 def coverage_report(
     payloads: Iterable[VerifiedPayload], mapping: CuratedMapping, crosswalk: Crosswalk
 ) -> Coverage:
-    entries, excluded = _index(crosswalk), _excluded(mapping)
-    listed = {(r.statement, r.tag) for r in mapping.rows} | excluded
+    classifier = Classifier(mapping, crosswalk)
+    listed = {(r.statement, r.tag) for r in mapping.rows} | _excluded(mapping)
     report = Coverage()
     for verified in payloads:
-        for row in decode_payload(verified):
+        for row, result in classifier.classify_rows(decode_payload(verified)):
             report.rows += 1
-            result = _classify(row, mapping, entries, excluded)
             if isinstance(result, Dropped):
                 report.drops[result.reason] += 1
                 continue

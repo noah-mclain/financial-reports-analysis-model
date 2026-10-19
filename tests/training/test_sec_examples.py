@@ -3,8 +3,10 @@
 import json
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+import sec_examples
 from build_dataset import main as dataset_main
 from sec_crosswalk_cli import main as crosswalk_main
 from sec_crosswalk_fixtures import committed_mapping, synthetic_vocabulary, tag_line
@@ -48,6 +50,34 @@ def verdict_for(row: dict[str, object]) -> dict[str, object]:
     if row["kind"] in ("subjects", "roles-subjects"):
         return row
     return {"key": row["key"], "verdict": "approve", "note": ""}
+
+
+def test_resolution_cache_separates_companion_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[bool] = []
+
+    def resolve(key: object, **kwargs: object) -> bool:
+        companion_present = kwargs["companion_present"]
+        assert isinstance(companion_present, bool)
+        calls.append(companion_present)
+        return companion_present
+
+    class Classifier:
+        def has_entry(self, key: object) -> bool:
+            return True
+
+    builder = object.__new__(sec_examples.ExampleBuilder)
+    builder._classifier = Classifier()
+    builder._bundle = SimpleNamespace(crosswalk=None, policies=(), trust=None)
+    builder._taxonomy = None
+    builder._decisions = {}
+    role = type("Role", (), {"role": "corporate"})()
+    key = object()
+    monkeypatch.setattr(sec_examples, "resolve_tag", resolve)
+
+    assert builder._decide(role, key, "source", True) is True
+    assert builder._decide(role, key, "source", False) is False
+    assert builder._decide(role, key, "source", True) is True
+    assert calls == [True, False]
 
 
 class Pipeline:
@@ -279,6 +309,35 @@ def test_the_batch_size_changes_nothing(pipeline: Pipeline, tmp_path: Path) -> N
     assert main([*pipeline.examples_args(second), "--batch-issuers", "100"]) == 0
     for name in ("examples.jsonl", "sources.jsonl", "approved.txt"):
         assert (first / name).read_bytes() == (second / name).read_bytes()
+
+
+def test_parent_share_examples_resolve_through_the_approved_conditional_entries(
+    tmp_path: Path,
+) -> None:
+    pipeline = Pipeline(
+        tmp_path / "pipeline",
+        rows=[
+            pre_line(1, 1, "Parent income", stmt="IS", tag="NetIncomeLoss"),
+            pre_line(1, 2, "Total income", stmt="IS", tag="ProfitLoss"),
+            pre_line(1, 3, "Parent equity", tag="StockholdersEquity"),
+            pre_line(
+                1,
+                4,
+                "Total equity",
+                tag="StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+            ),
+            pre_line(2, 1, "Income without companion", stmt="IS", tag="NetIncomeLoss"),
+        ],
+    )
+    out = tmp_path / "examples"
+    assert main(pipeline.examples_args(out)) == 0
+    examples = [json.loads(line) for line in (out / "examples.jsonl").read_text().splitlines()]
+    targets = {example["tag"]: example["canonical_id"] for example in examples}
+    assert targets["us-gaap:NetIncomeLoss"] == "net_income_attributable_parent"
+    assert targets["us-gaap:StockholdersEquity"] == "equity_attributable_parent"
+    counts = json.loads((out / "counts.json").read_text())
+    assert counts["dropped"] == {"ambiguous_semantics": 1}
+    assert counts["resolved"] == {"mapped": 4}
 
 
 def test_the_output_directory_is_never_reused(pipeline: Pipeline, tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]

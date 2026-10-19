@@ -61,6 +61,20 @@ def test_log_output_has_start_throttle_and_finish_lines() -> None:
     assert "\r" not in stream.getvalue()
 
 
+def test_slow_rows_can_check_time_without_waiting_for_256_rows() -> None:
+    stream, clock = FakeStream(tty=False), Clock()
+    progress = Progress("inference", total=2, stream=stream, clock=clock)
+    clock.tick(31)
+    progress.advance(check_clock=True)
+    lines = stream.getvalue().splitlines()
+    assert len(lines) == 2
+    assert "1/2 rows (50.0%)" in lines[1]
+    assert "eta" in lines[1]
+    clock.tick(1)
+    progress.advance(check_clock=True)
+    assert len(stream.getvalue().splitlines()) == 2
+
+
 def test_unknown_zero_and_over_total() -> None:
     stream, clock = FakeStream(tty=False), Clock()
     progress = Progress("unknown", unit="rows", stream=stream, clock=clock)

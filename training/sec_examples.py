@@ -164,7 +164,7 @@ class ExampleBuilder:
         self._progress_total = progress_total
         self._progress: Progress | None = None
         self._classifier = Classifier(mapping, bundle.crosswalk)
-        self._decisions: dict[tuple[str, object], Any] = {}
+        self._decisions: dict[tuple[str, object, bool], Any] = {}
         self._authorized: set[str] = set()
         self.counts: Counter[str] = Counter()
         self.dropped: Counter[str] = Counter()
@@ -181,10 +181,13 @@ class ExampleBuilder:
             raise DatasetError(f"{self._prepared}: no prepared archive")
         return found
 
-    def _decide(self, role: RoleAssessment, key: TagKey, source_id: str) -> Any:
+    def _decide(
+        self, role: RoleAssessment, key: TagKey, source_id: str, companion_present: bool = False
+    ) -> Any:
         """The resolution of a key for a role, computed once per role and key or scope."""
         subject: object = key if self._classifier.has_entry(key) else key.scope()
-        cached = self._decisions.get((role.role, subject))
+        cache_key = (role.role, subject, companion_present)
+        cached = self._decisions.get(cache_key)
         if cached is None:
             cached = resolve_tag(
                 key,
@@ -194,8 +197,9 @@ class ExampleBuilder:
                 role=role,
                 policies=self._bundle.policies,
                 trust=self._bundle.trust,
+                companion_present=companion_present,
             )
-            self._decisions[(role.role, subject)] = cached
+            self._decisions[cache_key] = cached
         return cached
 
     def _authorize_filing(self, role: RoleAssessment, source_id: str) -> None:
@@ -222,15 +226,14 @@ class ExampleBuilder:
             raise DatasetError(f"{source_id}: no role assessment in the trust directory")
         self._authorize_filing(role, source_id)
         cik = int(str(filing.source_record.issuer.cik))
-        for row in decode_payload(verified):
+        for row, outcome in self._classifier.classify_rows(decode_payload(verified)):
             self.counts["rows_read"] += 1
             if self._progress is not None:
                 self._progress.advance()
-            outcome = self._classifier.classify(row)
             if isinstance(outcome, Dropped):
                 self.dropped[outcome.reason] += 1
                 continue
-            result = self._decide(role, outcome.key, source_id)
+            result = self._decide(role, outcome.key, source_id, outcome.companion)
             if isinstance(result, UnresolvedResult):
                 self.dropped[f"unresolved:{result.reason}"] += 1
                 continue
