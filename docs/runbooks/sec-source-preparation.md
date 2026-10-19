@@ -153,6 +153,7 @@ yields a decoded row or a counted drop:
 | `unsupported_statement_code` | `stmt` is not `BS`, `IS`, `CI`, `CF` or `EQ` (so `SI`, `UN`) |
 | `unsupported_namespace` | a standard tag whose namespace is not the mapping's (`ifrs`, `us-gaap-ebp`) |
 | `ambiguous_semantics` | the tag is under `excluded` in the mapping |
+| `contradictory_presentation` | parent and companion lines in one report have the same label once casefolded and reduced to letters and digits; only lines that themselves resolve as the companion's total count; also a parent line whose label contains `noncontrolling`, `minority`, `consolidated`, the word `NCI`, the Arabic noncontrolling or minority terms, or is the bare "total equity" (the line is, or includes, the noncontrolling share) |
 | `parenthetical` | `inpth` is 1: a parenthetical note, not a line item |
 | `empty_label` | the label is empty after whitespace normalization |
 
@@ -406,6 +407,14 @@ The draft package was regenerated (444 entries; mapping hash `cd856f9a...`, cros
 `68d44b3f...`; scratch directory `draft4`, after three stale reason strings were corrected) and `make sec-coverage` rerun into
 `var/sec_prepared/coverage-report-4.json` and `unlisted-tags-4.jsonl` in about 35 s:
 
+The later hash-bound companion requirement changes the crosswalk hash and packet rows; these
+values are **to be regenerated**. On the eight archives (read-only probe, 3,742,460 rows) the two parent tags give 14,695 resolved
+rows, 340 `contradictory_presentation` drops, 46,948 `ambiguous_semantics`, 112 `parenthetical`,
+41 `empty_label` and 2,479 `unsupported_statement_code`. The most frequent drops are equal labels
+("net loss" 54, "net income" 39) and labels naming the noncontrolling share ("total stockholders
+equity excluding noncontrolling interests" 14, which is a genuine parent label dropped by the
+over-inclusive word check). Whether the 14,695 kept rows carry any wrong label is not measured.
+
 | Quantity | First report | After the merge and the review |
 | --- | --- | --- |
 | rows mapped | 772,247 | 771,591 |
@@ -418,6 +427,32 @@ The draft package was regenerated (444 entries; mapping hash `cd856f9a...`, cros
 | unlisted tags covering 50 / 80 / 90 / 95 / 99% of the unlisted rows | 57 / 281 / 531 / 813 / 1,527 | 55 / 276 / 522 / 803 / 1,517 |
 
 Custom rows (370,216) and the other drop counts are unchanged.
+
+## Coverage with conditional parent-share companions
+
+Measured read-only on 2026-10-19 across the same 3,742,460 prepared rows in 33,942 filings,
+using the companion-rule draft described in [sec-crosswalk-data.md](sec-crosswalk-data.md):
+
+| Resolution or drop reason | Before companions | With companions |
+| --- | --- | --- |
+| mapped by the crosswalk | 771,591 | 786,626 |
+| null entry | 107,899 | 107,899 |
+| outside crosswalk | 2,021,579 | 2,021,579 |
+| custom extension | 370,216 | 370,216 |
+| dropped: `ambiguous_semantics` | 62,676 | 47,641 |
+| dropped: `parenthetical` | 270,744 | 270,744 |
+| dropped: `unsupported_namespace` | 82,489 | 82,489 |
+| dropped: `unsupported_statement_code` | 54,161 | 54,161 |
+| dropped: `empty_label` | 1,105 | 1,105 |
+
+Resolved rows plus dropped rows still sum to 3,742,460. `NetIncomeLoss` contributes 7,564
+new parent-income classifications and `StockholdersEquity` 7,471 new parent-equity
+classifications. A companion must be a standard nonparenthetical line in the same
+`adsh`/`stmt`/presentation `report`; it is not a reporting-period match. The absent-companion
+rows and all three LLC/partnership tags remain `ambiguous_semantics`.
+These are draft classification counts, before negative-control override and unknown-role
+drops. The linked data runbook gives the per-version drops, role counts, dedupe conflict rates,
+changed approval hashes and scratch artifact location. No approvals or datasets were changed.
 
 ## Roles
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from dataset_contracts import Sha256
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
@@ -112,12 +112,22 @@ class CrosswalkEntry(_Contract):
     abstention_reason: Text | None
     semantic_reference: Text
     semantic_evidence_sha256: Sha256
+    requires_companion: Text | None = None
 
     @model_validator(mode="after")
     def _target(self) -> CrosswalkEntry:
         if (self.canonical_id is None) != (self.abstention_reason is not None):
             raise ValueError("null target requires an abstention reason only")
+        if self.requires_companion is not None and self.canonical_id is None:
+            raise ValueError("requires_companion is valid only on a positive target")
         return self
+
+
+def _entry_payload(entry: CrosswalkEntry) -> dict[str, Any]:
+    """An entry without a companion requirement hashes as it did before the field existed."""
+    return entry.model_dump(
+        mode="json", exclude=None if entry.requires_companion else {"requires_companion"}
+    )
 
 
 class Crosswalk(_TaxonomySubject):
@@ -139,7 +149,7 @@ class Crosswalk(_TaxonomySubject):
         checked = Crosswalk.model_validate(self)
         payload = checked.model_dump(mode="json")
         payload["entries"] = sorted(
-            (entry.model_dump(mode="json") for entry in checked.entries),
+            (_entry_payload(entry) for entry in checked.entries),
             key=lambda entry: json.dumps(entry, sort_keys=True, ensure_ascii=False),
         )
         return _digest(payload)
@@ -254,7 +264,11 @@ class AbstainResult(_Resolution):
 class UnresolvedResult(_Resolution):
     state: Literal["unresolved"] = "unresolved"
     reason: Literal[
-        "missing_key", "missing_entry", "unknown_role", "negative_control_policy_missing"
+        "missing_key",
+        "missing_entry",
+        "unknown_role",
+        "negative_control_policy_missing",
+        "companion_required",
     ]
 
 
@@ -303,6 +317,7 @@ def resolve_tag(
     role: RoleAssessment,
     policies: tuple[AbstentionPolicy, ...],
     trust: TrustContext,
+    companion_present: bool = False,
 ) -> Resolution:
     """Authorize all originals before resolving one exact key.
 
@@ -392,6 +407,8 @@ def resolve_tag(
             policy_sha256=None,
             policy_approval=None,
         )
+    if entry.requires_companion is not None and not companion_present:
+        return UnresolvedResult(key=key, binding=binding, reason="companion_required")
     return MappedResult(
         key=key,
         binding=binding,

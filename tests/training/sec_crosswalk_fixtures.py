@@ -51,8 +51,8 @@ def synthetic_vocabulary(
 
     Excluded tags are defined too, as the real vocabulary defines them.
     """
-    mapped = [(row.tag, f"{row.doc_phrases[0]} (synthetic)") for row in mapping.rows] + [
-        (x.tag, f"{x.tag} excluded definition") for x in mapping.excluded
+    mapped = [(row.tag, f"{row.doc_phrases[0]} (synthetic)") for row in mapping.entry_rows] + [
+        (x.tag, f"{x.tag} excluded definition") for x in mapping.excluded if x.companion is None
     ]
     return merge_vocabularies(
         TagDefinition(
