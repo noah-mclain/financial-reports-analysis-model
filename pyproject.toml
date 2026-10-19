@@ -15,6 +15,9 @@ dependencies = [
   # package only when the project names it itself. They pin the versions both profiles run.
   "torch==2.14.0",
   "torchvision==0.29.0",
+  # Apple-silicon normalization training/inference; Docker uses llama.cpp instead.
+  "mlx==0.32.2 ; sys_platform == 'darwin'",
+  "mlx-lm[train]==0.31.3 ; sys_platform == 'darwin'",
   # Named here, with the override below, in place of the GUI build that rapidocr asks for.
   "opencv-python-headless==5.0.0.93",
 ]
@@ -113,4 +116,5 @@ markers = [
   "slow: needs model weights or OCR, excluded from the default run",
   "golden: reads documents from eval/golden",
   "mac: needs Apple Vision or the Metal device",
+  "sockets: binds a local TCP socket, which a sandboxed worker may not do",
 ]

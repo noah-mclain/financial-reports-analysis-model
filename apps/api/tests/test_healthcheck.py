@@ -97,6 +97,7 @@ def reply(body: bytes, content_type: str = "application/json") -> bytes:
     return head.encode() + body
 
 
+@pytest.mark.sockets
 def test_check_returns_the_body_when_the_profile_matches(serve_app: Serve, tmp_path: Path) -> None:
     job_settings = settings_at(tmp_path)
     port = serve_app(create_app(Profile.DOCKER, job_settings))
@@ -104,6 +105,7 @@ def test_check_returns_the_body_when_the_profile_matches(serve_app: Serve, tmp_p
     assert check(port, expect_profile=Profile.DOCKER)["profile"] == "docker"
 
 
+@pytest.mark.sockets
 def test_check_fails_when_the_profile_differs(serve_app: Serve, tmp_path: Path) -> None:
     job_settings = settings_at(tmp_path)
     port = serve_app(create_app(Profile.DOCKER, job_settings))
@@ -112,11 +114,13 @@ def test_check_fails_when_the_profile_differs(serve_app: Serve, tmp_path: Path) 
         check(port, expect_profile=Profile.NATIVE)
 
 
+@pytest.mark.sockets
 def test_check_fails_when_nothing_is_listening() -> None:
     with pytest.raises(HealthCheckError, match="unreachable"):
         check(unused_port(), expect_profile=Profile.DOCKER)
 
 
+@pytest.mark.sockets
 @pytest.mark.parametrize(
     ("raw", "message"),
     [
@@ -134,6 +138,7 @@ def test_check_fails_cleanly_on_a_bad_reply(serve_raw: ServeRaw, raw: bytes, mes
         check(serve_raw(raw), expect_profile=Profile.DOCKER)
 
 
+@pytest.mark.sockets
 def test_main_prints_the_body_and_exits_zero_when_healthy(
     serve_app: Serve,
     monkeypatch: pytest.MonkeyPatch,
@@ -148,6 +153,7 @@ def test_main_prints_the_body_and_exits_zero_when_healthy(
     assert json.loads(capsys.readouterr().out)["profile"] == "docker"
 
 
+@pytest.mark.sockets
 def test_main_exits_one_and_says_why_when_unhealthy(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

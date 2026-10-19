@@ -36,12 +36,12 @@ class Progress:
         else:
             self._write(f"{_timestamp(self._started)} {stage} started")
 
-    def advance(self, n: int = 1) -> None:
-        """Add work to the count and render only when the stream's interval elapsed."""
+    def advance(self, n: int = 1, *, check_clock: bool = False) -> None:
+        """Add work; slow operations can check time each call without bypassing throttling."""
         if self._finished:
             return
         self._count += n
-        if n < 256:
+        if n < 256 and not check_clock:
             self._clock_countdown -= 1
             if self._clock_countdown > 0:
                 return
