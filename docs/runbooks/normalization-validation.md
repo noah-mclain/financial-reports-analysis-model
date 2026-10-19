@@ -1,6 +1,6 @@
 # Normalization validation baselines
 
-This comparison uses only the validation subdivision of `train`. It neither reads nor scores
+This comparison uses only the validation subdivision of `train`. It does not score
 the train holdout, `model_test` or `blind`, and its scores do not establish Gate C. The
 current SEC dataset has no PDF or Arabic examples.
 
@@ -20,12 +20,17 @@ make normalization-prepare DATASET_DIR=/path/to/dataset_sec_2 \
     OUT_DIR=var/normalization-validation/full
 ```
 
-All input paths are explicit. The registry must exist. The command checks the source roster,
-registry and fit/validation eligibility before opening example labels. It uses the same
-partition, approvals, recorded moves and looks as the dataset builder. It reproduces the
+All input paths are explicit. The registry must exist. The command validates the source roster
+and registry before opening example labels. It uses the same partition, approvals, recorded
+moves and looks as the dataset builder. It reproduces the
 partition manifest, per-issuer deduplication, counts and exact rendered fit and validation
 bytes, checking their recorded SHA-256 digests. It does not recount token lengths. Changed
 approvals, taxonomy, registry or split records refuse the comparison.
+
+A TRAIN roster may include train-holdout metadata, but holdout examples are rejected and never
+enter supervision, selection, scoring or generated dataset outputs; as in the builder, example
+files are parsed in memory before rejection. Strict pre-label authorization (parsing only source
+identity first) is not implemented and is a possible separate hardening task.
 
 The output directory must not exist. `selection.json` records validation examples with issuer,
 period and source/language metadata alongside the original dataset manifest. `lexicon.json`

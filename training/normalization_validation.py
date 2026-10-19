@@ -41,7 +41,7 @@ from pydantic import Field, ValidationError, model_validator
 from sec_source_access import read_registry
 
 from fra_core.pools import PoolError
-from fra_core.split import Part, SplitError, cik_key, development_documents
+from fra_core.split import SplitError, cik_key
 from fra_core.taxonomy import load_taxonomy
 from fra_ingest.label_match import LabelIndex
 
@@ -159,18 +159,6 @@ def prepare_validation(
         moves=moves,
         looks=looks,
     )
-    documents: list[dict[str, object]] = [
-        {
-            "id": s.source_id,
-            "issuer": s.issuer.name or cik_key(str(s.issuer.cik)),
-            "cik": s.issuer.cik,
-            "pool": s.pool,
-        }
-        for s in sources
-    ]
-    permitted = development_documents(documents, moves, {Part.FIT, Part.VALIDATION})
-    if len(permitted) != len(sources):
-        raise DatasetError("source roster contains holdout sources; label access refused")
     manifest = DatasetBuildManifest.model_validate_json(
         (dataset_dir / "manifest.json").read_bytes()
     )
