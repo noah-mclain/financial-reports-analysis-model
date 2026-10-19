@@ -228,6 +228,64 @@ def test_labels_differing_only_in_punctuation_and_spacing_are_contradictory() ->
     )
 
 
+@pytest.mark.parametrize(
+    "label",
+    [
+        "Net income including noncontrolling interests",
+        "Less: Net income attributable to Non-Controlling Interests",
+        "Net income attributable to minority shareholders",
+        "Consolidated net income",
+        "Net income attributable to NCI",
+        "Net income attributable to NCIs",
+        "صافي الربح العائد إلى الحصص غير المسيطرة",
+    ],
+)
+def test_parent_line_naming_the_noncontrolling_share_is_contradictory(label: str) -> None:
+    mapping, cw = crosswalk()
+    rows = [
+        row(stmt="IS", tag="NetIncomeLoss", plabel=label),
+        row(stmt="IS", tag="ProfitLoss", plabel="Profit for the year", n=2),
+    ]
+    assert next(Classifier(mapping, cw).classify_rows(rows))[1] == Dropped(
+        "contradictory_presentation"
+    )
+
+
+@pytest.mark.parametrize(
+    "label",
+    [
+        "Net income attributable to Campbell Soup Company",
+        "Net income attributable to common shareholders",
+        "Total stockholders' equity",
+        "Net income attributable to Financial Corp",
+    ],
+)
+def test_genuine_parent_labels_are_kept(label: str) -> None:
+    mapping, cw = crosswalk()
+    rows = [
+        row(stmt="IS", tag="NetIncomeLoss", plabel=label),
+        row(stmt="IS", tag="ProfitLoss", plabel="Profit for the year", n=2),
+    ]
+    result = next(Classifier(mapping, cw).classify_rows(rows))[1]
+    assert isinstance(result, Resolved) and result.companion
+
+
+def test_bare_total_equity_on_the_equity_tag_is_contradictory() -> None:
+    mapping, cw = crosswalk()
+    rows = [
+        row(stmt="BS", tag="StockholdersEquity", plabel="Total equity"),
+        row(
+            stmt="BS",
+            tag="StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+            plabel="Total equity and reserves",
+            n=2,
+        ),
+    ]
+    assert next(Classifier(mapping, cw).classify_rows(rows))[1] == Dropped(
+        "contradictory_presentation"
+    )
+
+
 def test_only_a_valid_companion_line_contributes_a_label() -> None:
     mapping, cw = crosswalk()
     rows = [

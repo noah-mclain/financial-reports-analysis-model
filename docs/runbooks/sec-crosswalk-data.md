@@ -76,7 +76,10 @@ used or inferred. Parenthetical and filer-custom lines never count as companions
 builds the companion set once per filing payload, for both coverage and example generation.
 Without the companion the decoder drops the row as `ambiguous_semantics`; direct resolution of
 the hash-bound conditional entry returns unresolved `companion_required`. Identical normalized
-parent and companion labels drop the parent as `contradictory_presentation`.
+parent and companion labels, or a parent label containing `noncontrolling`, `minority`, `consolidated`, the word `NCI`, the
+Arabic noncontrolling or minority terms, or the bare label "total equity", drop the parent as `contradictory_presentation`. The word check is deliberately
+over-inclusive: it also drops genuine parent labels such as "total stockholders equity excluding
+noncontrolling interests", which loses an example rather than keeping a wrong label.
 `load_mapping` exposes these as `CuratedMapping.excluded` and rejects a self-reference, a
 companion without a positive mapping in the same statement, and an invalid target. The
 other three, `MembersEquity`, `PartnersCapital` and `MembersCapital`, are limited liability

@@ -133,7 +133,10 @@ class Classifier:
                 if (
                     isinstance(initial, Dropped)
                     and initial.reason == "ambiguous_semantics"
-                    and _label_key(row.plabel) in labels[companion_key]
+                    and (
+                        _label_key(row.plabel) in labels[companion_key]
+                        or _contradicts_parent(row.plabel)
+                    )
                 ):
                     yield row, Dropped("contradictory_presentation")
                     continue
@@ -156,6 +159,23 @@ class Classifier:
 def classify(row: PayloadRow, mapping: CuratedMapping, crosswalk: Crosswalk) -> Dropped | Resolved:
     """Without filing context, conditional tags are dropped; use Classifier.classify_rows."""
     return Classifier(mapping, crosswalk).classify(row)
+
+
+# A parent-share line is never printed with these words: they mean the line is, or includes, the
+# noncontrolling share. Dropping a label that names one loses an example; keeping it mislabels.
+_TOTAL_LABEL_WORDS = ("noncontrolling", "minority", "consolidated", "غيرالمسيطرة", "الأقلية")
+_TOTAL_LABEL_ABBREVIATIONS = frozenset({"nci", "ncis"})
+_BARE_TOTAL_LABELS = frozenset({"totalequity"})
+
+
+def _contradicts_parent(label: str) -> bool:
+    """The label names the noncontrolling share, or is the bare total, so it is not the parent's."""
+    key = _label_key(label)
+    return (
+        key in _BARE_TOTAL_LABELS
+        or any(word in key for word in _TOTAL_LABEL_WORDS)
+        or not _TOTAL_LABEL_ABBREVIATIONS.isdisjoint(re.findall(r"[a-z]+", label.casefold()))
+    )
 
 
 def _label_key(label: str) -> str:

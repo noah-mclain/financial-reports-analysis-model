@@ -153,7 +153,7 @@ yields a decoded row or a counted drop:
 | `unsupported_statement_code` | `stmt` is not `BS`, `IS`, `CI`, `CF` or `EQ` (so `SI`, `UN`) |
 | `unsupported_namespace` | a standard tag whose namespace is not the mapping's (`ifrs`, `us-gaap-ebp`) |
 | `ambiguous_semantics` | the tag is under `excluded` in the mapping |
-| `contradictory_presentation` | parent and companion lines in one report have the same label once casefolded and reduced to letters and digits; only lines that themselves resolve as the companion's total count |
+| `contradictory_presentation` | parent and companion lines in one report have the same label once casefolded and reduced to letters and digits; only lines that themselves resolve as the companion's total count; also a parent line whose label contains `noncontrolling`, `minority`, `consolidated`, the word `NCI`, the Arabic noncontrolling or minority terms, or is the bare "total equity" (the line is, or includes, the noncontrolling share) |
 | `parenthetical` | `inpth` is 1: a parenthetical note, not a line item |
 | `empty_label` | the label is empty after whitespace normalization |
 
@@ -408,8 +408,12 @@ The draft package was regenerated (444 entries; mapping hash `cd856f9a...`, cros
 `var/sec_prepared/coverage-report-4.json` and `unlisted-tags-4.jsonl` in about 35 s:
 
 The later hash-bound companion requirement changes the crosswalk hash and packet rows; these
-values are **to be regenerated**. The new `contradictory_presentation` drop reason has not been
-measured against the SEC archives.
+values are **to be regenerated**. On the eight archives (read-only probe, 3,742,460 rows) the two parent tags give 14,695 resolved
+rows, 340 `contradictory_presentation` drops, 46,948 `ambiguous_semantics`, 112 `parenthetical`,
+41 `empty_label` and 2,479 `unsupported_statement_code`. The most frequent drops are equal labels
+("net loss" 54, "net income" 39) and labels naming the noncontrolling share ("total stockholders
+equity excluding noncontrolling interests" 14, which is a genuine parent label dropped by the
+over-inclusive word check). Whether the 14,695 kept rows carry any wrong label is not measured.
 
 | Quantity | First report | After the merge and the review |
 | --- | --- | --- |
