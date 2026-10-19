@@ -153,6 +153,7 @@ yields a decoded row or a counted drop:
 | `unsupported_statement_code` | `stmt` is not `BS`, `IS`, `CI`, `CF` or `EQ` (so `SI`, `UN`) |
 | `unsupported_namespace` | a standard tag whose namespace is not the mapping's (`ifrs`, `us-gaap-ebp`) |
 | `ambiguous_semantics` | the tag is under `excluded` in the mapping |
+| `contradictory_presentation` | parent and companion lines in one report have the same label once casefolded and reduced to letters and digits; only lines that themselves resolve as the companion's total count |
 | `parenthetical` | `inpth` is 1: a parenthetical note, not a line item |
 | `empty_label` | the label is empty after whitespace normalization |
 
@@ -405,6 +406,10 @@ noncontrolling share is included. `LoansPayableCurrent` stays mapped.
 The draft package was regenerated (444 entries; mapping hash `cd856f9a...`, crosswalk hash
 `68d44b3f...`; scratch directory `draft4`, after three stale reason strings were corrected) and `make sec-coverage` rerun into
 `var/sec_prepared/coverage-report-4.json` and `unlisted-tags-4.jsonl` in about 35 s:
+
+The later hash-bound companion requirement changes the crosswalk hash and packet rows; these
+values are **to be regenerated**. The new `contradictory_presentation` drop reason has not been
+measured against the SEC archives.
 
 | Quantity | First report | After the merge and the review |
 | --- | --- | --- |

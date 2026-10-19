@@ -35,6 +35,11 @@ Approval records go to the owner's local trust store `var/approvals/`, which is 
   - `unsupported_namespace`: a standard tag outside the mapping's namespace (for example `ifrs`
     or `us-gaap-ebp`), for which there is no mapping or policy.
   - `ambiguous_semantics`: a tag listed under `excluded:` without a satisfied companion rule.
+  - `contradictory_presentation`: parent and companion lines in one report have the same normalized label.
+- **Conditional entry field.** `requires_companion` names the standard tag that must appear in
+  the same report. It is present only on a positive target and is part of the crosswalk content
+  hash. `resolve_tag` defaults to fail-closed (`companion_required`); callers must pass the
+  decoder's verified same-report companion result.
 - **Mapping rows** exist for BS and IS only, because the taxonomy has items for those two
   statements. CI, CF and EQ lines are covered by an outside-crosswalk policy.
 - **Definitions change between versions.** A tag's `doc` can be reworded from one tag taxonomy
@@ -69,7 +74,9 @@ between `total_equity` and `equity_attributable_parent`. Each now has a typed `c
 the exact `adsh`, `stmt` and presentation `report` number. No values or reporting periods are
 used or inferred. Parenthetical and filer-custom lines never count as companions. The decoder
 builds the companion set once per filing payload, for both coverage and example generation.
-Without the companion it still drops the row as `ambiguous_semantics`, before resolution.
+Without the companion the decoder drops the row as `ambiguous_semantics`; direct resolution of
+the hash-bound conditional entry returns unresolved `companion_required`. Identical normalized
+parent and companion labels drop the parent as `contradictory_presentation`.
 `load_mapping` exposes these as `CuratedMapping.excluded` and rejects a self-reference, a
 companion without a positive mapping in the same statement, and an invalid target. The
 other three, `MembersEquity`, `PartnersCapital` and `MembersCapital`, are limited liability
@@ -132,6 +139,10 @@ review rows are unchanged. Full content hashes from the draft comparison:
 | --- | --- | --- |
 | Mapping | `cd856f9a3f26db2aa15cf6c1ddf36e2799aea2156dad505f4b9ff29c2d36710a` | `eec5f173051cc428e0207070dd418a8299b5ccbad5ba0ef196b5918bf2538116` |
 | Draft crosswalk | `68d44b3f11d7a5c07750a13b2b3e162803d4f242e41ab05ff235c1634f306ed8` | `6ba68b9304e4ca64046a8a084aebb0c504b55446a044c197be24ba40be64981f` |
+
+Adding `requires_companion` to those eight positive entries changes the crosswalk content
+hash and review packet. Those hashes and the packet diff are **to be regenerated**; the earlier
+hashes above predate this contract field.
 
 All five policy hashes also change because their review metadata binds the new mapping hash;
 their kinds, scopes and reasons are unchanged. Old approvals cannot authorize this package.

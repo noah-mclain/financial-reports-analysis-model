@@ -3,8 +3,10 @@
 import json
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+import sec_examples
 from build_dataset import main as dataset_main
 from sec_crosswalk_cli import main as crosswalk_main
 from sec_crosswalk_fixtures import committed_mapping, synthetic_vocabulary, tag_line
@@ -48,6 +50,34 @@ def verdict_for(row: dict[str, object]) -> dict[str, object]:
     if row["kind"] in ("subjects", "roles-subjects"):
         return row
     return {"key": row["key"], "verdict": "approve", "note": ""}
+
+
+def test_resolution_cache_separates_companion_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[bool] = []
+
+    def resolve(key: object, **kwargs: object) -> bool:
+        companion_present = kwargs["companion_present"]
+        assert isinstance(companion_present, bool)
+        calls.append(companion_present)
+        return companion_present
+
+    class Classifier:
+        def has_entry(self, key: object) -> bool:
+            return True
+
+    builder = object.__new__(sec_examples.ExampleBuilder)
+    builder._classifier = Classifier()
+    builder._bundle = SimpleNamespace(crosswalk=None, policies=(), trust=None)
+    builder._taxonomy = None
+    builder._decisions = {}
+    role = type("Role", (), {"role": "corporate"})()
+    key = object()
+    monkeypatch.setattr(sec_examples, "resolve_tag", resolve)
+
+    assert builder._decide(role, key, "source", True) is True
+    assert builder._decide(role, key, "source", False) is False
+    assert builder._decide(role, key, "source", True) is True
+    assert calls == [True, False]
 
 
 class Pipeline:

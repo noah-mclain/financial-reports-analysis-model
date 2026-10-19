@@ -1,5 +1,6 @@
 """Synthetic crosswalk authorization; no source labels or corpus records."""
 
+import json
 from dataclasses import replace
 
 import pytest
@@ -15,6 +16,7 @@ from sec_crosswalk import (
     TagKey,
     TagScope,
     TrustContext,
+    _digest,
     resolve_tag,
     taxonomy_sha256,
 )
@@ -143,6 +145,7 @@ def resolve(
     assessment: RoleAssessment | None = None,
     policies: tuple[AbstentionPolicy, ...] = (),
     context: TrustContext | None = None,
+    companion_present: bool = False,
 ):
     artifact = artifact if artifact is not None else crosswalk()
     assessment = assessment if assessment is not None else role()
@@ -159,6 +162,7 @@ def resolve(
         role=assessment,
         policies=policies,
         trust=context,
+        companion_present=companion_present,
     )
 
 
@@ -174,6 +178,30 @@ def test_exact_mapping_carries_approval_and_semantic_evidence() -> None:
     assert result.binding.canonical_taxonomy_sha256 == taxonomy_sha256(TAXONOMY)
     assert result.binding.role_sha256 == role().content_sha256()
     assert result == resolve(artifact)
+
+
+def test_companion_requirement_is_hash_bound_and_fails_closed() -> None:
+    conditional = entry(requires_companion="ProfitLoss")
+    artifact = crosswalk(conditional)
+    assert artifact.content_sha256() != crosswalk(entry()).content_sha256()
+    result = resolve(artifact)
+    assert result.state == "unresolved" and result.reason == "companion_required"
+    assert resolve(artifact, companion_present=True).state == "mapped"
+
+
+def test_entries_without_a_companion_requirement_keep_their_old_hash() -> None:
+    artifact = crosswalk(entry())
+    old = artifact.model_dump(mode="json")
+    old["entries"] = sorted(
+        ({k: v for k, v in e.items() if k != "requires_companion"} for e in old["entries"]),
+        key=lambda e: json.dumps(e, sort_keys=True, ensure_ascii=False),
+    )
+    assert artifact.content_sha256() == _digest(old)
+
+
+def test_companion_requirement_is_invalid_for_null_target() -> None:
+    with pytest.raises(ValidationError, match="positive target"):
+        entry(canonical_id=None, abstention_reason="unmapped", requires_companion="ProfitLoss")
 
 
 @pytest.mark.parametrize(

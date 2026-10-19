@@ -35,6 +35,7 @@ DROP_REASONS = (
     "unsupported_statement_code",
     "unsupported_namespace",
     "ambiguous_semantics",
+    "contradictory_presentation",
     "parenthetical",
     "empty_label",
 )
@@ -54,6 +55,7 @@ class Resolved:
     kind: str
     key: TagKey
     canonical_id: str | None
+    companion: bool = False
 
 
 def decode_payload(verified: VerifiedPayload) -> list[PayloadRow]:
@@ -96,33 +98,69 @@ class Classifier:
         }
 
     def classify(self, row: PayloadRow) -> Dropped | Resolved:
+        """Classify without filing context; use classify_rows for conditional parent tags."""
         return _classify(row, self._mapping, self._entries, self._excluded)
 
     def classify_rows(
         self, rows: Sequence[PayloadRow]
     ) -> Iterator[tuple[PayloadRow, Dropped | Resolved]]:
         """Index standard companions once per payload, scoped to adsh/stmt/report."""
-        companions = {
-            (row.adsh, row.stmt, row.report, row.tag)
-            for row in rows
-            if not row.inpth
-            and row.version != row.adsh
-            and (parsed := _VERSION.fullmatch(row.version)) is not None
-            and parsed.group(1) == self._mapping.namespace
+        required: dict[tuple[str, str], str | None] = {
+            (row.statement, row.tag): row.canonical_id
+            for row in self._mapping.rows
+            if any(
+                statement == row.statement and rule.tag == row.tag
+                for (statement, _), rule in self._rules.items()
+            )
         }
+        companions = set()
+        labels: dict[tuple[str, str, int, str], set[str]] = defaultdict(set)
+        for row in rows:
+            target = required.get((row.stmt, row.tag))
+            if target is None:
+                continue
+            outcome = self.classify(row)
+            if isinstance(outcome, Resolved) and outcome.canonical_id == target:
+                key = (row.adsh, row.stmt, row.report, row.tag)
+                companions.add(key)
+                labels[key].add(_label_key(row.plabel))
         for row in rows:
             excluded = self._excluded
             rule = self._rules.get((row.stmt, row.tag))
-            if rule is not None and (row.adsh, row.stmt, row.report, rule.tag) in companions:
-                excluded = excluded - {(row.stmt, row.tag)}
-            yield row, _classify(row, self._mapping, self._entries, excluded)
+            companion_key = (row.adsh, row.stmt, row.report, rule.tag) if rule else None
+            initial = _classify(row, self._mapping, self._entries, excluded)
+            if rule is not None and companion_key in companions:
+                if (
+                    isinstance(initial, Dropped)
+                    and initial.reason == "ambiguous_semantics"
+                    and _label_key(row.plabel) in labels[companion_key]
+                ):
+                    yield row, Dropped("contradictory_presentation")
+                    continue
+                if initial == Dropped("ambiguous_semantics"):
+                    excluded = excluded - {(row.stmt, row.tag)}
+            outcome = _classify(row, self._mapping, self._entries, excluded)
+            if (
+                isinstance(outcome, Resolved)
+                and outcome.kind == "mapped"
+                and rule is not None
+                and companion_key in companions
+            ):
+                outcome = Resolved(outcome.kind, outcome.key, outcome.canonical_id, companion=True)
+            yield row, outcome
 
     def has_entry(self, key: TagKey) -> bool:
         return key in self._entries
 
 
 def classify(row: PayloadRow, mapping: CuratedMapping, crosswalk: Crosswalk) -> Dropped | Resolved:
+    """Without filing context, conditional tags are dropped; use Classifier.classify_rows."""
     return Classifier(mapping, crosswalk).classify(row)
+
+
+def _label_key(label: str) -> str:
+    """A label with case, spacing and punctuation removed: ``NET(LOSS)`` equals ``Net (loss)``."""
+    return "".join(c for c in label.casefold() if c.isalnum())
 
 
 def _index(crosswalk: Crosswalk) -> dict[TagKey, CrosswalkEntry]:

@@ -116,6 +116,11 @@ def review_packet(
                 },
                 "reason": mapped.reason,
                 **(
+                    {"requires_companion": entry.requires_companion}
+                    if entry.requires_companion is not None
+                    else {}
+                ),
+                **(
                     {"companion": companions[(_CODE_BY_STATEMENT[key.statement], key.tag)]}
                     if (_CODE_BY_STATEMENT[key.statement], key.tag) in companions
                     else {}

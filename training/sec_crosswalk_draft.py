@@ -312,6 +312,16 @@ def build_draft(vocabulary: Vocabulary, mapping: CuratedMapping, taxonomy: Taxon
                     abstention_reason=None if row.canonical_id else row.reason,
                     semantic_reference=f"{TAG_MEMBER} {version} {row.tag}",
                     semantic_evidence_sha256=_evidence_sha256(definition),
+                    requires_companion=next(
+                        (
+                            exclusion.companion.tag
+                            for exclusion in mapping.excluded
+                            if exclusion.statement == row.statement
+                            and exclusion.tag == row.tag
+                            and exclusion.companion is not None
+                        ),
+                        None,
+                    ),
                 )
             )
     return Crosswalk(

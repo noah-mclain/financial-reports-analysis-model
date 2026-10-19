@@ -310,6 +310,20 @@ def test_draft_is_independent_of_input_order() -> None:
     assert forward.content_sha256() == backward.content_sha256()
 
 
+def test_only_companion_exclusions_add_requirements_to_draft_entries() -> None:
+    mapping = committed_mapping()
+    draft = build_draft(synthetic_vocabulary(mapping), mapping, taxonomy())
+    conditional = {
+        entry.key.tag: entry.requires_companion
+        for entry in draft.entries
+        if entry.requires_companion is not None
+    }
+    assert conditional == {
+        "NetIncomeLoss": "ProfitLoss",
+        "StockholdersEquity": "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+    }
+
+
 def test_draft_refuses_a_phrase_missing_from_the_definition() -> None:
     with pytest.raises(DatasetError, match=r"Assets.*us-gaap/2024"):
         build_draft(

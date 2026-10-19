@@ -122,6 +122,9 @@ PARENT_TAGS = [
         {"inpth": True},
         {"version": adsh(1)},
         {"version": "ifrs/2024"},
+        {"version": "us-gaap/2019"},
+        {"plabel": ""},
+        {"plabel": " \t "},
     ],
 )
 def test_parent_share_requires_a_standard_nonparenthetical_companion_in_the_same_report(
@@ -131,7 +134,9 @@ def test_parent_share_requires_a_standard_nonparenthetical_companion_in_the_same
     parent = row(stmt=stmt, tag=tag)
     rows = [parent]
     if changes is not None:
-        rows.append(row(stmt=stmt, tag=companion, n=2).model_copy(update=changes))
+        rows.append(
+            row(stmt=stmt, tag=companion, plabel="Total amount", n=2).model_copy(update=changes)
+        )
     result = next(Classifier(mapping, cw).classify_rows(rows))[1]
     if changes == {}:
         assert isinstance(result, Resolved)
@@ -148,6 +153,28 @@ def test_partnership_tags_stay_dropped_even_with_total_equity(tag: str) -> None:
     assert next(Classifier(mapping, cw).classify_rows(rows))[1] == Dropped("ambiguous_semantics")
 
 
+def test_companion_requires_a_positive_reviewed_crosswalk_entry() -> None:
+    mapping, cw = crosswalk()
+    rows = [row(stmt="IS", tag="NetIncomeLoss"), row(stmt="IS", tag="ProfitLoss", n=2)]
+    for entries in (
+        tuple(entry for entry in cw.entries if entry.key.tag != "ProfitLoss"),
+        tuple(
+            entry.model_copy(update={"canonical_id": None, "abstention_reason": "unreviewed"})
+            if entry.key.tag == "ProfitLoss"
+            else entry
+            for entry in cw.entries
+        ),
+        tuple(
+            entry.model_copy(update={"canonical_id": "revenue"})
+            if entry.key.tag == "ProfitLoss"
+            else entry
+            for entry in cw.entries
+        ),
+    ):
+        classifier = Classifier(mapping, cw.model_copy(update={"entries": entries}))
+        assert next(classifier.classify_rows(rows))[1] == Dropped("ambiguous_semantics")
+
+
 def test_companion_context_is_not_retained_between_payloads() -> None:
     mapping, cw = crosswalk()
     classifier = Classifier(mapping, cw)
@@ -162,16 +189,71 @@ def test_companion_can_follow_parent_and_use_a_different_standard_version(
     stmt: str, tag: str, companion: str, target: str
 ) -> None:
     mapping, cw = crosswalk()
-    rows = [row(stmt=stmt, tag=tag), row(stmt=stmt, tag=companion, version="us-gaap/2023", n=2)]
+    rows = [
+        row(stmt=stmt, tag=tag, plabel="Parent share"),
+        row(stmt=stmt, tag=companion, plabel="Total amount", version="us-gaap/2023", n=2),
+    ]
     result = next(Classifier(mapping, cw).classify_rows(rows))[1]
-    assert isinstance(result, Resolved) and result.canonical_id == target
+    assert isinstance(result, Resolved) and result.canonical_id == target and result.companion
+
+
+def test_identical_parent_and_companion_labels_are_dropped() -> None:
+    mapping, cw = crosswalk()
+    rows = [
+        row(stmt="IS", tag="NetIncomeLoss", plabel="Net   income attributable to parent"),
+        row(stmt="IS", tag="ProfitLoss", plabel=" net income ATTRIBUTABLE to parent ", n=2),
+    ]
+    assert next(Classifier(mapping, cw).classify_rows(rows))[1] == Dropped(
+        "contradictory_presentation"
+    )
+
+
+def test_labels_differing_only_in_punctuation_and_spacing_are_contradictory() -> None:
+    mapping, cw = crosswalk()
+    rows = [
+        row(
+            stmt="IS",
+            tag="NetIncomeLoss",
+            plabel="NET(LOSS) INCOME INCLUDING NON-CONTROLLING INTEREST",
+        ),
+        row(
+            stmt="IS",
+            tag="ProfitLoss",
+            plabel="Net (loss) income including non-controlling interest",
+            n=2,
+        ),
+    ]
+    assert next(Classifier(mapping, cw).classify_rows(rows))[1] == Dropped(
+        "contradictory_presentation"
+    )
+
+
+def test_only_a_valid_companion_line_contributes_a_label() -> None:
+    mapping, cw = crosswalk()
+    rows = [
+        row(stmt="IS", tag="NetIncomeLoss", plabel="Parent income"),
+        row(stmt="IS", tag="ProfitLoss", plabel="Total income", n=2),
+        row(stmt="IS", tag="ProfitLoss", plabel="Parent income", n=3, inpth=True),
+    ]
+    result = next(Classifier(mapping, cw).classify_rows(rows))[1]
+    assert isinstance(result, Resolved) and result.companion
+
+
+def test_distinct_parent_and_companion_labels_are_kept() -> None:
+    mapping, cw = crosswalk()
+    rows = [
+        row(stmt="IS", tag="NetIncomeLoss", plabel="Net income attributable to parent"),
+        row(stmt="IS", tag="ProfitLoss", plabel="Profit or loss", n=2),
+    ]
+    result = next(Classifier(mapping, cw).classify_rows(rows))[1]
+    assert isinstance(result, Resolved) and result.companion
 
 
 @pytest.mark.parametrize("changes", [{"inpth": True}, {"plabel": " "}, {"version": adsh(1)}])
 def test_companion_does_not_bypass_the_parent_rows_own_filters(changes: dict[str, object]) -> None:
     mapping, cw = crosswalk()
     parent = row(stmt="IS", tag="NetIncomeLoss").model_copy(update=changes)
-    rows = [parent, row(stmt="IS", tag="ProfitLoss", n=2)]
+    rows = [parent, row(stmt="IS", tag="ProfitLoss", plabel="Total income", n=2)]
     classifier = Classifier(mapping, cw)
     assert next(classifier.classify_rows(rows))[1] == classifier.classify(parent)
 
@@ -204,6 +286,7 @@ def test_the_drop_reasons_are_the_documented_ones() -> None:
         "unsupported_statement_code",
         "unsupported_namespace",
         "ambiguous_semantics",
+        "contradictory_presentation",
         "parenthetical",
         "empty_label",
     }
