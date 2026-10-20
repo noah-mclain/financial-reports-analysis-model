@@ -84,6 +84,35 @@ Writes are not atomic: a failure part-way leaves earlier files behind, to be rem
 - No bag-of-words or bilingual-pair example generation.
 - No semantic deduplication, period weighting or long-tail coverage policy.
 
+## Fit conflict attribution (scope B)
+
+`training/dataset_conflict_audit.py` writes a deterministic, exclusive JSON report from the fit
+`train.jsonl` rows and their matching upstream examples. It attributes null targets by recorded
+role, tag namespace and abstention reason; missing provenance remains unresolved. The exact key
+is `messages[1].content` (label and statement only), matching the builder's `render_input`.
+The audit checks the exact current system prompt and authorizes source IDs from the fit/train
+roster before validating upstream labels. Upstream rows with no train match and rows whose
+partial multiplicity match spans different attribution buckets are reported separately; the
+latter remain unresolved and are not projected as removable. Fully matched and partial
+single-bucket groups have deterministic attribution.
+The blueprint's example at `docs/blueprint/04-execution-phases.md` includes parent, siblings and
+sign; that differs from the current model input and is an unresolved architecture decision.
+
+The report's baseline is unchanged. R1 and R2 are measured projections only: R1 removes selected
+null rows inside conflicting keys; R2 then quarantines keys that still conflict. Neither projection
+is an approved cleaning rule, changes data, votes on targets, or establishes target correctness.
+Unsupported-statement nulls are never eligible for removal. A non-null/non-null disagreement is
+reported as `suspected_supervision_error_pending_source_review` pending source inspection.
+`multi_non_null_conflict_keys` counts every conflict key with at least two distinct non-null
+targets, including keys that also have a null target. `nonnull_only_multi_target_conflict_keys`
+counts the subset with at least two distinct non-null targets and no null target.
+The audit does not read validation, model-test or blind dataset files; its JSON output belongs
+outside version control and must be sampled by key-hash order before any later source review.
+On `dataset_sec_4_v3`, `upstream_row_counts_reconcile` is expected to be false because the
+upstream examples still include the 997 equity-train exclusion rows removed from `train.jsonl`.
+Those rows appear separately in `unmatched_upstream_examples`; they are not counted as train
+rows or as unattributed train rows.
+
 ## Monitoring a run
 
 `dataset-build` reports input reading, contract validation and partitioning, token counting,

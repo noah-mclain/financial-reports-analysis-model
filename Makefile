@@ -31,7 +31,7 @@ export FRA_API_PORT FRA_LLM_PORT
 
 .PHONY: help setup unhide-pth fmt lint typecheck test test-sandboxed test-all eval corpus-check corpus-split corpus-fetch sec-fsds dataset-build sec-crosswalk-draft sec-crosswalk-approve sec-prepare sec-coverage sec-roles-draft sec-roles-approve sec-examples clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping eval-gates dry-run expected-drafts eval-extraction verify-expected dev worker docker-up docker-health ci-workflows-check container-smoke smoke hygiene-check
 
-.PHONY: normalization-prepare normalization-score normalization-predict
+.PHONY: normalization-prepare normalization-score normalization-predict train-smoke
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -79,7 +79,7 @@ typecheck: ## Type check the packages, apps, the analytics golden test, eval har
 	MYPYPATH=scripts:eval $(UV) run mypy --strict training/sec_roles.py
 	MYPYPATH=scripts:eval $(UV) run mypy --strict training/sec_examples.py
 	MYPYPATH=scripts:eval $(UV) run mypy --strict training/sec_source_cli.py
-	MYPYPATH=scripts:eval:training $(UV) run mypy --strict training/normalization_eval.py training/normalization_validation.py training/normalization_mlx.py
+	MYPYPATH=scripts:eval:training $(UV) run mypy --strict training/normalization_eval.py training/normalization_validation.py training/normalization_mlx.py training/normalization_train.py
 
 test: ## Fast tests (no models, no OCR)
 	@$(MAKE) --no-print-directory unhide-pth
@@ -241,3 +241,7 @@ docs-check: ## Fail on TBD placeholders left in docs
 	@! grep -rniE "\bTBD\b" docs eval/golden/README.md \
 		|| { echo "docs-check failed"; exit 1; }
 	@echo "docs-check passed"
+
+train-smoke: ## Bounded offline QLoRA smoke (CONFIG required; DRY_RUN=1 for non-training preflight)
+	$(if $(CONFIG),,$(error CONFIG is required))
+	PYTHONPATH=scripts:eval:training .venv/bin/python training/normalization_train.py --config "$(CONFIG)" $(if $(filter 1,$(DRY_RUN)),--dry-run)
