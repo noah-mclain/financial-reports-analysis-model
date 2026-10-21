@@ -879,3 +879,36 @@ def test_arabic_direct_template_page_has_isolated_numeric_links_and_honest_copy(
     assert 'dir="rtl" lang="ar"' in page
     assert '<bdi dir="ltr">1.50×</bdi>' in page
     assert "قالب مباشر" in page and "Written by the model" not in page
+
+
+def test_arabic_decline_page_shows_plain_reason_and_no_financial_outputs(tmp_path: Path) -> None:
+    settings = settings_at(tmp_path)
+    reason = (
+        "This report is mainly in Arabic. Only English financial reports are analyzed, "
+        "so no statements, metrics or summary were produced."
+    )
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        upload = " ".join(client.get("/").text.split())
+        assert "in English, digital or scanned" in upload
+        assert (
+            "Reports identified as mainly Arabic, banks and insurers are declined with the reason"
+            in upload
+        )
+        assert (
+            "Poor OCR can miss Arabic text, and other non-English languages may not be detected"
+            in upload
+        )
+        job_id = finished_job(
+            settings,
+            client,
+            language="ar",
+            statements=[],
+            reviews=[],
+            metrics=[],
+            decline=Decline(code="unsupported_language", reason=reason),
+        )
+        page = client.get(f"/analyses/{job_id}/view").text
+    assert "Declined (unsupported_language)" in page and reason in page
+    assert 'class="badge needs_review">needs_review</span>' in page
+    assert 'id="metrics"' not in page and 'class="statement"' not in page
+    assert "1.50×" not in page

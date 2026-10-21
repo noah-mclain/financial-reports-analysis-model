@@ -245,16 +245,26 @@ the source identities, the supplied equity artifact's byte hash and embedded v1 
 and disjoint pair counts/reasons (`equity`, `statement`, `ambiguous`, `outlier`). Equity takes
 precedence so a row is counted once. For v2, `keys_sha256` binds the complete artifact content
 except that hash field, including policy and pair removals; for v1 it remains the original
-sorted key-list hash. These integrity hashes are not evidence of annotation truth.
+sorted key-list hash. The persisted artifact and manifest `ExclusionAudit.keys_sha256`
+retain this versioned meaning to preserve existing bytes and loader bindings.
+Population reports always expose the sorted key-list digest as `exclusion_keys_sha256`;
+v2 reports additionally expose the content binding as `exclusion_artifact_content_sha256`.
+For v2, only removals with reason `ambiguous` select the ambiguity diagnostic population;
+equity, statement and outlier removals do not change its membership. Full validation scores
+keep their original population. These integrity hashes are not evidence of annotation truth.
 
-V2 freeze reads only train rows, the build manifest and the supplied equity artifact. The
-validation hash is carried from the bound manifests; freeze does not open validation or any
+V2 freeze hashes and selects removals from one complete train byte pass, verifying the
+manifest hash at EOF. It reads only train rows, the build manifest and the supplied equity
+artifact. The validation hash is carried from the bound manifests; freeze does not open validation or any
 example/provenance records. Application still checks source identity, pair coverage, per-pair
 and target counts, and before/after accounting. Version 1 selection, validation and whole-key
 application remain available with the original CLI. Both versions produce one unchanged
 `ExclusionAudit`; the existing `build_dataset(..., exclusions=...)` path recomputes retained
 lengths, strata, row count and train hash from the original examples and injected tokenizer.
-Validation bytes remain unchanged.
+Validation bytes remain unchanged. The freeze CLI writes the complete serialized artifact to a
+temporary file in the output directory, flushes it to disk and publishes it with an exclusive
+atomic link. Existing outputs are never overwritten; failed writes remove only their own
+temporary file.
 
 After independent diff review and all four required make checks, the coordinator may freeze
 from the **unexcluded** source with the owner-selected parameters below. Reuse the environment

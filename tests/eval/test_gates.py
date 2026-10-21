@@ -281,11 +281,15 @@ def test_an_unreadable_document_makes_every_part_not_met_and_is_listed() -> None
         {"pair": "x/y", "type": "balance", "gated": True, "misses": [0, 0], "period_kind": "annual"}
     ]
     report = gate_report(
-        [doc("a", "annual", figures=[fig])], pairs=pairs, errors=["gone: unreadable_pdf"]
+        [doc("a", "annual", figures=[fig])],
+        pairs=pairs,
+        errors=[{"id": "gone", "language": "en", "reason": "unreadable_pdf", "detail": ""}],
     )
     for name in ("annual", "total"):
         s = report["strata"][name]
-        assert s["unreadable"] == ["gone: unreadable_pdf"]
+        assert s["unreadable"] == [
+            {"id": "gone", "language": "en", "reason": "unreadable_pdf", "detail": ""}
+        ]
         a = s["gate_a"]
         assert a["figures"]["checked"]["digital"]["met"] is False
         assert a["pairs"]["met"] is False and a["identity"]["met"] is False
@@ -299,8 +303,8 @@ def test_an_unreadable_document_makes_every_part_not_met_and_is_listed() -> None
 @pytest.mark.parametrize(
     "status,mode,language,eligible",
     [
-        ("checked", "scanned", "ar", True),
-        ("unreferenced", "scanned", "ar", True),
+        ("checked", "scanned", "ar", False),
+        ("unreferenced", "scanned", "ar", False),
         ("draft", "scanned", "ar", False),
         ("checked", "digital", "ar", False),
         ("checked", "scanned", "en", False),
@@ -328,13 +332,19 @@ def test_unreadable_override_applies_to_eligible_confidence_blocks_even_without_
         document["output_coverage"] = [
             {"status": status, "page_mode": mode, "unassessed_numeric": 1}
         ]
-    errors = ["gone: unreadable_pdf"] if unreadable else []
+    errors = (
+        [{"id": "gone", "language": language, "reason": "unreadable_pdf", "detail": ""}]
+        if unreadable
+        else []
+    )
     report = gate_report([document], pairs=[], errors=errors)
     met = None
     if eligible:
         met = False if unreadable else True if cells and status == "checked" else None
     for stratum in ("annual", "total"):
-        block = report["strata"][stratum]["gate_a"]["confident"][f"{status} {mode} {language}"]
+        block = report["strata"][stratum]["reported_languages"][language]["gate_a"]["confident"][
+            f"{status} {mode} {language}"
+        ]
         assert block["met"] is met
         assert block["cells"] == (0 if status == "unreferenced" else cells)
         assert block["unassessed_confident"] == 0
@@ -449,7 +459,7 @@ def test_golden_gate_run_builds_one_configured_engine_and_reuses_it(
     config = IngestConfig(artifact_root=tmp_path / "artifacts")
     manifest = tmp_path / "manifest.yaml"
     manifest.write_text(
-        "documents:\n  - {id: first, file: first.pdf}\n  - {id: second, file: second.pdf}\n",
+        "documents:\n  - {id: first, file: first.pdf, language: en}\n  - {id: second, file: second.pdf, language: en}\n",
         encoding="utf-8",
     )
     factory_configs: list[IngestConfig] = []
@@ -514,7 +524,7 @@ def test_gate_writes_requested_output_and_fails_on_incomplete_locate_evidence(
 
     assert gates_module.main(["--output", str(output)]) == 1
     report = json.loads(output.read_text(encoding="utf-8"))
-    assert report["evidence_schema_version"] == 2
+    assert report["evidence_schema_version"] == 3
     assert report["documents"][0]["locate_evidence"]["status"] == "incomplete"
 
 
@@ -622,7 +632,11 @@ def test_explicit_findings_keep_slot_denominator_and_missing_statements_blocking
         ]["met"]
         is True
     )
-    for blockers, errors in [({"disagrees": 1}, []), ({"unmapped": 1}, []), ({}, ["unreadable"])]:
+    for blockers, errors in [
+        ({"disagrees": 1}, []),
+        ({"unmapped": 1}, []),
+        ({}, [{"id": "gone", "language": "en", "reason": "unreadable_pdf", "detail": ""}]),
+    ]:
         blocked = gate_report(
             [doc("synthetic", "annual", mapping={**complete, **blockers})], pairs=[], errors=errors
         )
@@ -1025,3 +1039,66 @@ def test_a_document_that_errored_earlier_and_is_gone_now_is_listed_as_removed(
     assert gates_module.main(["--compare-with", str(earlier), "--output", str(output)]) == 0
     report = json.loads(output.read_text(encoding="utf-8"))
     assert [item["id"] for item in report["removed_documents"]] == ["broken"]
+
+
+@pytest.mark.parametrize("version", [2, 3])
+def test_supported_gate_schemas_compare_only_locate_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, version: int
+) -> None:
+    earlier = tmp_path / "earlier.json"
+    earlier.write_text(
+        json.dumps(
+            {
+                "evidence_schema_version": version,
+                "documents": [{"id": "a", "locate_evidence": _complete_evidence().as_dict()}],
+            }
+        )
+    )
+    output = _stub_gate_run(tmp_path, monkeypatch, ("a",))
+    assert gates_module.main(["--compare-with", str(earlier), "--output", str(output)]) == 0
+    report = json.loads(output.read_text())
+    assert report["evidence_schema_version"] == 3
+    assert report["documents"][0]["comparison"]["status"] == "unchanged"
+
+
+@pytest.mark.parametrize("version", [True, None, 0, 4, "3"])
+def test_unsupported_gate_schema_fails_before_processing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, version: object
+) -> None:
+    earlier = tmp_path / "earlier.json"
+    earlier.write_text(json.dumps({"evidence_schema_version": version, "documents": []}))
+    monkeypatch.setattr(gates_module, "load_config", lambda: pytest.fail("work started"))
+    with pytest.raises(SystemExit, match="unsupported evidence schema"):
+        gates_module.main(["--compare-with", str(earlier)])
+
+
+@pytest.mark.parametrize("language", ["en", "ar"])
+def test_unreadable_manifest_language_survives_main_boundary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, language: str
+) -> None:
+    output = _stub_gate_run(tmp_path, monkeypatch, ("bad", "good"), failing=("bad",))
+    manifest = gates_module.MANIFEST
+    manifest.write_text(
+        manifest.read_text().replace(
+            "id: bad, file: bad.pdf, language: en", f"id: bad, file: bad.pdf, language: {language}"
+        )
+    )
+    assert gates_module.main(["--output", str(output)]) == 1
+    report = json.loads(output.read_text())
+    assert report["errored"][0]["language"] == language
+    total = report["strata"]["total"]
+    failure = total["reported_languages"][language]["unreadable"][0]
+    assert failure["id"] == "bad" and failure["reason"] == "unreadable_pdf"
+    assert failure["detail"]
+    assert total["reported_languages"]["ar" if language == "en" else "en"]["unreadable"] == []
+
+
+def test_missing_manifest_language_fails_before_reading_an_unreadable_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = _stub_gate_run(tmp_path, monkeypatch, ("bad",), failing=("bad",))
+    manifest = gates_module.MANIFEST
+    manifest.write_text(manifest.read_text().replace(", language: en", ""))
+    monkeypatch.setattr(gates_module, "structure_pdf", lambda *_args: pytest.fail("read attempted"))
+    with pytest.raises(ValueError, match="manifest language"):
+        gates_module.main(["--output", str(output)])

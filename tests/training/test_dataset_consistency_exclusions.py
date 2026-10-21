@@ -1,9 +1,7 @@
 """Synthetic pair removals, equity-first policy and existing builder/loader contracts."""
 
-import ast
 import hashlib
 import json
-import subprocess
 from collections import Counter, defaultdict
 from decimal import Decimal
 from pathlib import Path
@@ -413,29 +411,32 @@ def test_v1_contract_remains_whole_key_and_constant_criterion(tmp_path: Path) ->
         )
 
 
-def test_loader_branch_source_uses_unchanged_exclusion_contract() -> None:
-    root = Path(__file__).resolve().parents[2]
-    result = subprocess.run(
-        ["git", "show", "origin/normalization-training-smoke:training/normalization_train.py"],
-        cwd=root,
-        text=True,
-        capture_output=True,
-        check=True,
+def test_loader_uses_unchanged_exclusion_contract(tmp_path: Path) -> None:
+    from dataset_builder import DatasetBuildManifest
+
+    parts, source, equity = fixture(tmp_path)
+    artifact = freeze_v2(source, equity)
+    built = build_dataset(
+        parts, count_tokens=lambda _: 1, tokenizer_id="fixture", exclusions=artifact
     )
-    tree = ast.parse(result.stdout)
-    imports = {
-        n.module: {a.name for a in n.names} for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)
-    }
-    assert imports["dataset_exclusions"] == {"load_exclusions", "verify_source"}
-    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)]
-    assert any(
-        n.func.id == "verify_source"
-        and any(
-            k.arg == "allow_applied" and isinstance(k.value, ast.Constant) and k.value.value is True
-            for k in n.keywords
+    # The loader consumes a saved artifact and already-applied manifest, without rebuilding.
+    saved = tmp_path / "loader-exclusions.json"
+    saved.write_text(artifact.model_dump_json())
+    manifest = DatasetBuildManifest.model_validate_json(built.manifest.model_dump_json())
+    loaded = load_exclusions(saved)
+    verify_source(loaded, manifest, allow_applied=True)
+    assert loaded.audit() == manifest.exclusion
+    assert manifest.train_sha256 != loaded.source_train_sha256
+    with pytest.raises(DatasetError, match="already applied"):
+        verify_source(loaded, manifest)
+    with pytest.raises(DatasetError, match="already applied or differ"):
+        verify_source(
+            loaded,
+            manifest.model_copy(
+                update={"exclusion": loaded.audit().model_copy(update={"keys_sha256": "f" * 64})}
+            ),
+            allow_applied=True,
         )
-        for n in calls
-    )
 
 
 @pytest.mark.parametrize(
@@ -500,35 +501,18 @@ def test_reason_precedence_and_deterministic_pair_order() -> None:
     assert all(r.input_key == a and r.reason == "ambiguous" for r in first)
 
 
-def test_v1_synthetic_artifact_and_retained_bytes_match_base_revision(tmp_path: Path) -> None:
-    import sys
-    from types import ModuleType
-
-    parts, source, equity = fixture(tmp_path)
-    root = Path(__file__).resolve().parents[2]
-    result = subprocess.run(
-        ["git", "show", "1613600163501f1c204b4b4aee5a704f3bde9709:training/dataset_exclusions.py"],
-        cwd=root,
-        text=True,
-        capture_output=True,
-        check=True,
+def test_v1_synthetic_artifact_and_retained_bytes_match_pinned_contract(tmp_path: Path) -> None:
+    parts, _, equity = fixture(tmp_path)
+    contract = json.loads(
+        (Path(__file__).resolve().parent / "fixtures/exclusions-v1-contract.json").read_bytes()
     )
-    original = ModuleType("base_dataset_exclusions")
-    sys.modules[original.__name__] = original
-    try:
-        exec(compile(result.stdout, "<base-dataset-exclusions>", "exec"), original.__dict__)
-        baseline = original.freeze_exclusions(source, provenance="synthetic equity")
-        current = load_exclusions(equity)
-        assert baseline.model_dump_json() == current.model_dump_json()
-        built = build_dataset(parts, count_tokens=lambda _: 1, tokenizer_id="fixture")
-        old_indices = original.retained_indices(built.fit_rows, baseline)
-        new_indices = retained_indices(built.fit_rows, current)
-        assert old_indices == new_indices
-        assert b"".join(
-            (json.dumps(built.fit_rows[i]) + "\n").encode() for i in old_indices
-        ) == b"".join((json.dumps(built.fit_rows[i]) + "\n").encode() for i in new_indices)
-    finally:
-        del sys.modules[original.__name__]
+    current = load_exclusions(equity)
+    assert current.model_dump_json() == contract["artifact_json"]
+    built = build_dataset(parts, count_tokens=lambda _: 1, tokenizer_id="fixture")
+    indices = retained_indices(built.fit_rows, current)
+    assert list(indices) == contract["retained_indices"]
+    data = b"".join((json.dumps(built.fit_rows[i]) + "\n").encode() for i in indices)
+    assert hashlib.sha256(data).hexdigest() == contract["retained_bytes_sha256"]
 
 
 def test_original_v1_cli_needs_no_new_flags(tmp_path: Path) -> None:
@@ -548,3 +532,173 @@ def test_original_v1_cli_needs_no_new_flags(tmp_path: Path) -> None:
         == 0
     )
     assert load_exclusions(out).model_dump_json() == load_exclusions(equity).model_dump_json()
+
+
+def test_v2_reads_train_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _, source, equity = fixture(tmp_path)
+    original_open = Path.open
+    opens = 0
+
+    def counted(path: Path, *args: object, **kwargs: object):
+        nonlocal opens
+        if path == source / "train.jsonl":
+            opens += 1
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", counted)
+    freeze_v2(source, equity)
+    assert opens == 1
+
+
+def test_v2_rejects_changed_valid_bytes_at_eof(tmp_path: Path) -> None:
+    _, source, equity = fixture(tmp_path)
+    train = source / "train.jsonl"
+    # Valid JSON and unchanged rows; only the complete byte hash exposes this mutation.
+    train.write_bytes(train.read_bytes().rstrip(b"\n") + b" \n")
+    with pytest.raises(DatasetError, match=r"train\.jsonl: source sha256"):
+        freeze_v2(source, equity)
+
+
+def test_v2_cannot_bind_removals_to_bytes_reopened_after_hash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, source, equity = fixture(tmp_path)
+    original_digest = hashlib.file_digest
+    original = (source / "train.jsonl").read_bytes()
+    mutated = original.replace(b"Sales", b"Trade")
+    assert mutated != original
+
+    def mutate_after_hash(handle, name):
+        value = original_digest(handle, name)
+        (source / "train.jsonl").write_bytes(mutated)
+        return value
+
+    monkeypatch.setattr(hashlib, "file_digest", mutate_after_hash)
+    artifact = freeze_v2(source, equity)
+    assert any(r.input_key == render_input("Sales", "income") for r in artifact.removals)
+    assert all(r.input_key != render_input("Trade", "income") for r in artifact.removals)
+
+
+def test_missing_equity_key_is_a_coverage_error(tmp_path: Path) -> None:
+    _, source, equity = fixture(tmp_path)
+    raw = json.loads(equity.read_bytes())
+    raw["keys"] = [render_input("Absent equity", "balance")]
+    raw["keys_sha256"] = digest(raw["keys"])
+    equity.write_text(json.dumps(raw))
+    with pytest.raises(DatasetError, match=r"equity.*key coverage"):
+        freeze_v2(source, equity)
+
+
+@pytest.mark.parametrize("dominance, ambiguous_rows", [("0.60", 0), ("0.95", 3)])
+def test_v2_report_uses_only_ambiguity_reasons(
+    tmp_path: Path, dominance: str, ambiguous_rows: int
+) -> None:
+    from normalization_eval import population_report, score
+    from test_normalization_eval import prediction, sample
+
+    _, source, equity = fixture(tmp_path)
+    artifact = freeze_v2(source, equity, dominance=Decimal(dominance))
+    specs = [
+        ("Equity", StatementType.BALANCE, "total_equity"),
+        ("Sales", StatementType.INCOME, "revenue"),
+        ("Sales", StatementType.INCOME, "cost_of_revenue"),
+        ("Sales", StatementType.INCOME, None),
+        ("Flows", StatementType.CASH_FLOW, None),
+        ("Other", StatementType.BALANCE, None),
+    ]
+    rows = tuple(
+        sample(str(i), target).model_copy(update={"statement": statement, "label": label})
+        for i, (label, statement, target) in enumerate(specs)
+    )
+    predictions = tuple(prediction(r.example_id, None) for r in rows)
+    report = population_report(rows, predictions, artifact)
+    assert report["full_validation"]["score"] == score(rows, predictions)
+    assert report["full_validation"]["rows"] == len(rows)
+    assert report["ambiguity_only"]["rows"] == ambiguous_rows
+    assert report["validation_excluding_ambiguity"]["rows"] == len(rows) - ambiguous_rows
+    inputs = report["ambiguity_only"]["inputs"]
+    assert [i["input"] for i in inputs] == (
+        [render_input("Sales", "income")] if ambiguous_rows else []
+    )
+
+
+@pytest.mark.parametrize("version", [1, 2])
+def test_report_names_key_list_and_content_digests(tmp_path: Path, version: int) -> None:
+    from normalization_eval import population_report
+    from test_normalization_eval import prediction, sample
+
+    _, source, equity = fixture(tmp_path)
+    artifact = load_exclusions(equity) if version == 1 else freeze_v2(source, equity)
+    report = population_report((sample("a", None),), (prediction("a", None),), artifact)
+    assert report["exclusion_keys_sha256"] == digest(artifact.keys)
+    if version == 2:
+        assert report["exclusion_artifact_content_sha256"] == artifact.keys_sha256
+    else:
+        assert "exclusion_artifact_content_sha256" not in report
+    assert artifact.audit().keys_sha256 == artifact.keys_sha256
+
+
+@pytest.mark.parametrize("failure", ["partial_write", "sync", "link", "race", "success"])
+def test_cli_publishes_complete_bytes_atomically(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str
+) -> None:
+    import os
+
+    _, source, equity = fixture(tmp_path)
+    out = tmp_path / "published/v2.json"
+    expected = (
+        freeze_v2(source, equity, provenance="synthetic").model_dump_json(indent=2) + "\n"
+    ).encode()
+    original_link = os.link
+    links = []
+
+    def publish(src, dst):
+        src, dst = Path(src), Path(dst)
+        links.append(src)
+        assert src.parent == out.parent and src != out
+        assert src.read_bytes() == expected
+        assert not dst.exists()
+        if failure == "race":
+            dst.write_bytes(b"competing artifact")
+        if failure == "link":
+            raise OSError("injected link failure")
+        original_link(src, dst)
+
+    monkeypatch.setattr(os, "link", publish)
+    if failure == "sync":
+
+        def fail_sync(descriptor):
+            assert not out.exists()
+            raise OSError("injected sync failure")
+
+        monkeypatch.setattr(os, "fsync", fail_sync)
+    if failure == "partial_write":
+        original_fdopen = os.fdopen
+
+        class PartialWrite:
+            def __init__(self, handle):
+                self.handle = handle
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                self.handle.close()
+
+            def write(self, data):
+                self.handle.write(data[:8])
+                self.handle.flush()
+                assert not out.exists()
+                raise OSError("injected partial write")
+
+        monkeypatch.setattr(os, "fdopen", lambda *a, **k: PartialWrite(original_fdopen(*a, **k)))
+    result = freeze_main(cli(source, equity, out))
+    assert result == (0 if failure == "success" else 1)
+    assert list(out.parent.iterdir()) == ([out] if failure in {"race", "success"} else [])
+    if failure == "success":
+        assert links
+        assert out.read_bytes() == expected
+    elif failure == "race":
+        assert out.read_bytes() == b"competing artifact"
+    else:
+        assert not out.exists()

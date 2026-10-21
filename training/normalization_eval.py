@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from typing import Any, Literal
 
 from dataset_builder import SYSTEM_PROMPT, render_input
-from dataset_contracts import Contract, DatasetError, NormalizationAnswer, Text
+from dataset_contracts import Contract, DatasetError, NormalizationAnswer, Text, digest
 from dataset_exclusions import FrozenExclusions, checked, target_name
 
 from fra_core.schemas import StatementType
@@ -277,7 +277,11 @@ def population_report(
     """Continuity score and two separately labelled diagnostic populations."""
     checked(artifact)
     full = score(rows, predictions)
-    keys = frozenset(artifact.keys)
+    keys = frozenset(
+        artifact.keys
+        if artifact.version == 1
+        else (r.input_key for r in artifact.removals or () if r.reason == "ambiguous")
+    )
     ambiguous: dict[str, list[EvalRow]] = defaultdict(list)
     retained = []
     for row in rows:
@@ -315,7 +319,12 @@ def population_report(
         for key, group in sorted(ambiguous.items())
     ]
     return {
-        "exclusion_keys_sha256": artifact.keys_sha256,
+        "exclusion_keys_sha256": digest(artifact.keys),
+        **(
+            {"exclusion_artifact_content_sha256": artifact.keys_sha256}
+            if artifact.version == 2
+            else {}
+        ),
         "full_validation": {
             "label": "Full validation, continuity population",
             "rows": len(rows),

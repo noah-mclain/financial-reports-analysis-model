@@ -686,15 +686,18 @@ Not done: how a filing is recognised as scanned Arabic in the demo (D14 says the
 
 ### Locate evidence in gate reports
 
-Gate reports (`var/eval/gates-dev.json`) use `evidence_schema_version: 2` and include a
-`locate_evidence` record per structured document. It fingerprints each saved page-text record
+Gate reports (`var/eval/gates-dev.json`) use `evidence_schema_version: 3` and include a
+`locate_evidence` record per structured document. Version 3 changed the report's gate verdicts
+(English only, with Arabic under `reported_languages`, D21), not the evidence record, which is
+the same as in version 2. The record fingerprints each saved page-text record
 (excluding OCR timings), the locate version, `ocr_key`, ranges, conversion spans and settings
 hash. Each conversion span records its page range, OCR mode, OCR language, image pages and
 renderer, so a change of OCR mode or image pages makes the span count as changed. The OCR mode
 and renderer must be values that a conversion plan allows (the `RangeOcr` and `RangeRenderer`
 types of the ingest package); a span with any other value makes the evidence incomplete. The
 type of a located range must be a `StatementType`, so a range of any other type is incomplete
-too; its serialized value is the same string as before, so the evidence schema version stays 2.
+too; its serialized value is the same string as before, so that change did not alter the
+evidence.
 
 The record's `conversion` field is `read` when this run converted the document. A bank or
 insurer that is declined before conversion is recorded as `not_run`, with no spans and no
@@ -728,8 +731,8 @@ difference, not as a changed conversion plan. A document that errored in the
 earlier report and reads now is not comparable, because the earlier evidence is incomplete.
 Documents in the earlier report, errored or not, that are absent from the current run are
 listed under `removed_documents`, each as not comparable. An earlier
-report that uses another evidence schema version is not compared field by field: every document
-is not comparable, with the reason `earlier report uses evidence schema <n>`. Reports without
+report that uses an evidence schema version other than 2 or 3 is not compared field by field:
+every document is not comparable, with the reason `earlier report uses evidence schema <n>`. Reports without
 earlier evidence, incomplete evidence and malformed evidence are not comparable with a stated
 reason. These fingerprints describe saved inputs and outputs; they do not establish that a
 cached read is correct.

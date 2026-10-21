@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sys
+import tempfile
 from collections import Counter, defaultdict
 from collections.abc import Iterator, Mapping, Sequence
 from decimal import Decimal, InvalidOperation
@@ -22,7 +24,6 @@ from dataset_contracts import (
     Text,
     digest,
 )
-from exclusive_write import write_new
 from pydantic import Field, ValidationError, model_validator
 
 from fra_core.schemas import StatementType
@@ -392,15 +393,26 @@ def _freeze_consistency(
         raise DatasetError("carried equity exclusions must be version 1")
     verify_source(equity, manifest)
     targets: dict[str, Counter[str | None]] = defaultdict(Counter)
+    source_hash = hashlib.sha256()
+    row_error: DatasetError | None = None
     with (dataset_dir / "train.jsonl").open("rb") as handle:
         for number, line in enumerate(handle, 1):
+            source_hash.update(line)
+            if row_error is not None:
+                continue
             try:
                 key, target = _validated_pair(
                     _ChatRow.model_validate_json(line), manifest.system_prompt_sha256
                 )
             except ValueError as exc:
-                raise DatasetError(f"{dataset_dir / 'train.jsonl'}:{number}: {exc}") from exc
+                row_error = DatasetError(f"{dataset_dir / 'train.jsonl'}:{number}: {exc}")
+                continue
             targets[key][target] += 1
+    # Verify every byte, including lines after a parse failure, before returning any selection.
+    if source_hash.hexdigest() != manifest.train_sha256:
+        raise DatasetError("train.jsonl: source sha256 differs from manifest")
+    if row_error is not None:
+        raise row_error
     before = sum(sum(c.values()) for c in targets.values())
     if before != manifest.fit_rows_after:
         raise DatasetError("source train rows differ from manifest")
@@ -510,16 +522,16 @@ def freeze_exclusions(
             raise DatasetError("freeze requires the current unexcluded builder version")
         if manifest.system_prompt_sha256 != hashlib.sha256(SYSTEM_PROMPT.encode()).hexdigest():
             raise DatasetError("freeze source system prompt sha256 differs")
-        source_hashes = [("train.jsonl", manifest.train_sha256)]
-        if policy is None:
-            source_hashes.append(("valid.jsonl", manifest.valid_sha256))
-        for name, expected in source_hashes:
-            with (dataset_dir / name).open("rb") as handle:
-                if hashlib.file_digest(handle, "sha256").hexdigest() != expected:
-                    raise DatasetError(f"{name}: source sha256 differs from manifest")
         if policy is not None:
             assert equity_exclusions is not None
             return _freeze_consistency(dataset_dir, manifest, policy, equity_exclusions, provenance)
+        for name, expected in (
+            ("train.jsonl", manifest.train_sha256),
+            ("valid.jsonl", manifest.valid_sha256),
+        ):
+            with (dataset_dir / name).open("rb") as handle:
+                if hashlib.file_digest(handle, "sha256").hexdigest() != expected:
+                    raise DatasetError(f"{name}: source sha256 differs from manifest")
         targets: dict[str, Counter[str]] = defaultdict(Counter)
         for key, target in _train_targets(
             dataset_dir / "train.jsonl", manifest.system_prompt_sha256
@@ -564,6 +576,29 @@ def _threshold(value: str) -> Decimal:
         raise argparse.ArgumentTypeError("threshold must be a decimal number") from exc
 
 
+def _publish_exclusions(path: Path, data: bytes) -> None:
+    """Publish complete bytes with an exclusive hard link in the destination directory."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        try:
+            os.link(temporary, path)
+        except FileExistsError as exc:
+            raise DatasetError(f"{path} already exists; refusing to overwrite") from exc
+        directory = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset-dir", type=Path, required=True)
@@ -597,13 +632,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             null_dominance=args.null_dominance,
             equity_exclusions=args.equity_exclusions,
         )
-        write_new({args.out: artifact.model_dump_json(indent=2) + "\n"})
+        _publish_exclusions(args.out, (artifact.model_dump_json(indent=2) + "\n").encode("utf-8"))
     except (DatasetError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
+    hash_label = "keys" if artifact.version == 1 else "artifact content"
     print(
         f"{len(artifact.keys)} keys, {artifact.removed_rows} removed, "
-        f"{artifact.rows_after} retained; keys sha256 {artifact.keys_sha256}"
+        f"{artifact.rows_after} retained; {hash_label} sha256 {artifact.keys_sha256}"
     )
     return 0
 
