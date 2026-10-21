@@ -77,6 +77,7 @@ def analysis_of(
     converted: ConvertResult | None,
     result: StructureResult,
     metrics: list[MetricValue],
+    decline: Decline | None = None,
 ) -> Analysis:
     industry = result.industry
     conversion_flags: list[str] = []
@@ -93,7 +94,8 @@ def analysis_of(
         statements=result.statements,
         reviews=result.reviews,
         flags=list(dict.fromkeys([*located.flags, *conversion_flags, *result.flags])),
-        decline=(
+        decline=decline
+        or (
             Decline(code=industry.code, reason=industry.reason)
             if industry is not None and industry.outcome == "declined"
             else None
@@ -122,10 +124,18 @@ def run_job(store: JobStore, job: Job, pipeline: Pipeline, max_pages: int) -> Jo
             f"{document.page_count} pages, {len(document.scanned_pages)} without a text layer, "
             f"{len(located.ranges)} statement ranges",
         )
-        decision = industry_decision(located.industry)
-        declined = (
-            decision.code if decision is not None and decision.outcome == "declined" else None
-        )
+        decline = None
+        if document.language == "ar":
+            decline = Decline(
+                code="unsupported_language",
+                reason="This report is mainly in Arabic. Only English financial reports are "
+                "analyzed, so no statements, metrics or summary were produced.",
+            )
+        else:
+            decision = industry_decision(located.industry)
+            if decision is not None and decision.outcome == "declined":
+                decline = Decline(code=decision.code, reason=decision.reason)
+        declined = decline.code if decline is not None else None
         store.start_stage(job.id, JobStage.CONVERT)
         converted: ConvertResult | None = None
         if declined is not None:
@@ -134,8 +144,14 @@ def run_job(store: JobStore, job: Job, pipeline: Pipeline, max_pages: int) -> Jo
             converted = pipeline.convert(pdf, located)
             store.finish_stage(job.id, JobStage.CONVERT, f"{len(converted.ranges)} page ranges")
         store.start_stage(job.id, JobStage.STRUCTURE)
-        result = pipeline.structure(pdf, converted)
-        store.finish_stage(job.id, JobStage.STRUCTURE, f"{len(result.statements)} statements")
+        if declined == "unsupported_language":
+            result = StructureResult(
+                version="declined", sha256=job.upload_sha256, convert_version="", settings_hash=""
+            )
+            store.finish_stage(job.id, JobStage.STRUCTURE, "skipped: declined")
+        else:
+            result = pipeline.structure(pdf, converted)
+            store.finish_stage(job.id, JobStage.STRUCTURE, f"{len(result.statements)} statements")
         store.start_stage(job.id, JobStage.METRICS)
         if declined is not None:
             metrics: list[MetricValue] = []
@@ -146,7 +162,7 @@ def run_job(store: JobStore, job: Job, pipeline: Pipeline, max_pages: int) -> Jo
             store.finish_stage(
                 job.id, JobStage.METRICS, f"{computed} of {len(metrics)} values computed"
             )
-        analysis = analysis_of(job, located, converted, result, metrics)
+        analysis = analysis_of(job, located, converted, result, metrics, decline)
         store.start_stage(job.id, JobStage.NARRATE)
         summary = pipeline.summarize(analysis)
         if isinstance(summary, SummaryBuilt):

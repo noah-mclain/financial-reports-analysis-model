@@ -1,0 +1,14 @@
+{
+  "provenance": "Pinned synthetic v1 contract from c32311ee2ab61b63051a45ed35fea356f7eef4d6; no private rows.",
+  "artifact_json": "{\"keys_sha256\":\"594eb7f288e2b3b18a365f353ad8eeef7efa2898efaeda3aa94caa56d928c0be\",\"source_train_sha256\":\"40700b023799c652a58ef2405f37f0f94f9b92938e8d3b031aa4202a9371e496\",\"rows_before\":10,\"rows_after\":7,\"removed_rows\":3,\"removed_targets\":{\"equity_attributable_parent\":1,\"null\":1,\"total_equity\":1},\"version\":1,\"keys\":[\"{\\\"label\\\":\\\"Equity\\\",\\\"statement\\\":\\\"balance\\\"}\"],\"selection_criterion\":\"Exact messages[1].content strings with both equity_attributable_parent and total_equity targets in train only; remove every matching train row, including null.\",\"builder_version\":2,\"system_prompt_sha256\":\"bba5f9cdf6ea3e553c9b899a0d4419128e84f6255f73870dba2090ded1bc0606\",\"dataset\":{\"version\":1,\"input_examples\":11,\"input_sha256\":\"a77ef221afee9a8cda7cc57736b1ca4c891bbf2e49b7c08b1989ee6045afd245\",\"sources_sha256\":\"0116b6f06d0b5fafed690fd2602b1a3876fb2a61d06c97f1934ac473b6412b33\",\"registry_sha256\":\"8c17c3a6e440ee28e6b273a69a9acff6d0863b646d30242ef0fa89851451662a\",\"split_records_sha256\":\"0180f1b536c58828ccc47616f75b99e0fcaf3ed8d1e2126b1691e833ecc1f27c\",\"taxonomy_sha256\":\"b8cdd84cff5bb058232a0e011f1d9d5fac1ae04b37dbe30618a0ce849da0335e\",\"config_sha256\":\"dd54ddb606d93172e9828cdb73a42d8d943b3bd2713601b2a0d2144ffece74f5\",\"fit_sha256\":\"b38881720cda5f5f9a88909b779a7d88e83ff77849ca0e28f9411acbe3fbd94e\",\"validation_sha256\":\"e4e6fccf177659588941532a67d6d62925a771ef6d381602697510e0643f22d1\"},\"source_valid_sha256\":\"4455acf51f050e624a3ffc8e4327c01330cb7a529a1c36e5b09b1af58c036c3a\",\"tokenizer_id\":\"fixture\",\"provenance\":\"synthetic equity\"}",
+  "retained_indices": [
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "retained_bytes_sha256": "6a37788a1b69427023f0b60ffaad7b9de4afce35aa4783a3aa88cb0e746ac09e"
+}
