@@ -52,6 +52,51 @@ pools so that no score is measured on something the code or the model has alread
 `make corpus-check` enforces rules 1 and 2 on recorded identity/pool metadata. `make corpus-fetch` enforces
 rule 2 again on the downloaded bytes.
 
+## English-only scored scope (D21)
+
+Declared by the owner on 2026-10-21, before the planned 24 October checkpoint and any
+`model_test` or `blind` scoring: score every English document in each whole pool, using its
+manifest language, never its result. Apply the rule identically to both pools. Arabic stays
+in the corpus and training data and is reported with measured limits, without a gate.
+D14 and D20 remain historical decisions and no longer govern a gate. Arabic uploads are
+declined with a plain reason; the demo promises English reports only.
+
+Recounted 2026-10-21 with `make corpus-check` (exit 0) and fetched metadata joined by document
+key to `candidates.yaml` for issuer and language. This reads metadata only, not protected PDFs,
+labels or outputs. Issuers are distinct recorded issuer names within each pool; an issuer
+with both editions contributes its English documents to scoring.
+
+| Pool | All issuers | With English | Arabic-only issuers | English documents scored | Arabic documents reported only |
+|------|-------------|--------------|---------------------|--------------------------|--------------------------------|
+| model_test | 36 | 25 | 11 | 36 | 29 |
+| blind | 39 | 28 | 11 | 39 | 33 |
+
+The issuer counts agree with the coverage table below: Arabic-only is issuers with Arabic
+minus issuers with both editions (`25 - 14 = 11`; `23 - 12 = 11`). Thus Gate E covers 39
+English documents from 28 blind issuers, rather than 72 documents from 39 issuers. The English
+documents of the 14 and 12 bilingual issuers remain scored; Arabic editions and the bilingual
+pair comparison are report-only. The three scanned Egyptian blind filings no longer establish
+demo coverage. The accuracy report must state the smaller promise and the excluded Arabic
+strata and Arabic-only issuers. Preserve corpus membership and issuer pool boundaries.
+Record this policy and recount the denominators in the scoring log before the checkpoint.
+
+The CPU-only recount of saved `dev` evidence on 2026-10-21 still fails the English gates:
+six English documents have identity outcomes 3 ok, 2 skipped and 1 no balance sheet; scale
+and currency are found for 17 of 18 expected statements; Gate B has 8 statement-not-found
+slots and 1 ambiguous slot. English-only scope does not make Gate A or B pass. The historical saved Arabic report had
+1 ok, 2 skipped, 2 no balance and 1 failed-accepted identity, 14 of 18 metadata found, 16 missing
+mapping slots and 8 ambiguous slots. Recomputing the currently saved Arabic structures gives
+1 ok, 1 skipped, 3 no balance and 1 failed-accepted identity, 13 of 18 metadata found, 24 missing
+mapping slots and 5 ambiguous slots. Those saved inputs differ; neither Arabic recount is a
+gate verdict. The English reference and recomputation agree.
+
+The unchanged language detector was measured on available train/dev native text layers only,
+without OCR: 108 Arabic documents classified Arabic and 97 English documents classified
+English, with no observed English false decline. Six English documents had no usable text
+layer and were unmeasurable without OCR. Five additional English train candidates were not
+fetched and were not measured. These counts do not establish scanned-document
+language accuracy; no detector threshold was tuned and no protected document was read.
+
 ## Current size
 
 Measured 2026-09-26 to 2026-10-03 (`fetched.yaml`): 353 documents from 198 issuers in Saudi

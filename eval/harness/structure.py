@@ -6,7 +6,7 @@ Per document: statements per enabled type, scale and currency against the manife
 status (from the balance identity checks in table_checks.json), review status and flags. A
 failed identity is accepted only on a statement held for review, with a cell on the check's
 rows that explains it (spec 12, Scoring). Per language pair: numeric rows without a
-counterpart. Only the Almarai pair is gated. Writes
+counterpart. Language pairs are report-only (D21). Writes
 var/eval/structure-golden.json.
 """
 
@@ -34,7 +34,7 @@ from harness.failures import DOCUMENT_ERRORS, EngineFailure, EngineGuard, aborte
 MANIFEST = REPO_ROOT / "eval" / "golden" / "manifest.yaml"
 OUT = REPO_ROOT / "var" / "eval"
 PAIRS = (
-    ("almarai-2025-en", "almarai-2025-ar", True),
+    ("almarai-2025-en", "almarai-2025-ar", False),
     ("juhayna-2025-en-consolidated", "juhayna-2025-ar-consolidated", False),
     ("juhayna-2024-en-consolidated", "juhayna-2024-ar-consolidated", False),
     ("edita-2025-en-consolidated-eas", "edita-2025-ar-consolidated", False),

@@ -580,8 +580,8 @@ def test_two_runs_that_skipped_conversion_compare_as_unchanged(tmp_path: Path) -
     assert comparison["conversion_settings_changed"] is False
 
 
-def test_evidence_schema_version_is_unchanged_by_the_stricter_range_type() -> None:
-    assert EVIDENCE_SCHEMA_VERSION == 2
+def test_evidence_schema_version_records_manifest_language_scoping() -> None:
+    assert EVIDENCE_SCHEMA_VERSION == 3
 
 
 @pytest.mark.parametrize("statement_type", list(StatementType))

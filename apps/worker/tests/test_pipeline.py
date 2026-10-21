@@ -53,7 +53,7 @@ BANK = IndustrySignal(
 def located(sha256: str, pages: int = 10, industry: IndustrySignal | None = None) -> LocateResult:
     return LocateResult(
         version="v",
-        document=Document(sha256=sha256, filename="r.pdf", page_count=pages, language="ar"),
+        document=Document(sha256=sha256, filename="r.pdf", page_count=pages, language="en"),
         pages=[],
         ranges=[
             StatementRange(type=StatementType.BALANCE, first_page=3, last_page=3, score=8, rank=1)
@@ -163,6 +163,7 @@ def pipeline_for(
     industry: IndustrySignal | None = None,
     result: StructureResult | None = None,
     fail_at: str | None = None,
+    language: str = "en",
 ) -> Pipeline:
     def step(name: str) -> None:
         calls.names.append(name)
@@ -172,7 +173,9 @@ def pipeline_for(
     def locate(pdf: Path) -> LocateResult:
         step("locate")
         assert pdf.read_bytes() == PDF  # the stored upload is what each stage reads
-        return located(sha256, pages, industry)
+        result = located(sha256, pages, industry)
+        result.document.language = language
+        return result
 
     def convert(pdf: Path, loc: LocateResult) -> ConvertResult:
         step("convert")
@@ -233,7 +236,7 @@ def test_a_job_runs_each_stage_in_order_and_leaves_its_analysis(tmp_path: Path) 
     ]
     analysis = store.load_analysis(job.id)
     assert analysis is not None
-    assert analysis.page_count == 10 and analysis.language == "ar"
+    assert analysis.page_count == 10 and analysis.language == "en"
     assert [s.id for s in analysis.statements] == ["s"]
     assert [m.value for m in analysis.metrics] == [1.5, None]
     assert analysis.decline is None and analysis.narrative is None
@@ -477,7 +480,7 @@ def test_valid_source_reaches_checked_summary_in_existing_store(tmp_path: Path) 
     assert job.status is JobStatus.COMPLETED and saved is not None
     assert saved.narrative is not None and saved.narrative.origin == "direct_template"
     assert saved.narrative.grounding.value == "passed" and not saved.narrative_suppression
-    assert "نسبة التداول: 1.50×" in saved.narrative.sections[0].sentences[0].text
+    assert "Current ratio: 1.50×" in saved.narrative.sections[0].sentences[0].text
     assert store.events(job.id)[-2].detail == "checked direct-template summary"
 
 
@@ -491,3 +494,26 @@ def test_unchecked_summary_callback_cannot_persist_unverified_text(tmp_path: Pat
     job = run_one(store, pipeline)
     assert job.status is JobStatus.FAILED and job.stage is JobStage.NARRATE
     assert store.load_analysis(job.id) is None
+
+
+@pytest.mark.parametrize("industry", [None, BANK])
+def test_arabic_decline_precedes_industry_and_skips_financial_outputs(
+    tmp_path: Path, industry: IndustrySignal | None
+) -> None:
+    store, sha = queued(tmp_path)
+    calls = Calls()
+    job = run_one(store, pipeline_for(sha, calls, language="ar", industry=industry))
+    assert job.status is JobStatus.NEEDS_REVIEW
+    assert calls.names == ["locate"]
+    analysis = store.load_analysis(job.id)
+    assert analysis is not None and analysis.decline is not None
+    assert analysis.decline.code == "unsupported_language"
+    assert analysis.decline.reason == (
+        "This report is mainly in Arabic. Only English financial reports are analyzed, "
+        "so no statements, metrics or summary were produced."
+    )
+    assert analysis.statements == [] and analysis.metrics == [] and analysis.reviews == []
+    assert analysis.narrative is None and analysis.hold is None
+    details = [(event.stage, event.detail) for event in store.events(job.id)]
+    assert (JobStage.CONVERT, "skipped: declined (unsupported_language)") in details
+    assert (JobStage.METRICS, "skipped: declined") in details
