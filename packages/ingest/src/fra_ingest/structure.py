@@ -76,7 +76,7 @@ from fra_ingest.visual_order import (
     restore_word_order,
 )
 
-STRUCTURE_VERSION = "52"  # EPS needs a precise interval and a governing note heading
+STRUCTURE_VERSION = "53"  # retain qualified label-cell sources, including value-free headings
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 

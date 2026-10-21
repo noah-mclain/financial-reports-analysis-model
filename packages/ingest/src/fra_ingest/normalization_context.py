@@ -104,6 +104,24 @@ def _context_rows(
     return context, heading, parent, related
 
 
+def build_normalization_source_row(
+    item: LineItem,
+    source_order: int,
+    role: Literal["target", "heading", "parent", "related"],
+) -> NormalizationSourceRow:
+    """Keep label lineage separate from the value rows, including value-free headings."""
+    refs = sorted(
+        {(c.provenance.page_no, c.provenance.table_ref, c.provenance.row) for c in item.cells}
+    )
+    return NormalizationSourceRow(
+        role=role,
+        line_item_id=item.id,
+        source_order=source_order,
+        value_rows=tuple(ValueRowReference(page_no=p, table_ref=t, row=r) for p, t, r in refs),
+        label_region=item.label_source if item.label_source is not None else "unavailable",
+    )
+
+
 def build_normalization_request(statement: Statement, target_id: str) -> NormalizationRequest:
     """Build an amount-free request without mutating the structured statement.
 
@@ -119,16 +137,7 @@ def build_normalization_request(statement: Statement, target_id: str) -> Normali
     def source_row(
         n: int, role: Literal["target", "heading", "parent", "related"]
     ) -> NormalizationSourceRow:
-        item = items[n]
-        refs = sorted(
-            {(c.provenance.page_no, c.provenance.table_ref, c.provenance.row) for c in item.cells}
-        )
-        return NormalizationSourceRow(
-            role=role,
-            line_item_id=item.id,
-            source_order=n,
-            value_rows=tuple(ValueRowReference(page_no=p, table_ref=t, row=r) for p, t, r in refs),
-        )
+        return build_normalization_source_row(items[n], n, role)
 
     rows = [source_row(target, "target")]
     if heading is not None:

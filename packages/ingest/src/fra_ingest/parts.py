@@ -11,19 +11,29 @@ gap. A section heading the taxonomy also knows (``Current assets``) stays a head
 from __future__ import annotations
 
 from collections.abc import Collection, Sequence
+from math import isfinite
 from statistics import median
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from fra_core.labels import normalize_label
 from fra_core.numbers import parse_number
-from fra_core.schemas import BBox, Cell, LineItem, Period, Provenance, StatementType, TextSource
-from fra_core.schemas.statement import PeriodConflict
+from fra_core.schemas import (
+    BBox,
+    Cell,
+    LabelSource,
+    LineItem,
+    Period,
+    Provenance,
+    StatementType,
+    TextSource,
+)
+from fra_core.schemas.statement import LabelSourceReason, PeriodConflict
 from fra_ingest.classify import Classification
 from fra_ingest.column_assignment import SPLIT_FLAG, is_merged_amount
 from fra_ingest.header import HeaderLayout, split_note
 from fra_ingest.label_match import LabelIndex, has_subtotal_cue, squash
-from fra_ingest.table_grid import Grid
+from fra_ingest.table_grid import Grid, GridCell
 
 # Larger than any printed statement figure, before scale: merged digit groups (OCR).
 IMPLAUSIBLE = 10**15
@@ -159,6 +169,96 @@ def _flag_column_outliers(part: PartialStatement) -> None:
             part.line_items[n] = item.model_copy(update={"cells": cells})
 
 
+def _label_source(
+    grid: Grid,
+    layout: HeaderLayout,
+    row: int,
+    cell: GridCell | None,
+    *,
+    source: TextSource,
+    note_split: bool,
+    has_values: bool,
+    merged: bool,
+) -> LabelSource:
+    """Locate only the uniquely owned physical label cell, independently of value boxes."""
+    if cell is None or not cell.text.strip():
+        return LabelSource(status="unavailable", reasons=("missing_cell",))
+    candidates = [
+        c
+        for c in grid.cells
+        if layout.label_col is not None
+        and c.row <= row < c.row + c.row_span
+        and c.col <= layout.label_col < c.col + c.col_span
+    ]
+    valued_row = has_values or any(
+        c is not cell
+        and c.text.strip()
+        and c.col in layout.value_cols
+        and c.row <= row < c.row + c.row_span
+        for c in grid.cells
+    )
+    if (
+        len(candidates) != 1
+        or cell.row != row
+        or (
+            valued_row
+            and any(cell.col <= col < cell.col + cell.col_span for col in layout.value_cols)
+        )
+    ):
+        return LabelSource(status="ambiguous", reasons=("ambiguous_cell",))
+    if not grid.source_page_unambiguous or cell.page_no != grid.page_no:
+        return LabelSource(status="ambiguous", reasons=("ambiguous_page",))
+    if cell.bbox is None:
+        return LabelSource(status="unavailable", reasons=("missing_bbox",))
+    if grid.page_height is None or not grid.docling_path.strip() or not grid.table_ref.strip():
+        return LabelSource(status="unavailable", reasons=("source_missing",))
+    box = cell.bbox
+    origin_row = cell.source_row if cell.source_row is not None else cell.row
+    origin_col = cell.source_col if cell.source_col is not None else cell.col
+    if (
+        not all(
+            isfinite(v)
+            for v in (box.left, box.top, box.right, box.bottom, grid.page_width, grid.page_height)
+        )
+        or not 0 <= box.left < box.right <= grid.page_width
+        or not 0 <= box.top < box.bottom <= grid.page_height
+        or not 0 <= origin_row < grid.num_rows
+        or not 0 <= origin_col < grid.num_cols
+        or cell.row_span < 1
+        or cell.col_span < 1
+        or cell.row + cell.row_span > grid.num_rows
+        or cell.col + cell.col_span > grid.num_cols
+        or grid.page_no < 1
+    ):
+        return LabelSource(status="unavailable", reasons=("invalid_source",))
+    reasons: list[LabelSourceReason] = []
+    if {"digits_reversed", "letters_spaced", "words_from_page", "year_joined"} & set(cell.flags):
+        reasons.append("text_repaired")
+    if note_split:
+        reasons.append("note_split")
+    if {"words_reversed", "word_order_uncertain"} & set(grid.flags):
+        reasons.append("reading_uncertain")
+    if merged or cell.row_span > 1 or cell.col_span > 1:
+        reasons.append("merged_or_wrapped")
+    return LabelSource(
+        status="merged"
+        if "merged_or_wrapped" in reasons
+        else "transformed"
+        if reasons
+        else "retained",
+        provenance=Provenance(
+            page_no=grid.page_no,
+            bbox=box,
+            table_ref=grid.table_ref,
+            row=origin_row,
+            col=origin_col,
+            source=source,
+        ),
+        docling_path=grid.docling_path,
+        reasons=tuple(reasons),
+    )
+
+
 def build_part(
     grid: Grid,
     layout: HeaderLayout,
@@ -199,6 +299,7 @@ def build_part(
     for row in data_rows:
         label_cell = grid.cell(row, layout.label_col) if layout.label_col is not None else None
         label = label_cell.text if label_cell is not None else ""
+        split = None
         note = grid.text(row, layout.note_col) if layout.note_col is not None else ""
         if not note:
             label, split = split_note(label)
@@ -217,6 +318,16 @@ def build_part(
         known = index.match(label, classification.type) if index is not None else None
         # A known total with every value lost keeps its cells, each flagged as missing.
         has_values = any(texts.values()) or (known is not None and has_subtotal_cue(label))
+        label_source = _label_source(
+            grid,
+            layout,
+            row,
+            label_cell,
+            source=source,
+            note_split=split is not None,
+            has_values=bool(has_values),
+            merged=row in merged_rows,
+        )
         if not has_values:
             under_per_share = named_per_share
         per_share = named_per_share or (under_per_share and _under_per_share_heading(label))
@@ -276,7 +387,13 @@ def build_part(
         if words_from_page and not cells:  # a heading has no value cell to carry the flag
             part.flags.append(f"label_words_from_page:{item_id}")
         part.line_items.append(
-            LineItem(id=item_id, raw_label=label, note_ref=note or None, cells=cells)
+            LineItem(
+                id=item_id,
+                raw_label=label,
+                label_source=label_source,
+                note_ref=note or None,
+                cells=cells,
+            )
         )
         indent = None
         if label_cell is not None and label_cell.bbox is not None:
