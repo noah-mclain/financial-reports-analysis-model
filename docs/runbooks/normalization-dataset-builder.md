@@ -275,8 +275,24 @@ inputs, this new artifact as `--exclusions`, and a new output directory. Do not 
 the already equity-filtered v3 dataset: the combined artifact binds the unexcluded source.
 Combined retained rows must equal applying the policy after v1 equity removal.
 
-No real v2 policy counts or build results have been measured yet. Synthetic tests establish
-policy/application behavior only; the immutable real v1 byte regression and real v2 freeze,
-build and reconciliation remain coordinator checks. This is a training-input consistency
-choice. For example, dominant training mappings may retain `total_assets` despite custom-tag
-null drafts; the policy does not integrate or certify the separate source-evidence gate.
+The coordinator measured the real `dataset_sec_5` build: 287,486 train rows, of which 129,555
+(45.1%) have a non-null target, across 122,464 exact input groups with zero multi-target
+groups. The six reported critical-item counts are:
+
+| Canonical item | Rows |
+|---|---:|
+| `revenue` | 3,445 |
+| `net_income` | 1,759 |
+| `total_assets` | 3,556 |
+| `total_equity` | 708 |
+| `total_current_assets` | 3,298 |
+| `total_current_liabilities` | 3,273 |
+
+These six counts are not an exhaustive class distribution. Against the directly recomputed
+279,139-row control without null dominance, the final build adds 8,347 rows (+3.0%). Direct
+counting from retained train keys and the artifact's source/outlier pairs attributes this to
+104 null-dominant mixed groups: 8,508 null rows are kept instead of 161 top-mapped rows, a net
+gain of 8,347. The `income,balance`, `0.95` mapped-dominance and `0.90` null-dominance
+parameters were unchanged. This is a training-input consistency choice. For example, dominant
+training mappings may retain `total_assets` despite custom-tag null drafts; the policy does
+not establish financial truth or integrate or certify the separate source-evidence gate.
