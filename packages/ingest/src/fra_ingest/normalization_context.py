@@ -22,7 +22,8 @@ from fra_core.schemas.normalization import (
 )
 
 
-def _positions(items: Sequence[LineItem], target_id: str) -> dict[str, int]:
+def validate_row_graph(items: Sequence[LineItem], target_id: str) -> dict[str, int]:
+    """Validate all parent components before traversal and return source positions."""
     positions: dict[str, int] = {}
     for n, item in enumerate(items):
         if item.id in positions:
@@ -130,7 +131,7 @@ def build_normalization_request(statement: Statement, target_id: str) -> Normali
     heading ancestor provides no printed context. Run-in headings are not reconstructed.
     """
     items = statement.line_items
-    positions = _positions(items, target_id)
+    positions = validate_row_graph(items, target_id)
     target = positions[target_id]
     context, heading, parent, related = _context_rows(items, positions, target)
 
