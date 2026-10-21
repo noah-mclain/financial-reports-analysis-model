@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block main %}
 <h1>Analyse a financial report</h1>
-<p class="muted">A statement of financial position and a profit or loss statement, in English, digital or scanned. Up to {{ max_mb }} MB and {{ max_pages }} pages. Arabic reports, banks and insurers are declined with the reason.</p>
+<p class="muted">A statement of financial position and a profit or loss statement, in English, digital or scanned. Up to {{ max_mb }} MB and {{ max_pages }} pages. Reports identified as mainly Arabic, banks and insurers are declined with the reason. Poor OCR can miss Arabic text, and other non-English languages may not be detected.</p>
 <form class="panel" id="upload">
   <label for="file">Financial report (PDF)</label>
   <input type="file" id="file" name="file" accept="application/pdf,.pdf" required>

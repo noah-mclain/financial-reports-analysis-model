@@ -890,7 +890,14 @@ def test_arabic_decline_page_shows_plain_reason_and_no_financial_outputs(tmp_pat
     with TestClient(create_app(Profile.NATIVE, settings)) as client:
         upload = " ".join(client.get("/").text.split())
         assert "in English, digital or scanned" in upload
-        assert "Arabic reports, banks and insurers are declined with the reason" in upload
+        assert (
+            "Reports identified as mainly Arabic, banks and insurers are declined with the reason"
+            in upload
+        )
+        assert (
+            "Poor OCR can miss Arabic text, and other non-English languages may not be detected"
+            in upload
+        )
         job_id = finished_job(
             settings,
             client,

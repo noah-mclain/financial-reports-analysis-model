@@ -39,7 +39,7 @@ dedupe. Nothing from extraction onward exists yet.
 | In | Out (say so plainly when demonstrating) |
 |----|------------------------------------------|
 | Statement of financial position and profit or loss | Cash flow and equity statements (stretch) |
-| English, digital and scanned, detected per page | Arabic reports are declined with a plain reason; other languages |
+| English, digital and scanned, within the limits of text-derived script detection | Arabic-majority extracted text is declined with a plain reason; other languages are outside the supported scope but are not generally detected |
 | Non-financial corporates from any market | Banks and insurers: detected and declined with the reason |
 | About 12 ratios with identity checks | The full 24-metric registry from 02 |
 | Trained label normalization; narration on the base model, trained only if it misses its gate | Corrections UI, export, auth, multi-user |
@@ -136,7 +136,9 @@ restore if time is left, not the first thing to add.
 D21 was declared by the owner on 21 October, before the planned 24 October checkpoint and
 before any protected scoring. Apply the same whole-pool manifest-language rule to `model_test`
 and `blind`, independently of results. Arabic stays in the code, corpus and training pool;
-Arabic uploads are declined. The excluded Arabic documents and Arabic-only issuers remain
+uploads identified from extracted text as mainly Arabic are declined. This script-majority
+check can miss Arabic when OCR is poor and does not identify non-English Latin-script reports.
+The excluded Arabic documents and Arabic-only issuers remain
 visible in the accuracy report. The measured denominators and method are in
 [the corpus rules](../../eval/corpus/README.md#english-only-scored-scope-d21).
 
@@ -181,7 +183,7 @@ a first look. The holdout and the dry runs reduce that risk; they do not remove 
 
 | ID | Risk | Mitigation |
 |----|------|------------|
-| R15 | Linux OCR too weak on Arabic scans | Closed for gating by D21. Retain measured Arabic OCR limits in the accuracy report; Arabic uploads are declined with a plain reason |
+| R15 | Linux OCR too weak on Arabic scans | Closed for gating by D21. Retain measured Arabic OCR limits in the accuracy report; extracted text identified as mainly Arabic is declined, but poor OCR can miss it |
 | R16 | Fused adapter does not convert to GGUF cleanly | Week 1 spike, before any training run depends on it |
 | R17 | Blind documents leak into development | Issuer-grouped pools enforced by `make corpus-check`; failures fixed on non-blind documents |
 | R18 | Cloud environment cannot reach most filing hosts | Collection and fetch scripts run unchanged on the Mac; URL and sha256 recorded so the set reproduces |

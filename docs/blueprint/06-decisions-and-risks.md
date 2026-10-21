@@ -32,9 +32,13 @@ an owner sign-off before the Phase 1 exit gate.
 | D21 | Which languages the remaining gates and demo score | Keep English and Arabic; score English only and report Arabic as measured but not gated; cut Arabic code | Decided 2026-10-21 by the owner: score English only. Arabic stays in the code, training pool and corpus, is reported with measured limits, and carries no gate. D14 and D20 remain on record but no longer govern a gate. Declare language scope before the D13 checkpoint and apply it to the whole pool by document language, never by result |
 
 The owner recorded D21 on 2026-10-21: "let's limit to english only and sideline arabic, its
-causing too many problems for the time we have." Arabic uploads are declined with the plain
-language reason; Arabic OCR, rendering and narration support remain in the code. This scope
-is recorded before the planned 24 October D13 checkpoint and before protected scoring.
+causing too many problems for the time we have." Uploads whose extracted text is identified as
+mainly Arabic are declined with the plain language reason; Arabic OCR, rendering and narration
+support remain in the code. This is a text-derived script majority check, not general language
+identification: poor OCR can miss Arabic text, and non-English Latin-script reports may be
+processed as English. Scanned-page metadata and configured OCR languages do not identify the
+report's language. This scope is recorded before the planned 24 October D13 checkpoint and
+before protected scoring.
 
 ## 6.2 Risk register
 
