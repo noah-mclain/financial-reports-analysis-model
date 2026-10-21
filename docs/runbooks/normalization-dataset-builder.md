@@ -178,8 +178,8 @@ Source train/validation and example hashes matched the task's pinned artifacts; 
 identity matched `9e3c11a4a87d85a72b6f2d1e4b29ab88532f72d03189b6fa2793da735a2d98aa`.
 These examples are consumed as hash-bound decoder artifacts; this change does not independently
 reproduce `sec_examples_4`. Dropping conflicting supervision does not teach abstention or
-establish a clean dataset. Broader label-versus-null discordance (scope B) remains unresolved;
-there is no global discordance filter.
+establish a clean dataset. Version 1 leaves broader label-versus-null discordance (scope B)
+unresolved; it applies no global discordance filter.
 
 The coordinator runs the commands below outside the worker sandbox. They use the existing
 local environment, create new outputs and refuse overwrites. No real exclusion file, rebuilt
@@ -222,3 +222,61 @@ per-input targets and predictions. Fixture tests verify membership and full-scor
 The coordinator must check the real 173 ambiguity rows / 21 inputs and compare the full
 lexicon result with the existing `normalization-validation-sec4/RECORD.txt` baseline
 (accuracy 85.35%, macro-F1 42.08%); these real population results remain unverified here.
+
+## Frozen training-input consistency exclusions (artifact version 2)
+
+The optional `training_input_consistency` criterion keeps the existing builder and manifest
+contracts. It freezes `(input_key, target-or-null)` removals, where `input_key` is the entire
+exact `messages[1].content` string. Parsing validates the label, statement and target without
+re-rendering the key. It never relabels, deduplicates or creates rows.
+
+All three policy parameters are explicit; there are no defaults. First carry the supplied
+version 1 equity removals, then group the remaining train rows. Remove rows outside the selected
+statement types. For each selected group:
+
+- Retain every row if all targets are null.
+- Excluding nulls from the denominator, quarantine the whole group (including nulls) if the
+  largest mapped share is below `dominance` or there is a tie for the largest mapped count.
+- Otherwise retain only null rows when their share of all group rows is at least
+  `null-dominance`; retain only the top mapped target otherwise. Remove all other rows.
+
+Threshold comparisons are exact, including equality. The artifact records policy parameters,
+the source identities, the supplied equity artifact's byte hash and embedded v1 selection,
+and disjoint pair counts/reasons (`equity`, `statement`, `ambiguous`, `outlier`). Equity takes
+precedence so a row is counted once. For v2, `keys_sha256` binds the complete artifact content
+except that hash field, including policy and pair removals; for v1 it remains the original
+sorted key-list hash. These integrity hashes are not evidence of annotation truth.
+
+V2 freeze reads only train rows, the build manifest and the supplied equity artifact. The
+validation hash is carried from the bound manifests; freeze does not open validation or any
+example/provenance records. Application still checks source identity, pair coverage, per-pair
+and target counts, and before/after accounting. Version 1 selection, validation and whole-key
+application remain available with the original CLI. Both versions produce one unchanged
+`ExclusionAudit`; the existing `build_dataset(..., exclusions=...)` path recomputes retained
+lengths, strata, row count and train hash from the original examples and injected tokenizer.
+Validation bytes remain unchanged.
+
+After independent diff review and all four required make checks, the coordinator may freeze
+from the **unexcluded** source with the owner-selected parameters below. Reuse the environment
+variables from the commands above, from the `fit-consistency-projection` checkout:
+
+```sh
+"$PYTHON_BIN" training/dataset_exclusions.py \
+    --dataset-dir "$V/dataset_sec_4_v2" \
+    --equity-exclusions "$V/dataset_sec_4_v2_exclusions/exclusions.json" \
+    --criterion training_input_consistency \
+    --statements income,balance --dominance 0.95 --null-dominance 0.90 \
+    --out "$V/dataset_sec_4_consistency_exclusions/exclusions.json" \
+    --provenance 'Training-input consistency policy; not independently verified financial truth.'
+```
+
+Then rerun the existing `build_dataset.py` command with the original example/approval/source
+inputs, this new artifact as `--exclusions`, and a new output directory. Do not freeze against
+the already equity-filtered v3 dataset: the combined artifact binds the unexcluded source.
+Combined retained rows must equal applying the policy after v1 equity removal.
+
+No real v2 policy counts or build results have been measured yet. Synthetic tests establish
+policy/application behavior only; the immutable real v1 byte regression and real v2 freeze,
+build and reconciliation remain coordinator checks. This is a training-input consistency
+choice. For example, dominant training mappings may retain `total_assets` despite custom-tag
+null drafts; the policy does not integrate or certify the separate source-evidence gate.
