@@ -215,7 +215,7 @@ def pipeline_for(
 
 
 @pytest.mark.parametrize("language", ["en", "ar"])
-def test_upload_runs_through_worker_and_renders_grounded_result(
+def test_upload_runs_through_worker_and_renders_language_scoped_result(
     tmp_path: Path, language: str
 ) -> None:
     settings = settings_at(tmp_path)
@@ -236,6 +236,19 @@ def test_upload_runs_through_worker_and_renders_grounded_result(
         job = store.claim()
         assert job is not None and job.id == job_id
         finished = run_job(store, job, pipeline_for(sha256, language), settings.max_pages)
+        if language == "ar":
+            assert finished.status.value == "needs_review"
+            persisted = store.load_analysis(job_id)
+            assert persisted is not None and persisted.decline is not None
+            assert persisted.decline.code == "unsupported_language"
+            assert not persisted.statements and not persisted.metrics
+            assert persisted.narrative is None
+            response = client.get(f"/analyses/{job_id}/view")
+            assert response.status_code == 200
+            assert persisted.decline.reason in response.text
+            assert "Declined (unsupported_language)" in response.text
+            assert 'id="metrics"' not in response.text
+            return
         assert finished.status.value == "completed"
         persisted = store.load_analysis(job_id)
         assert persisted is not None and persisted.narrative is not None

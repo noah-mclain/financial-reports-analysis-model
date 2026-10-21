@@ -207,16 +207,18 @@ def test_the_gate_report_splits_scanned_figures_by_language_with_no_bar_for_arab
         ),
     ]
     report = gate_report(documents, pairs=[])
-    a = report["strata"]["annual"]["gate_a"]
+    a = report["strata"]["annual"]["reported_languages"]["ar"]["gate_a"]
     assert a["figures"]["checked"]["scanned_ar"]["share"] == 0.7
     assert a["figures"]["checked"]["scanned_ar"]["met"] is None  # D20: no accuracy bar
-    assert a["figures"]["checked"]["scanned_en"]["met"] is False  # 97% is below 98%
-    assert a["confident"]["checked scanned ar"]["met"] is True
+    assert (
+        report["strata"]["annual"]["gate_a"]["figures"]["checked"]["scanned_en"]["met"] is False
+    )  # 97% is below 98%
+    assert a["confident"]["checked scanned ar"]["met"] is None
     printed = "\n".join(lines(report))
     assert "A figures checked scanned_ar: 70 of 100 cells" in printed
-    assert "reported, no accuracy bar (D20)" in printed
+    assert "reported, no accuracy bar (D21)" in printed
     assert (
-        "A confident checked scanned ar: 0 wrong shown as confident of 100 cells met (D20)"
+        "A confident checked scanned ar: 0 wrong shown as confident of 100 cells reported"
         in printed
     )
 
@@ -233,7 +235,7 @@ def test_a_confident_wrong_figure_is_named_in_the_printed_report() -> None:
         )
     ]
     printed = "\n".join(lines(gate_report(documents, pairs=[])))
-    assert "NOT met (D20)" in printed
+    assert "reported only (D21)" in printed
     assert "confident wrong: a balance 'Cash' 2025-12-31: expected 5, read 6" in printed
 
 
@@ -243,8 +245,17 @@ def test_an_unreadable_document_makes_the_gated_confidence_part_not_met() -> Non
             doc("a", "annual", figures=[figure("checked", "scanned", right_held=10)]), "ar"
         )
     ]
-    report = gate_report(documents, pairs=[], errors=["gone: unreadable_pdf"])
-    assert report["strata"]["annual"]["gate_a"]["confident"]["checked scanned ar"]["met"] is False
+    report = gate_report(
+        documents,
+        pairs=[],
+        errors=[{"id": "gone", "language": "ar", "reason": "unreadable_pdf", "detail": ""}],
+    )
+    assert (
+        report["strata"]["annual"]["reported_languages"]["ar"]["gate_a"]["confident"][
+            "checked scanned ar"
+        ]["met"]
+        is None
+    )
 
 
 def test_document_figures_carry_outcomes_from_the_statement_review() -> None:
@@ -320,7 +331,9 @@ def safety_report(
 
 
 def safety_block(report: dict[str, Any], status: str = "checked") -> dict[str, Any]:
-    return report["strata"]["total"]["gate_a"]["confident"][f"{status} scanned ar"]  # type: ignore[no-any-return]
+    return report["strata"]["total"]["reported_languages"]["ar"]["gate_a"]["confident"][
+        f"{status} scanned ar"
+    ]  # type: ignore[no-any-return]
 
 
 def with_cell_source(statement: Statement, source: TextSource) -> Statement:
@@ -401,7 +414,7 @@ def test_unassessed_statement_coverage_uses_its_own_mode(
     assert [c["page_mode"] for c in document["output_coverage"]] == ["digital", duplicate_mode]
     report = gate_report([document], pairs=[])
     for stratum in ("unknown", "total"):
-        gate = report["strata"][stratum]["gate_a"]
+        gate = report["strata"][stratum]["reported_languages"]["ar"]["gate_a"]
         if assessed_cells:
             assert set(gate["figures"]["checked"]) == {"digital"}
             assert gate["figures"]["checked"]["digital"]["cells"] == 3
@@ -420,7 +433,7 @@ def test_unassessed_statement_coverage_uses_its_own_mode(
             assert (scanned["cells"], scanned["accepted_share"]) == (0, None)
             assert scanned["unassessed_numeric"] == scanned["unassessed_confident"] == 3
             assert {c["statement_position"] for c in scanned["unassessed"]} == {1}
-            assert scanned["wrong_confident"] == 0 and scanned["met"] is False
+            assert scanned["wrong_confident"] == 0 and scanned["met"] is None
         else:
             assert set(gate["confident"]) == {f"{status} digital ar"}
             assert (
@@ -446,7 +459,9 @@ def test_cell_free_unreferenced_output_cannot_certify_safety(empty_rows: bool) -
     document = document_figures(entry, result, {}, None, INDEX, TAXONOMY, TYPES)
     assert document["output_coverage"][0]["page_mode"] == "digital"
     report = gate_report([document], pairs=[])
-    block = report["strata"]["total"]["gate_a"]["confident"]["unreferenced digital ar"]
+    block = report["strata"]["total"]["reported_languages"]["ar"]["gate_a"]["confident"][
+        "unreferenced digital ar"
+    ]
     assert block["emitted_numeric"] == block["unassessed_confident"] == block["cells"] == 0
     assert block["accepted_share"] is None and block["met"] is None
     assert block["reason"] == "no confirmed expected figures; safety is not measured"
@@ -477,7 +492,7 @@ def test_confident_unassessed_output_withholds_d20_without_changing_accuracy(ext
             extracted = extracted.model_copy(update={"periods": [P, extra_period]})
     document, report = safety_report(expected, [extracted])
     block = safety_block(report)
-    assert block["met"] is False
+    assert block["met"] is None
     assert block["wrong_confident"] == 0  # unknown is not proven wrong
     assert (block["cells"], block["accepted_share"]) == (3, 1.0)
     assert (
@@ -530,7 +545,7 @@ def test_unassessed_output_discloses_confidence_using_the_own_cell_flag(
     )
     block = safety_block(gate_report([document], pairs=[]))
     confident = not held and flag != "digit_suspect"
-    assert block["met"] is not confident
+    assert block["met"] is None
     assert block["unassessed_numeric"] == 1
     assert block["unassessed_confident"] == int(confident)
     assert block["unassessed"][0]["confident"] is confident
@@ -584,9 +599,9 @@ def test_output_outside_confirmed_gold_cannot_vanish_from_confidence_coverage(ca
     block = safety_block(report, status)
     assert block["unassessed_confident"] > 0
     assert block["wrong_confident"] == 0
-    assert block["met"] is (None if case == "unconfirmed" else False)
+    assert block["met"] is None
     if case == "no_reference":
-        assert "NOT met (D20)" in "\n".join(lines(report))
+        assert "reported only (D21)" in "\n".join(lines(report))
     if case == "same_statement_object":
         assert {d["statement_position"] for d in block["unassessed"]} == {1}
 
@@ -595,7 +610,7 @@ def test_clean_matching_output_retains_d20_pass_and_full_emitted_coverage() -> N
     expected, extracted = safety_fixture()
     _, report = safety_report(expected, [extracted])
     block = safety_block(report)
-    assert block["met"] is True
+    assert block["met"] is None
     assert (block["emitted_numeric"], block["assessed_numeric"], block["unassessed_numeric"]) == (
         3,
         3,
@@ -629,8 +644,10 @@ def test_unassessed_output_stays_in_its_period_stratum(months: int, stratum: str
         }
     )
     _, report = safety_report(expected, [extracted])
-    own = report["strata"][stratum]["gate_a"]["confident"]["checked scanned ar"]
-    assert own["met"] is False and own["unassessed_confident"] == 1
+    own = report["strata"][stratum]["reported_languages"]["ar"]["gate_a"]["confident"][
+        "checked scanned ar"
+    ]
+    assert own["met"] is None and own["unassessed_confident"] == 1
     assert safety_block(report) == own
 
 
@@ -653,7 +670,9 @@ def test_unassessed_output_does_not_gate_other_strata(
     )
     document, _ = safety_report(expected, [extracted])
     report = gate_report([{**document, "language": language}], pairs=[])
-    block = report["strata"]["total"]["gate_a"]["confident"][f"{status} {mode} {language}"]
+    block = report["strata"]["total"]["reported_languages"][language]["gate_a"]["confident"][
+        f"{status} {mode} {language}"
+    ]
     assert block["met"] is None and block["unassessed_confident"] == 1
 
 
@@ -723,5 +742,5 @@ def test_period_semantics_reach_the_confidence_gate(change: str, blank: bool) ->
     entry = {"id": "d", "language": "ar", "scale": 1000, "currency": "SAR", "text_layer": "scanned"}
     document = document_figures(entry, result, {}, expected, INDEX, TAXONOMY, TYPES)
     block = safety_block(gate_report([document], pairs=[]))
-    assert block["met"] is (change == "exact")
+    assert block["met"] is None
     assert block["wrong_confident"] == (0 if change == "exact" else 3)

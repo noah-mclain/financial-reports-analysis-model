@@ -9,7 +9,7 @@ Status: v1, 2026-09-26. Supersedes [07-build-plan.md](07-build-plan.md), which t
 
 | Before (07) | Now |
 |-------------|-----|
-| Demo on the golden set, stored results allowed | The interviewer uploads any English or Arabic financial report found online, and it runs live |
+| Demo on the golden set, stored results allowed | The interviewer uploads any English financial report found online, and it runs live |
 | Base model only, fine-tuning out of scope | A trained model with a proper train/test split, scored on held-out issuers |
 | Runs on the development Mac | Runs natively on the Mac, and from `docker compose` on any machine |
 | 12 hand-vetted documents | A large corpus split by issuer into train, model test and blind pools |
@@ -24,7 +24,7 @@ dedupe. Nothing from extraction onward exists yet.
 ## Principles for unseen documents
 
 1. **No document knowledge in code.** Statement pages come from titles and numeric density,
-   in both languages. `statement_pages` in the golden manifest scores the locator and is
+   in English; Arabic is reported, not gated (D21). `statement_pages` in the golden manifest scores the locator and is
    never an input to it. No per-issuer rules.
 2. **Right, or visibly unsure.** On an unseen document the tool either produces figures that
    pass their own checks, or it shows what it extracted, marks what failed, and does not
@@ -39,7 +39,7 @@ dedupe. Nothing from extraction onward exists yet.
 | In | Out (say so plainly when demonstrating) |
 |----|------------------------------------------|
 | Statement of financial position and profit or loss | Cash flow and equity statements (stretch) |
-| English and Arabic, digital and scanned, detected per page | Other languages |
+| English, digital and scanned, detected per page | Arabic reports are declined with a plain reason; other languages |
 | Non-financial corporates from any market | Banks and insurers: detected and declined with the reason |
 | About 12 ratios with identity checks | The full 24-metric registry from 02 |
 | Trained label normalization; narration on the base model, trained only if it misses its gate | Corrections UI, export, auth, multi-user |
@@ -98,8 +98,8 @@ so the classifier learns to decline them.
 |------|------|-----------|
 | 1: Sep 26 to Oct 2 | Corpus expansion and fetch. `packages/ingest`: per-page text layer, locator, docling on candidate pages, grid with provenance, header and period binding, scale and currency, page continuation. Docker skeleton (base image, compose, both profiles start). Spike: fuse an MLX LoRA adapter and run it as GGUF in llama.cpp | Almarai English and Arabic extracted with identical figures. Locator recall 100% on `dev`. `docker compose up` serves a health page |
 | 2: Oct 3 to 9 | OCR engines behind one interface, bake-off on the golden scans (Vision vs Tesseract; RapidOCR was cut, see 14). Label mapping: aliases, fuzzy match, structural anchors. Identity checks, 12 metrics with D1 to D6 defaults, decline for banks and insurers. First dry run on the train holdout | Gate A and Gate B on `dev` and the dry run; `model_test` at the checkpoint. OCR engine chosen for Docker with measured accuracy |
-| 3: Oct 10 to 16 | SEC FSDS and bilingual-pair datasets, issuer-grouped split, length audit. Baseline vs QLoRA for normalization on the train holdout, with training data smaller by the holdout share. Grounding checker, templates, narration in both languages. GGUF export of the promoted adapter | Gate C, provisional until the checkpoint. Normalization beats baseline on held-out issuers |
-| 4: Oct 17 to 23 | Upload page, background job, stage timeline, results page (statements with click-to-source, metrics with formulas, summary with citations, right-to-left for Arabic). Docker profile complete. Dry runs on the train holdout, fix the most common failure classes on non-holdout documents | Gate D. Gate E waits for the checkpoint |
+| 3: Oct 10 to 16 | SEC FSDS dataset (bilingual pairs are not built), issuer-grouped split, length audit. Baseline vs QLoRA for normalization on the train holdout, with training data smaller by the holdout share. Grounding checker, templates, English narration. GGUF export of the promoted adapter | Gate C, provisional until the checkpoint. Normalization beats baseline on held-out issuers |
+| 4: Oct 17 to 23 | Upload page, background job, stage timeline, results page (statements with click-to-source, metrics with formulas, summary with citations). Docker profile complete. Dry runs on the train holdout, fix the most common failure classes on non-holdout documents | Gate D. Gate E waits for the checkpoint |
 | Oct 24 (planned) | Checkpoint, run by the owner: `model_test`, then `blind`, then Gates A to E confirmed | Scores frozen. The date is a plan that moves only later, never earlier than "all planned work complete and every check passing" (D13) |
 | Oct 25 to 26 | Rehearsal, accuracy report, README. Which documents the rehearsal uses is an open question (note after the gates) | Two clean end-to-end runs on documents never seen before, if the open question allows it |
 
@@ -108,32 +108,37 @@ restore if time is left, not the first thing to add.
 
 ## Gates
 
-- **A. Extraction.** Almarai English and Arabic figures match on every row. Balance sheet
-  identity holds, or is flagged with the correct reason, on every `dev` and `model_test`
-  document. Scale and currency correct on all of them. Digital cells and English scanned cells
-  meet G1's accuracy bars ([04-execution-phases.md](04-execution-phases.md)). Scanned Arabic
-  cells have no accuracy bar: no figure on them may be wrong and shown as confident, and their
-  accuracy is reported with its interval beside the share of figures on statements that passed
-  review (D20 in [06-decisions-and-risks.md](06-decisions-and-risks.md)). Emitted numeric cells outside
-  confirmed expected alignments are reported separately with their confidence status, including
-  duplicate and additional statements and output without an expected reference. Confident
-  unassessed output withholds a pass without being labelled proven wrong. Accuracy and the
-  accepted share retain their expected-cell denominators.
+- **A. Extraction.** Almarai English figures match on every row. Balance sheet identity
+  holds, or is flagged with the correct reason, on every English `dev` and `model_test`
+  document. Scale and currency are correct on all of them. English digital and scanned cells
+  meet G1's accuracy bars ([04-execution-phases.md](04-execution-phases.md)). Arabic figures
+  carry no gate: their cell accuracy, 95% interval and share of figures on statements that
+  passed review remain reported, with emitted numeric coverage and confident wrong or
+  unassessed output visible. Accuracy and accepted share retain their expected-cell
+  denominators. Bilingual pairs are report-only. D21 supersedes D14 and D20 for gate scope
+  ([06-decisions-and-risks.md](06-decisions-and-risks.md)).
 - **B. Mapping.** Every critical item (revenue, net profit, total assets, total equity, total
   current assets and liabilities) is mapped or explicitly flagged on `dev` and `model_test`,
-  in both languages. No silent wrong mapping.
+  in English. Arabic mapping is reported, not gated. No silent wrong English mapping.
 - **C. Model.** Normalization on held-out issuers: critical items 99% or higher, macro-F1 at
   least 5 points above the base model. It is never pooled across sources: it is judged for SEC
-  English labels, corpus English labels and corpus Arabic labels, each only if large enough, and
-  a stratum that is too small is "not shown" (rules, levels and example counts:
+  English labels and corpus English labels, each only if large enough; corpus Arabic is not
+  shown. For the scored sources, a stratum that is too small is "not shown" (rules, levels and example counts:
   [04-execution-phases.md](04-execution-phases.md) 2.4). Before the checkpoint it is measured
   on the train holdout and marked provisional; at the checkpoint it is measured once on
   `model_test`, and that number is the one reported. Summaries: zero numeric claims that do not
   match a computed metric; schema-valid after at most one repair, otherwise the template.
 - **D. Portability.** `docker compose up` on a clean machine runs upload to summary on one
-  digital and one scanned document. Eval numbers recorded for both profiles.
-- **E. Blind.** On the blind pool, every document ends in a correct result, a correct
+  digital and one scanned English document. Eval numbers recorded for both profiles.
+- **E. Blind.** On the blind pool, every English document ends in a correct result, a correct
   decline, or a visible `needs_review` with the reason. Zero confident wrong figures.
+
+D21 was declared by the owner on 21 October, before the planned 24 October checkpoint and
+before any protected scoring. Apply the same whole-pool manifest-language rule to `model_test`
+and `blind`, independently of results. Arabic stays in the code, corpus and training pool;
+Arabic uploads are declined. The excluded Arabic documents and Arabic-only issuers remain
+visible in the accuracy report. The measured denominators and method are in
+[the corpus rules](../../eval/corpus/README.md#english-only-scored-scope-d21).
 
 Gates A, B and E, and every dry run, are reported per period kind (annual and interim) beside
 the total, and Gate C per period kind as description only (D18 in
@@ -150,26 +155,19 @@ pipeline on the documents of the train-holdout issuers, and marked "not yet meas
 [04-execution-phases.md](04-execution-phases.md) 2.4, pool rules in
 [eval/corpus/README.md](../../eval/corpus/README.md)); Gate E waits.
 
-Run time of the checkpoint, an estimate and not measured. The budget (a target, not a limit) is
-under 1 minute for a digital report and 2 to 4 minutes for a scanned one (principle 3 above). By
-`eval/corpus/fetched.yaml` on 3 October, `model_test` has 65 documents (20 digital, 43 mixed, 2
-scanned) and `blind` has 72 (20 digital, 44 mixed, 3 scanned, and 5 not yet fetched, taken here
-as scanned). A mixed document has some pages with no text layer that need OCR, so it sits
-between the two budgets. At the digital budget for mixed documents: `model_test` 63 x 1 + 2 x 4
-= 71 minutes, `blind` 64 x 1 + 8 x 4 = 96 minutes, 167 minutes in all. At the scanned budget
-(4 minutes) for mixed documents: `model_test` 20 x 1 + 45 x 4 = 200 minutes, `blind` 20 x 1 +
-52 x 4 = 228 minutes, 428 minutes in all. So extraction on one profile takes between about 167
-and about 428 minutes if every document met its budget. Not included, and not measured: model
-scoring for Gate C on the SEC `model_test` rows, the Docker profile's run for Gate D, and
-narration. The checkpoint is planned for one day, so the first dry run in week 2 should record
-the real time per document, and the 24 October plan is revisited if that measurement says one
-day is not enough.
+Checkpoint volume under D21, recounted from metadata on 21 October: `model_test` scores
+36 English documents from 25 issuers; `blind` scores 39 English documents from 28 issuers.
+The 29 and 33 Arabic documents, respectively, are excluded identically by manifest language.
+Eleven Arabic-only issuers leave each scored denominator. No protected documents were opened
+for this count. Runtime for the smaller scored set has not been measured; the per-document
+budgets above remain targets. Model scoring, the Docker profile and narration also need time;
+the planned checkpoint date still waits for all gates and checks.
 
-Open question, not decided: Gate E is "every document" of the blind pool, so a checkpoint that
-runs all of `blind` leaves no blind document that nobody has run, yet the rehearsal is meant to use
+Open question, not decided: Gate E is "every English document" of the blind pool, so a checkpoint that
+runs all English documents of `blind` leaves no blind document that nobody has run, yet the rehearsal is meant to use
 documents never seen before. Two options. (1) Reserve a fixed-hash subset of `blind` issuers
 that the checkpoint does not run, so the rehearsal has documents nobody has run; the cost is
-that Gate E is then judged on the rest, not on every document. (2) The checkpoint runs all of
+that Gate E is then judged on the rest, not on every English document. (2) The checkpoint runs all of
 `blind`, and the rehearsal uses documents found on the day from issuers outside the corpus,
 which is closest to the demo itself (anyone uploads any report); the cost is that those
 documents have no expected results to check against.
@@ -183,7 +181,7 @@ a first look. The holdout and the dry runs reduce that risk; they do not remove 
 
 | ID | Risk | Mitigation |
 |----|------|------------|
-| R15 | Linux OCR too weak on Arabic scans | Week 2 bake-off decides; if none passes, scanned Arabic is native-only and the demo says so. On either profile, a scanned Arabic filing that misses the scanned-page gate stays in the demo, shown as held for review with its reasons, not cut and not presented as correct (D14 in [06-decisions-and-risks.md](06-decisions-and-risks.md)); how such a filing is identified in the demo is not built yet |
+| R15 | Linux OCR too weak on Arabic scans | Closed for gating by D21. Retain measured Arabic OCR limits in the accuracy report; Arabic uploads are declined with a plain reason |
 | R16 | Fused adapter does not convert to GGUF cleanly | Week 1 spike, before any training run depends on it |
 | R17 | Blind documents leak into development | Issuer-grouped pools enforced by `make corpus-check`; failures fixed on non-blind documents |
 | R18 | Cloud environment cannot reach most filing hosts | Collection and fetch scripts run unchanged on the Mac; URL and sha256 recorded so the set reproduces |

@@ -13,17 +13,14 @@ Gate A, extraction.
                   and judged by nothing. A share over no cells is not measured. Scanned cells are
                   split by document language; scanned Arabic has no accuracy bar (D20) and its
                   share is reported only.
-  confident       every confirmed figure as accepted, held or confident wrong
-                  (`harness.confidence`), per status, page mode and language. For scanned Arabic
-                  on checked files this is the part D20 gates: no figure wrong and shown as
-                  confident. The share of figures on passed statements is reported beside it.
-  pairs           the gated language pair (Almarai) has no value row without a counterpart
-                  (`structure.pair_misses`): 100% of matched rows. Over the statement types the
-                  gate text names, financial position and profit or loss (`PAIR_TYPES`). A pair
-                  belongs to the period kind of its first (English) document, `unknown` when that
-                  document is unreadable.
-  identity        the balance sheet identity holds within tolerance on every document, or fails
-                  on a statement held for review with a cell on the failed rows that explains it
+  confident       confirmed figures as accepted, held or confident wrong, with emitted
+                  numeric coverage (`harness.confidence`); report-only under D21.
+  pairs           language pairs over financial position and profit or loss (`PAIR_TYPES`),
+                  reported without a gate under D21. Each belongs to the period kind of
+                  its first (English) document, unknown when that document is unreadable.
+  identity        the balance sheet identity holds within tolerance on every English document,
+                  or fails on a statement held for review with a cell on its failed rows that
+                  explains it
                   (`structure.identity_accepted`). That is explained by rule, not reviewed by a
                   person. A document with no balance sheet, or a skipped check, is not met.
   scale_currency  right, or flagged unsure by its own flag, on every statement expected: one of
@@ -38,11 +35,13 @@ Gate B, mapping. The gate text: every critical item is "mapped ... or explicitly
   `mapping.verdict` says which an expected file confirms (verified, consistent with the lexicon,
   or no verdict); "0 disagree" applies only to slots with a verdict.
 
-Any document that could not be read makes every part of every stratum not met, and is listed:
-its period kind is unknown, so it cannot be placed in one. Every figure is marked "not yet
-measured on model_test": the golden set is in-sample (aliases were taken from it), and model_test
-waits for the checkpoint (D13). A stratum with no documents is named, not filled: the golden set
-is annual only (D18). Writes var/eval/gates-dev.json.
+Unreadables retain their manifest language and identity. An English unreadable fails measured
+English verdicts; Arabic unreadables remain visible only in Arabic reporting. Unreadables have
+unknown period kind and are listed in every stratum of their language. Without measured
+English documents a verdict is not measured, even if English unreadables exist. Every figure
+is marked "not yet measured on model_test": the golden set is in-sample (aliases were taken
+from it), and model_test waits for the checkpoint (D13). A stratum with no documents is named,
+not filled: the golden set is annual only (D18). Writes var/eval/gates-dev.json.
 """
 
 from __future__ import annotations
@@ -69,6 +68,12 @@ from harness.confidence import OUTCOMES, confidence_part, output_coverage, state
 from harness.expected import EXPECTED_DIR, ExpectedFile, load_expected
 from harness.extraction import DIGITAL, SCANNED, score_statement, wilson_interval
 from harness.failures import DOCUMENT_ERRORS, EngineFailure, EngineGuard, aborted, document_failure
+from harness.language_scope import (
+    GATED_LANGUAGE,
+    REPORTED_LANGUAGES,
+    UnreadableDocument,
+    manifest_language,
+)
 from harness.locate_evidence import (
     compare_evidence,
     document_evidence,
@@ -91,17 +96,16 @@ from harness.structure import (
 MANIFEST = REPO_ROOT / "eval" / "golden" / "manifest.yaml"
 OUT = REPO_ROOT / "var" / "eval"
 NOT_MEASURED = "dev only; not yet measured on model_test"
-# The cell-accuracy bar of each figures block; None is reported with no bar. Scanned cells are
-# split by document language, and scanned Arabic has no accuracy bar (D20).
+# The cell-accuracy bar of each figures block; None is reported with no bar.
 G1: dict[str, float | None] = {"digital": DIGITAL, "scanned_en": SCANNED, "scanned_ar": None}
-# Where D20's "no wrong figure shown as confident" is the verdict: (page mode, language).
-CONFIDENT_GATED = {("scanned", "ar"): True}
+# Confidence failures remain reported but do not decide a gate.
+CONFIDENT_GATED: dict[tuple[str, str], bool] = {}
 PAIR_TYPES = (
     StatementType.BALANCE,
     StatementType.INCOME,
 )  # "financial position and profit or loss"
 IDENTITY_MET = ("ok", "failed_accepted")
-EVIDENCE_SCHEMA_VERSION = 2
+EVIDENCE_SCHEMA_VERSION = 3
 
 
 def identity_outcome(
@@ -219,8 +223,8 @@ def _share(right: int, cells: int) -> float | None:
 
 
 def _unless_unreadable(value: bool | None, unreadable: Sequence[str]) -> bool | None:
-    """A part is not met when any document could not be read, whatever the rest says."""
-    return False if unreadable else value
+    """An unreadable fails a measured part; it cannot create a measurement."""
+    return False if unreadable and value is not None else value
 
 
 def _figures(
@@ -278,7 +282,9 @@ def _gate_a(
             "gated": len(gated),
             "identical": len(identical),
             "ungated": len(pairs) - len(gated),
-            "met": _unless_unreadable(len(identical) == len(gated) if gated else None, unreadable),
+            "met": _unless_unreadable(
+                len(identical) == len(gated) if gated and documents else None, unreadable
+            ),
         },
         "identity": {
             "counts": dict(outcomes),
@@ -324,28 +330,65 @@ def _gate_b(documents: Sequence[Mapping[str, Any]], unreadable: Sequence[str]) -
     }
 
 
+def _report_only(value: Any) -> Any:
+    """Retain all measurements while removing verdicts from an ungated language."""
+    if isinstance(value, dict):
+        return {key: None if key == "met" else _report_only(item) for key, item in value.items()}
+    return value
+
+
 def gate_report(
     documents: Sequence[Mapping[str, Any]],
     pairs: Sequence[Mapping[str, Any]],
-    errors: Sequence[str] = (),
+    errors: Sequence[UnreadableDocument] = (),
 ) -> dict[str, Any]:
-    """Gate A and B for each period kind and for all documents; `unknown` is always a stratum.
-    An unreadable document (`errors`: one line each) has no period kind, so it is listed in every
-    stratum and makes every part of it not met."""
+    """Score English by manifest language and report Arabic in the same period strata.
+
+    Unreadables retain manifest identity/language at the input boundary. Their period is
+    unknown, so they are visible in every stratum of their language. A verdict requires
+    measured documents; an unreadables-only subset remains not measured.
+    """
+    seen: set[str] = set()
+    for record in (*documents, *errors):
+        if not isinstance(record, Mapping):
+            raise ValueError("document failure requires manifest language attribution")
+        manifest_language(record)
+        if record["id"] in seen:
+            raise ValueError(f"duplicate document attribution {record['id']!r}")
+        seen.add(record["id"])
+    for error in errors:
+        if not isinstance(error.get("reason"), str) or not error["reason"]:
+            raise ValueError(f"document {error['id']!r} has no failure reason")
+        if not isinstance(error.get("detail"), str):
+            raise ValueError(f"document {error['id']!r} has no failure detail")
     kinds = (*STRATA, "unknown")
     strata: dict[str, Any] = {}
     for name in (*kinds, "total"):
         mine = [d for d in documents if name == "total" or d["period_kind"] == name]
         theirs = [p for p in pairs if name == "total" or p["period_kind"] == name]
+        languages = {}
+        for language in REPORTED_LANGUAGES:
+            measured = [d for d in mine if d["language"] == language]
+            unreadable = [e for e in errors if e["language"] == language]
+            reasons = [f"{e['id']}: {e['reason']} {e['detail']}".strip() for e in unreadable]
+            block = {
+                "documents": len(measured),
+                "unreadable": unreadable,
+                "gate_a": _gate_a(measured, theirs, reasons),
+                "gate_b": _gate_b(measured, reasons),
+            }
+            languages[language] = block if language == GATED_LANGUAGE else _report_only(block)
         strata[name] = {
             "documents": len(mine),
             "measured_on": NOT_MEASURED,
             "unreadable": list(errors),
-            "gate_a": _gate_a(mine, theirs, errors),
-            "gate_b": _gate_b(mine, errors),
+            "gate_a": languages[GATED_LANGUAGE]["gate_a"],
+            "gate_b": languages[GATED_LANGUAGE]["gate_b"],
+            "reported_languages": languages,
         }
     return {
         "measured_on": NOT_MEASURED,
+        "gated_language": GATED_LANGUAGE,
         "strata": strata,
         "empty_strata": [k for k in kinds if strata[k]["documents"] == 0],
     }
@@ -430,12 +473,15 @@ def _confident_lines(confident: Mapping[str, Mapping[str, Any]]) -> list[str]:
     return out
 
 
-def lines(report: Mapping[str, Any]) -> list[str]:
+def _score_lines(report: Mapping[str, Any]) -> list[str]:
     out = [f"{report['measured_on']}; in-sample (aliases were taken from these documents)"]
     for name, s in report["strata"].items():
         a, b = s["gate_a"], s["gate_b"]
         out.append(f"\n[{name}] {s['documents']} documents ({NOT_MEASURED})")
-        out.extend(f"  UNREADABLE (every part not met): {e}" for e in s["unreadable"])
+        out.extend(
+            f"  UNREADABLE {e['language']} {e['id']}: {e['reason']} {e['detail']}"
+            for e in s["unreadable"]
+        )
         if not s["documents"]:
             out.append("  empty stratum: no document of this period kind")
             continue
@@ -444,7 +490,7 @@ def lines(report: Mapping[str, Any]) -> list[str]:
                 if status != "checked":
                     judged = "provisional"
                 elif G1[mode] is None:
-                    judged = "reported, no accuracy bar (D20)"
+                    judged = "reported, no accuracy bar (D21)"
                 else:
                     judged = _met(f["met"])
                 share = "no cells" if f["share"] is None else f"{f['share']:.2%}"
@@ -509,12 +555,35 @@ def lines(report: Mapping[str, Any]) -> list[str]:
     return out
 
 
+def lines(report: Mapping[str, Any]) -> list[str]:
+    out = []
+    for language in REPORTED_LANGUAGES:
+        out.append(
+            f"Language {language}: "
+            + ("gated" if language == GATED_LANGUAGE else "reported only (D21)")
+        )
+        scoped = {
+            **report,
+            "strata": {
+                name: {**stratum, **stratum["reported_languages"][language]}
+                for name, stratum in report["strata"].items()
+            },
+        }
+        out.extend(_score_lines(scoped))
+    return out
+
+
 def earlier_records(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Index the documents and errored records of an earlier report by id.
 
     An errored record without ``locate_evidence`` (written before errored records carried it)
     gets incomplete evidence. An id that appears twice is a malformed report.
     """
+    version = report.get("evidence_schema_version")
+    if "evidence_schema_version" in report and (
+        type(version) is not int or version not in (1, 2, EVIDENCE_SCHEMA_VERSION)
+    ):
+        raise ValueError(f"unsupported evidence schema {version!r}")
     records: dict[str, dict[str, Any]] = {}
     # Reports written before errored records existed have no "errored" key.
     sections = (("documents", report["documents"]), ("errored", report.get("errored", [])))
@@ -550,7 +619,7 @@ def main(argv: list[str] | None = None) -> int:
             previous = earlier_records(earlier_report)
             if "evidence_schema_version" in earlier_report:
                 found = earlier_report["evidence_schema_version"]
-                if type(found) is not int or found != EVIDENCE_SCHEMA_VERSION:
+                if type(found) is not int or found not in (2, EVIDENCE_SCHEMA_VERSION):
                     schema_reason = f"earlier report uses evidence schema {found!r}"
         except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
             raise SystemExit(f"cannot read comparison report {args.compare_with}: {exc}") from exc
@@ -562,18 +631,29 @@ def main(argv: list[str] | None = None) -> int:
     documents: list[dict[str, Any]] = []
     by_id: dict[str, dict[StatementType, Statement]] = {}
     errors: list[str] = []
+    unreadable: list[UnreadableDocument] = []
     errored: list[dict[str, Any]] = []
     guard = EngineGuard(len(entries))
     stopped: EngineFailure | None = None
     for entry in entries:
+        language = manifest_language(entry)
         print(f"{entry['id']} ...", file=sys.stderr, flush=True)
         try:
             result = structure_pdf(MANIFEST.parent / entry["file"], config, ocr)
         except DOCUMENT_ERRORS as exc:
             failure = document_failure(exc)
             errors.append(f"{entry['id']}: {failure['error']}")
+            unreadable.append(
+                {
+                    "id": entry["id"],
+                    "language": language,
+                    "reason": failure["error"],
+                    "detail": failure["detail"],
+                }
+            )
             failed: dict[str, Any] = {
                 "id": entry["id"],
+                "language": language,
                 "reason": failure["error"],
                 "detail": failure["detail"],
                 "locate_evidence": incomplete_evidence(
@@ -629,7 +709,7 @@ def main(argv: list[str] | None = None) -> int:
         by_id[entry["id"]] = first_statements(result, PAIR_TYPES)
     kinds = {d["id"]: d["period_kind"] for d in documents}
     report = {
-        **gate_report(documents, pair_records(by_id, kinds), errors),
+        **gate_report(documents, pair_records(by_id, kinds), unreadable),
         "evidence_schema_version": EVIDENCE_SCHEMA_VERSION,
         "errors": errors,
         "errored": errored,
