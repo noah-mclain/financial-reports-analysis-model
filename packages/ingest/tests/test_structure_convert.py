@@ -396,7 +396,7 @@ def test_failed_header_read_is_persisted_but_not_reused_as_success(
     assert len(engine.calls) == 1
 
 
-@pytest.mark.parametrize("old_version", ["17", "24", "25"])
+@pytest.mark.parametrize("old_version", ["17", "24", "25", "52"])
 def test_old_structure_version_and_header_resolution_do_not_reuse_old_headers(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, old_version: str
 ) -> None:

@@ -58,6 +58,7 @@ def test_cells_keep_position_header_flags_and_boxes() -> None:
     )
     grid = build_grid(doc.tables[0], doc, "docling/p7-7.json")
     assert (grid.page_no, grid.page_width, grid.num_rows, grid.num_cols) == (7, 600, 2, 3)
+    assert grid.page_height == 800 and grid.source_page_unambiguous
     assert grid.table_index == "t3"
     header = grid.cell(0, 1)
     assert header is not None and header.text == "2025" and header.is_column_header
@@ -81,3 +82,11 @@ def test_a_cell_without_a_box_is_kept() -> None:
     grid = build_grid(doc.tables[0], doc, "docling/p7-7.json")
     kept = grid.cell(1, 2)
     assert kept is not None and kept.bbox is None
+
+
+def test_multiple_table_provenances_do_not_identify_a_source_page() -> None:
+    doc = document([cell("Heading", 1, 0)])
+    table = doc.tables[0]
+    table = table.model_copy(update={"prov": [*table.prov, table.prov[0]]})
+    grid = build_grid(table, doc, "docling/p7-7.json")
+    assert not grid.source_page_unambiguous

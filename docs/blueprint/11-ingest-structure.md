@@ -20,6 +20,21 @@ statement, periods bound from header text, every value with its page, box, table
 Values are kept as printed (sign applied, before scale), and scale and currency are recorded on
 the statement.
 
+Structure version 53 also retains `LineItem.label_source`, including on value-free headings.
+`None` means a legacy, unrecorded source. The frozen `LabelSource` descriptor locates only a
+uniquely owned original label cell, using its own offsets, path and TOPLEFT PDF-point box.
+`retained`, `transformed` and `merged` require a location; transformations qualify repaired
+text, split notes and uncertain reading order, while merged/wrapped labels retain the whole
+cell only. Missing or ambiguous ownership, geometry or page scope withholds the location with
+fixed reason codes. Amount boxes and synthesized bands never supply label regions. Covered
+rows do not inherit a spanning label's source. This metadata neither verifies glyphs nor
+confirms primary sources, hierarchy, mappings or numerical checks.
+
+The shadow normalization audit copies this descriptor separately from value-row references.
+Audit is excluded from ordinary request serialization; model-visible labels, context status,
+answer schema and prompt are unchanged. Older JSON remains readable, but version 52 structure
+caches cannot satisfy the current cache gate and are never rewritten for compatibility.
+
 ## Statement source authorization
 
 Structure version 27 requires the locate result. Classification identifies an apparent table

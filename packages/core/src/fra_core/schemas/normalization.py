@@ -13,7 +13,7 @@ from pydantic import (
     model_validator,
 )
 
-from fra_core.schemas.statement import StatementType
+from fra_core.schemas.statement import LabelSource, StatementType
 
 MAX_RELATED_LABELS = 6
 
@@ -82,7 +82,7 @@ class NormalizationSourceRow(BaseModel):
     line_item_id: str
     source_order: int = Field(ge=0)
     value_rows: tuple[ValueRowReference, ...] = ()
-    label_region: Literal["unavailable"] = "unavailable"
+    label_region: LabelSource | Literal["unavailable"] = "unavailable"
 
 
 class NormalizationAudit(BaseModel):
