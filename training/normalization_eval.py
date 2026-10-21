@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import math
 import random
 from collections import Counter, defaultdict
@@ -11,10 +10,11 @@ from collections.abc import Sequence
 from typing import Any, Literal
 
 from dataset_builder import SYSTEM_PROMPT, render_input
-from dataset_contracts import Contract, DatasetError, NormalizationAnswer, Text
+from dataset_contracts import Contract, DatasetError, Text
 from dataset_exclusions import FrozenExclusions, checked, target_name
 
 from fra_core.schemas import StatementType
+from fra_core.schemas.normalization import parse_normalization_answer
 from fra_core.taxonomy import Taxonomy, load_taxonomy
 from fra_core.taxonomy.loader import PLAN_CRITICAL_IDS
 
@@ -49,28 +49,10 @@ def inference_messages(row: EvalRow) -> list[dict[str, str]]:
     ]
 
 
-def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("duplicate JSON key")
-        result[key] = value
-    return result
-
-
 def parse_answer(
     response: str, statement: StatementType, taxonomy: Taxonomy
 ) -> tuple[Literal["valid", "invalid"], str | None]:
-    try:
-        raw = json.loads(response, object_pairs_hook=_unique_object)
-        answer = NormalizationAnswer.model_validate(raw)
-        if answer.canonical_id is not None:
-            item = taxonomy.by_id(answer.canonical_id)
-            if item is None or item.statement != statement:
-                return "invalid", None
-        return "valid", answer.canonical_id
-    except (ValueError, TypeError):
-        return "invalid", None
+    return parse_normalization_answer(response, statement, taxonomy)
 
 
 def select_rows(rows: Sequence[EvalRow], *, limit: int | None, seed: int) -> tuple[EvalRow, ...]:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Annotated, Literal
 
 from pydantic import (
@@ -14,6 +15,7 @@ from pydantic import (
 )
 
 from fra_core.schemas.statement import StatementType
+from fra_core.taxonomy import Taxonomy
 
 MAX_RELATED_LABELS = 6
 
@@ -78,7 +80,7 @@ class NormalizationSourceRow(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    role: Literal["target", "heading", "parent", "related"]
+    role: Literal["target", "heading", "parent", "related", "observed"]
     line_item_id: str
     source_order: int = Field(ge=0)
     value_rows: tuple[ValueRowReference, ...] = ()
@@ -103,3 +105,81 @@ class NormalizationRequest(BaseModel):
 
     def model_payload_json(self) -> str:
         return self.payload.model_dump_json()
+
+
+class NormalizationAnswer(BaseModel):
+    """The one normalization reply schema, shared by the prompt, dataset and scorer."""
+
+    model_config = ConfigDict(
+        extra="forbid", frozen=True, strict=True, revalidate_instances="always"
+    )
+
+    canonical_id: str | None
+
+
+def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate JSON key")
+        result[key] = value
+    return result
+
+
+def parse_normalization_answer(
+    response: str, statement: StatementType, taxonomy: Taxonomy
+) -> tuple[Literal["valid", "invalid"], str | None]:
+    """Schema/catalog validity only; a valid catalog ID is not mapping evidence."""
+    try:
+        raw = json.loads(response, object_pairs_hook=_unique_object)
+        answer = NormalizationAnswer.model_validate(raw)
+        if answer.canonical_id is not None:
+            item = taxonomy.by_id(answer.canonical_id)
+            if item is None or item.statement != statement:
+                return "invalid", None
+        return "valid", answer.canonical_id
+    except (ValueError, TypeError):
+        return "invalid", None
+
+
+class NormalizationObservation(BaseModel):
+    """Observed caption and retained value-row references; parent linkage is inferred."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    source_row: NormalizationSourceRow
+    printed_label: str
+    inferred_parent_id: str | None
+
+
+class NormalizationDecision(BaseModel):
+    """Shadow categorical decision, never numerical verification or primary-source approval.
+
+    Supplied anchor check IDs record inputs, not a claim that each check caused resolution.
+    Observations cover every row the mapper inspected; label regions remain unavailable.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid", frozen=True, strict=True, revalidate_instances="always"
+    )
+
+    state: Literal["supported", "model_abstention", "unresolved", "rejected", "invalid"]
+    canonical_id: str | None = None
+    reason: str = Field(min_length=1)
+    needed_evidence: tuple[str, ...] = ()
+    mapper_evidence: str | None = None
+    audit: NormalizationAudit
+    observations: tuple[NormalizationObservation, ...] = Field(min_length=1)
+    supplied_anchor_check_ids: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def _accepted_state(self) -> NormalizationDecision:
+        if (self.state == "supported") != (self.canonical_id is not None):
+            raise ValueError("only a supported decision must have an accepted canonical ID")
+        if self.canonical_id is not None and not self.canonical_id.strip():
+            raise ValueError("accepted canonical ID must not be blank")
+        if self.state == "supported" and self.needed_evidence:
+            raise ValueError("supported categorical mapping cannot require more evidence")
+        if self.state == "unresolved" and not self.needed_evidence:
+            raise ValueError("unresolved decision must name missing evidence")
+        return self

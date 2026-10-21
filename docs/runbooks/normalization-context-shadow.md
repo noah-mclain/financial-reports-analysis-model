@@ -159,3 +159,47 @@ The frozen plan SHA-256 is
 Private run artifacts retain the prompts, outputs, model identity and audit. They are not
 committed. This checkpoint supports further abstention/output-contract work, not a SEC rebuild,
 model promotion or a claim of reliable document-grounded normalization.
+
+## Evidence-gated decisions
+
+`fra_ingest.normalization_decision.baseline_decision(statement, target_id, index, checks)`
+recomputes the existing deterministic mapper after discarding incoming mapping conclusions.
+`assess_proposal(statement, target_id, taxonomy, checks, response)` accepts a non-null proposal
+only when it matches that supported baseline. These are shadow callables with no production
+routing, prompt change or model invocation. Prefix-only matches remain unresolved; no aliases
+were added to improve coverage.
+
+Decisions distinguish `supported`, `unresolved`, `rejected`, `model_abstention` and `invalid`.
+Only `supported` carries an accepted canonical ID. A valid object containing a null ID records
+model abstention, not proof that no taxonomy concept exists. Bare null, duplicate keys, missing
+or extra fields, wrong-statement IDs and unknown IDs remain invalid. Training re-exports the
+shared core answer contract and delegates its existing parser API; the shipped schema and
+prompt retain their prechange SHA-256 digests in regression tests. No dataset rebuild follows.
+
+The boundary validates every row-graph component before mapper traversal. Only subtotal and
+balance-identity checks can anchor mappings. Their statement, period and source-row references
+must belong to this statement; EPS and cross-statement note references are ignored for mapping.
+Results must come from trusted deterministic upstream checks. The gate checks their scope and
+does not recalculate arithmetic or authenticate their producer.
+
+The target must have a reported value and a valid printed label. Statement flags, unresolved
+period conflicts, critical cell flags and unrecognized non-provenance cell flags conservatively
+hold the shadow decision. The exact `per_share` cell annotation is treated as unit metadata and
+does not hold categorical eligibility; similarly named or unknown flags remain held. A supplied
+skipped anchor conservatively holds the decision until its scope is settled, even when another
+period passed. Categorical support is neither numerical verification nor primary-statement
+eligibility. For EPS, it does not verify the amount, denominator, entity or unit.
+Entity/consolidation and EPS denominator verification remain the existing upstream checker's
+responsibility; a categorical EPS alias cannot settle those questions.
+
+The decision audit records every inspected row's observed label, inferred parent ID, statement
+order and actual retained value-row references. Each label region remains `unavailable`.
+Supplied anchor check IDs name inputs, not proof that every check caused resolution. Decisions
+and audit observations are separate from `NormalizationPayload`; no source references, cell
+values or proposed/gold answers are added to model input. Stable unresolved mapper reasons and
+needed-evidence descriptions support collecting real source facts next.
+
+Tests use construction fixtures, including the four intentionally underdetermined controls.
+They establish boundary behavior, not real-document accuracy, PDF label layout, EPS arithmetic
+or a model-quality score. Explicit source-positive captions are separate evidence and do not
+repair those negative controls. Independent full-diff review remains a separate gate.
