@@ -16,6 +16,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
@@ -43,7 +44,7 @@ CACHE_LIMIT_BYTES = 1_000_000_000
 MIN_DISK_BYTES = 15_000_000_000
 
 
-class SmokeConfig(Contract):
+class TrainingConfig(Contract):
     dataset_dir: Path
     dataset_manifest_sha256: Sha256
     exclusions: Path
@@ -51,6 +52,28 @@ class SmokeConfig(Contract):
     model_manifest: Path
     model_manifest_sha256: Sha256
     run_dir: Path
+    iters: int
+    batch_size: int
+    grad_checkpoint: bool
+    num_layers: int
+    max_seq_length: int
+    seed: int
+    timeout_seconds: int
+
+    @property
+    def learning_rate(self) -> float:
+        return 1e-4
+
+    @property
+    def steps_per_eval(self) -> int:
+        return self.iters
+
+    @property
+    def val_batches(self) -> int:
+        return 1
+
+
+class SmokeConfig(TrainingConfig):
     iters: int = Field(default=20, ge=1, le=20)
     batch_size: Literal[1] = 1
     grad_checkpoint: Literal[True] = True
@@ -116,7 +139,7 @@ def probe_resources() -> Resources:
     )
 
 
-def training_options(config: SmokeConfig) -> dict[str, Any]:
+def training_options(config: TrainingConfig) -> dict[str, Any]:
     """Explicit bounded LoRA/AdamW options, with no dataset loader or test scoring."""
     return {
         "model": str(config.model_dir.resolve()),
@@ -133,11 +156,11 @@ def training_options(config: SmokeConfig) -> dict[str, Any]:
         "seed": config.seed,
         "mask_prompt": True,
         "grad_accumulation_steps": 1,
-        "learning_rate": 1e-4,
+        "learning_rate": config.learning_rate,
         "lora_parameters": {"rank": 16, "scale": 20.0, "dropout": 0.05},
         "steps_per_report": 1,
-        "steps_per_eval": config.iters,
-        "val_batches": 1,
+        "steps_per_eval": config.steps_per_eval,
+        "val_batches": config.val_batches,
         "save_every": config.iters,
         "adapter_path": str(config.run_dir / "adapter"),
         "resume_adapter_file": None,
@@ -145,7 +168,7 @@ def training_options(config: SmokeConfig) -> dict[str, Any]:
     }
 
 
-def verify_inputs(config: SmokeConfig) -> dict[str, Any]:
+def verify_inputs(config: TrainingConfig, *, selected_rows_only: bool = False) -> dict[str, Any]:
     """Trust pinned builder artifacts, without rebuilding partitions or opening source labels."""
     if (config.dataset_dir / "test.jsonl").exists() or (
         config.dataset_dir / "test.jsonl"
@@ -171,7 +194,9 @@ def verify_inputs(config: SmokeConfig) -> dict[str, Any]:
     ):
         if file_sha256(config.dataset_dir / name) != expected:
             raise DatasetError(f"{name}: sha256 differs from dataset manifest")
-    if max(manifest.fit_lengths.max, manifest.validation_lengths.max) > config.max_seq_length:
+    if not selected_rows_only and (
+        max(manifest.fit_lengths.max, manifest.validation_lengths.max) > config.max_seq_length
+    ):
         raise DatasetError("dataset exceeds configured sequence cap; truncation is forbidden")
     if min(manifest.fit_rows_after, manifest.validation_rows_after) < 1:
         raise DatasetError("fit and validation must both contain rows")
@@ -191,7 +216,7 @@ def verify_inputs(config: SmokeConfig) -> dict[str, Any]:
     }
 
 
-def bounded_rows(config: SmokeConfig) -> tuple[list[Row], list[Row]]:
+def bounded_rows(config: TrainingConfig) -> tuple[list[Row], list[Row]]:
     """First fit rows and a fixed validation diagnostic; never choose using validation targets."""
     counter, _ = load_chat_counter(config.model_dir)
     rows: list[list[Row]] = []
@@ -234,8 +259,25 @@ def validate_supervision(tokens: Sequence[int], offset: int, max_seq_length: int
         raise DatasetError("upstream tokenization exceeds sequence cap or masks all targets")
 
 
+@dataclass(frozen=True)
+class FitControl:
+    """Explicit diagnostic hooks; the default fit boundary retains smoke bounds."""
+
+    validate_options: Callable[[Any], None]
+    validation: Callable[[Any, Any], tuple[float, int]]
+    batches: Callable[..., Any]
+    record: Callable[[str, dict[str, Any]], None]
+    validation_steps: tuple[int, ...]
+
+
 def fit(
-    args: Any, model: Any, train_set: Any, valid_set: Any, *, loss: Any
+    args: Any,
+    model: Any,
+    train_set: Any,
+    valid_set: Any,
+    *,
+    loss: Any,
+    control: FitControl | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     """The bounded LoRA/AdamW setup, using the public trainer's loss hook."""
     import mlx.core as mx
@@ -263,19 +305,45 @@ def fit(
         or args.steps_per_report != 1
     ):
         raise DatasetError("fit requires bounded LoRA/AdamW, no resume/schedule, per-step reports")
+    if control is None:
+        if (
+            args.batch_size != 1
+            or not 1 <= args.iters <= 20
+            or args.learning_rate != 1e-4
+            or args.seed != 17
+            or args.grad_accumulation_steps != 1
+        ):
+            raise DatasetError("direct fit requires smoke batch1, <=20 updates, LR1e-4, seed17")
+    else:
+        control.validate_options(args)
     reports: dict[str, list[dict[str, Any]]] = {"train": [], "validation": []}
 
     class FiniteLoss(TrainingCallback):
         # Upstream calls training reports AFTER the optimizer update and BEFORE saving.
         def on_train_loss_report(self, info: dict[str, Any]) -> None:
+            if control is not None:
+                control.record("train", dict(info))
             if not math.isfinite(info["train_loss"]):
                 raise DatasetError("nonfinite train loss; refusing checkpoint")
             reports["train"].append(dict(info))
+            if control is not None:
+                step = info["iteration"]
+                if step in control.validation_steps:
+                    record_validation(step)
 
         def on_val_loss_report(self, info: dict[str, Any]) -> None:
+            if control is not None:
+                control.record("validation", dict(info))
             if not math.isfinite(info["val_loss"]):
                 raise DatasetError("nonfinite validation loss; refusing checkpoint")
             reports["validation"].append(dict(info))
+
+    callback = FiniteLoss()
+
+    def record_validation(step: int) -> None:
+        assert control is not None
+        value, rows = control.validation(model, valid_set)
+        callback.on_val_loss_report({"iteration": step, "val_loss": value, "rows": rows})
 
     mx.random.seed(args.seed)
     model.freeze()
@@ -299,19 +367,27 @@ def fit(
         grad_accumulation_steps=args.grad_accumulation_steps,
     )
     optimizer = optim.AdamW(learning_rate=args.learning_rate, **args.optimizer_config["adamw"])
+    if control is not None:
+        record_validation(0)
     train(
         model=model,
         args=training_args,
         optimizer=optimizer,
         train_dataset=train_set,
-        val_dataset=valid_set,
+        val_dataset=valid_set if control is None else None,
         loss=loss,
-        training_callback=FiniteLoss(),
+        training_callback=callback,
+        **({"iterate_batches": control.batches} if control is not None else {}),
     )
     return reports
 
 
-def train_local(config: SmokeConfig) -> dict[str, Any]:
+def train_local(
+    config: TrainingConfig,
+    *,
+    selection: tuple[list[Row], list[Row]] | None = None,
+    control: FitControl | None = None,
+) -> dict[str, Any]:
     """Child-only upstream trainer; import Metal after all non-training checks."""
     if config.run_dir.resolve().is_relative_to(ROOT):
         raise DatasetError("worker run directory must be outside the checkout")
@@ -320,8 +396,8 @@ def train_local(config: SmokeConfig) -> dict[str, Any]:
         raise DatasetError("worker adapter directory already exists")
     write_new({config.run_dir / "worker-started.json": config.model_dump_json() + "\n"})
     probe_resources().check()
-    verify_inputs(config)
-    fit_rows, valid = bounded_rows(config)
+    verify_inputs(config, selected_rows_only=control is not None)
+    fit_rows, valid = bounded_rows(config) if selection is None else selection
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["TRANSFORMERS_OFFLINE"] = "1"
     import mlx.core as mx
@@ -349,13 +425,18 @@ def train_local(config: SmokeConfig) -> dict[str, Any]:
             for i in range(len(dataset)):
                 tokens, offset = dataset.process(dataset[i])
                 validate_supervision(tokens, offset, config.max_seq_length)
-        fit(
+        reports = fit(
             SimpleNamespace(**training_options(config)),
             model,
             train_set,
             valid_set,
             loss=exclude_padding_loss,
+            **({"control": control} if control is not None else {}),
         )
+        if control is not None:
+            write_new({config.run_dir / "metrics.json": json.dumps(reports, indent=2) + "\n"})
+            if mx.get_peak_memory() > TRAIN_ALLOCATION_BYTES:
+                raise DatasetError("MLX peak exceeds training allocation")
         return {
             "peak_mlx_bytes": mx.get_peak_memory(),
             "peak_rss_bytes": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
@@ -374,13 +455,13 @@ def train_local(config: SmokeConfig) -> dict[str, Any]:
         )
 
 
-def launch_trainer(config: SmokeConfig) -> dict[str, Any]:
+def launch_trainer(config: TrainingConfig, *, script: Path = Path(__file__)) -> dict[str, Any]:
     """A child process gives the entire model load/train phase a wall-clock deadline."""
     with (config.run_dir / "trainer.log").open("x") as log:
         result = subprocess.run(
             [
                 sys.executable,
-                str(Path(__file__).resolve()),
+                str(script.resolve()),
                 "--config",
                 str(config.run_dir / "config.json"),
                 "--worker",

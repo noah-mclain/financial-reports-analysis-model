@@ -77,12 +77,9 @@ AdamW and rank-16 LoRA. There is one optimizer update per iteration. The model i
 limits do not cap total system memory. A timeout kills only the child and reports failure;
 partial artifacts remain diagnostic and must not be promoted or reused.
 
-The separate padding-paired diagnostic keeps these training thresholds for its `train` child.
-Its bounded `probe` and `reference` children use an explicitly reviewed 8.5 GB available-memory
-preflight and a 6 GB MLX allocation cap (with the same 1 GB cache). That diagnostic-only policy
-uses the blueprint's 6 GB analysis budget plus 2.5 GB headroom; it does not change the training
-profile. Every stage repeats its own preflight before loading weights and fails if its measured
-MLX peak exceeds its declared allocation.
+There is no padding-paired diagnostic entry point in this checkout. The diagnostic allocation
+constants alone do not implement probe/reference children; the training thresholds above remain
+in force. The optimization diagnostic below uses the same training resource policy.
 
 Both manifest maximum sequence lengths and the selected rows are checked against the configured
 cap. The child also checks exact upstream chat tokenization and masked target lengths before
@@ -106,3 +103,116 @@ quality gates. Full training still needs a reviewed data/stratum plan, baseline 
 resource measurements at representative sequence lengths and the relevant Gate C evidence.
 GGUF export requires the separately guarded rehearsal and D12 disk/weight conditions; this
 entry point implements neither export nor a full-training scheduler.
+
+## Preregistered optimization stability diagnostic
+
+Question: does the earlier smoke spike and validation rise depend on optimization setup, and do
+smaller learning rates or larger batches remove it on this sample? This is an optimization
+experiment, with no accuracy, capacity, quality or Gate C claim. No diagnostic measurements have
+been recorded here. This phase supplies commands for later authorized execution only.
+
+| Arm | Learning rate | Batch | Optimizer updates |
+| --- | --- | --- | --- |
+| A | 0.0001 | 1 | 60 |
+| B | 0.00002 | 1 | 60 |
+| C | 0.00002 | 4 | 60 |
+| D | 0.00001 | 4 | 60 |
+
+Every arm uses one fresh base-model process, seed 17, rank 16, 16 trainable layers, AdamW,
+activation checkpointing, a 2,048-token cap and the padding-excluding loss. No learning-rate
+schedule or adapter resume is allowed. Each process has a 1,500-second maximum. The 14 GB
+available-memory preflight, 11.5 GB allocation limit and 1 GB cache policy are unchanged.
+
+The authorized input is `dataset_sec_5/train.jsonl` and `valid.jsonl`, plus manifests,
+exclusions and model metadata. The dataset manifest SHA-256 is
+`9cae5c2febd7e568cb1996150b99bfad7170f5c565dea090010e67b9953843f5` and exclusions SHA-256 is
+`9d5388129dbdba74dff6bd3fa5724f738b7e0d4f963208cfd4de34941b6c8a7f`.
+Model pins come from the existing `smoke-config.json`; do not repin or download. No holdout,
+`model_test`, `blind`, `test.jsonl` or `dev` content is read.
+
+Select 240 fit and 64 validation rows. For a file with N rows and requested count K, zero-based
+candidates are `floor(k*(N-1)/(K-1))` for k from 0 through K-1. Scan forward from each candidate,
+skipping over-cap rows and already selected indices. Count unique over-cap indices and
+collisions, never wrap or search backward, and fail on exhaustion or invalid supervision.
+Targets never select rows. Class counts and null share are descriptive statistics computed
+after selection. A fresh `random.Random(17)` permutes each split, identically for every arm.
+Contiguous batches preserve that order without sorting or another permutation. C and D consume
+all 240 selected fit rows in 60 updates; A and B consume the first 60 rows of the same permutation.
+Ordinary batch padding is allowed; no synthetic examples or length inflation are added.
+
+Validation is the arithmetic mean of singleton losses over all 64 selected rows with dropout
+disabled: true step 0 before optimization, then after updates 15, 30, 45 and 60. The installed
+trainer's usual pre-update validation callback is disabled for these arms. Reports retain each
+training loss, validation losses and ratios, nonfinite events, elapsed time, and peak MLX/RSS
+bytes. Missing counters are unmeasured, never zero.
+
+The evaluator emits a separate verdict for each criterion:
+
+1. No nonfinite values.
+2. Final validation loss is at most 1.10 times initial validation loss.
+3. Every validation loss is at most 1.25 times initial validation loss.
+4. Maximum training loss is at most 0.5 times A's maximum in the same experiment.
+
+All four must pass with complete run, resource and identity evidence for the outcome
+`stable on this sample`. `not stable on this sample` means a complete, usable measurement
+that failed at least one criterion. Missing arms and failed or incomplete reports are labeled
+`NOT MEASURED` when their evidence cannot support a verdict. A is compared literally with itself
+for criterion 4. If A passes both validation rules, validity is
+`INCONCLUSIVE about LR/batch` and there is no winner. Missing or unusable criteria read
+`NOT MEASURED`; failed and partial reports retain evidence and cannot silently pass. Unknown
+baseline validation rules also prevent a winner. A table from partial runs is still valid output;
+four successful runs are not required to report failure honestly. One seed and 64 validation
+rows cannot establish generalization or compare near ties reliably.
+
+### Offline preparation and execution
+
+Finish source changes, native checks and independent full-diff review before preparing the
+immutable preregistration. From the assigned worktree, the following defines an offline helper;
+all artifacts remain under the existing private training root, outside Git:
+
+```sh
+export UV_CACHE_DIR="$PWD/.venv/.uv-cache"
+training_root="$HOME/Library/Application Support/financial-reports-analysis-model/normalization-training"
+stability_dir="$training_root/stability-diagnostic"
+stability() {
+  PYTHONPATH=scripts:eval:training uv run --no-sync --offline python training/normalization_stability.py "$@"
+}
+
+stability --prepare-configs "$training_root/smoke-config.json" --out "$stability_dir"
+stability --preregister "$stability_dir/plan.json" --out "$stability_dir/preregistration.json"
+```
+
+Preparation reads existing model pins; preregistration verifies identities and tokenizes selected
+rows without a resource probe, MLX model load or training. It exclusively writes the hypothesis,
+all four configs, selection semantics, indices, permutations, sample statistics/hashes, source
+hashes, pins, metrics and rules. The preregistration is read-only and its SHA-256 is bound into
+every generated config and report. Changed inputs or implementation refuse execution. Never
+rewrite the preregistration after the first attempt.
+
+After separate authorization, preflight and run each arm once, using the generated distinct dry
+and training directories. For arm A (repeat with B, C and D only as authorized):
+
+```sh
+make train-stability CONFIG="$stability_dir/A-dry.json" DRY_RUN=1
+caffeinate -i make train-stability CONFIG="$stability_dir/A.json"
+```
+
+Every attempt consumes its run directory; an exclusive per-arm attempt marker also prevents
+retrying with another directory. Stop on authentication/quota, identity/hash/pin mismatch,
+preflight refusal, resource/runtime excess or scope expansion. A nonfinite or other numerical
+failure ends that arm and preserves evidence; the owner may continue the remaining arms after
+a non-environment failure, without rerunning the failed arm. Do not change the rules, probes,
+thresholds or inputs in response to results.
+
+Generate the table using completed or failed reports from this experiment:
+
+```sh
+stability --evaluate "$stability_dir/runs/A/report.json" "$stability_dir/runs/B/report.json" \
+  "$stability_dir/runs/C/report.json" "$stability_dir/runs/D/report.json" \
+  --out "$stability_dir/evaluation.json"
+```
+
+If an arm was never attempted, omit its report argument; it appears as `NOT MEASURED` in the
+four-arm table. Identity, sample, config, source and preregistration mismatches fail loudly.
+`events.jsonl` preserves step identity and JSON-safe nonfinite markers even when `metrics.json`
+cannot be completed. Failed adapters and partial artifacts must not be reused or promoted.
