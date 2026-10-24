@@ -257,7 +257,7 @@ Final update-60 adapters of the pair above, generated at temperature 0 with at m
 on the two frozen panels (`representative`, 512 rows; `challenge`, 168 rows), then scored with
 `normalization_validation.py score`, seed 20261023, paired issuer bootstrap against the base
 model's predictions on the same panel. The unadapted base model and the label-lexicon match are
-the comparators. Peak MLX was 4.89 GB for the base and 5.46 to 5.49 GB with an adapter; every
+the comparators. Peak MLX was 4.88 to 4.89 GB for the base and 5.46 to 5.49 GB with an adapter; every
 process stayed under the 6 GB limit. These are validation diagnostics, not Gate C: panels are
 reported separately and never pooled.
 
