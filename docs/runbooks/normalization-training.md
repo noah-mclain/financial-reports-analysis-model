@@ -219,3 +219,32 @@ If an arm was never attempted, omit its report argument; it appears as `NOT MEAS
 four-arm table. Identity, sample, config, source and preregistration mismatches fail loudly.
 `events.jsonl` preserves step identity and JSON-safe nonfinite markers even when `metrics.json`
 cannot be completed. Failed adapters and partial artifacts must not be reused or promoted.
+
+## Measured result: matched bias-correction pair, 24 October 2026
+
+One preregistered matched pair on the stability sample (240 fit examples, 64 validation rows,
+2,161 supervised tokens, 60 updates, `dataset_sec_5`), run natively on the Mac at commit
+`f51bda8` (registration `df77cbce…6853`, dataset manifest `9cae5c2f…43f5`). Both arms
+exited 0 with `diagnostic_completed` and no artifact errors. This is a teacher-forced
+optimization-stability check; it says nothing about generated answers.
+
+| Measure | Reference (no correction) | Treatment (bias-corrected) |
+| --- | --- | --- |
+| Verdict | not stable on this sample | stable on this sample |
+| Validation loss, initial to final | 0.0572 to 0.0337 | 0.0572 to 0.0196 |
+| Worst validation loss, ratio to initial (limit 1.25) | 1.50, fails | 1.00, passes |
+| Final validation, ratio to initial (limit 1.10) | 0.59, passes | 0.34, passes |
+| Maximum training loss | 0.633 | 0.460 |
+| Maximum training loss, ratio to the historical arm A ceiling | 0.062 | 0.045 |
+| Nonfinite values | none | none |
+| Peak MLX / peak RSS | 8.15 GB / 2.42 GB | 8.15 GB / 3.20 GB |
+| Elapsed | 1,206 s | 1,205 s |
+
+The treatment arm reproduced the earlier treatment-only run exactly (final validation 0.0196,
+maximum training loss 0.4596), which used the sources before the 12 GB launch floor.
+
+Limits: one pair, one sample, one seed. The reference arm failed on a single validation spike.
+`generated_quality` is `NOT MEASURED` and promotion is not authorized by teacher-forced
+stability. Two earlier attempts at this pair were refused by the memory preflight at 72% free
+before any training (see the launch floor above); their registrations were discarded and no
+result from them is used.
