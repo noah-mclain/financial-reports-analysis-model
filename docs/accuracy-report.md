@@ -10,13 +10,32 @@ Scored scope is English documents (D21). Arabic results stay visible where they 
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| A. Extraction | Not met on `dev`; measurement dated 7 October, before later fixes | `var/eval/gates-dev.json`, 12 golden documents |
-| B. Mapping | Not met on `dev`; measurement dated 7 October | same |
+| A. Extraction | Not met on `dev` (English, 24 October): scanned cells and balance identity miss the bar | `var/eval/gates-dev.json`, 6 English golden documents |
+| B. Mapping | Slot accounting met on `dev` (24 October); no mapped slot is verified against an independent reference | same |
 | C. Model | Not met: no adapter has been promoted | [normalization-validation.md](runbooks/normalization-validation.md) |
 | D. Portability | Not measured: CI builds the image and checks API health only | [ci.md](runbooks/ci.md) |
 | E. Blind | Not measured: waits for the checkpoint | None; the checkpoint has not run |
 
-## Gate A and B, golden set (`dev`), 7 October
+## Gate A and B, English golden set (`dev`), 24 October
+
+`make eval-gates` on the 6 English annual documents (D21 gated language; Arabic is reported
+only). In-sample: the aliases were taken from these documents. Not measured on `model_test`.
+
+| Measure | Result |
+| --- | --- |
+| Digital cells right | 138 of 138 (100.00%, 95% Wilson 97.29% to 100.00%, 1 file); met |
+| Scanned cells right | 123 of 126 (97.62%, 95% Wilson 93.23% to 99.19%, 1 file); not met |
+| Bilingual pairs identical | 0 of 0 gated pairs (8 ungated); not measured |
+| Balance identity | 5 of 6 hold or are explained (ok 4, failed but accepted by rule 1, skipped 1); not met |
+| Scale and currency | 18 of 18 statements right; met |
+| Mapping slots | 72 total: 46 mapped, 8 ambiguous (flagged), 18 explicitly flagged, 0 silently absent, 0 statement not found; met |
+| Mapped slots with an independent verdict | 19 of 46 consistent with the lexicon, 0 disagree, 0 verified, 27 no verdict |
+| Output coverage, scanned without reference | 0 of 77 emitted numeric cells assessed, 12 of them shown as confident; safety is not established |
+
+The scanned and mapping rows count the cells and slots the gate could check. The 4 scanned
+documents without an expected file contribute no right-or-wrong cells.
+
+## Gate A and B, all languages (`dev`), 7 October, superseded
 
 Annual stratum, 12 documents, all languages (the run predates D21, so the set includes Arabic
 documents). No interim documents were in the set.
@@ -30,8 +49,8 @@ documents). No interim documents were in the set.
 | Scale and currency | 31 of 36 found and right, 5 not found; not met |
 | Mapping slots | 144 total: 56 mapped, 55 explicitly flagged, 9 ambiguous, 24 statement not found, 0 unmapped; not met |
 
-This predates the English-only rescoring of 21 October and the merges since. It needs a new
-`make eval-gates` run before any claim.
+This table predates the English-only rescoring of 21 October. It is kept for the Arabic and
+bilingual-pair history; the 24 October table above supersedes it for scored scope.
 
 ## Locate (golden and `train`)
 
