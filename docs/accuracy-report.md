@@ -30,7 +30,7 @@ only). In-sample: the aliases were taken from these documents. Not measured on `
 | Scale and currency | 18 of 18 statements right; met |
 | Mapping slots | 72 total: 46 mapped, 8 ambiguous (flagged), 18 explicitly flagged, 0 silently absent, 0 statement not found; met |
 | Mapped slots with an independent verdict | 19 of 46 consistent with the lexicon, 0 disagree, 0 verified, 27 no verdict |
-| Output coverage, scanned without reference | 0 of 77 emitted numeric cells assessed, 12 of them shown as confident; safety is not established |
+| Output coverage, no expected file | Digital (2 files): 0 of 77 emitted numeric cells assessed, 12 shown as confident. Scanned (4 files): 0 of 316 assessed, 64 shown as confident. Safety is not established |
 
 The scanned and mapping rows count the cells and slots the gate could check. The 4 scanned
 documents without an expected file contribute no right-or-wrong cells.
