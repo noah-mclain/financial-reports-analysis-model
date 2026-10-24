@@ -1,8 +1,11 @@
 """The training boundary refuses unsafe inputs before any MLX import or trainer call."""
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
+import normalization_mlx
 import normalization_train as smoke
 import pytest
 from chat_tokenizer import load_chat_counter
@@ -18,7 +21,26 @@ from test_normalization_mlx import local_model, snapshot  # noqa: F401
 def config(tmp_path: Path, local_model: Path, monkeypatch: pytest.MonkeyPatch) -> smoke.SmokeConfig:  # noqa: F811
     parts, exclusions = freeze(tmp_path)
     _, tokenizer_id = load_chat_counter(local_model)
-    monkeypatch.setattr(smoke, "load_chat_counter", lambda _: (lambda messages: 32, tokenizer_id))
+
+    class TokenizerContext:
+        identity = tokenizer_id
+
+        def assert_current(self, _directory):
+            return None
+
+        def count(self, _messages):
+            return 32
+
+        def encode(self, _messages):
+            return list(range(32)), 16
+
+        def release(self):
+            return None
+
+    monkeypatch.setattr(smoke, "open_chat_tokenizer", lambda _directory: TokenizerContext())
+    monkeypatch.setattr(
+        normalization_mlx, "open_chat_tokenizer", lambda _directory: TokenizerContext()
+    )
     # A fresh freeze is required because the tokenizer is part of exclusion identity.
     from dataset_exclusions import freeze_exclusions
 
@@ -127,6 +149,77 @@ def test_no_silent_truncation(config: smoke.SmokeConfig) -> None:
         smoke.bounded_rows(config)
 
 
+def test_bounded_rows_binds_context_to_requested_model_directory(
+    config: smoke.SmokeConfig,
+) -> None:
+    class Context:
+        def assert_current(self, directory):
+            if directory != config.model_dir:
+                raise DatasetError("tokenizer context directory differs")
+
+        def count(self, _messages):
+            return 32
+
+    rows, valid = smoke.bounded_rows(config, Context())
+    assert rows and valid
+
+    other = config.model_copy(update={"model_dir": config.model_dir.parent})
+    with pytest.raises(DatasetError, match="differs"):
+        smoke.bounded_rows(other, Context())
+
+
+def test_bounded_rows_rechecks_tokenizer_snapshot_after_processing(
+    config: smoke.SmokeConfig,
+) -> None:
+    class Context:
+        checks = 0
+
+        def assert_current(self, _directory):
+            self.checks += 1
+            if self.checks == 2:
+                raise DatasetError("tokenizer snapshot changed during verification")
+
+        def count(self, _messages):
+            return 32
+
+    context = Context()
+    with pytest.raises(DatasetError, match="snapshot changed"):
+        smoke.bounded_rows(config, context)
+    assert context.checks == 2
+
+
+def test_train_local_releases_only_contexts_it_owns(
+    config: smoke.SmokeConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    contexts = []
+
+    class Context:
+        released = False
+
+        def release(self):
+            self.released = True
+
+    def open_context(_directory):
+        context = Context()
+        contexts.append(context)
+        return context
+
+    def fail_verification(*_args, **_kwargs):
+        raise DatasetError("verification failed")
+
+    monkeypatch.setattr(smoke, "open_chat_tokenizer", open_context)
+    monkeypatch.setattr(smoke, "verify_inputs", fail_verification)
+    monkeypatch.setattr(smoke, "write_new", lambda _files: None)
+    with pytest.raises(DatasetError, match="verification failed"):
+        smoke.train_local(config)
+    assert contexts[0].released
+
+    caller_context = Context()
+    with pytest.raises(DatasetError, match="verification failed"):
+        smoke.train_local(config, tokenizer_context=caller_context)
+    assert not caller_context.released
+
+
 @pytest.mark.parametrize("state", ["directory", "symlink"])
 def test_output_reuse(config: smoke.SmokeConfig, state: str) -> None:
     if state == "directory":
@@ -167,6 +260,147 @@ def test_stage_specific_resource_thresholds_preserve_training_default() -> None:
         at_training_minimum.model_copy(
             update={"available_memory_bytes": smoke.MIN_MEMORY_BYTES - 1}
         ).check()
+
+
+def test_coarse_pressure_estimate_is_sampled_before_72_percent_refusal(tmp_path: Path) -> None:
+    physical = 18 * 1024**3
+    estimate = physical * 72 // 100
+    state = smoke.Resources(
+        free_disk_bytes=20_000_000_000,
+        available_memory_bytes=estimate,
+        services=(),
+        physical_memory_bytes=physical,
+        memory_pressure_free_percent=72,
+        memory_estimate_bytes=estimate,
+        memory_method="memory_pressure -Q integer free percentage × hw.memsize",
+        memory_granularity_bytes=(physical + 99) // 100,
+        memory_granularity_percentage_points=1,
+        current_rss_bytes=1000,
+        peak_rss_bytes=2000,
+    )
+    with pytest.raises(DatasetError, match="14 GB available memory"):
+        smoke.check_and_record_resources(tmp_path, stage="worker-readiness", probe=lambda: state)
+    sample = json.loads((tmp_path / "resource-samples.jsonl").read_text())
+    assert sample["memory_pressure_free_percent"] == 72
+    assert sample["physical_memory_bytes"] == physical
+    assert sample["memory_estimate_bytes"] == estimate
+    assert sample["required_memory_bytes"] == smoke.MIN_MEMORY_BYTES
+    assert sample["memory_granularity_bytes"] == (physical + 99) // 100
+    assert sample["memory_granularity_percentage_points"] == 1
+    assert sample["available_memory_basis"] == "estimate_from_whole_percent"
+    assert sample["stage"] == "worker-readiness"
+    assert sample["pid"] > 0 and sample["ppid"] > 0 and sample["sampled_at"]
+    assert sample["current_rss_bytes"] == 1000 and sample["peak_rss_bytes"] == 2000
+
+
+def test_coarse_pressure_estimate_at_73_percent_passes(tmp_path: Path) -> None:
+    physical = 18 * 1024**3
+    estimate = physical * 73 // 100
+    state = smoke.Resources(
+        free_disk_bytes=20_000_000_000,
+        available_memory_bytes=estimate,
+        services=(),
+        physical_memory_bytes=physical,
+        memory_pressure_free_percent=73,
+        memory_estimate_bytes=estimate,
+        memory_method="memory_pressure -Q integer free percentage × hw.memsize",
+        memory_granularity_bytes=(physical + 99) // 100,
+        current_rss_bytes=1000,
+        peak_rss_bytes=2000,
+    )
+    assert (
+        smoke.check_and_record_resources(
+            tmp_path, stage="controller-readiness", probe=lambda: state
+        )
+        == state
+    )
+    sample = json.loads((tmp_path / "resource-samples.jsonl").read_text())
+    assert sample["memory_pressure_free_percent"] == 73
+
+
+def test_supervised_controller_imports_without_heavy_backends(tmp_path: Path) -> None:
+    import os
+    import subprocess
+    import sys
+
+    root = Path(__file__).resolve().parents[2]
+    helper = tmp_path / "child.py"
+    helper.write_text(
+        "import json, pathlib, sys; "
+        "pathlib.Path(sys.argv[sys.argv.index('--config') + 1]).parent.joinpath('resources.json').write_text('{\\\"peak_mlx_bytes\\\":null,\\\"peak_rss_bytes\\\":1}'); "
+        "assert not any(name in sys.modules for name in ('torch','transformers','mlx','mlx.core'))"
+    )
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    source = (
+        "import os,sys; sys.path[:0]=sys.argv[1].split(os.pathsep); "
+        "import normalization_stability, normalization_train as smoke; "
+        "assert not any(name in sys.modules for name in ('torch','transformers','mlx','mlx.core')); "
+        "from pathlib import Path; from types import SimpleNamespace; "
+        "result=smoke.launch_trainer(SimpleNamespace(run_dir=Path(sys.argv[2]), timeout_seconds=5), "
+        "script=Path(sys.argv[3])); assert result == {'peak_mlx_bytes':None,'peak_rss_bytes':1}"
+    )
+    paths = os.pathsep.join(
+        str(root / suffix)
+        for suffix in (
+            "training",
+            "eval",
+            "scripts",
+            "packages/core/src",
+            "packages/ingest/src",
+        )
+    )
+    subprocess.run(
+        [sys.executable, "-c", source, paths, str(run_dir), str(helper)],
+        check=True,
+        env={**os.environ, "UV_NO_SYNC": "1", "UV_OFFLINE": "1"},
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_supervised_worker_refusal_sample_survives_to_parent(
+    config: smoke.SmokeConfig, tmp_path: Path
+) -> None:
+    run_dir = config.run_dir
+    run_dir.mkdir()
+    (run_dir / "config.json").write_text(config.model_dump_json())
+    training = str(Path(__file__).resolve().parents[2] / "training")
+    helper = tmp_path / "refusing_worker.py"
+    helper.write_text(
+        "import json, sys\n"
+        f"sys.path.insert(0, {training!r})\n"
+        "import normalization_train as smoke\n"
+        "saved_config = smoke.SmokeConfig.model_validate_json("
+        "open(sys.argv[sys.argv.index('--config') + 1], 'rb').read())\n"
+        "class Context:\n"
+        "    identity = json.loads((saved_config.dataset_dir / 'manifest.json').read_bytes())['tokenizer_id']\n"
+        "    def assert_current(self, _directory): pass\n"
+        "    def count(self, _messages): return 32\n"
+        "    def release(self): pass\n"
+        "smoke.open_chat_tokenizer = lambda _directory: Context()\n"
+        "smoke.probe_resources = lambda: smoke.Resources(free_disk_bytes=20000000000, "
+        "available_memory_bytes=18*1024**3*72//100, services=(), "
+        "physical_memory_bytes=18*1024**3, memory_pressure_free_percent=72, "
+        "memory_estimate_bytes=18*1024**3*72//100, memory_method='mocked memory_pressure -Q', "
+        "memory_granularity_bytes=(18*1024**3+99)//100, "
+        "memory_granularity_percentage_points=1, current_rss_bytes=1000, peak_rss_bytes=2000)\n"
+        "raise SystemExit(smoke.main(['--config', sys.argv[sys.argv.index('--config')+1], '--worker']))\n"
+    )
+    with pytest.raises(DatasetError, match="trainer exit 1"):
+        smoke.launch_trainer(config, script=helper)
+    samples = [
+        json.loads(line) for line in (run_dir / "resource-samples.jsonl").read_text().splitlines()
+    ]
+    assert len(samples) == 1
+    assert samples[0]["stage"] == "worker-readiness"
+    assert samples[0]["memory_pressure_free_percent"] == 72
+    assert samples[0]["required_memory_bytes"] == smoke.MIN_MEMORY_BYTES
+    assert not (run_dir / "resources.json").exists()
+    assert not (run_dir / "metrics.json").exists()
+    # The real child wrote evidence before its readiness refusal, without MLX.
+    verification = smoke._read_worker_verification(run_dir / "worker-verification.json", config)
+    assert verification == worker_metadata(config)
     at_13gb = smoke.Resources(
         free_disk_bytes=20_000_000_000,
         available_memory_bytes=13_000_000_000,
@@ -218,6 +452,51 @@ def test_failure_and_timeout_are_recorded(config: smoke.SmokeConfig) -> None:
     assert report["status"] == "failed" and "runtime bound" in report["error"]
 
 
+def test_non_dry_controller_does_not_construct_tokenizer_for_injected_trainer(
+    config: smoke.SmokeConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        smoke,
+        "open_chat_tokenizer",
+        lambda _directory: pytest.fail("controller constructed tokenizer outside dry-run"),
+    )
+
+    def fail(_config: smoke.SmokeConfig) -> dict:
+        raise TimeoutError("stop after controller handoff")
+
+    assert smoke.run(config, dry_run=False, probe=resources, trainer=fail) == 1
+
+
+def test_non_dry_controller_imports_no_heavy_training_modules(
+    config: smoke.SmokeConfig, tmp_path: Path
+) -> None:
+    config_path = tmp_path / "config.json"
+    config_path.write_text(config.model_dump_json())
+    training = str(Path(__file__).resolve().parents[2] / "training")
+    root = Path(__file__).resolve().parents[2]
+    evaluation = str(root / "eval")
+    scripts = str(root / "scripts")
+    script = (
+        "import sys; sys.path[:0] = sys.argv[1:4]; "
+        "import normalization_train as smoke; "
+        "config = smoke.SmokeConfig.model_validate_json(open(sys.argv[4], 'rb').read()); "
+        "resources = smoke.Resources(free_disk_bytes=30000000000, "
+        "available_memory_bytes=15000000000, services=()); "
+        "smoke._read_worker_verification = lambda path, config: "
+        "{'identity': {}, 'selection': {}}; "
+        "status = smoke.run(config, dry_run=False, probe=lambda: resources, "
+        "trainer=lambda config: {}, verify_in_controller=False); "
+        "assert status == 0; "
+        "assert not {'torch', 'transformers', 'mlx', 'mlx.core'} & sys.modules.keys()"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script, training, evaluation, scripts, str(config_path)],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 @pytest.mark.parametrize("field", ["dataset_manifest_sha256", "model_manifest_sha256"])
 def test_wrong_manifest_pin(config: smoke.SmokeConfig, field: str) -> None:
     with pytest.raises(DatasetError, match="sha256"):
@@ -241,17 +520,235 @@ def test_child_deadline_and_offline_environment(
 ) -> None:
     import subprocess
 
-    def timeout(command, **kwargs):
-        assert command[-1] == "--worker"
-        assert kwargs["timeout"] == config.timeout_seconds
-        assert kwargs["env"]["HF_HUB_OFFLINE"] == "1"
-        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+    class Child:
+        waits = 0
 
-    monkeypatch.setattr(smoke.subprocess, "run", timeout)
+        def wait(self, timeout):
+            self.waits += 1
+            if self.waits == 1:
+                assert timeout == config.timeout_seconds
+                raise subprocess.TimeoutExpired("worker", timeout)
+            assert timeout == 5
+            return -15
+
+        def terminate(self):
+            return None
+
+        def kill(self):
+            return None
+
+    def popen(command, **kwargs):
+        assert command[-1] == "--worker"
+        assert kwargs["env"]["HF_HUB_OFFLINE"] == "1"
+        return Child()
+
+    monkeypatch.setattr(smoke.subprocess, "Popen", popen)
     assert smoke.run(config, dry_run=False, probe=resources) == 1
     report = json.loads((config.run_dir / "report.json").read_text())
     assert "TimeoutExpired" in report["error"]
     assert report["resources"]["peak_mlx_bytes"] is None
+
+
+def test_supervised_child_cancel_is_forwarded_and_reaped(tmp_path, monkeypatch):
+    import signal
+    from types import SimpleNamespace
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    events = []
+
+    class Child:
+        def wait(self, timeout=None):
+            if timeout != 5:
+                handler = signal.getsignal(signal.SIGTERM)
+                handler(signal.SIGTERM, None)
+            events.append("reaped")
+            return -signal.SIGTERM
+
+        def send_signal(self, signum):
+            events.append(("forwarded", signum))
+
+        def terminate(self):
+            events.append("terminated")
+
+        def kill(self):
+            events.append("killed")
+
+    monkeypatch.setattr(smoke.subprocess, "Popen", lambda *_args, **_kwargs: Child())
+    with pytest.raises(InterruptedError, match="signal"):
+        smoke.launch_trainer(
+            SimpleNamespace(run_dir=run_dir, timeout_seconds=30), script=tmp_path / "worker.py"
+        )
+    assert events == [("forwarded", signal.SIGTERM), "terminated", "reaped"]
+
+
+def test_supervised_child_repeat_cancel_during_cleanup_is_reaped(tmp_path, monkeypatch):
+    import signal
+    from types import SimpleNamespace
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    events = []
+
+    class Child:
+        waits = 0
+
+        def wait(self, timeout=None):
+            self.waits += 1
+            if self.waits == 1:
+                signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
+            elif timeout == 5:
+                assert signal.getsignal(signal.SIGINT) == signal.SIG_IGN
+            events.append("reaped")
+            return -signal.SIGTERM
+
+        def send_signal(self, signum):
+            events.append(("forwarded", signum))
+
+        def terminate(self):
+            events.append("terminated")
+
+        def kill(self):
+            events.append("killed")
+
+    monkeypatch.setattr(smoke.subprocess, "Popen", lambda *_args, **_kwargs: Child())
+    with pytest.raises(InterruptedError, match="signal"):
+        smoke.launch_trainer(
+            SimpleNamespace(run_dir=run_dir, timeout_seconds=30), script=tmp_path / "worker.py"
+        )
+    assert events[-1] == "reaped"
+
+
+def test_supervised_child_error_and_missing_artifacts_fail_loudly(tmp_path, monkeypatch):
+    from functools import partial
+    from types import SimpleNamespace
+
+    def return_child(child_obj, *_args, **_kwargs):
+        return child_obj
+
+    for return_code, missing, expected in (
+        (9, False, "trainer exit 9"),
+        (0, True, "resources.json"),
+    ):
+        run_dir = tmp_path / f"run-{return_code}-{missing}"
+        run_dir.mkdir()
+
+        class Child:
+            def __init__(self, child_return_code):
+                self.return_code = child_return_code
+
+            def wait(self, timeout):
+                return self.return_code
+
+            def terminate(self):
+                pytest.fail("an exited child must not be terminated")
+
+            def kill(self):
+                pytest.fail("an exited child must not be killed")
+
+        child = Child(return_code)
+        monkeypatch.setattr(smoke.subprocess, "Popen", partial(return_child, child))
+        if not missing:
+            (run_dir / "resources.json").write_text(
+                json.dumps({"peak_mlx_bytes": None, "peak_rss_bytes": 1})
+            )
+        with pytest.raises((DatasetError, FileNotFoundError), match=expected):
+            smoke.launch_trainer(
+                SimpleNamespace(run_dir=run_dir, timeout_seconds=30),
+                script=tmp_path / "worker.py",
+            )
+
+
+@pytest.mark.parametrize("write_verification", [True, False])
+def test_supervised_smoke_collects_worker_identity_and_selection(
+    config: smoke.SmokeConfig, monkeypatch: pytest.MonkeyPatch, write_verification: bool
+) -> None:
+    command: list[str] = []
+    metadata = worker_metadata(config)
+    monkeypatch.setattr(smoke.platform, "platform", lambda: "synthetic")
+
+    class Child:
+        def wait(self, timeout):
+            run_dir = Path(command[command.index("--config") + 1]).parent
+            if write_verification:
+                (run_dir / "worker-verification.json").write_text(json.dumps(metadata))
+            (run_dir / "resources.json").write_text(
+                json.dumps({"peak_mlx_bytes": 123, "peak_rss_bytes": 456})
+            )
+            return 0
+
+    def popen(args, **_kwargs):
+        command.extend(args)
+        return Child()
+
+    monkeypatch.setattr(smoke.subprocess, "Popen", popen)
+    monkeypatch.setattr(smoke, "probe_resources", resources)
+    assert smoke.run(config, dry_run=False, probe=resources) == int(not write_verification)
+    report = json.loads((config.run_dir / "report.json").read_text())
+    if write_verification:
+        assert report["status"] == "smoke_completed"
+        assert report["identity"] == metadata["identity"]
+        assert report["selection"] == metadata["selection"]
+    else:
+        assert report["status"] == "failed"
+        assert "worker verification" in report["error"]
+
+
+def test_timeout_with_malformed_resource_artifact_still_writes_report(
+    config: smoke.SmokeConfig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail_with_partial_artifacts(_config):
+        (config.run_dir / "resources.json").write_text("{")
+        (config.run_dir / "resource-samples.jsonl").write_text(
+            json.dumps(
+                {
+                    "stage": "worker-readiness",
+                    "pid": 10,
+                    "ppid": 1,
+                    "sampled_at": "now",
+                    "required_memory_bytes": 14,
+                }
+            )
+            + "\n[]"
+        )
+        raise TimeoutError("worker deadline")
+
+    monkeypatch.setattr(smoke, "probe_resources", resources)
+    assert (
+        smoke.run(config, dry_run=False, probe=resources, trainer=fail_with_partial_artifacts) == 1
+    )
+    report = json.loads((config.run_dir / "report.json").read_text())
+    assert report["status"] == "failed"
+    assert "worker deadline" in report["error"]
+    assert len(report["resource_samples"]) == 1
+    assert any("resources.json" in error for error in report["artifact_errors"])
+    assert any("line 2" in error for error in report["artifact_errors"])
+
+
+def test_supervised_start_marker_is_exclusive(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "resources.json").write_text(
+        json.dumps({"peak_mlx_bytes": None, "peak_rss_bytes": 1})
+    )
+    launches = []
+
+    class Child:
+        def wait(self, timeout):
+            return 0
+
+    def popen(*_args, **_kwargs):
+        launches.append(1)
+        return Child()
+
+    monkeypatch.setattr(smoke.subprocess, "Popen", popen)
+    config = SimpleNamespace(run_dir=run_dir, timeout_seconds=30)
+    assert smoke.launch_trainer(config, script=tmp_path / "worker.py")["peak_rss_bytes"] == 1
+    with pytest.raises(DatasetError, match="already exists"):
+        smoke.launch_trainer(config, script=tmp_path / "worker.py")
+    assert launches == [1]
 
 
 @pytest.mark.parametrize("overflow", [False, True, "empty"])
@@ -440,7 +937,7 @@ def test_content_end_newline_retained_and_padding_invariant(cpu_mlx):
 
 
 @pytest.mark.parametrize("arm", ["default_loss", "exclude_padding_loss"])
-def test_real_cpu_fit_loss_forwarding(cpu_mlx, tmp_path, monkeypatch, arm):
+def test_real_cpu_fit_loss_forwarding(cpu_mlx, tmp_path, monkeypatch, arm, config):
     from types import SimpleNamespace
 
     import mlx.nn as nn
@@ -471,6 +968,16 @@ def test_real_cpu_fit_loss_forwarding(cpu_mlx, tmp_path, monkeypatch, arm):
     initial = np.asarray(model.layers[0].table.weight).copy()
     expected, count = expected_ce(initial, batch, bounds, inclusive=arm == "default_loss")
     selected = trainer.default_loss if arm == "default_loss" else smoke.exclude_padding_loss
+    import mlx.optimizers as optim
+
+    actual_optimizer = optim.AdamW
+    optimizer_calls = []
+
+    def constructed(**kwargs):
+        optimizer_calls.append(kwargs)
+        return actual_optimizer(**kwargs)
+
+    monkeypatch.setattr(optim, "AdamW", constructed)
     actual_train = trainer.train
     calls = []
 
@@ -483,7 +990,7 @@ def test_real_cpu_fit_loss_forwarding(cpu_mlx, tmp_path, monkeypatch, arm):
     options = SimpleNamespace(
         fine_tune_type="lora",
         optimizer="adamw",
-        optimizer_config={"adamw": {}},
+        optimizer_config=smoke.training_options(config)["optimizer_config"],
         resume_adapter_file=None,
         lr_schedule=None,
         seed=17,
@@ -502,6 +1009,9 @@ def test_real_cpu_fit_loss_forwarding(cpu_mlx, tmp_path, monkeypatch, arm):
         learning_rate=1e-4,
     )
     reports = smoke.fit(options, model, TokenRows(pairs), TokenRows(pairs), loss=selected)
+    assert optimizer_calls == [
+        {"learning_rate": 1e-4, **smoke.training_options(config)["optimizer_config"]["adamw"]}
+    ]
     assert calls == [selected]
     assert reports["train"][0]["iteration"] == 1
     assert reports["train"][0]["train_loss"] == pytest.approx(expected, abs=2e-6)
@@ -622,3 +1132,110 @@ def test_fit_public_boundary_without_metal(tmp_path, monkeypatch, failure):
         assert reports == {"train": [{"train_loss": 2.0}], "validation": [{"val_loss": 1.0}]}
         saved = json.loads((tmp_path / "adapter/adapter_config.json").read_text())
         assert saved["save_every"] == 5 and "steps_per_save" not in saved
+
+
+def test_explicit_adamw_contract(config):
+    assert smoke.training_options(config)["optimizer_config"]["adamw"] == {
+        "bias_correction": False,
+        "betas": [0.9, 0.999],
+        "eps": 1e-8,
+        "weight_decay": 0.01,
+    }
+
+
+def test_real_adamw_default_explicit_cpu_equivalence(cpu_mlx, config):
+    import mlx.optimizers as optim
+    import numpy as np
+
+    mx = cpu_mlx
+    implicit = optim.AdamW(learning_rate=1e-4)
+    explicit = optim.AdamW(
+        learning_rate=1e-4, **smoke.training_options(config)["optimizer_config"]["adamw"]
+    )
+    a = {"weight": mx.array([0.5, -1.25, 0.0], dtype=mx.float32)}
+    b = {"weight": mx.array([0.5, -1.25, 0.0], dtype=mx.float32)}
+    for gradient in ([0.25, -0.75, 0.0], [-0.1, 0.2, 0.01], [0.0, 0.0, -0.2]):
+        grads = {"weight": mx.array(gradient, dtype=mx.float32)}
+        a = implicit.apply_gradients(grads, a)
+        b = explicit.apply_gradients(grads, b)
+        mx.eval(a, b, implicit.state, explicit.state)
+        np.testing.assert_allclose(
+            np.asarray(a["weight"]), np.asarray(b["weight"]), rtol=0, atol=1e-7
+        )
+    assert implicit.step.item() == explicit.step.item() == 3
+
+
+def worker_metadata(config):
+    fit, valid = smoke.bounded_rows(config)
+    return {
+        "identity": smoke.verify_inputs(config),
+        "selection": {
+            "policy": "first 50 fit rows; first validation row",
+            "fit_rows": len(fit),
+            "validation_rows": len(valid),
+            "fit_sha256": smoke.digest(fit),
+            "validation_sha256": smoke.digest(valid),
+        },
+    }
+
+
+@pytest.mark.parametrize("bad_line", [b"\xff", b"{truncated", b"[]"])
+@pytest.mark.parametrize("bad_first", [True, False])
+def test_timeout_preserves_binary_telemetry_and_primary_error(
+    config, monkeypatch, bad_line, bad_first
+):
+    good = json.dumps(
+        {
+            "stage": "worker-readiness",
+            "pid": 10,
+            "ppid": 1,
+            "sampled_at": "now",
+            "required_memory_bytes": 14,
+        }
+    ).encode()
+
+    def fail(_config, **kwargs):
+        parts = [bad_line, good] if bad_first else [good, bad_line]
+        (config.run_dir / "resource-samples.jsonl").write_bytes(b"\n".join(parts))
+        (config.run_dir / "resources.json").write_bytes(b"\xff")
+        (config.run_dir / "worker-verification.json").write_bytes(b"\xff")
+        raise TimeoutError("primary worker timeout")
+
+    monkeypatch.setattr(smoke, "launch_trainer", fail)
+    assert smoke.run(config, dry_run=False, probe=resources, trainer=fail) == 1
+    report = json.loads((config.run_dir / "report.json").read_bytes())
+    assert report["status"] == "failed"
+    assert "primary worker timeout" in report["error"]
+    assert report["resource_samples"] == [json.loads(good)]
+    assert any(f"line {1 if bad_first else 2}" in e for e in report["artifact_errors"])
+    assert any("resources.json" in e for e in report["artifact_errors"])
+
+
+@pytest.mark.parametrize(
+    "mutation", ["empty", "garbage", "missing", "nested", "bool_count", "bad_hash"]
+)
+def test_supervised_smoke_rejects_partial_nested_verification(config, monkeypatch, mutation):
+    metadata = worker_metadata(config)
+    if mutation == "empty":
+        metadata["identity"] = {}
+    elif mutation == "garbage":
+        metadata["identity"] = {"garbage": True}
+    elif mutation == "missing":
+        metadata["identity"].pop("model_revision")
+    elif mutation == "nested":
+        metadata["identity"]["dataset_manifest"]["dataset"] = []
+    elif mutation == "bool_count":
+        metadata["selection"]["fit_rows"] = True
+    else:
+        metadata["selection"]["fit_sha256"] = "z" * 64
+
+    def launch(_config, **kwargs):
+        (config.run_dir / "worker-verification.json").write_text(json.dumps(metadata))
+        return {"peak_mlx_bytes": 1, "peak_rss_bytes": 2}
+
+    monkeypatch.setattr(smoke, "launch_trainer", launch)
+    assert smoke.run(config, dry_run=False, probe=resources, trainer=launch) == 1
+    report = json.loads((config.run_dir / "report.json").read_bytes())
+    assert report["status"] == "failed"
+    assert report.get("verification_status") != "verified_in_worker"
+    assert any("worker-verification.json" in e for e in report["artifact_errors"])
