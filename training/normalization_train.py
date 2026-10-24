@@ -40,8 +40,10 @@ from pydantic import Field
 from fra_core.taxonomy import load_taxonomy
 
 ROOT = Path(__file__).resolve().parents[1]
-# Measured need is at most 10.7 GB (8.15 GB peak MLX + 2.54 GB peak RSS, overlapping
-# in unified memory); add 1.3 GB headroom. This is not the 11.5 GB allocator cap.
+# Completed runs peaked at 8.15 GB MLX and 2.4 to 3.2 GB process RSS (4.0 GB in the
+# historical arm D). The counters overlap in unified memory, so their sum is a ceiling:
+# 11.35 GB for the pair runs. 12 GB covers that, with 0.65 GB spare. This is not the
+# 11.5 GB allocator cap.
 MIN_MEMORY_BYTES = 12_000_000_000
 PROBE_MIN_MEMORY_BYTES = 8_500_000_000
 TRAIN_ALLOCATION_BYTES = 11_500_000_000

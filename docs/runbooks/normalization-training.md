@@ -56,10 +56,12 @@ make train-smoke CONFIG=/private/tmp/normalization-smoke.json DRY_RUN=1
 
 This performs non-training checks and token counts only; it never imports MLX or creates an
 adapter. The resource probe requires Apple Silicon macOS, at least 15 GB free disk and
-12 GB available memory floor. Two completed 60-iteration runs measured an 8.15 GB peak MLX
-allocation and a 2.54 GB peak process RSS. These overlap in unified memory, so 10.7 GB is a
-conservative upper bound; the floor adds 1.3 GB headroom. The unchanged 11.5 GB MLX allocator
-cap is not the measured need, and the 1 GB cache limit is unchanged. Available memory is
+12 GB available memory floor. Completed 60-iteration runs measured an 8.15 GB peak MLX
+allocation and a peak process RSS of 2.42 to 3.20 GB (4.03 GB in the historical arm D). These
+counters overlap in unified memory, so their sum is a ceiling, not a measurement: 11.35 GB for
+the matched-pair runs, 12.18 GB for arm D. The 12 GB floor covers the pair runs with 0.65 GB
+spare and is below the summed ceiling for arm D. The unchanged 11.5 GB MLX allocator cap is not
+the measured need, and the 1 GB cache limit is unchanged. Available memory is
 estimated from `memory_pressure -Q` free percentage times `hw.memsize`; on this
 19,327,352,832-byte machine, each percentage point represents about 193 MB. API, worker and
 repository Vite processes must be stopped. A failed system probe refuses execution. Close other
