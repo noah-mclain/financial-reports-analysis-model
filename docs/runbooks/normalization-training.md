@@ -56,9 +56,12 @@ make train-smoke CONFIG=/private/tmp/normalization-smoke.json DRY_RUN=1
 
 This performs non-training checks and token counts only; it never imports MLX or creates an
 adapter. The resource probe requires Apple Silicon macOS, at least 15 GB free disk and
-14 GB available memory: the blueprint's 11.5 GB training allocation plus 2.5 GB headroom.
-Available memory is estimated from `memory_pressure -Q` free percentage times `hw.memsize`.
-These are conservative planning thresholds, not measured training capacity. API, worker and
+12 GB available memory floor. Two completed 60-iteration runs measured an 8.15 GB peak MLX
+allocation and a 2.54 GB peak process RSS. These overlap in unified memory, so 10.7 GB is a
+conservative upper bound; the floor adds 1.3 GB headroom. The unchanged 11.5 GB MLX allocator
+cap is not the measured need, and the 1 GB cache limit is unchanged. Available memory is
+estimated from `memory_pressure -Q` free percentage times `hw.memsize`; on this
+19,327,352,832-byte machine, each percentage point represents about 193 MB. API, worker and
 repository Vite processes must be stopped. A failed system probe refuses execution. Close other
 apps manually; the command never kills them, uses sudo, changes wired limits or changes settings.
 
@@ -120,8 +123,8 @@ been recorded here. This phase supplies commands for later authorized execution 
 
 Every arm uses one fresh base-model process, seed 17, rank 16, 16 trainable layers, AdamW,
 activation checkpointing, a 2,048-token cap and the padding-excluding loss. No learning-rate
-schedule or adapter resume is allowed. Each process has a 1,500-second maximum. The 14 GB
-available-memory preflight, 11.5 GB allocation limit and 1 GB cache policy are unchanged.
+schedule or adapter resume is allowed. Each process has a 1,500-second maximum. The 12 GB
+available-memory preflight floor, 11.5 GB allocation limit and 1 GB cache policy are unchanged.
 
 The authorized input is `dataset_sec_5/train.jsonl` and `valid.jsonl`, plus manifests,
 exclusions and model metadata. The dataset manifest SHA-256 is

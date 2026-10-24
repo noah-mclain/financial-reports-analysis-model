@@ -40,8 +40,9 @@ from pydantic import Field
 from fra_core.taxonomy import load_taxonomy
 
 ROOT = Path(__file__).resolve().parents[1]
-# 01-constraints 1.3: 11.5 GB training allocation plus 2.5 GB headroom.
-MIN_MEMORY_BYTES = 14_000_000_000
+# Measured need is at most 10.7 GB (8.15 GB peak MLX + 2.54 GB peak RSS, overlapping
+# in unified memory); add 1.3 GB headroom. This is not the 11.5 GB allocator cap.
+MIN_MEMORY_BYTES = 12_000_000_000
 PROBE_MIN_MEMORY_BYTES = 8_500_000_000
 TRAIN_ALLOCATION_BYTES = 11_500_000_000
 DIAGNOSTIC_ALLOCATION_BYTES = 6_000_000_000
@@ -126,7 +127,7 @@ class Resources(Contract):
         if self.available_memory_bytes < minimum_memory_bytes:
             if minimum_memory_bytes == MIN_MEMORY_BYTES:
                 raise DatasetError(
-                    "preflight requires 14 GB available memory (11.5 GB plus 2.5 GB)"
+                    f"preflight requires {MIN_MEMORY_BYTES / 1e9:g} GB available memory"
                 )
             raise DatasetError(
                 f"preflight requires at least {minimum_memory_bytes} bytes available memory"

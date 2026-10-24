@@ -912,7 +912,9 @@ def test_failed_child_preserves_partial_events_and_malformed_tail(
         smoke,
         "probe_resources",
         lambda: smoke.Resources(
-            free_disk_bytes=20_000_000_000, available_memory_bytes=14_000_000_000, services=()
+            free_disk_bytes=20_000_000_000,
+            available_memory_bytes=smoke.MIN_MEMORY_BYTES,
+            services=(),
         ),
     )
 
