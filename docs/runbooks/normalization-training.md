@@ -250,3 +250,32 @@ Limits: one pair, one sample, one seed. The reference arm failed on a single val
 stability. Two earlier attempts at this pair were refused by the memory preflight at 72% free
 before any training (see the launch floor above); their registrations were discarded and no
 result from them is used.
+
+## Measured result: generated quality of the matched pair, 24 October 2026
+
+Final update-60 adapters of the pair above, generated at temperature 0 with at most 64 tokens
+on the two frozen panels (`representative`, 512 rows; `challenge`, 168 rows), then scored with
+`normalization_validation.py score`, seed 20261023, paired issuer bootstrap against the base
+model's predictions on the same panel. The unadapted base model and the label-lexicon match are
+the comparators. Peak MLX was 4.89 GB for the base and 5.46 to 5.49 GB with an adapter; every
+process stayed under the 6 GB limit. These are validation diagnostics, not Gate C: panels are
+reported separately and never pooled.
+
+| Panel | Predictor | Accuracy | Macro-F1 (47 classes) | Invalid | False mappings on null | Taxonomy-critical errors | Macro-F1 change vs base, 95% CI |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Representative | Base | 0.875 | 0.520 | 15 | 20 | 5 of 23 | n/a |
+| Representative | Reference | 0.830 | 0.222 | 4 | 5 | 10 of 23 | -0.318 to -0.183 |
+| Representative | Treatment | 0.896 | 0.485 | 6 | 19 | 4 of 23 | -0.073 to +0.026 |
+| Representative | Lexicon | 0.850 | 0.289 | 0 | 2 | 14 of 23 | -0.278 to -0.138 |
+| Challenge | Base | 0.804 | 0.457 | 1 | 6 | 15 of 95 | n/a |
+| Challenge | Reference | 0.613 | 0.219 | 1 | 1 | 33 of 95 | -0.246 to -0.130 |
+| Challenge | Treatment | 0.804 | 0.462 | 0 | 7 | 13 of 95 | -0.030 to +0.038 |
+| Challenge | Lexicon | 0.482 | 0.239 | 0 | 0 | 62 of 95 | -0.258 to -0.115 |
+
+Reading: the uncorrected reference adapter is clearly worse than the base model on both panels.
+The bias-corrected adapter is not distinguishable from the base model on either panel (both
+macro-F1 intervals include zero), with fewer invalid outputs on the representative panel (6
+against 15). It does not reach the Gate C bar of 5 macro-F1 points above the base model, and the
+critical-item rate is far from 99%. Sixty updates on 240 examples show that the corrected
+optimizer is stable and avoids the damage the uncorrected one does; they do not show an
+improvement from fine-tuning. Nothing is promoted, and `model_test` and `blind` were not scored.
