@@ -2,6 +2,8 @@
 
 Sep 28, 2026 · @n
 
+> Historical: written 28 September. Current status, the deadline (27 October) and measured results are in [the accuracy report](../accuracy-report.md) and the [revised plan](../blueprint/08-revised-plan.md).
+
 The data foundation and the first extraction stage are done: statement pages are found in English and Arabic filings, digital or scanned, at 100% recall on the golden set. What remains is turning those pages into structured statements, then metrics, narration and the live demo by Oct 26, 2026.
 
 ## Completed
