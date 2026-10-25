@@ -357,3 +357,36 @@ selection. This module adds no generation code. Gate C still requires at least 5
 points above the base model and 99% critical-item correctness under the prescribed evaluation
 protocol. Neither a successful fit nor these validation panels authorize promotion or early
 `model_test`/`blind` scoring.
+
+## Measured result: bounded fit, 25 October 2026
+
+One preregistered fit (`/private/tmp/normalization-fit-20261025`; 1,000 updates, batch 4, 4,000
+fit examples, 36,467 supervised tokens, bias-corrected AdamW, constant learning rate 1e-5, seed 17)
+ran natively on the Mac in 14,537 seconds, about 14.5 seconds per update. It passed all ten
+evaluation criteria with no abort rule triggered: peak MLX 9.12 GB (limit 11.5 GB), peak RSS
+3.23 GB, token budget matched. Validation loss on the 64 diagnostic rows went from 0.0572 at update
+0 to 0.0303 at update 1,000, a ratio of 0.53; the series is noisy (lowest 0.0164 at update 950,
+highest 0.0671 at update 400, which is 1.17 times the initial value, under the 1.25 limit). The
+candidate is the final update-1,000 adapter; no checkpoint was chosen by its scores.
+
+The final adapter was generated at temperature 0 (at most 64 tokens) on the two frozen panels and
+scored with the same command, seed and paired issuer bootstrap against the unadapted base
+model's predictions as the matched pair above. Panels are reported separately.
+
+| Panel | Predictor | Accuracy | Macro-F1 (47 classes) | Invalid | False mappings on null | Taxonomy-critical errors | Macro-F1 change vs base, 95% CI |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Representative | Base | 0.875 | 0.520 | 15 | 20 | 5 of 23 | n/a |
+| Representative | Pair treatment (60 updates) | 0.896 | 0.485 | 6 | 19 | 4 of 23 | -0.073 to +0.026 |
+| Representative | Fit (1,000 updates) | 0.916 | 0.592 | 12 | 24 | 0 of 23 | +0.032 to +0.120 |
+| Challenge | Base | 0.804 | 0.457 | 1 | 6 | 15 of 95 | n/a |
+| Challenge | Pair treatment (60 updates) | 0.804 | 0.462 | 0 | 7 | 13 of 95 | -0.030 to +0.038 |
+| Challenge | Fit (1,000 updates) | 0.881 | 0.538 | 1 | 5 | 6 of 95 | +0.018 to +0.105 |
+
+Reading: unlike the 60-update adapter, the 1,000-update adapter is above the base model on both
+panels, and both macro-F1 intervals exclude zero. The point estimates (+7.2 and +8.1 points)
+exceed the Gate C margin of 5 points, but the lower ends of the intervals (+3.2 and +1.8 points)
+do not, and the panels are validation diagnostics, not Gate C. Critical items are not at the 99%
+bar on the challenge panel (6 errors of 95); the representative panel has no taxonomy-critical
+error in 23 items, too few to bound a 99% rate. False mappings on null rows rose on the
+representative panel (24 against 20). This is one adapter, one seed, one pass over 4,000 of the
+fit rows. Nothing is promoted, and `model_test` and `blind` were not scored.
