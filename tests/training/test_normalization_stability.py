@@ -3,6 +3,7 @@
 import copy
 import json
 import math
+from pathlib import Path
 
 import normalization_stability as stability
 import normalization_train as smoke
@@ -1063,6 +1064,10 @@ def test_treatment_verification_rechecks_historical_file_hashes(config, monkeypa
         stability.verify_historical(conf, {}, {})
 
 
+@pytest.mark.skipif(
+    not Path("/private/tmp/normalization-quality-protocol/panels-v1").is_dir(),
+    reason="reads the frozen validation panels, which exist only on the evaluation host",
+)
 def test_treatment_registration_is_exclusive_and_source_bound(config, monkeypatch, tmp_path):  # noqa: F811
     conf = treatment_only(config)
     plan = tmp_path / "treatment-plan.json"
