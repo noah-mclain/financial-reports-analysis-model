@@ -56,9 +56,14 @@ make train-smoke CONFIG=/private/tmp/normalization-smoke.json DRY_RUN=1
 
 This performs non-training checks and token counts only; it never imports MLX or creates an
 adapter. The resource probe requires Apple Silicon macOS, at least 15 GB free disk and
-14 GB available memory: the blueprint's 11.5 GB training allocation plus 2.5 GB headroom.
-Available memory is estimated from `memory_pressure -Q` free percentage times `hw.memsize`.
-These are conservative planning thresholds, not measured training capacity. API, worker and
+12 GB available memory floor. Completed 60-iteration runs measured an 8.15 GB peak MLX
+allocation and a peak process RSS of 2.42 to 3.20 GB (4.03 GB in the historical arm D). These
+counters overlap in unified memory, so their sum is a ceiling, not a measurement: 11.35 GB for
+the matched-pair runs, 12.18 GB for arm D. The 12 GB floor covers the pair runs with 0.65 GB
+spare and is below the summed ceiling for arm D. The unchanged 11.5 GB MLX allocator cap is not
+the measured need, and the 1 GB cache limit is unchanged. Available memory is
+estimated from `memory_pressure -Q` free percentage times `hw.memsize`; on this
+19,327,352,832-byte machine, each percentage point represents about 193 MB. API, worker and
 repository Vite processes must be stopped. A failed system probe refuses execution. Close other
 apps manually; the command never kills them, uses sudo, changes wired limits or changes settings.
 
@@ -120,8 +125,8 @@ been recorded here. This phase supplies commands for later authorized execution 
 
 Every arm uses one fresh base-model process, seed 17, rank 16, 16 trainable layers, AdamW,
 activation checkpointing, a 2,048-token cap and the padding-excluding loss. No learning-rate
-schedule or adapter resume is allowed. Each process has a 1,500-second maximum. The 14 GB
-available-memory preflight, 11.5 GB allocation limit and 1 GB cache policy are unchanged.
+schedule or adapter resume is allowed. Each process has a 1,500-second maximum. The 12 GB
+available-memory preflight floor, 11.5 GB allocation limit and 1 GB cache policy are unchanged.
 
 The authorized input is `dataset_sec_5/train.jsonl` and `valid.jsonl`, plus manifests,
 exclusions and model metadata. The dataset manifest SHA-256 is
@@ -216,3 +221,61 @@ If an arm was never attempted, omit its report argument; it appears as `NOT MEAS
 four-arm table. Identity, sample, config, source and preregistration mismatches fail loudly.
 `events.jsonl` preserves step identity and JSON-safe nonfinite markers even when `metrics.json`
 cannot be completed. Failed adapters and partial artifacts must not be reused or promoted.
+
+## Measured result: matched bias-correction pair, 24 October 2026
+
+One preregistered matched pair on the stability sample (240 fit examples, 64 validation rows,
+2,161 supervised tokens, 60 updates, `dataset_sec_5`), run natively on the Mac at commit
+`f51bda8` (registration `df77cbce…6853`, dataset manifest `9cae5c2f…43f5`). Both arms
+exited 0 with `diagnostic_completed` and no artifact errors. This is a teacher-forced
+optimization-stability check; it says nothing about generated answers.
+
+| Measure | Reference (no correction) | Treatment (bias-corrected) |
+| --- | --- | --- |
+| Verdict | not stable on this sample | stable on this sample |
+| Validation loss, initial to final | 0.0572 to 0.0337 | 0.0572 to 0.0196 |
+| Worst validation loss, ratio to initial (limit 1.25) | 1.50, fails | 1.00, passes |
+| Final validation, ratio to initial (limit 1.10) | 0.59, passes | 0.34, passes |
+| Maximum training loss | 0.633 | 0.460 |
+| Maximum training loss, ratio to the historical arm A ceiling | 0.062 | 0.045 |
+| Nonfinite values | none | none |
+| Peak MLX / peak RSS | 8.15 GB / 2.42 GB | 8.15 GB / 3.20 GB |
+| Elapsed | 1,206 s | 1,205 s |
+
+The treatment arm reproduced the earlier treatment-only run exactly (final validation 0.0196,
+maximum training loss 0.4596), which used the sources before the 12 GB launch floor.
+
+Limits: one pair, one sample, one seed. The reference arm failed on a single validation spike.
+`generated_quality` is `NOT MEASURED` and promotion is not authorized by teacher-forced
+stability. Two earlier attempts at this pair were refused by the memory preflight at 72% free
+before any training (see the launch floor above); their registrations were discarded and no
+result from them is used.
+
+## Measured result: generated quality of the matched pair, 24 October 2026
+
+Final update-60 adapters of the pair above, generated at temperature 0 with at most 64 tokens
+on the two frozen panels (`representative`, 512 rows; `challenge`, 168 rows), then scored with
+`normalization_validation.py score`, seed 20261023, paired issuer bootstrap against the base
+model's predictions on the same panel. The unadapted base model and the label-lexicon match are
+the comparators. Peak MLX was 4.88 to 4.89 GB for the base and 5.46 to 5.49 GB with an adapter; every
+process stayed under the 6 GB limit. These are validation diagnostics, not Gate C: panels are
+reported separately and never pooled.
+
+| Panel | Predictor | Accuracy | Macro-F1 (47 classes) | Invalid | False mappings on null | Taxonomy-critical errors | Macro-F1 change vs base, 95% CI |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Representative | Base | 0.875 | 0.520 | 15 | 20 | 5 of 23 | n/a |
+| Representative | Reference | 0.830 | 0.222 | 4 | 5 | 10 of 23 | -0.318 to -0.183 |
+| Representative | Treatment | 0.896 | 0.485 | 6 | 19 | 4 of 23 | -0.073 to +0.026 |
+| Representative | Lexicon | 0.850 | 0.289 | 0 | 2 | 14 of 23 | -0.278 to -0.138 |
+| Challenge | Base | 0.804 | 0.457 | 1 | 6 | 15 of 95 | n/a |
+| Challenge | Reference | 0.613 | 0.219 | 1 | 1 | 33 of 95 | -0.246 to -0.130 |
+| Challenge | Treatment | 0.804 | 0.462 | 0 | 7 | 13 of 95 | -0.030 to +0.038 |
+| Challenge | Lexicon | 0.482 | 0.239 | 0 | 0 | 62 of 95 | -0.258 to -0.115 |
+
+Reading: the uncorrected reference adapter is clearly worse than the base model on both panels.
+The bias-corrected adapter is not distinguishable from the base model on either panel (both
+macro-F1 intervals include zero), with fewer invalid outputs on the representative panel (6
+against 15). It does not reach the Gate C bar of 5 macro-F1 points above the base model, and the
+critical-item rate is far from 99%. Sixty updates on 240 examples show that the corrected
+optimizer is stable and avoids the damage the uncorrected one does; they do not show an
+improvement from fine-tuning. Nothing is promoted, and `model_test` and `blind` were not scored.

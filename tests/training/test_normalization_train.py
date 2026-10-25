@@ -235,7 +235,7 @@ def test_output_reuse(config: smoke.SmokeConfig, state: str) -> None:
     "bad",
     [
         {"free_disk_bytes": 14_999_999_999},
-        {"available_memory_bytes": 13_999_999_999},
+        {"available_memory_bytes": 11_999_999_999},
         {"services": ("fra-worker",)},
     ],
 )
@@ -257,13 +257,13 @@ def test_stage_specific_resource_thresholds_preserve_training_default() -> None:
         services=(),
     )
     at_training_minimum.check()
-    with pytest.raises(DatasetError, match="14 GB available memory"):
+    with pytest.raises(DatasetError, match="12 GB available memory"):
         at_training_minimum.model_copy(
             update={"available_memory_bytes": smoke.MIN_MEMORY_BYTES - 1}
         ).check()
 
 
-def test_coarse_pressure_estimate_is_sampled_before_72_percent_refusal(tmp_path: Path) -> None:
+def test_coarse_pressure_estimate_at_72_percent_passes(tmp_path: Path) -> None:
     physical = 18 * 1024**3
     estimate = physical * 72 // 100
     state = smoke.Resources(
@@ -279,8 +279,10 @@ def test_coarse_pressure_estimate_is_sampled_before_72_percent_refusal(tmp_path:
         current_rss_bytes=1000,
         peak_rss_bytes=2000,
     )
-    with pytest.raises(DatasetError, match="14 GB available memory"):
+    assert (
         smoke.check_and_record_resources(tmp_path, stage="worker-readiness", probe=lambda: state)
+        == state
+    )
     sample = json.loads((tmp_path / "resource-samples.jsonl").read_text())
     assert sample["memory_pressure_free_percent"] == 72
     assert sample["physical_memory_bytes"] == physical
@@ -381,9 +383,9 @@ def test_supervised_worker_refusal_sample_survives_to_parent(
         "    def release(self): pass\n"
         "smoke.open_chat_tokenizer = lambda _directory: Context()\n"
         "smoke.probe_resources = lambda: smoke.Resources(free_disk_bytes=20000000000, "
-        "available_memory_bytes=18*1024**3*72//100, services=(), "
-        "physical_memory_bytes=18*1024**3, memory_pressure_free_percent=72, "
-        "memory_estimate_bytes=18*1024**3*72//100, memory_method='mocked memory_pressure -Q', "
+        "available_memory_bytes=18*1024**3*60//100, services=(), "
+        "physical_memory_bytes=18*1024**3, memory_pressure_free_percent=60, "
+        "memory_estimate_bytes=18*1024**3*60//100, memory_method='mocked memory_pressure -Q', "
         "memory_granularity_bytes=(18*1024**3+99)//100, "
         "memory_granularity_percentage_points=1, current_rss_bytes=1000, peak_rss_bytes=2000)\n"
         "raise SystemExit(smoke.main(['--config', sys.argv[sys.argv.index('--config')+1], '--worker']))\n"
@@ -395,21 +397,21 @@ def test_supervised_worker_refusal_sample_survives_to_parent(
     ]
     assert len(samples) == 1
     assert samples[0]["stage"] == "worker-readiness"
-    assert samples[0]["memory_pressure_free_percent"] == 72
+    assert samples[0]["memory_pressure_free_percent"] == 60
     assert samples[0]["required_memory_bytes"] == smoke.MIN_MEMORY_BYTES
     assert not (run_dir / "resources.json").exists()
     assert not (run_dir / "metrics.json").exists()
     # The real child wrote evidence before its readiness refusal, without MLX.
     verification = smoke._read_worker_verification(run_dir / "worker-verification.json", config)
     assert verification == worker_metadata(config)
-    at_13gb = smoke.Resources(
+    at_11gb = smoke.Resources(
         free_disk_bytes=20_000_000_000,
-        available_memory_bytes=13_000_000_000,
+        available_memory_bytes=11_000_000_000,
         services=(),
     )
-    at_13gb.check(smoke.PROBE_MIN_MEMORY_BYTES)
-    with pytest.raises(DatasetError, match="14 GB available memory"):
-        at_13gb.check()
+    at_11gb.check(smoke.PROBE_MIN_MEMORY_BYTES)
+    with pytest.raises(DatasetError, match="12 GB available memory"):
+        at_11gb.check()
     with pytest.raises(DatasetError, match="available memory"):
         smoke.Resources(
             free_disk_bytes=20_000_000_000,
@@ -833,6 +835,47 @@ def test_probe_failure_is_loud(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(smoke.subprocess, "run", denied)
     with pytest.raises(DatasetError, match="Operation not permitted"):
         smoke.probe_resources()
+
+
+@pytest.mark.parametrize(("free_percent", "refused"), [(62, True), (63, False)])
+def test_real_probe_estimate_obeys_memory_floor(
+    free_percent: int, refused: bool, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from types import SimpleNamespace
+
+    physical = 19_327_352_832
+    monkeypatch.setattr(smoke.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(smoke.platform, "machine", lambda: "arm64")
+    monkeypatch.setattr(smoke.shutil, "disk_usage", lambda _: SimpleNamespace(free=20_000_000_000))
+    monkeypatch.setattr(smoke, "current_rss_bytes", lambda: 1_000)
+
+    def output(command, **_kwargs):
+        stdout = {
+            ("/usr/sbin/sysctl", "-n", "hw.memsize"): f"{physical}\n",
+            ("/usr/bin/memory_pressure", "-Q"): (
+                f"System-wide memory free percentage: {free_percent}%\n"
+            ),
+            ("/bin/ps", "-axo", "command="): "",
+        }[tuple(command)]
+        return SimpleNamespace(stdout=stdout)
+
+    monkeypatch.setattr(smoke.subprocess, "run", output)
+    state = smoke.probe_resources()
+    if refused:
+        with pytest.raises(DatasetError, match="12 GB available memory"):
+            smoke.check_and_record_resources(
+                tmp_path, stage="controller-readiness", probe=lambda: state
+            )
+    else:
+        assert (
+            smoke.check_and_record_resources(
+                tmp_path, stage="controller-readiness", probe=lambda: state
+            )
+            == state
+        )
+    assert state.physical_memory_bytes == physical
+    assert state.memory_pressure_free_percent == free_percent
+    assert state.memory_estimate_bytes == physical * free_percent // 100
 
 
 def test_dry_run_cannot_enter_worker(tmp_path: Path) -> None:
