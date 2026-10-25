@@ -87,6 +87,9 @@ lease still keeps their compute apart (N3). Preflight threshold: `demo_min_free_
 API, workers, Vite and browser stopped; run under `caffeinate -i`. Preflight checks that no
 service from this repository is running.
 
+The training launch floor is a 12 GB floor derived from the measured peaks (see the training runbook); the 11.5 GB
+allocator cap is unchanged.
+
 | Consumer | Budget |
 |----------|--------|
 | macOS and background services | 4.0 GB |

@@ -14,7 +14,7 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Any, Literal
 
-from chat_tokenizer import load_chat_counter
+from chat_tokenizer import ChatTokenizerContext, open_chat_tokenizer
 from dataset_contracts import Contract, DatasetError, Sha256, canonical_json, digest
 from exclusive_write import write_new
 from normalization_eval import Prediction, inference_messages
@@ -38,7 +38,11 @@ class LocalModelManifest(Contract):
 
 
 def model_identity(
-    model_dir: Path, *, expected_tokenizer: str, snapshot: LocalModelManifest
+    model_dir: Path,
+    *,
+    expected_tokenizer: str,
+    snapshot: LocalModelManifest,
+    tokenizer_context: ChatTokenizerContext | None = None,
 ) -> dict[str, Any]:
     """Verify the caller's pinned Qwen 7B snapshot before loading any MLX weights."""
     if not model_dir.is_dir() or not (model_dir / "config.json").is_file():
@@ -62,7 +66,14 @@ def model_identity(
     weights = sorted(model_dir.glob("*.safetensors"))
     if not weights:
         raise DatasetError("local model has no safetensors weights")
-    _, tokenizer_id = load_chat_counter(model_dir)
+    owns_context = tokenizer_context is None
+    context = tokenizer_context or open_chat_tokenizer(model_dir)
+    try:
+        context.assert_current(model_dir)
+        tokenizer_id = context.identity
+    finally:
+        if owns_context:
+            context.release()
     if tokenizer_id != expected_tokenizer:
         raise DatasetError("local model tokenizer differs from dataset tokenizer")
     artifacts = sorted(
