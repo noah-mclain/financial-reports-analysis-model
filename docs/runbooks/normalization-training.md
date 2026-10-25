@@ -411,3 +411,113 @@ Reading: on the representative panel the gain over the base model was already pr
 appears only between update 500 and 1,000: at update 500 the interval includes zero and accuracy
 is below the base model's 0.804. The harder rows were still improving when the run ended, which
 is consistent with a longer fit helping, but a single seed and two diagnostic panels do not establish a trend.
+
+## The 3,000-update fit aborted, 25 October 2026
+
+The longer fit (`/private/tmp/normalization-fit-3000-20261025`, 3,000 updates, seed 17, timeout
+75,000 seconds) triggered the preregistered abort rule at update 1,500 after 21,874 seconds:
+validation loss on the 64 diagnostic rows was 0.0778 against 0.0572 at update 0, a ratio of 1.36
+(limit 1.25). Earlier validations ranged 0.0147 to 0.0395 from update 1,150 to 1,450. The report
+status is `failed`; per the rules above a failed run cannot authorize a candidate, there is no
+resume, and the attempt marker is consumed. No panel was generated or scored. Retained
+checkpoints are 100 to 1,400 in steps of 100 (no update-1,500 checkpoint). The 1,000-update fit
+above remains the only candidate. Whether to change the abort rule for a new preregistration is
+an owner decision; the rule was not changed after seeing this result.
+
+### Generating and scoring a checkpoint as a diagnostic
+
+Only as a diagnostic, as with update 500 above: no checkpoint is chosen by its scores. Set `CKPT` to
+the update count without padding (`1400`). Copy `adapter/00NNNNN_adapters.safetensors` (the
+seven-digit file, `0001400_adapters.safetensors`) as `adapters.safetensors` beside the run's
+`adapter_config.json` in `$FIT/ckpt-$CKPT/adapter`. Do not run the commands while another heavy job
+holds memory.
+
+```sh
+cd ~/.herdr/worktrees/financial-reports-analysis-model/normalization-fit
+export PYTHONPATH=scripts:eval:training
+PY=~/Developer/GitHub/financial-reports-analysis-model/.venv/bin/python
+FIT=/private/tmp/normalization-fit-3000-20261025
+CKPT=1400
+PANELS=/private/tmp/normalization-quality-protocol/panels-v1
+BASE=/private/tmp/normalization-stability-reference-pair-20261024T174500Z/generated-v1
+ROOT="$HOME/Library/Application Support/financial-reports-analysis-model/normalization-training"
+export FIT CKPT PANELS BASE ROOT
+mkdir -p "$FIT/ckpt-$CKPT" && mkdir "$FIT/ckpt-$CKPT/adapter" \
+  && cp "$FIT/runs/fit/adapter/$(printf '%07d' "$CKPT")_adapters.safetensors" "$FIT/ckpt-$CKPT/adapter/adapters.safetensors" \
+  && cp "$FIT/runs/fit/adapter/adapter_config.json" "$FIT/ckpt-$CKPT/adapter/"
+```
+
+The base predictions on the same panels already exist (`$BASE/base-<panel>.json`); do not
+regenerate them or the panels. The driver below generates both panels with greedy decoding, at
+most 64 tokens, the MLX allocation limited to 6 GB in the child and a per-panel deadline (about 13
+minutes for the 512 representative rows and 4 for the 168 challenge rows at the 0.7 rows per second
+the 1,000-update run measured; estimates for this run). It stops at the first failure: an existing
+output directory (a new attempt needs a new `CKPT` or directory), a generation error or timeout, an
+allocation above 6 GB, or a scoring error. Scoring starts only after both panels are generated and
+within the limit. Scoring uses the same bootstrap seed as every earlier comparison and never pools
+the panels.
+
+```sh
+/usr/bin/caffeinate -i "$PY" - <<'PY'
+import json, os, subprocess, sys
+from pathlib import Path
+
+fit, panels, base, root = (Path(os.environ[k]) for k in ("FIT", "PANELS", "BASE", "ROOT"))
+ckpt = os.environ["CKPT"]
+out = fit / f"generated-ckpt{ckpt}"
+out.mkdir(mode=0o700)  # raises if it exists
+child = ('import mlx.core as mx,runpy; mx.set_memory_limit(6_000_000_000); '
+         'runpy.run_path("training/normalization_mlx.py",run_name="__main__")')
+env = {**os.environ, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
+deadlines = {"representative": 1500, "challenge": 600}
+for panel, seconds in deadlines.items():
+    target = out / f"{panel}.json"
+    subprocess.run(
+        [sys.executable, "-c", child, "--selection", str(panels / f"{panel}-selection.json"),
+         "--model-dir", str(root / "qwen2.5-7b-instruct-4bit"),
+         "--model-manifest", str(root / "local-model.json"),
+         "--adapter-dir", str(fit / f"ckpt-{ckpt}/adapter"), "--max-tokens", "64",
+         "--out", str(target)],
+        check=True, timeout=seconds, env=env)
+    peak = json.loads(target.read_bytes())["metadata"]["peak_mlx_bytes"]
+    if peak > 6_000_000_000:
+        raise SystemExit(f"{panel}: peak MLX {peak} bytes exceeds 6 GB; preserve the output as failed")
+for panel in deadlines:
+    subprocess.run(
+        [sys.executable, "training/normalization_validation.py", "score",
+         "--selection", str(panels / f"{panel}-selection.json"),
+         "--predictions", str(out / f"{panel}.json"), "--base", str(base / f"base-{panel}.json"),
+         "--seed", "20261023", "--out", str(out / f"{panel}-score.json")],
+        check=True)
+PY
+```
+
+Then **record the result** in a new "Measured result" section here and in the Normalization section
+   of [accuracy-report.md](../accuracy-report.md), only from these score files. Report, per panel
+   and beside the base model and the 1,000-update adapter: accuracy, macro-F1 over 47 classes,
+   invalid replies, false mappings on null rows, taxonomy-critical errors and the paired
+   macro-F1 change with its 95% interval. State what the numbers cannot show: one seed, two
+   validation panels, no `model_test` or `blind` score. Compare against the Gate C bar (5
+   macro-F1 points above base with the interval's lower end considered, 99% on critical items)
+   without declaring it met.
+
+### Measured diagnostic: update-1,400 checkpoint
+
+Generated and scored with exactly the commands above (`ckpt-1400`; temperature 0, at most 64
+tokens, paired issuer bootstrap seed 20261023, peak MLX 5.46 and 5.49 GB under the 6 GB limit)
+against the same base predictions. A diagnostic of whether the longer run was still improving, not
+a selection: the checkpoint belongs to a failed run and cannot be a candidate.
+
+| Panel | Adapter | Accuracy | Macro-F1 (47 classes) | Invalid | False mappings on null | Taxonomy-critical errors | Macro-F1 change vs base, 95% CI |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Representative | Update 1,000 | 0.916 | 0.592 | 12 | 24 | 0 of 23 | +0.032 to +0.120 |
+| Representative | Update 1,400 (aborted run) | 0.895 | 0.603 | 23 | 26 | 0 of 23 | +0.043 to +0.142 |
+| Challenge | Update 1,000 | 0.881 | 0.538 | 1 | 5 | 6 of 95 | +0.018 to +0.105 |
+| Challenge | Update 1,400 (aborted run) | 0.857 | 0.493 | 1 | 7 | 5 of 95 | -0.014 to +0.074 |
+
+Reading: more updates did not improve generated quality. On the representative panel macro-F1 is
+about the same (0.603 against 0.592) while accuracy fell and invalid replies doubled (23 against
+12). On the challenge panel accuracy and macro-F1 are lower than at update 1,000 and the interval
+includes zero, while taxonomy-critical errors are 5 of 95 against 6. The two runs trained on different fit selections (the selection depends on the
+iteration count), so this is a single-seed comparison, not a trend. It gives no reason to prefer a
+longer fit over the update-1,000 candidate.
