@@ -279,3 +279,135 @@ against 15). It does not reach the Gate C bar of 5 macro-F1 points above the bas
 critical-item rate is far from 99%. Sixty updates on 240 examples show that the corrected
 optimizer is stable and avoids the damage the uncorrected one does; they do not show an
 improvement from fine-tuning. Nothing is promoted, and `model_test` and `blind` were not scored.
+
+## Bounded fit
+
+The [matched pair](#measured-result-matched-bias-correction-pair-24-october-2026)
+found the bias-corrected optimizer stable on its fixed sample. The
+[generated-quality comparison](#measured-result-generated-quality-of-the-matched-pair-24-october-2026)
+found no statistically distinguishable improvement over the base model. A longer fit tests
+whether additional updates help; it produces one candidate and does not establish Gate C.
+
+`training/normalization_fit.py` fixes constant LR 1e-5, AdamW bias correction, batch 4,
+16 LoRA layers, gradient checkpointing, sequence cap 2048 and seed 17. Validation is the
+same diagnostic selection of 64 rows from `valid.jsonl`, evaluated individually with row
+provenance at step 0, every 50 updates and the final update. The fit selects exactly
+`iters * 4` rows from the already exclusion-filtered `train.jsonl`, using the diagnostic
+stride/cap policy and retaining selected index order. Each row is consumed once, without
+shuffling, repetition or truncation. Preregistration freezes indices, hashes, counts and the
+supervised-token budget, as well as the input pins, tokenizer/model identity, dependency
+source hashes, package versions and abort rules.
+
+The declared iteration range is 1 to 3000 (default 1000). Timeout defaults to 25000 seconds,
+is capped at 75000 seconds, and must be at least `iters * 25` seconds, so the default iteration
+count fits its default timeout and 3000 updates fit the cap exactly. A longer fit supplies both
+`iters` and `timeout_seconds` explicitly. No limit is silently relaxed. Each arm of the pair
+above took about 1,206 seconds for 60 updates, which includes model load and five validation
+passes: roughly 20 seconds per update. Extrapolating gives approximately 5.5 hours at 1000 updates. This is an estimate, not a measured longer-fit runtime.
+
+Finish source changes, checks and independent review before registration. Keep every artifact
+outside Git under the private training root. Create `fit-plan.json` from the existing smoke
+config's dataset/model path and manifest pins, adding the frozen exclusions file SHA-256.
+Supply `iters: 1000`, `timeout_seconds: 25000`, `batch_size: 4`, `grad_checkpoint: true`,
+`num_layers: 16`, `max_seq_length: 2048` and `seed: 17`; omit preregistration fields. The
+`run_dir` field is required in the plan; registration generates distinct dry/run paths beside
+its output. No model download, resource probe or training occurs during preregistration.
+
+```sh
+training_root="$HOME/Library/Application Support/financial-reports-analysis-model/normalization-training"
+fit_dir="$training_root/bounded-fit"
+fit() {
+  PYTHONPATH=scripts:eval:training uv run --no-sync --offline python training/normalization_fit.py "$@"
+}
+fit --preregister "$training_root/fit-plan.json" --out "$fit_dir/preregistration.json"
+make train-fit CONFIG="$fit_dir/fit-dry.json" DRY_RUN=1
+caffeinate -i make train-fit CONFIG="$fit_dir/fit.json"
+fit --evaluate "$fit_dir/runs/fit/report.json" --out "$fit_dir/evaluation.json"
+```
+
+The registration and generated configs are read-only. Each dry/train mode has an exclusive
+attempt marker, and every run directory is exclusive. A failed attempt consumes its marker;
+changing the output directory does not permit a retry. There is no resume. Training verification,
+tokenization and model loading take place in one supervised heavy worker; the training controller
+stays free of torch, transformers and MLX. A dry run verifies with the local tokenizer and does
+not import MLX or load weights.
+
+Abort on any nonfinite loss, any validation loss above 1.25 times step 0, final validation loss
+above 1.10 times step 0, timeout, peak MLX above 11.5 GB, available memory below the 12 GB floor,
+or source/identity/dataset/exclusions/model drift. The 1 GB MLX cache cap remains unchanged.
+The final consumed supervised-token count must equal the preregistered budget. Errors preserve
+`config.json`, `events.jsonl` (including nonfinite flags), `metrics.json` when available,
+`resource-samples.jsonl`, `resources.json`, `trainer.log`, `report.json` and partial adapters.
+The report lists individual criteria, elapsed time and per-validation ratios; failed or missing
+evidence cannot authorize a candidate.
+
+Intermediate `adapter/NNNNNNN_adapters.safetensors` checkpoints are retained every 100 updates.
+The final update-N checkpoint and `adapter/adapters.safetensors` must agree. The selection rule
+is fixed before training: **the final update-N adapter is the candidate**. No best-checkpoint
+selection is performed. Evaluation always states `generated_quality: NOT MEASURED` and
+`promotion: not authorized`.
+
+After separately authorized training, reuse the matched pair's generation script shape from
+the follow-up protocol and the existing
+[base/adapter prediction and paired scoring commands](normalization-validation.md#local-base-and-adapter-predictions)
+on the unchanged representative and challenge panels. Use the final adapter, greedy generation,
+the same bounded completion and paired issuer bootstrap seed 20261023, with base predictions
+on each identical panel. Report panels separately; never pool them or regenerate their
+selection. This module adds no generation code. Gate C still requires at least 5 macro-F1
+points above the base model and 99% critical-item correctness under the prescribed evaluation
+protocol. Neither a successful fit nor these validation panels authorize promotion or early
+`model_test`/`blind` scoring.
+
+## Measured result: bounded fit, 25 October 2026
+
+One preregistered fit (`/private/tmp/normalization-fit-20261025`; 1,000 updates, batch 4, 4,000
+fit examples, 36,467 supervised tokens, bias-corrected AdamW, constant learning rate 1e-5, seed 17)
+ran natively on the Mac in 14,537 seconds, about 14.5 seconds per update. It passed all ten
+evaluation criteria with no abort rule triggered: peak MLX 9.12 GB (limit 11.5 GB), peak RSS
+3.23 GB, token budget matched. Validation loss on the 64 diagnostic rows went from 0.0572 at update
+0 to 0.0303 at update 1,000, a ratio of 0.53; the series is noisy (lowest 0.0164 at update 950,
+highest 0.0671 at update 400, which is 1.17 times the initial value, under the 1.25 limit). The
+candidate is the final update-1,000 adapter; no checkpoint was chosen by its scores.
+
+The final adapter was generated at temperature 0 (at most 64 tokens) on the two frozen panels and
+scored with the same command, seed and paired issuer bootstrap against the unadapted base
+model's predictions as the matched pair above. Panels are reported separately.
+
+| Panel | Predictor | Accuracy | Macro-F1 (47 classes) | Invalid | False mappings on null | Taxonomy-critical errors | Macro-F1 change vs base, 95% CI |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Representative | Base | 0.875 | 0.520 | 15 | 20 | 5 of 23 | n/a |
+| Representative | Pair treatment (60 updates) | 0.896 | 0.485 | 6 | 19 | 4 of 23 | -0.073 to +0.026 |
+| Representative | Fit (1,000 updates) | 0.916 | 0.592 | 12 | 24 | 0 of 23 | +0.032 to +0.120 |
+| Challenge | Base | 0.804 | 0.457 | 1 | 6 | 15 of 95 | n/a |
+| Challenge | Pair treatment (60 updates) | 0.804 | 0.462 | 0 | 7 | 13 of 95 | -0.030 to +0.038 |
+| Challenge | Fit (1,000 updates) | 0.881 | 0.538 | 1 | 5 | 6 of 95 | +0.018 to +0.105 |
+
+Reading: unlike the 60-update adapter, the 1,000-update adapter is above the base model on both
+panels, and both macro-F1 intervals exclude zero. The point estimates (+7.2 and +8.1 points)
+exceed the Gate C margin of 5 points, but the lower ends of the intervals (+3.2 and +1.8 points)
+do not, and the panels are validation diagnostics, not Gate C. Critical items are not at the 99%
+bar on the challenge panel (6 errors of 95); the representative panel has no taxonomy-critical
+error in 23 items, too few to bound a 99% rate. False mappings on null rows rose on the
+representative panel (24 against 20). This is one adapter, one seed, one pass over 4,000 of the
+fit rows. Nothing is promoted, and `model_test` and `blind` were not scored.
+
+### Diagnostic: update-500 checkpoint against the final adapter
+
+The retained update-500 checkpoint (`0000500_adapters.safetensors`, copied with the run's
+`adapter_config.json` to its own adapter directory) was generated and scored with the identical
+commands, panels, seed and base predictions. This is a diagnostic of how the gain develops during
+training. It is not a selection: the fit's rule fixes the final update-1,000 adapter as the
+candidate, and no checkpoint is chosen by these scores.
+
+| Panel | Adapter | Accuracy | Macro-F1 (47 classes) | Invalid | False mappings on null | Taxonomy-critical errors | Macro-F1 change vs base, 95% CI |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Representative | Update 500 | 0.930 | 0.575 | 6 | 20 | 2 of 23 | +0.014 to +0.110 |
+| Representative | Update 1,000 | 0.916 | 0.592 | 12 | 24 | 0 of 23 | +0.032 to +0.120 |
+| Challenge | Update 500 | 0.756 | 0.472 | 0 | 6 | 22 of 95 | -0.038 to +0.053 |
+| Challenge | Update 1,000 | 0.881 | 0.538 | 1 | 5 | 6 of 95 | +0.018 to +0.105 |
+
+Reading: on the representative panel the gain over the base model was already present at update
+500 and changed little by update 1,000 (macro-F1 0.575 to 0.592). On the challenge panel it
+appears only between update 500 and 1,000: at update 500 the interval includes zero and accuracy
+is below the base model's 0.804. The harder rows were still improving when the run ended, which
+is consistent with a longer fit helping, but a single seed and two diagnostic panels do not establish a trend.

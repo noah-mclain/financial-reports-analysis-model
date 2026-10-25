@@ -258,6 +258,8 @@ def select_rows(
     count: int,
     encode: Callable[[Row], tuple[list[int], int]],
     cap: int,
+    *,
+    permute: bool = True,
 ) -> dict[str, Any]:
     if cap < 2:
         raise DatasetError("selection cap must allow supervised tokens")
@@ -286,7 +288,8 @@ def select_rows(
         else:
             raise DatasetError(f"selection exhausted at candidate {candidate}; no wrap permitted")
     permuted = selected.copy()
-    random.Random(17).shuffle(permuted)
+    if permute:
+        random.Random(17).shuffle(permuted)
     # Targets are inspected for description only after indices are fixed.
     classes = Counter(
         NormalizationAnswer.model_validate_json(rows[i]["messages"][-1]["content"]).canonical_id
@@ -339,8 +342,11 @@ def identities(
 
 
 def selections(
-    config: DiagnosticInputs,
+    config: smoke.TrainingConfig,
     tokenizer_context: ChatTokenizerContext | None = None,
+    *,
+    fit_rows: int | None = None,
+    permute_fit: bool = True,
 ) -> tuple[dict[str, Any], tuple[list[Row], list[Row]]]:
     owns_context = tokenizer_context is None
     context = tokenizer_context or open_chat_tokenizer(config.model_dir)
@@ -349,11 +355,17 @@ def selections(
     try:
         encode = encoder(config.model_dir, context)
         for split, filename, count in (
-            ("fit", "train.jsonl", FIT_ROWS),
+            ("fit", "train.jsonl", FIT_ROWS if fit_rows is None else fit_rows),
             ("valid", "valid.jsonl", VALID_ROWS),
         ):
             rows = read_rows(config.dataset_dir / filename)
-            record = select_rows(rows, count, encode, config.max_seq_length)
+            record = select_rows(
+                rows,
+                count,
+                encode,
+                config.max_seq_length,
+                **({"permute": False} if split == "fit" and not permute_fit else {}),
+            )
             records[split] = record
             selected_rows.append([rows[i] for i in record["permuted"]])
         return records, (selected_rows[0], selected_rows[1])
@@ -865,10 +877,11 @@ def pair_design() -> dict[str, Any]:
 
 
 def supervised_budget(
-    config: BiasCorrectionConfig,
+    config: smoke.TrainingConfig,
     rows: tuple[list[Row], list[Row]],
     *,
     tokenizer_context: ChatTokenizerContext | None = None,
+    frozen_pair: bool = True,
 ) -> dict[str, int]:
     owns_context = tokenizer_context is None
     context = tokenizer_context or open_chat_tokenizer(config.model_dir)
@@ -887,7 +900,11 @@ def supervised_budget(
         finally:
             if owns_context:
                 context.release()
-    if budget != {"updates": 60, "examples": FIT_ROWS, "supervised_tokens": PAIR_SUPERVISED_TOKENS}:
+    if frozen_pair and budget != {
+        "updates": 60,
+        "examples": FIT_ROWS,
+        "supervised_tokens": PAIR_SUPERVISED_TOKENS,
+    }:
         raise DatasetError("matched pair token budget differs from frozen D exposure")
     return budget
 
@@ -1039,9 +1056,12 @@ def validation_report(
 
 
 def fit_control(
-    config: DiagnosticConfig,
+    config: smoke.TrainingConfig,
     selection: dict[str, Any],
     validation_rows: list[Row],
+    *,
+    validation_steps: tuple[int, ...] = VALIDATION_STEPS,
+    on_record: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> smoke.FitControl:
     def validate(args: Any) -> None:
         if vars(args) != smoke.training_options(config):
@@ -1060,6 +1080,8 @@ def fit_control(
             and info.get("trained_tokens") != PAIR_SUPERVISED_TOKENS
         ):
             raise DatasetError("matched pair final token budget differs")
+        if on_record is not None:
+            on_record(kind, info)
 
     indices = selection.get("permuted")
     if (
@@ -1080,7 +1102,7 @@ def fit_control(
     ) -> tuple[float, int, list[smoke.ValidationRowDiagnostic]]:
         return validation_report(model, dataset, provenance)
 
-    return smoke.FitControl(validate, validation, ordered_batches, record, VALIDATION_STEPS)
+    return smoke.FitControl(validate, validation, ordered_batches, record, validation_steps)
 
 
 def worker(config: DiagnosticConfig) -> None:
@@ -1146,7 +1168,14 @@ class DiagnosticSelection(Contract):
             raise DatasetError("worker selection has invalid indices, counts or statistics")
 
 
-def _read_worker_verification(path: Path, config: DiagnosticConfig) -> dict[str, Any]:
+def read_worker_verification(
+    path: Path,
+    config: smoke.TrainingConfig,
+    *,
+    fit_rows: int | None = None,
+    preregistration: Path | None = None,
+    preregistration_sha256: str | None = None,
+) -> dict[str, Any]:
     verification = json.loads(path.read_bytes())
     if not isinstance(verification, dict) or set(verification) != {"identity", "selection"}:
         raise DatasetError("invalid worker verification object")
@@ -1154,11 +1183,19 @@ def _read_worker_verification(path: Path, config: DiagnosticConfig) -> dict[str,
     selection = verification["selection"]
     if not isinstance(selection, dict) or set(selection) != {"fit", "valid"}:
         raise DatasetError("invalid worker selection object")
-    for split, count in (("fit", FIT_ROWS), ("valid", VALID_ROWS)):
+    for split, count in (
+        ("fit", FIT_ROWS if fit_rows is None else fit_rows),
+        ("valid", VALID_ROWS),
+    ):
         DiagnosticSelection.model_validate(selection[split]).check_count(count)
     # This is a small saved JSON record, not input/tokenizer/model verification.
-    registration_bytes = config.preregistration.read_bytes()
-    if hashlib.sha256(registration_bytes).hexdigest() != config.preregistration_sha256:
+    if isinstance(config, DiagnosticConfig):
+        preregistration = config.preregistration
+        preregistration_sha256 = config.preregistration_sha256
+    if preregistration is None or preregistration_sha256 is None:
+        raise DatasetError("worker verification requires preregistration path and sha256")
+    registration_bytes = preregistration.read_bytes()
+    if hashlib.sha256(registration_bytes).hexdigest() != preregistration_sha256:
         raise DatasetError("worker verification preregistration sha256 differs")
     registration = json.loads(registration_bytes)
     if not isinstance(registration, dict) or any(
@@ -1217,8 +1254,8 @@ def run(config: DiagnosticConfig, *, dry_run: bool) -> int:
         report["environment"] = {
             name: version(name) for name in ("mlx", "mlx-lm", "transformers", "tokenizers", "numpy")
         }
-        if report["environment"]["mlx-lm"] != "0.31.3":
-            raise DatasetError("diagnostic requires inspected mlx-lm 0.31.3")
+        if report["environment"]["mlx-lm"] != smoke.INSPECTED_MLX_LM:
+            raise DatasetError(f"diagnostic requires inspected mlx-lm {smoke.INSPECTED_MLX_LM}")
         state = smoke.check_and_record_resources(
             run_dir, stage="controller-readiness", probe=smoke.probe_resources
         )
@@ -1243,74 +1280,91 @@ def run(config: DiagnosticConfig, *, dry_run: bool) -> int:
         report["error"] = f"{type(exc).__name__}: {exc}"
         print(f"error: {exc}", file=sys.stderr)
     finally:
-        counters = run_dir / "resources.json"
-        if counters.is_file():
-            try:
-                resources = json.loads(counters.read_bytes())
-                if not isinstance(resources, dict) or not {
-                    "peak_mlx_bytes",
-                    "peak_rss_bytes",
-                }.issubset(resources):
-                    raise ValueError("resource artifact has an invalid object shape")
-                report["resources"] = resources
-            except (OSError, ValueError) as exc:
-                report["artifact_errors"].append(f"resources.json: {exc}")
-        events_path = run_dir / "events.jsonl"
-        verification_path = run_dir / "worker-verification.json"
-        if verification_path.is_file():
-            try:
-                verification = _read_worker_verification(verification_path, config)
-                report["identity"] = verification["identity"]
-                report["selection"] = verification["selection"]
-                report["verification_status"] = "verified_in_worker"
-            except (OSError, ValueError) as exc:
-                report["artifact_errors"].append(f"worker-verification.json: {exc}")
-                report["verification_status"] = "worker_verification_invalid"
-        elif not dry_run:
-            report["verification_status"] = "worker_verification_not_completed"
-            report["artifact_errors"].append("worker-verification.json: missing")
-        samples = run_dir / "resource-samples.jsonl"
-        if samples.is_file():
-            report["resource_samples"] = _read_resource_samples(samples, report["artifact_errors"])
-            controller_samples = [
-                sample
-                for sample in report["resource_samples"]
-                if sample.get("stage") == "controller-readiness"
-            ]
-            if controller_samples and "preflight" not in report:
-                report["preflight"] = controller_samples[-1]
-        if events_path.is_file():
-            events = []
-            try:
-                with events_path.open("rb") as handle:
-                    for number, line in enumerate(handle, 1):
-                        try:
-                            event = json.loads(line.decode("utf-8"))
-                            if not isinstance(event, dict) or event.get("kind") not in (
-                                "train",
-                                "validation",
-                            ):
-                                raise DatasetError("invalid event")
-                            events.append(event)
-                        except ValueError as exc:
-                            report["artifact_errors"].append(f"events.jsonl line {number}: {exc}")
-            except OSError as exc:
-                report["artifact_errors"].append(f"events.jsonl: {exc}")
-            report["events"] = events
-            report["metrics"] = {
-                kind: [event for event in events if event["kind"] == kind]
-                for kind in ("train", "validation")
-            }
-        if report["artifact_errors"]:
-            report["status"] = "failed"
-        report["elapsed_seconds"] = time.monotonic() - started
-        write_new(
-            {
-                run_dir / "report.json": json.dumps(json_safe(report), indent=2, allow_nan=False)
-                + "\n"
-            }
+        finalize_report(
+            config, report, started, dry_run=dry_run, verification_reader=read_worker_verification
         )
     return int(report["status"] == "failed")
+
+
+def finalize_report(
+    config: smoke.TrainingConfig,
+    report: dict[str, Any],
+    started: float,
+    *,
+    dry_run: bool,
+    verification_reader: Callable[
+        [Path, smoke.TrainingConfig], dict[str, Any]
+    ] = read_worker_verification,
+    finish: Callable[[dict[str, Any]], None] | None = None,
+) -> None:
+    """Preserve partial worker artifacts and write one final report, including on failure."""
+    run_dir = config.run_dir
+    counters = run_dir / "resources.json"
+    if counters.is_file():
+        try:
+            resources = json.loads(counters.read_bytes())
+            if not isinstance(resources, dict) or not {
+                "peak_mlx_bytes",
+                "peak_rss_bytes",
+            }.issubset(resources):
+                raise ValueError("resource artifact has an invalid object shape")
+            report["resources"] = resources
+        except (OSError, ValueError) as exc:
+            report["artifact_errors"].append(f"resources.json: {exc}")
+    events_path = run_dir / "events.jsonl"
+    verification_path = run_dir / "worker-verification.json"
+    if verification_path.is_file():
+        try:
+            verification = verification_reader(verification_path, config)
+            report["identity"] = verification["identity"]
+            report["selection"] = verification["selection"]
+            report["verification_status"] = "verified_in_worker"
+        except (OSError, ValueError) as exc:
+            report["artifact_errors"].append(f"worker-verification.json: {exc}")
+            report["verification_status"] = "worker_verification_invalid"
+    elif not dry_run:
+        report["verification_status"] = "worker_verification_not_completed"
+        report["artifact_errors"].append("worker-verification.json: missing")
+    samples = run_dir / "resource-samples.jsonl"
+    if samples.is_file():
+        report["resource_samples"] = _read_resource_samples(samples, report["artifact_errors"])
+        controller_samples = [
+            sample
+            for sample in report["resource_samples"]
+            if sample.get("stage") == "controller-readiness"
+        ]
+        if controller_samples and "preflight" not in report:
+            report["preflight"] = controller_samples[-1]
+    if events_path.is_file():
+        events = []
+        try:
+            with events_path.open("rb") as handle:
+                for number, line in enumerate(handle, 1):
+                    try:
+                        event = json.loads(line.decode("utf-8"))
+                        if not isinstance(event, dict) or event.get("kind") not in (
+                            "train",
+                            "validation",
+                        ):
+                            raise DatasetError("invalid event")
+                        events.append(event)
+                    except ValueError as exc:
+                        report["artifact_errors"].append(f"events.jsonl line {number}: {exc}")
+        except OSError as exc:
+            report["artifact_errors"].append(f"events.jsonl: {exc}")
+        report["events"] = events
+        report["metrics"] = {
+            kind: [event for event in events if event["kind"] == kind]
+            for kind in ("train", "validation")
+        }
+    if report["artifact_errors"]:
+        report["status"] = "failed"
+    report["elapsed_seconds"] = time.monotonic() - started
+    if finish is not None:
+        finish(report)
+    write_new(
+        {run_dir / "report.json": json.dumps(json_safe(report), indent=2, allow_nan=False) + "\n"}
+    )
 
 
 def _read_resource_samples(path: Path, errors: list[str]) -> list[dict[str, Any]]:

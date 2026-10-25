@@ -40,6 +40,7 @@ from pydantic import Field
 from fra_core.taxonomy import load_taxonomy
 
 ROOT = Path(__file__).resolve().parents[1]
+INSPECTED_MLX_LM = "0.31.3"
 # Completed runs peaked at 8.15 GB MLX and 2.4 to 3.2 GB process RSS (4.0 GB in the
 # historical arm D). The counters overlap in unified memory, so their sum is a ceiling:
 # 11.35 GB for the pair runs. 12 GB covers that, with 0.65 GB spare. This is not the
@@ -379,6 +380,17 @@ class FitControl:
     batches: Callable[..., Any]
     record: Callable[[str, dict[str, Any]], None]
     validation_steps: tuple[int, ...]
+    checkpoint_steps: tuple[int, ...] = ()
+
+
+def save_checkpoint(model: Any, path: Path) -> None:
+    """Retain an explicit diagnostic checkpoint without changing final-save semantics."""
+    import mlx.core as mx
+    from mlx.utils import tree_flatten
+
+    if path.exists() or path.is_symlink():
+        raise DatasetError(f"{path}: checkpoint already exists")
+    mx.save_safetensors(str(path), dict(tree_flatten(model.trainable_parameters())))
 
 
 def fit(
@@ -441,6 +453,10 @@ def fit(
                 step = info["iteration"]
                 if step in control.validation_steps:
                     record_validation(step)
+                if step in control.checkpoint_steps:
+                    save_checkpoint(
+                        model, Path(args.adapter_path) / f"{step:07d}_adapters.safetensors"
+                    )
 
         def on_val_loss_report(self, info: dict[str, Any]) -> None:
             if control is not None:
@@ -807,8 +823,8 @@ def run(
         report["environment"] = {
             name: version(name) for name in ("mlx", "mlx-lm", "transformers", "tokenizers", "numpy")
         }
-        if report["environment"]["mlx-lm"] != "0.31.3":
-            raise DatasetError("training API requires inspected mlx-lm 0.31.3")
+        if report["environment"]["mlx-lm"] != INSPECTED_MLX_LM:
+            raise DatasetError(f"training API requires inspected mlx-lm {INSPECTED_MLX_LM}")
         state = check_and_record_resources(run_dir, stage="controller-readiness", probe=probe)
         report["preflight"] = state.model_dump(mode="json")
         if dry_run or verify_in_controller:

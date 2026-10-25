@@ -13,7 +13,7 @@ from importlib.metadata import PackageNotFoundError, version
 import pytest
 
 STUB_VERSIONS = {"mlx": "0.32.2", "mlx-lm": "0.31.3"}
-TRAINER_MODULES = ("normalization_train", "normalization_stability")
+TRAINER_MODULES = ("normalization_train", "normalization_stability", "normalization_fit")
 
 
 def mlx_installed() -> bool:
