@@ -6,6 +6,7 @@ import contextlib
 import json
 import os
 import re
+import shlex
 import shutil
 import signal
 import subprocess
@@ -614,9 +615,9 @@ def test_make_smoke_passes_shell_metacharacters_in_the_path_literally(tmp_path: 
     (tmp_path / ".env").write_text("FRA_API_PORT=8000\nFRA_LLM_PORT=8001\n")
     received = tmp_path / "received"
     stub = tmp_path / "scripts" / "smoke_job.sh"
-    stub.write_text(f'#!/usr/bin/env bash\nprintf %s "$1" > {received}\n')
+    stub.write_text(f'#!/usr/bin/env bash\nprintf %s "$1" > {shlex.quote(str(received))}\n')
     marker = tmp_path / "marker"
-    pdf = f"a `touch {marker}` 'q' \"d\"; b.pdf"
+    pdf = f"a `touch {shlex.quote(str(marker))}` 'q' \"d\"; b.pdf"
 
     subprocess.run(["make", "smoke", f"PDF={pdf}"], cwd=tmp_path, check=True)
 
