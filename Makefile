@@ -230,8 +230,10 @@ container-smoke: ## Build and smoke-test the Docker API and placeholder worker
 	bash scripts/ci/container-smoke.sh
 
 smoke: ## Run one PDF through the native API and worker, printing live stage events (PDF required)
+	@# $$PDF reaches the shell as an environment variable, never as recipe text, so quotes, backticks and ; in a file name
+	@# are not interpreted. make still reads $$ in a value as its own syntax: for such a name run scripts/smoke_job.sh directly.
 	$(if $(PDF),,$(error PDF is required))
-	bash scripts/smoke_job.sh "$(PDF)"
+	bash scripts/smoke_job.sh "$$PDF"
 
 clean: ## Remove caches and build artifacts
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +

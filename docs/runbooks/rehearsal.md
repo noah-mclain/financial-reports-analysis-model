@@ -44,9 +44,10 @@ Open `/analyses/<job_id>/view` for the results and record that job id and the an
 `GET /analyses/<job_id>`. `var/jobs` keeps the job, upload and analysis.
 
 For timing and stage events from a clean isolated state, run the same document through the smoke
-script. Call the script directly, with the path in a quoted variable: `make smoke PDF=...` pastes the
-path into a shell recipe, so a file name containing `$(...)`, backticks or quotes would run as
-a command.
+script. Call the script directly, with the path in a quoted variable. `make smoke PDF=...` passes the
+path to the script as an environment variable, so quotes, backticks and `;` in a file name are
+not interpreted, but make reads `$` in the value as its own syntax, so a path containing `$` must
+go to the script directly.
 
 From the repository root:
 

@@ -606,3 +606,19 @@ def test_rejects_wrong_or_missing_identity(tmp_path: Path, mode: str, message: s
     assert result.returncode == 1, result.stdout + result.stderr
     assert message in result.stderr
     assert not (tmp_path / "run/analysis.json").exists()
+
+
+def test_make_smoke_passes_shell_metacharacters_in_the_path_literally(tmp_path: Path) -> None:
+    (tmp_path / "scripts").mkdir()
+    shutil.copy(ROOT / "Makefile", tmp_path / "Makefile")
+    (tmp_path / ".env").write_text("FRA_API_PORT=8000\nFRA_LLM_PORT=8001\n")
+    received = tmp_path / "received"
+    stub = tmp_path / "scripts" / "smoke_job.sh"
+    stub.write_text(f'#!/usr/bin/env bash\nprintf %s "$1" > {received}\n')
+    marker = tmp_path / "marker"
+    pdf = f"a `touch {marker}` 'q' \"d\"; b.pdf"
+
+    subprocess.run(["make", "smoke", f"PDF={pdf}"], cwd=tmp_path, check=True)
+
+    assert received.read_text() == pdf
+    assert not marker.exists()
