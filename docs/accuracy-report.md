@@ -2,10 +2,10 @@
 
 Status: 24 October 2026. Gate A and B results below are from `dev`; nothing here is a held-out
 gate result. `model_test` and `blind` have not been scored (D13, D17), and the checkpoint has
-not run. The cited Gate A/B and locate results come from local, uncommitted artifacts under
-`var/`, which are absent from a clean checkout and may be overwritten by later runs. Regenerate
-the Gate A/B report with `make eval-gates` (24 October 2026 run) and locate results with
-`make eval-locate TARGET=golden` (the documented golden-set evaluation). Rows marked "not
+not run. The cited Gate A/B and locate results are the dated reports committed under
+[`eval/results/`](../eval/results/README.md), with their SHA-256 and the command that produced
+each. The live reports under `var/` are not committed and a later run overwrites them; regenerate
+with `make eval-gates` and `make eval-locate TARGET=golden`. Rows marked "not
 measured" have no run.
 
 Scored scope is English documents (D21). Arabic results stay visible where they were measured.
@@ -16,7 +16,7 @@ leave each scored denominator ([D21 counts](blueprint/08-revised-plan.md)).
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| A. Extraction | Not met on `dev` (English, 24 October): scanned cells and balance identity miss the bar | `var/eval/gates-dev.json`, 6 English golden documents |
+| A. Extraction | Not met on `dev` (English, 24 October): scanned cells and balance identity miss the bar | [`eval/results/gates-dev-2026-10-24.json`](../eval/results/gates-dev-2026-10-24.json), 6 English golden documents |
 | B. Mapping | Slot accounting met on `dev` (24 October); no mapped slot is verified against an independent reference | same |
 | C. Model | Not met: no adapter has been promoted | [normalization-validation.md](runbooks/normalization-validation.md) |
 | D. Portability | Not measured: CI smoke validates both Compose configurations, builds the image, and checks runtime imports, non-root identity, CPU-only PyTorch, API health, and placeholder worker startup/shutdown; this does not establish Gate D | [ci.md](runbooks/ci.md) |
@@ -62,10 +62,17 @@ bilingual-pair history; the 24 October table above supersedes it for scored scop
 
 ## Locate (golden and `train`)
 
-From [the locate design document](blueprint/09-ingest-locate.md) and `var/eval/locate-*.json`:
-statement-page recall 100% on 12 golden documents; median share of pages sent to conversion
-10.7%; corporate filings with a balance and an income range in `train` 109 of 109; banks and
-insurers recognised 6 of 6. The golden set is not held out.
+From [the locate design document](blueprint/09-ingest-locate.md) and the committed 7 October
+re-runs, [`locate-golden-2026-10-07.json`](../eval/results/locate-golden-2026-10-07.json) and
+[`locate-train-2026-10-07.json`](../eval/results/locate-train-2026-10-07.json): statement-page
+recall 100% on 12 golden documents (no misses), with a median 14.1% of pages sent to conversion.
+On the 178 `train` documents (fit and validation parts, never the holdout) the locator covered
+all 156 corporate filings, judging 154 right and 2 held (annual 45 of 47, interim 109 of 109,
+none wrong). Of 22 negative controls, none of the 4 banks was wrongly passed (3
+declined, 1 held for review) and neither of the 2 insurers was (both held); of 16 other financial
+companies, 10 were held and 6 wrongly passed. The golden set is not held out. The design
+document's table (10.7%, 109 of 109 corporate filings, 6 of 6 banks and insurers) records an
+earlier run; the committed files are the later re-runs and do not reproduce those figures.
 
 ## Scanned value agreement, Juhayna, 12 October
 
