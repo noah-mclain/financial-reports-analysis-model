@@ -1,6 +1,6 @@
 # Accuracy report
 
-Status: 24 October 2026. Gate A and B results below are from `dev`; nothing here is a held-out
+Status: 25 October 2026. Gate A and B results below are from `dev`; nothing here is a held-out
 gate result. `model_test` and `blind` have not been scored (D13, D17), and the checkpoint has
 not run. The cited Gate A/B and locate results are the dated reports committed under
 [`eval/results/`](../eval/results/README.md), with their SHA-256 and the command that produced
@@ -107,10 +107,35 @@ be independently checked from a clean checkout:
 The gate needs an adapter at least 5 points above the base model and 99% on critical items on
 held-out issuers. The 11 critical examples are "not shown" at this size. No adapter has been promoted.
 
+### Bounded fit, 25 October (validation panels)
+
+One 1,000-update adapter, generated at temperature 0 on two frozen validation panels
+(`representative`, 512 rows; `challenge`, 168 rows) and scored against the unadapted base model
+with a paired issuer bootstrap. Not Gate C: one seed, validation diagnostics, no `model_test` or
+`blind` score. The panels differ from the 512-row selection above, so the base figures differ.
+Source and commands: [normalization-training.md](runbooks/normalization-training.md#measured-result-bounded-fit-25-october-2026).
+
+| Panel | Predictor | Accuracy | Macro-F1 (47 classes) | Invalid | False mappings on null | Taxonomy-critical errors | Macro-F1 change vs base, 95% CI |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Representative | Base | 0.875 | 0.520 | 15 | 20 | 5 of 23 | n/a |
+| Representative | Fit (1,000 updates) | 0.916 | 0.592 | 12 | 24 | 0 of 23 | +0.032 to +0.120 |
+| Challenge | Base | 0.804 | 0.457 | 1 | 6 | 15 of 95 | n/a |
+| Challenge | Fit (1,000 updates) | 0.881 | 0.538 | 1 | 5 | 6 of 95 | +0.018 to +0.105 |
+
+Both intervals exclude zero, and the point estimates (+7.2 and +8.1 points) exceed the 5-point
+margin, but the lower ends do not. Critical items are not at 99% on the challenge panel, and
+false mappings on null rows rose on the representative panel. A 3,000-update fit aborted at update 1,500
+after 21,874 seconds because validation loss reached 0.0778, 1.36 times the step-0 value of 0.0572
+(limit 1.25); it produced no candidate. Its retained update-1,400 checkpoint, scored as a diagnostic only, was
+not better than the 1,000-update adapter: about the same representative macro-F1 (0.603 against
+0.592) with lower accuracy (0.895) and 23 invalid replies, challenge macro-F1 0.493 with a change over base of -0.014
+to +0.074 (the interval includes zero). See
+[normalization-training.md](runbooks/normalization-training.md#the-3000-update-fit-aborted-25-october-2026).
+
 ## Not measured
 
 - `model_test` and `blind` scores for any gate.
 - Gate A and B on the train-holdout dry runs since 7 October.
 - Narration with a language model; the template summary is the shipped path.
 - Docker upload to summary on one digital and one scanned English document.
-- Two clean end-to-end runs on documents never seen before.
+- Two clean end-to-end runs on documents never seen before ([procedure](runbooks/rehearsal.md)).
