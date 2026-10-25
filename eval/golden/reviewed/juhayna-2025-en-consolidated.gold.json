@@ -1,0 +1,715 @@
+{
+  "version": 1,
+  "method": "assisted_review",
+  "reference_scope": "full_primary_statements",
+  "readings": [
+    {
+      "id": "juhayna-2025-en-consolidated",
+      "sha256": "8471e73426b746df1142d0e4103643907e7abed499140b15c6a4e77730fb7707",
+      "reader": "nada",
+      "source": "pdf_reviewed",
+      "complete": true,
+      "statements": [
+        {
+          "type": "balance",
+          "pages": [
+            5
+          ],
+          "page_mode": "scanned",
+          "scale": 1,
+          "currency": "EGP",
+          "periods": [
+            {
+              "key": "2025-12-31",
+              "end_date": "2025-12-31",
+              "kind": "instant",
+              "months": null,
+              "restated": false,
+              "audited": null
+            },
+            {
+              "key": "2024-12-31",
+              "end_date": "2024-12-31",
+              "kind": "instant",
+              "months": null,
+              "restated": false,
+              "audited": null
+            }
+          ],
+          "rows": [
+            {
+              "label": "Property, plant and equipment",
+              "values": {
+                "2025-12-31": "5175562196",
+                "2024-12-31": "3886899018"
+              },
+              "unconfirmed": [],
+              "canonical_id": "ppe_net"
+            },
+            {
+              "label": "Projects under construction",
+              "values": {
+                "2025-12-31": "2722175926",
+                "2024-12-31": "1511945561"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Biological assets",
+              "values": {
+                "2025-12-31": "574493531",
+                "2024-12-31": "445704631"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Equity accounted investees",
+              "values": {
+                "2025-12-31": null,
+                "2024-12-31": "18025552"
+              },
+              "unconfirmed": [],
+              "canonical_id": "investments_in_associates"
+            },
+            {
+              "label": "Investment measured at amortized cost (non-current)",
+              "values": {
+                "2025-12-31": "109946586",
+                "2024-12-31": null
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Right of use assets",
+              "values": {
+                "2025-12-31": "184421330",
+                "2024-12-31": "93038704"
+              },
+              "unconfirmed": [],
+              "canonical_id": "right_of_use_assets"
+            },
+            {
+              "label": "Good will",
+              "values": {
+                "2025-12-31": "97092890",
+                "2024-12-31": "97092890"
+              },
+              "unconfirmed": [],
+              "canonical_id": "goodwill"
+            },
+            {
+              "label": "Other long term asset",
+              "values": {
+                "2025-12-31": "690785",
+                "2024-12-31": "699057"
+              },
+              "unconfirmed": [],
+              "canonical_id": "other_non_current_assets"
+            },
+            {
+              "label": "Non-current assets",
+              "values": {
+                "2025-12-31": "8864383244",
+                "2024-12-31": "6053405413"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_non_current_assets"
+            },
+            {
+              "label": "Inventory",
+              "values": {
+                "2025-12-31": "5815744221",
+                "2024-12-31": "4177070922"
+              },
+              "unconfirmed": [],
+              "canonical_id": "inventories"
+            },
+            {
+              "label": "Trade and other receivables",
+              "values": {
+                "2025-12-31": "2033905286",
+                "2024-12-31": "1501832833"
+              },
+              "unconfirmed": [],
+              "canonical_id": "trade_receivables"
+            },
+            {
+              "label": "Due from related party",
+              "values": {
+                "2025-12-31": null,
+                "2024-12-31": "3421436"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Other biological assets",
+              "values": {
+                "2025-12-31": "66662132",
+                "2024-12-31": "43487421"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Investment measured at amortized cost (current)",
+              "values": {
+                "2025-12-31": "537771276",
+                "2024-12-31": null
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Cash and cash equivalents",
+              "values": {
+                "2025-12-31": "1091755742",
+                "2024-12-31": "1811244599"
+              },
+              "unconfirmed": [],
+              "canonical_id": "cash_and_equivalents"
+            },
+            {
+              "label": "Current assets",
+              "values": {
+                "2025-12-31": "9545838657",
+                "2024-12-31": "7537057211"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_current_assets"
+            },
+            {
+              "label": "Total assets",
+              "values": {
+                "2025-12-31": "18410221901",
+                "2024-12-31": "13590462624"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_assets"
+            },
+            {
+              "label": "Issued and paid up capital",
+              "values": {
+                "2025-12-31": "1176756353",
+                "2024-12-31": "941405082"
+              },
+              "unconfirmed": [],
+              "canonical_id": "share_capital"
+            },
+            {
+              "label": "Legal reserve",
+              "values": {
+                "2025-12-31": null,
+                "2024-12-31": "742112963"
+              },
+              "unconfirmed": [],
+              "canonical_id": "other_reserves"
+            },
+            {
+              "label": "General reserve - issuance premium",
+              "values": {
+                "2025-12-31": null,
+                "2024-12-31": "330920428"
+              },
+              "unconfirmed": [],
+              "canonical_id": "other_reserves"
+            },
+            {
+              "label": "Other reserve",
+              "values": {
+                "2025-12-31": "259470145",
+                "2024-12-31": null
+              },
+              "unconfirmed": [],
+              "canonical_id": "other_reserves"
+            },
+            {
+              "label": "Retained earnings",
+              "values": {
+                "2025-12-31": "6595203300",
+                "2024-12-31": "4324257529"
+              },
+              "unconfirmed": [],
+              "canonical_id": "retained_earnings"
+            },
+            {
+              "label": "Total equity attributable to owners of the company",
+              "values": {
+                "2025-12-31": "8031429798",
+                "2024-12-31": "6338696002"
+              },
+              "unconfirmed": [],
+              "canonical_id": "equity_attributable_parent"
+            },
+            {
+              "label": "Non-controlling interest",
+              "values": {
+                "2025-12-31": "1114421",
+                "2024-12-31": "628468"
+              },
+              "unconfirmed": [],
+              "canonical_id": "non_controlling_interests"
+            },
+            {
+              "label": "Total equity",
+              "values": {
+                "2025-12-31": "8032544219",
+                "2024-12-31": "6339324470"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_equity"
+            },
+            {
+              "label": "Loans (non-current)",
+              "values": {
+                "2025-12-31": "1542076348",
+                "2024-12-31": "578066880"
+              },
+              "unconfirmed": [],
+              "canonical_id": "long_term_borrowings"
+            },
+            {
+              "label": "Lease contract liabilities (non-current)",
+              "values": {
+                "2025-12-31": "156429712",
+                "2024-12-31": "84041450"
+              },
+              "unconfirmed": [],
+              "canonical_id": "lease_liabilities_non_current"
+            },
+            {
+              "label": "Deferred tax liabilities",
+              "values": {
+                "2025-12-31": "509294125",
+                "2024-12-31": "387421265"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Deferred income (non-current)",
+              "values": {
+                "2025-12-31": "386954",
+                "2024-12-31": "2199658"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Non-current liabilities",
+              "values": {
+                "2025-12-31": "2208187139",
+                "2024-12-31": "1051729253"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_non_current_liabilities"
+            },
+            {
+              "label": "Provisions",
+              "values": {
+                "2025-12-31": "130598404",
+                "2024-12-31": "228224163"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Bank credit facilities",
+              "values": {
+                "2025-12-31": "5330641186",
+                "2024-12-31": "2909495624"
+              },
+              "unconfirmed": [],
+              "canonical_id": "short_term_borrowings"
+            },
+            {
+              "label": "Creditors and other credit balances",
+              "values": {
+                "2025-12-31": "2343539038",
+                "2024-12-31": "2006712301"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Income tax liabilities",
+              "values": {
+                "2025-12-31": "102308058",
+                "2024-12-31": "712162570"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Due to related party",
+              "values": {
+                "2025-12-31": "28836424",
+                "2024-12-31": null
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Lease contracts liabilities (current)",
+              "values": {
+                "2025-12-31": "52958214",
+                "2024-12-31": "67487158"
+              },
+              "unconfirmed": [],
+              "canonical_id": "lease_liabilities_current"
+            },
+            {
+              "label": "Loans (current)",
+              "values": {
+                "2025-12-31": "178796516",
+                "2024-12-31": "271503629"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Deferred income (current)",
+              "values": {
+                "2025-12-31": "1812703",
+                "2024-12-31": "3823456"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Current liabilities",
+              "values": {
+                "2025-12-31": "8169490543",
+                "2024-12-31": "6199408901"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_current_liabilities"
+            },
+            {
+              "label": "Total liabilities",
+              "values": {
+                "2025-12-31": "10377677682",
+                "2024-12-31": "7251138154"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_liabilities"
+            },
+            {
+              "label": "Total equity and total liabilities",
+              "values": {
+                "2025-12-31": "18410221901",
+                "2024-12-31": "13590462624"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_liabilities_and_equity"
+            }
+          ]
+        },
+        {
+          "type": "comprehensive_income",
+          "pages": [
+            7
+          ],
+          "page_mode": "digital",
+          "scale": 1,
+          "currency": "EGP",
+          "periods": [
+            {
+              "key": "FY2025",
+              "end_date": "2025-12-31",
+              "kind": "duration",
+              "months": 12,
+              "restated": false,
+              "audited": null
+            },
+            {
+              "key": "FY2024",
+              "end_date": "2024-12-31",
+              "kind": "duration",
+              "months": 12,
+              "restated": false,
+              "audited": null
+            }
+          ],
+          "rows": [
+            {
+              "label": "Net profit for the year after tax",
+              "values": {
+                "FY2025": "1910094835",
+                "FY2024": "2735394516"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Losses of foreign currency evaluation (EAS 13 - appendix H)",
+              "values": {
+                "FY2025": null,
+                "FY2024": "-344814387"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Tax Impact (EAS 13 - appendix H)",
+              "values": {
+                "FY2025": null,
+                "FY2024": "-3677680"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Total comprehensive income",
+              "values": {
+                "FY2025": "1910094835",
+                "FY2024": "2386902449"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Parent owners of the company",
+              "values": {
+                "FY2025": "1909608115",
+                "FY2024": "2386802102"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Non-controlling interests",
+              "values": {
+                "FY2025": "486720",
+                "FY2024": "100347"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "",
+              "values": {
+                "FY2025": "1910094835",
+                "FY2024": "2386902449"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            }
+          ]
+        },
+        {
+          "type": "income",
+          "pages": [
+            6
+          ],
+          "page_mode": "digital",
+          "scale": 1,
+          "currency": "EGP",
+          "periods": [
+            {
+              "key": "FY2025",
+              "end_date": "2025-12-31",
+              "kind": "duration",
+              "months": 12,
+              "restated": false,
+              "audited": null
+            },
+            {
+              "key": "FY2024",
+              "end_date": "2024-12-31",
+              "kind": "duration",
+              "months": 12,
+              "restated": false,
+              "audited": null
+            }
+          ],
+          "rows": [
+            {
+              "label": "Net sales",
+              "values": {
+                "FY2025": "29984446222",
+                "FY2024": "24302616048"
+              },
+              "unconfirmed": [],
+              "canonical_id": "revenue"
+            },
+            {
+              "label": "Cost of sales",
+              "values": {
+                "FY2025": "-23103562055",
+                "FY2024": "-16912916624"
+              },
+              "unconfirmed": [],
+              "canonical_id": "cost_of_revenue"
+            },
+            {
+              "label": "Gross profit",
+              "values": {
+                "FY2025": "6880884167",
+                "FY2024": "7389699424"
+              },
+              "unconfirmed": [],
+              "canonical_id": "gross_profit"
+            },
+            {
+              "label": "Other operating income",
+              "values": {
+                "FY2025": "325638100",
+                "FY2024": "332938371"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Selling and Distribution expenses",
+              "values": {
+                "FY2025": "-2736787707",
+                "FY2024": "-2159669231"
+              },
+              "unconfirmed": [],
+              "canonical_id": "selling_general_admin"
+            },
+            {
+              "label": "General and administrative expenses",
+              "values": {
+                "FY2025": "-831126207",
+                "FY2024": "-659201157"
+              },
+              "unconfirmed": [],
+              "canonical_id": "selling_general_admin"
+            },
+            {
+              "label": "Net (Losses) of trade and other receivables",
+              "values": {
+                "FY2025": "7156493",
+                "FY2024": "-3081048"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Other expenses",
+              "values": {
+                "FY2025": "-72472752",
+                "FY2024": "-207708844"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Results from operating activities",
+              "values": {
+                "FY2025": "3573292094",
+                "FY2024": "4692977515"
+              },
+              "unconfirmed": [],
+              "canonical_id": "operating_income"
+            },
+            {
+              "label": "Share of net (Loss) /profit of Equity accounted investees",
+              "values": {
+                "FY2025": null,
+                "FY2024": "2355482"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Net finance (cost)",
+              "values": {
+                "FY2025": "-1168793931",
+                "FY2024": "-596428158"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Loss on sale of investment at FV through profit or loss",
+              "values": {
+                "FY2025": null,
+                "FY2024": "-522059933"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Net profit for the year before income tax",
+              "values": {
+                "FY2025": "2404498163",
+                "FY2024": "3576844906"
+              },
+              "unconfirmed": [],
+              "canonical_id": "profit_before_tax"
+            },
+            {
+              "label": "Current income tax",
+              "values": {
+                "FY2025": "-395997704",
+                "FY2024": "-779474208"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Defferd tax",
+              "values": {
+                "FY2025": "-98405624",
+                "FY2024": "-61976182"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Net profit for the year after tax",
+              "values": {
+                "FY2025": "1910094835",
+                "FY2024": "2735394516"
+              },
+              "unconfirmed": [],
+              "canonical_id": "net_income"
+            },
+            {
+              "label": "Owners of the company",
+              "values": {
+                "FY2025": "1909608115",
+                "FY2024": "2735294169"
+              },
+              "unconfirmed": [],
+              "canonical_id": "net_income_attributable_parent"
+            },
+            {
+              "label": "Non-controlling interests",
+              "values": {
+                "FY2025": "486720",
+                "FY2024": "100347"
+              },
+              "unconfirmed": [],
+              "canonical_id": "net_income_attributable_nci"
+            },
+            {
+              "label": "",
+              "values": {
+                "FY2025": "1910094835",
+                "FY2024": "2735394516"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Earning per share for the year (LE /share)",
+              "values": {
+                "FY2025": "1.38",
+                "FY2024": "2.32"
+              },
+              "unconfirmed": [],
+              "canonical_id": "eps_basic"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
