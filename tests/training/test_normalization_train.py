@@ -1,5 +1,6 @@
 """The training boundary refuses unsafe inputs before any MLX import or trainer call."""
 
+import importlib.util
 import json
 import subprocess
 import sys
@@ -467,6 +468,10 @@ def test_non_dry_controller_does_not_construct_tokenizer_for_injected_trainer(
     assert smoke.run(config, dry_run=False, probe=resources, trainer=fail) == 1
 
 
+@pytest.mark.skipif(
+    importlib.util.find_spec("mlx") is None,
+    reason="the child process records mlx package versions; mlx is Apple-only",
+)
 def test_non_dry_controller_imports_no_heavy_training_modules(
     config: smoke.SmokeConfig, tmp_path: Path
 ) -> None:
