@@ -2,11 +2,14 @@
 
 Upload an annual or interim financial report (PDF, digital or scanned). The pipeline finds the
 statement pages, extracts the primary statements with a page region behind every figure,
-computes a fixed set of ratios, and writes a short summary in which every number is one the
-analytics engine computed.
+computes a fixed set of ratios, and writes a short summary whose financial metric values are
+computed by the analytics engine. Source-period dates and duration in months are copied from
+the statement periods; they are metadata, not computed financial metrics.
 
 Scored scope is English documents (D21). Uploads identified as mainly Arabic are declined;
-the Arabic code, corpus and training pool are kept. Banks and insurers are declined.
+the Arabic code, corpus and training pool are kept. Bank and insurer uploads are declined
+when the industry verdict is sufficiently certain. Uncertain or unsettled classifications are
+held for review and continue through conversion and structuring.
 
 ## How it works
 
@@ -15,8 +18,9 @@ the Arabic code, corpus and training pool are kept. Banks and insurers are decli
 3. **Structure.** Table grid, periods, scale, currency, hierarchy, subtotal checks, and label
    mapping to a 47-item canonical taxonomy. Every cell keeps its page and bounding box.
 4. **Metrics.** Deterministic `Decimal` calculations (`packages/analytics`).
-5. **Summary.** Template text checked by a grounding checker that rejects any figure not traced
-   to a computed metric (`packages/modeling`). A statement with unresolved critical flags is
+5. **Summary.** Template text checked by a grounding checker that rejects any financial metric
+   value not traced to a computed metric (`packages/modeling`); source-period dates and duration
+   metadata come from statement periods. A statement with unresolved critical flags is
    held as `needs_review` and is not narrated.
 
 The design is in [docs/blueprint](docs/blueprint/README.md); the plan being executed is

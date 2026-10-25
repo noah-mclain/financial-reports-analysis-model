@@ -1,10 +1,16 @@
 # Accuracy report
 
-Status: 24 October 2026. Every number below is copied from a dated run artifact or a committed
-report, with its source. Nothing here is a gate result: `model_test` and `blind` have not been
-scored (D13, D17), and the checkpoint has not run. Rows marked "not measured" have no run.
+Status: 24 October 2026. Gate A and B results below are from `dev`; nothing here is a held-out
+gate result. `model_test` and `blind` have not been scored (D13, D17), and the checkpoint has
+not run. The cited Gate A/B and locate results come from local, uncommitted artifacts under
+`var/`, which are absent from a clean checkout and may be overwritten by later runs. Regenerate
+the Gate A/B report with `make eval-gates` (24 October 2026 run) and locate results with
+`make eval-locate TARGET=golden` (the documented golden-set evaluation). Rows marked "not
+measured" have no run.
 
 Scored scope is English documents (D21). Arabic results stay visible where they were measured.
+The 29 Arabic documents in `model_test` and 33 in `blind` are excluded; 11 Arabic-only issuers
+leave each scored denominator ([D21 counts](blueprint/08-revised-plan.md)).
 
 ## Gate status
 
@@ -13,7 +19,7 @@ Scored scope is English documents (D21). Arabic results stay visible where they 
 | A. Extraction | Not met on `dev` (English, 24 October): scanned cells and balance identity miss the bar | `var/eval/gates-dev.json`, 6 English golden documents |
 | B. Mapping | Slot accounting met on `dev` (24 October); no mapped slot is verified against an independent reference | same |
 | C. Model | Not met: no adapter has been promoted | [normalization-validation.md](runbooks/normalization-validation.md) |
-| D. Portability | Not measured: CI builds the image and checks API health only | [ci.md](runbooks/ci.md) |
+| D. Portability | Not measured: CI smoke validates both Compose configurations, builds the image, and checks runtime imports, non-root identity, CPU-only PyTorch, API health, and placeholder worker startup/shutdown; this does not establish Gate D | [ci.md](runbooks/ci.md) |
 | E. Blind | Not measured: waits for the checkpoint | None; the checkpoint has not run |
 
 ## Gate A and B, English golden set (`dev`), 24 October
@@ -29,11 +35,13 @@ only). In-sample: the aliases were taken from these documents. Not measured on `
 | Balance identity | 5 of 6 hold or are explained (ok 4, failed but accepted by rule 1, skipped 1); not met |
 | Scale and currency | 18 of 18 statements right; met |
 | Mapping slots | 72 total: 46 mapped, 8 ambiguous (flagged), 18 explicitly flagged, 0 silently absent, 0 statement not found; met |
-| Mapped slots with an independent verdict | 19 of 46 consistent with the lexicon, 0 disagree, 0 verified, 27 no verdict |
+| Mapped slots with a verdict | 19 of 46 consistent with the lexicon, 0 disagree, 0 verified, 27 no verdict |
 | Output coverage, no expected file | Digital (2 files): 0 of 77 emitted numeric cells assessed, 12 shown as confident. Scanned (4 files): 0 of 316 assessed, 64 shown as confident. Safety is not established |
 
 The scanned and mapping rows count the cells and slots the gate could check. The 4 scanned
 documents without an expected file contribute no right-or-wrong cells.
+
+The lexicon verdicts are not independent of the lexicon that mapped the rows.
 
 ## Gate A and B, all languages (`dev`), 7 October, superseded
 
@@ -66,9 +74,21 @@ income statement 100.00% (36 cells). A development diagnostic on in-sample label
 extraction accuracy. Details and the 27 mismatches:
 [juhayna-value-agreement-2026-10-12.md](exec-summaries/juhayna-value-agreement-2026-10-12.md).
 
+## Scanned Arabic OCR, Edita 2024
+
+The run-profile bakeoff records Vision (`ocrmac`), accurate, at 98 of 128 Arabic cells right
+(76.6%; 95% interval 68.5% to 83.1%) ([run profiles](blueprint/14-run-profiles.md)). The dated
+extraction review also records 98 of 128 (76.56%) ([review report](blueprint/12-ingest-review.md)).
+This is a development diagnostic, not a gated Arabic result under D21.
+
 ## Normalization (Gate C inputs)
 
-Validation diagnostics on a frozen 512-row SEC English selection, not the gate:
+Validation diagnostics on a frozen 512-row SEC English selection, not the gate. These values
+are from the 19 October 2026 run described in the
+[normalization validation runbook](runbooks/normalization-validation.md); its cited
+`var/normalization-validation/prompt-v2/` evidence is local and uncommitted. The runbook names
+the report/artifacts, but those files are not preserved in this checkout, so these values cannot
+be independently checked from a clean checkout:
 
 | Metric | Lexicon | Unadapted 7B |
 | --- | --- | --- |
