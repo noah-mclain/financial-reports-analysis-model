@@ -1,6 +1,7 @@
 """Bounded fit registration and failure evidence, without a training backend."""
 
 import copy
+import importlib.util
 import json
 import subprocess
 import sys
@@ -324,6 +325,10 @@ def test_evaluate_and_make_target(registered, tmp_path):
     assert "normalization_fit.py" in makefile
 
 
+@pytest.mark.skipif(
+    importlib.util.find_spec("mlx") is None,
+    reason="the child process records mlx package versions; mlx is Apple-only",
+)
 def test_controller_import_guard(registered, tmp_path):
     config_path = tmp_path / "controller.json"
     config_path.write_text(registered.model_dump_json())
