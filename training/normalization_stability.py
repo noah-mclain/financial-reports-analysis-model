@@ -1168,7 +1168,7 @@ class DiagnosticSelection(Contract):
             raise DatasetError("worker selection has invalid indices, counts or statistics")
 
 
-def _read_worker_verification(
+def read_worker_verification(
     path: Path,
     config: smoke.TrainingConfig,
     *,
@@ -1254,8 +1254,8 @@ def run(config: DiagnosticConfig, *, dry_run: bool) -> int:
         report["environment"] = {
             name: version(name) for name in ("mlx", "mlx-lm", "transformers", "tokenizers", "numpy")
         }
-        if report["environment"]["mlx-lm"] != "0.31.3":
-            raise DatasetError("diagnostic requires inspected mlx-lm 0.31.3")
+        if report["environment"]["mlx-lm"] != smoke.INSPECTED_MLX_LM:
+            raise DatasetError(f"diagnostic requires inspected mlx-lm {smoke.INSPECTED_MLX_LM}")
         state = smoke.check_and_record_resources(
             run_dir, stage="controller-readiness", probe=smoke.probe_resources
         )
@@ -1281,7 +1281,7 @@ def run(config: DiagnosticConfig, *, dry_run: bool) -> int:
         print(f"error: {exc}", file=sys.stderr)
     finally:
         finalize_report(
-            config, report, started, dry_run=dry_run, verification_reader=_read_worker_verification
+            config, report, started, dry_run=dry_run, verification_reader=read_worker_verification
         )
     return int(report["status"] == "failed")
 
@@ -1294,7 +1294,7 @@ def finalize_report(
     dry_run: bool,
     verification_reader: Callable[
         [Path, smoke.TrainingConfig], dict[str, Any]
-    ] = _read_worker_verification,
+    ] = read_worker_verification,
     finish: Callable[[dict[str, Any]], None] | None = None,
 ) -> None:
     """Preserve partial worker artifacts and write one final report, including on failure."""

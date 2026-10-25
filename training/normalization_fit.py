@@ -28,13 +28,13 @@ from pydantic import Field, model_validator
 
 class FitConfig(smoke.TrainingConfig):
     exclusions_sha256: Sha256
-    iters: int = Field(default=1000, ge=1, le=1500, strict=True)
+    iters: int = Field(default=1000, ge=1, le=3000, strict=True)
     batch_size: Literal[4] = 4
     grad_checkpoint: Literal[True] = True
     num_layers: Literal[16] = 16
     max_seq_length: Literal[2048] = 2048
     seed: Literal[17] = 17
-    timeout_seconds: int = Field(default=25000, ge=1, le=37500, strict=True)
+    timeout_seconds: int = Field(default=25000, ge=1, le=75000, strict=True)
     preregistration: Path | None = None
     preregistration_sha256: Sha256 | None = None
 
@@ -338,7 +338,7 @@ def worker(config: FitConfig) -> None:
 
 
 def read_worker_verification(path: Path, config: FitConfig) -> dict[str, Any]:
-    verification = stability._read_worker_verification(
+    verification = stability.read_worker_verification(
         path,
         config,
         fit_rows=config.iters * config.batch_size,
@@ -470,9 +470,11 @@ def run(config: FitConfig, *, dry_run: bool) -> int:
         report["environment"] = {name: version(name) for name in record["environment"]}
         if (
             report["environment"] != record["environment"]
-            or report["environment"]["mlx-lm"] != "0.31.3"
+            or report["environment"]["mlx-lm"] != smoke.INSPECTED_MLX_LM
         ):
-            raise DatasetError("environment changed or mlx-lm is not inspected 0.31.3")
+            raise DatasetError(
+                f"environment changed or mlx-lm is not inspected {smoke.INSPECTED_MLX_LM}"
+            )
         if dry_run:
             verified, _ = verify_preregistration(config)
             report.update({key: verified[key] for key in ("identity", "selection")})

@@ -40,6 +40,7 @@ from pydantic import Field
 from fra_core.taxonomy import load_taxonomy
 
 ROOT = Path(__file__).resolve().parents[1]
+INSPECTED_MLX_LM = "0.31.3"
 # Completed runs peaked at 8.15 GB MLX and 2.4 to 3.2 GB process RSS (4.0 GB in the
 # historical arm D). The counters overlap in unified memory, so their sum is a ceiling:
 # 11.35 GB for the pair runs. 12 GB covers that, with 0.65 GB spare. This is not the
@@ -822,8 +823,8 @@ def run(
         report["environment"] = {
             name: version(name) for name in ("mlx", "mlx-lm", "transformers", "tokenizers", "numpy")
         }
-        if report["environment"]["mlx-lm"] != "0.31.3":
-            raise DatasetError("training API requires inspected mlx-lm 0.31.3")
+        if report["environment"]["mlx-lm"] != INSPECTED_MLX_LM:
+            raise DatasetError(f"training API requires inspected mlx-lm {INSPECTED_MLX_LM}")
         state = check_and_record_resources(run_dir, stage="controller-readiness", probe=probe)
         report["preflight"] = state.model_dump(mode="json")
         if dry_run or verify_in_controller:

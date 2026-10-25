@@ -33,9 +33,9 @@ def configuration(base, **updates):
     "updates",
     [
         {"iters": 0},
-        {"iters": 1501},
+        {"iters": 3001},
         {"iters": 1000, "timeout_seconds": 24999},
-        {"timeout_seconds": 37501},
+        {"timeout_seconds": 75001},
         {"batch_size": 1},
         {"learning_rate": 0.1},
         {"adamw_bias_correction": False},
@@ -61,9 +61,13 @@ def test_config_defaults_and_explicit_long_timeout(config):  # noqa: F811
     assert fit.FitConfig.model_fields["timeout_seconds"].default == 25000
     with pytest.raises(ValidationError, match="25"):
         configuration(config, iters=1000, timeout_seconds=24999)
-    configuration(config, iters=1500, timeout_seconds=37500)
+    configuration(config, iters=3000, timeout_seconds=75000)
     with pytest.raises(ValidationError):
-        configuration(config, iters=1500, timeout_seconds=37499)
+        configuration(config, iters=3000, timeout_seconds=74999)
+    with pytest.raises(ValidationError):
+        configuration(config, iters=3001, timeout_seconds=75000)
+    with pytest.raises(ValidationError):
+        configuration(config, iters=1000, timeout_seconds=75001)
 
 
 @pytest.fixture

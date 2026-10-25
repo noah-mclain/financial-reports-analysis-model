@@ -298,12 +298,12 @@ shuffling, repetition or truncation. Preregistration freezes indices, hashes, co
 supervised-token budget, as well as the input pins, tokenizer/model identity, dependency
 source hashes, package versions and abort rules.
 
-The declared iteration range is 1 to 1500 (default 1000). Timeout defaults to 25000 seconds,
-is capped at 37500 seconds, and must be at least `iters * 25` seconds, so the default iteration
-count fits its default timeout and 1500 updates fit the cap exactly. No limit is silently
-relaxed. Each arm of the pair above took about 1,206 seconds for 60 updates, which includes
-model load and five validation passes: roughly 20 seconds per update. Extrapolating gives
-approximately 5.5 hours at 1000 updates. This is an estimate, not a measured longer-fit runtime.
+The declared iteration range is 1 to 3000 (default 1000). Timeout defaults to 25000 seconds,
+is capped at 75000 seconds, and must be at least `iters * 25` seconds, so the default iteration
+count fits its default timeout and 3000 updates fit the cap exactly. A longer fit supplies both
+`iters` and `timeout_seconds` explicitly. No limit is silently relaxed. Each arm of the pair
+above took about 1,206 seconds for 60 updates, which includes model load and five validation
+passes: roughly 20 seconds per update. Extrapolating gives approximately 5.5 hours at 1000 updates. This is an estimate, not a measured longer-fit runtime.
 
 Finish source changes, checks and independent review before registration. Keep every artifact
 outside Git under the private training root. Create `fit-plan.json` from the existing smoke
