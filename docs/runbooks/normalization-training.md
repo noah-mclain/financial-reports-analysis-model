@@ -390,3 +390,24 @@ bar on the challenge panel (6 errors of 95); the representative panel has no tax
 error in 23 items, too few to bound a 99% rate. False mappings on null rows rose on the
 representative panel (24 against 20). This is one adapter, one seed, one pass over 4,000 of the
 fit rows. Nothing is promoted, and `model_test` and `blind` were not scored.
+
+### Diagnostic: update-500 checkpoint against the final adapter
+
+The retained update-500 checkpoint (`0000500_adapters.safetensors`, copied with the run's
+`adapter_config.json` to its own adapter directory) was generated and scored with the identical
+commands, panels, seed and base predictions. This is a diagnostic of how the gain develops during
+training. It is not a selection: the fit's rule fixes the final update-1,000 adapter as the
+candidate, and no checkpoint is chosen by these scores.
+
+| Panel | Adapter | Accuracy | Macro-F1 (47 classes) | Invalid | False mappings on null | Taxonomy-critical errors | Macro-F1 change vs base, 95% CI |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Representative | Update 500 | 0.930 | 0.575 | 6 | 20 | 2 of 23 | +0.014 to +0.110 |
+| Representative | Update 1,000 | 0.916 | 0.592 | 12 | 24 | 0 of 23 | +0.032 to +0.120 |
+| Challenge | Update 500 | 0.756 | 0.472 | 0 | 6 | 22 of 95 | -0.038 to +0.053 |
+| Challenge | Update 1,000 | 0.881 | 0.538 | 1 | 5 | 6 of 95 | +0.018 to +0.105 |
+
+Reading: on the representative panel the gain over the base model was already present at update
+500 and changed little by update 1,000 (macro-F1 0.575 to 0.592). On the challenge panel it
+appears only between update 500 and 1,000: at update 500 the interval includes zero and accuracy
+is below the base model's 0.804. The harder rows were still improving when the run ended, which
+is consistent with a longer fit helping, but a single seed and two diagnostic panels do not establish a trend.
