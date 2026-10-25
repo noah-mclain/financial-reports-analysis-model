@@ -426,61 +426,73 @@ an owner decision; the rule was not changed after seeing this result.
 
 ### Generating and scoring a checkpoint as a diagnostic
 
-Only as a diagnostic, as with update 500 above: no checkpoint is chosen by its scores. Copy
-`adapter/00NNNNN_adapters.safetensors` as `adapters.safetensors` beside the run's
-`adapter_config.json` in `$FIT/ckpt-NNNN/adapter`, then generate and score with the commands below. `NNNN` is
-the update count without padding (`1400`); `00NNNNN` is the seven-digit file prefix (`0001400`);
-`ckptNNNN` is the output file prefix. Do not
-run them while another heavy job holds memory.
+Only as a diagnostic, as with update 500 above: no checkpoint is chosen by its scores. Set `CKPT` to
+the update count without padding (`1400`). Copy `adapter/00NNNNN_adapters.safetensors` (the
+seven-digit file, `0001400_adapters.safetensors`) as `adapters.safetensors` beside the run's
+`adapter_config.json` in `$FIT/ckpt-$CKPT/adapter`. Do not run the commands while another heavy job
+holds memory.
 
-   ```sh
-   cd ~/.herdr/worktrees/financial-reports-analysis-model/normalization-fit
-   export PYTHONPATH=scripts:eval:training
-   PY=~/Developer/GitHub/financial-reports-analysis-model/.venv/bin/python
-   FIT=/private/tmp/normalization-fit-3000-20261025
-   ```
+```sh
+cd ~/.herdr/worktrees/financial-reports-analysis-model/normalization-fit
+export PYTHONPATH=scripts:eval:training
+PY=~/Developer/GitHub/financial-reports-analysis-model/.venv/bin/python
+FIT=/private/tmp/normalization-fit-3000-20261025
+CKPT=1400
+PANELS=/private/tmp/normalization-quality-protocol/panels-v1
+BASE=/private/tmp/normalization-stability-reference-pair-20261024T174500Z/generated-v1
+ROOT="$HOME/Library/Application Support/financial-reports-analysis-model/normalization-training"
+export FIT CKPT PANELS BASE ROOT
+mkdir -p "$FIT/ckpt-$CKPT" && mkdir "$FIT/ckpt-$CKPT/adapter" \
+  && cp "$FIT/runs/fit/adapter/$(printf '%07d' "$CKPT")_adapters.safetensors" "$FIT/ckpt-$CKPT/adapter/adapters.safetensors" \
+  && cp "$FIT/runs/fit/adapter/adapter_config.json" "$FIT/ckpt-$CKPT/adapter/"
+```
 
-1. **Generate on both panels** with the checkpoint adapter, 64 tokens at most, the MLX allocation
-   limited to 6 GB in the child, and each panel under its own deadline (about 13 minutes for
-   the 512 representative rows and 4 for the 168 challenge rows at the 0.7 rows per second the
-   1,000-update run measured; those are estimates for this run). `mkdir` refuses an existing
-   output directory, and `normalization_mlx.py` refuses an existing output file.
+The base predictions on the same panels already exist (`$BASE/base-<panel>.json`); do not
+regenerate them or the panels. The driver below generates both panels with greedy decoding, at
+most 64 tokens, the MLX allocation limited to 6 GB in the child and a per-panel deadline (about 13
+minutes for the 512 representative rows and 4 for the 168 challenge rows at the 0.7 rows per second
+the 1,000-update run measured; estimates for this run). It stops at the first failure: an existing
+output directory (a new attempt needs a new `CKPT` or directory), a generation error or timeout, an
+allocation above 6 GB, or a scoring error. Scoring starts only after both panels are generated and
+within the limit. Scoring uses the same bootstrap seed as every earlier comparison and never pools
+the panels.
 
-   ```sh
-   PANELS=/private/tmp/normalization-quality-protocol/panels-v1
-   BASE=/private/tmp/normalization-stability-reference-pair-20261024T174500Z/generated-v1
-   ROOT="$HOME/Library/Application Support/financial-reports-analysis-model/normalization-training"
-   mkdir -m 700 "$FIT/generated-v1"
-   child='import mlx.core as mx,runpy; mx.set_memory_limit(6_000_000_000); runpy.run_path("training/normalization_mlx.py",run_name="__main__")'
-   for panel in representative challenge; do
-     limit=1500; [ "$panel" = challenge ] && limit=600
-     HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 /usr/bin/caffeinate -i timeout "$limit" \
-       "$PY" -c "$child" --selection "$PANELS/$panel-selection.json" \
-       --model-dir "$ROOT/qwen2.5-7b-instruct-4bit" --model-manifest "$ROOT/local-model.json" \
-       --adapter-dir "$FIT/ckpt-NNNN/adapter" --max-tokens 64 \
-       --out "$FIT/generated-v1/ckptNNNN-$panel.json" || break
-     jq -e '.metadata.peak_mlx_bytes <= 6000000000' "$FIT/generated-v1/ckptNNNN-$panel.json" >/dev/null \
-       || { echo "allocation exceeded: preserve $panel output as failed"; break; }
-   done
-   ```
+```sh
+/usr/bin/caffeinate -i "$PY" - <<'PY'
+import json, os, subprocess, sys
+from pathlib import Path
 
-   The base predictions on the same panels already exist (`$BASE/base-<panel>.json`); do not
-   regenerate them or the panels.
+fit, panels, base, root = (Path(os.environ[k]) for k in ("FIT", "PANELS", "BASE", "ROOT"))
+ckpt = os.environ["CKPT"]
+out = fit / f"generated-ckpt{ckpt}"
+out.mkdir(mode=0o700)  # raises if it exists
+child = ('import mlx.core as mx,runpy; mx.set_memory_limit(6_000_000_000); '
+         'runpy.run_path("training/normalization_mlx.py",run_name="__main__")')
+env = {**os.environ, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
+deadlines = {"representative": 1500, "challenge": 600}
+for panel, seconds in deadlines.items():
+    target = out / f"{panel}.json"
+    subprocess.run(
+        [sys.executable, "-c", child, "--selection", str(panels / f"{panel}-selection.json"),
+         "--model-dir", str(root / "qwen2.5-7b-instruct-4bit"),
+         "--model-manifest", str(root / "local-model.json"),
+         "--adapter-dir", str(fit / f"ckpt-{ckpt}/adapter"), "--max-tokens", "64",
+         "--out", str(target)],
+        check=True, timeout=seconds, env=env)
+    peak = json.loads(target.read_bytes())["metadata"]["peak_mlx_bytes"]
+    if peak > 6_000_000_000:
+        raise SystemExit(f"{panel}: peak MLX {peak} bytes exceeds 6 GB; preserve the output as failed")
+for panel in deadlines:
+    subprocess.run(
+        [sys.executable, "training/normalization_validation.py", "score",
+         "--selection", str(panels / f"{panel}-selection.json"),
+         "--predictions", str(out / f"{panel}.json"), "--base", str(base / f"base-{panel}.json"),
+         "--seed", "20261023", "--out", str(out / f"{panel}-score.json")],
+        check=True)
+PY
+```
 
-2. **Score each panel separately**, paired with its base predictions and the same bootstrap seed
-   as every earlier comparison. Never pool the panels.
-
-   ```sh
-   for panel in representative challenge; do
-     "$PY" training/normalization_validation.py score \
-       --selection "$PANELS/$panel-selection.json" \
-       --predictions "$FIT/generated-v1/ckptNNNN-$panel.json" \
-       --base "$BASE/base-$panel.json" --seed 20261023 \
-       --out "$FIT/generated-v1/ckptNNNN-$panel-score.json"
-   done
-   ```
-
-3. **Record the result** in a new "Measured result" section here and in the Normalization section
+Then **record the result** in a new "Measured result" section here and in the Normalization section
    of [accuracy-report.md](../accuracy-report.md), only from these score files. Report, per panel
    and beside the base model and the 1,000-update adapter: accuracy, macro-F1 over 47 classes,
    invalid replies, false mappings on null rows, taxonomy-critical errors and the paired
