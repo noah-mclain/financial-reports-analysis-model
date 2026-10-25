@@ -426,7 +426,7 @@ def fit(
         control.validate_options(args)
     reports: dict[str, list[dict[str, Any]]] = {"train": [], "validation": []}
 
-    class FiniteLoss(TrainingCallback):
+    class FiniteLoss(TrainingCallback):  # type: ignore[misc,unused-ignore]
         # Upstream calls training reports AFTER the optimizer update and BEFORE saving.
         def on_train_loss_report(self, info: dict[str, Any]) -> None:
             if control is not None:
