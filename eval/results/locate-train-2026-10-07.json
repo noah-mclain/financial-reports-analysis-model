@@ -1,0 +1,2259 @@
+{
+  "documents": [
+    {
+      "id": "abdulaziz-bin-ahmed-altwijri-trading-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.19230769230769232,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "abu-dhabi-commercial-bank-2024-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.03571428571428571,
+      "truth": "bank",
+      "verdict": "bank",
+      "decision": "declined/bank",
+      "judgement": "right",
+      "flags": [
+        "likely_bank"
+      ]
+    },
+    {
+      "id": "ades-holding-2023-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.13157894736842105,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "ades-holding-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.1724137931034483,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "ades-holding-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.1724137931034483,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "advanced-petrochemical-2024-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.4375,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "advanced-petrochemical-2024-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.1,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "advanced-petrochemical-2025-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.078125,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "al-dawaa-medical-services-2019-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.09433962264150944,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "al-dawaa-medical-services-2023-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.3333333333333333,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "al-dawaa-medical-services-2025-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.3,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "al-dawaa-medical-services-2025-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.25,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "al-jouf-cement-2024-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.21052631578947367,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "al-kathiri-holding-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.16,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "statement_not_found:comprehensive_income"
+      ]
+    },
+    {
+      "id": "al-kathiri-holding-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.14814814814814814,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "al-kathiri-holding-na-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.2564102564102564,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "statement_not_found:comprehensive_income",
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "al-munajem-foods-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.2,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "al-sorayai-trading-and-industrial-group-na-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.06349206349206349,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "al-waha-capital-2023-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.06756756756756757,
+      "truth": "other_financial/investment_holding",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "wrong",
+      "flags": []
+    },
+    {
+      "id": "aljouf-mineral-water-bottling-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.23529411764705882,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "statement_not_found:comprehensive_income"
+      ]
+    },
+    {
+      "id": "almoosa-health-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.23809523809523808,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "almoosa-health-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.19047619047619047,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "alramz-real-estate-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.2631578947368421,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "alramz-real-estate-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.23809523809523808,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "anaam-international-holding-group-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.29411764705882354,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "anaam-international-holding-group-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.5555555555555556,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "arab-banking-corporation-2025-ar",
+      "period": "annual",
+      "covered": false,
+      "share": 0.07608695652173914,
+      "truth": "bank",
+      "verdict": "bank",
+      "decision": "needs_review/weak_verdict",
+      "judgement": "held",
+      "flags": [
+        "statement_not_found:income",
+        "likely_bank"
+      ]
+    },
+    {
+      "id": "arabian-drilling-2025-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.08333333333333333,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "arabian-mills-for-food-products-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.56,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "arabian-mills-for-food-products-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.15384615384615385,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "arabian-pipes-2024-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.10869565217391304,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "arabian-pipes-2024-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.21739130434782608,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "statement_not_found:comprehensive_income"
+      ]
+    },
+    {
+      "id": "armah-sports-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.25,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "armah-sports-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.25,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "artex-industrial-investment-2025-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.2777777777777778,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "arzan-financial-group-for-financing-and-investment-2024-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.044585987261146494,
+      "truth": "other_financial/investment_holding",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "wrong",
+      "flags": []
+    },
+    {
+      "id": "axelerated-solutions-for-information-and-communication-technology-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.23529411764705882,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "statement_not_found:comprehensive_income"
+      ]
+    },
+    {
+      "id": "axelerated-solutions-for-information-and-communication-technology-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.2631578947368421,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "b-investments-holding-2020-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.3125,
+      "truth": "other_financial/investment_holding",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "wrong",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "b-investments-holding-2023-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.3,
+      "truth": "other_financial/investment_holding",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "wrong",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "batic-investment-and-logistics-2023-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.0784313725490196,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "statement_not_found:comprehensive_income"
+      ]
+    },
+    {
+      "id": "batic-investment-and-logistics-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.16666666666666666,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "batic-investment-and-logistics-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.21739130434782608,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "bawan-2025-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.07142857142857142,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "bawan-2025-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.21739130434782608,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "cairo-poultry-2012-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.1794871794871795,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "statement_not_found:comprehensive_income"
+      ]
+    },
+    {
+      "id": "cairo-poultry-2012-en-2e75",
+      "period": "annual",
+      "covered": true,
+      "share": 0.1794871794871795,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "statement_not_found:comprehensive_income"
+      ]
+    },
+    {
+      "id": "coast-investment-and-development-2025-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.2777777777777778,
+      "truth": "other_financial/investment_holding",
+      "verdict": "corporate",
+      "decision": "needs_review/near_threshold",
+      "judgement": "held",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "contact-financial-holding-2022-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.13846153846153847,
+      "truth": "other_financial/consumer_finance",
+      "verdict": "other_financial/consumer_finance",
+      "decision": "needs_review/other_financial",
+      "judgement": "held",
+      "flags": [
+        "likely_other_financial:consumer_finance"
+      ]
+    },
+    {
+      "id": "contact-financial-holding-2023-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.1,
+      "truth": "other_financial/consumer_finance",
+      "verdict": "other_financial/consumer_finance",
+      "decision": "needs_review/other_financial",
+      "judgement": "held",
+      "flags": [
+        "likely_other_financial:consumer_finance"
+      ]
+    },
+    {
+      "id": "contact-financial-holding-2024-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.09090909090909091,
+      "truth": "other_financial/consumer_finance",
+      "verdict": "other_financial/consumer_finance",
+      "decision": "needs_review/other_financial",
+      "judgement": "held",
+      "flags": [
+        "likely_other_financial:consumer_finance"
+      ]
+    },
+    {
+      "id": "dallah-healthcare-2024-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.5254237288135594,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "dallah-healthcare-2024-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.8214285714285714,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "dar-al-medical-and-scientific-equipment-2025-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.21052631578947367,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "dar-albalad-for-business-solutions-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.17391304347826086,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "dar-albalad-for-business-solutions-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.18181818181818182,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "deyaar-development-2025-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.25,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "digital-research-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.21052631578947367,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "digital-research-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.19047619047619047,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "dr-sulaiman-al-habib-medical-services-2024-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.375,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "dubai-financial-market-2021-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.1111111111111111,
+      "truth": "other_financial/exchange_operator",
+      "verdict": "other_financial/exchange_operator",
+      "decision": "needs_review/other_financial",
+      "judgement": "held",
+      "flags": [
+        "likely_other_financial:exchange_operator"
+      ]
+    },
+    {
+      "id": "dubai-financial-market-2021-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.21739130434782608,
+      "truth": "other_financial/exchange_operator",
+      "verdict": "other_financial/exchange_operator",
+      "decision": "needs_review/other_financial",
+      "judgement": "held",
+      "flags": [
+        "likely_other_financial:exchange_operator"
+      ]
+    },
+    {
+      "id": "edarat-communication-and-information-technology-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.2,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "edarat-communication-and-information-technology-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.23809523809523808,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "egypt-kuwait-holding-2023-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.13333333333333333,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "statement_not_found:comprehensive_income"
+      ]
+    },
+    {
+      "id": "egypt-kuwait-holding-2024-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.14285714285714285,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "egypt-kuwait-holding-2024-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.1346153846153846,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "egypt-kuwait-holding-2025-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.6153846153846154,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "eipico-2025h1-ar",
+      "period": "interim",
+      "covered": true,
+      "share": 0.1282051282051282,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "elsewedy-electric-2021-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.1016949152542373,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "needs_review/near_threshold",
+      "judgement": "held",
+      "flags": []
+    },
+    {
+      "id": "elsewedy-electric-2023-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.07407407407407407,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "statement_not_found:comprehensive_income"
+      ]
+    },
+    {
+      "id": "elsewedy-electric-2024-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.08064516129032258,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "elsewedy-electric-2024-en-c224",
+      "period": "annual",
+      "covered": true,
+      "share": 0.07142857142857142,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "elsewedy-electric-2024-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.1282051282051282,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "esterad-investment-2024-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.17647058823529413,
+      "truth": "other_financial/investment_holding",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "wrong",
+      "flags": []
+    },
+    {
+      "id": "esterad-investment-2025-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.23809523809523808,
+      "truth": "other_financial/investment_holding",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "wrong",
+      "flags": []
+    },
+    {
+      "id": "etihad-atheeb-telecommunication-2025-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.17391304347826086,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "statement_not_found:comprehensive_income"
+      ]
+    },
+    {
+      "id": "etihad-etisalat-2018-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.2976190476190476,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "etihad-etisalat-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.42857142857142855,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "etihad-etisalat-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.4,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "first-avenue-real-estate-development-2025-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.16666666666666666,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "first-avenue-real-estate-development-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.11428571428571428,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "foodco-national-foodstuff-2025-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.06451612903225806,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "gas-arabian-services-2025-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.2777777777777778,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "ghitha-holding-2025-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.1951219512195122,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "gulf-investment-corporation-2024-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.17857142857142858,
+      "truth": "other_financial/investment_holding",
+      "verdict": "bank",
+      "decision": "needs_review/weak_verdict",
+      "judgement": "held",
+      "flags": [
+        "likely_bank"
+      ]
+    },
+    {
+      "id": "halwani-bros-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.5555555555555556,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "hawyia-auctions-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.47368421052631576,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "herfy-food-services-2022-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.08064516129032258,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "integrated-holding-2020-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.11363636363636363,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "international-human-resources-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.2631578947368421,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "jazan-development-and-investment-2024-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.07936507936507936,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "jazan-development-and-investment-2025-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.23809523809523808,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "statement_not_found:comprehensive_income"
+      ]
+    },
+    {
+      "id": "knowledge-economic-city-2025-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.1111111111111111,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "knowledge-net-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.2222222222222222,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "statement_not_found:comprehensive_income"
+      ]
+    },
+    {
+      "id": "knowledge-net-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.2222222222222222,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "l-azurde-company-for-jewelry-2025-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.10204081632653061,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "l-azurde-company-for-jewelry-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.42857142857142855,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "l-azurde-company-for-jewelry-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.4,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "lana-medical-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.17391304347826086,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "leaf-global-environmental-services-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.21052631578947367,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "leaf-global-environmental-services-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.23809523809523808,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "lecico-2025q2-en",
+      "period": "interim",
+      "covered": true,
+      "share": 0.46153846153846156,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "madinet-nasr-for-housing-and-development-2021-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.12727272727272726,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "malath-cooperative-insurance-2025-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.04424778761061947,
+      "truth": "insurer",
+      "verdict": "insurer",
+      "decision": "needs_review/weak_verdict",
+      "judgement": "held",
+      "flags": [
+        "likely_insurer"
+      ]
+    },
+    {
+      "id": "meyar-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.22727272727272727,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "miahona-2018-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.20673813169984687,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "miahona-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.20833333333333334,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "miahona-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.17857142857142858,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "middle-east-healthcare-2024-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.13333333333333333,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "middle-east-healthcare-2024-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.08771929824561403,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "middle-east-healthcare-2024-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.30434782608695654,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "middle-east-healthcare-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.13793103448275862,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "molan-steel-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.21739130434782608,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "mouwasat-medical-services-2017-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.35294117647058826,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "musharaka-capital-2019-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.14705882352941177,
+      "truth": "other_financial/asset_manager",
+      "verdict": "other_financial/asset_manager",
+      "decision": "needs_review/other_financial",
+      "judgement": "held",
+      "flags": [
+        "likely_other_financial:asset_manager"
+      ]
+    },
+    {
+      "id": "naba-al-saha-medical-services-2024-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.12195121951219512,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "naba-al-saha-medical-services-na-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.0975609756097561,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "naseej-2022-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.06779661016949153,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "statement_not_found:comprehensive_income"
+      ]
+    },
+    {
+      "id": "naseej-na-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.3333333333333333,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "national-medical-care-2024-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.3157894736842105,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "national-petrochemical-2020-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.10869565217391304,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "neft-alsharq-company-for-chemical-industries-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.16666666666666666,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "nofoth-food-products-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.21739130434782608,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "nofoth-food-products-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.20833333333333334,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "northern-region-cement-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.2222222222222222,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "northern-region-cement-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.23529411764705882,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "orascom-investment-2025-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.21739130434782608,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "orient-takaful-2025-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.08695652173913043,
+      "truth": "insurer",
+      "verdict": "corporate",
+      "decision": "needs_review/too_narrow",
+      "judgement": "held",
+      "flags": []
+    },
+    {
+      "id": "oriental-weavers-na-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.21739130434782608,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "statement_not_found:comprehensive_income"
+      ]
+    },
+    {
+      "id": "qalaa-holdings-2024-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.96,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "qalaa-holdings-2024-ar-interim-d7e0",
+      "period": "interim",
+      "covered": true,
+      "share": 0.7906976744186046,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "qalaa-holdings-2024-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.7254901960784313,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "qalaa-holdings-2024-en-interim-ca25",
+      "period": "interim",
+      "covered": true,
+      "share": 0.6521739130434783,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "qassim-cement-2025-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.07547169811320754,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "rabigh-refining-and-petrochemical-2025-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.11363636363636363,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "sabic-2022-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.08181818181818182,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "sabic-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.2727272727272727,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "sabic-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.3,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "sabic-agri-nutrients-2020-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.3125,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "statement_not_found:comprehensive_income",
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "sabic-agri-nutrients-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.4,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "sabic-agri-nutrients-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.35,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "statement_not_found:comprehensive_income",
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "sal-saudi-logistics-services-2025-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.08,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "saudi-cement-2022-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.25,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "saudi-company-for-hardware-2025-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.18181818181818182,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "saudi-company-for-hardware-2025-en-interim-f7f9",
+      "period": "interim",
+      "covered": true,
+      "share": 0.18181818181818182,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "saudi-energy-2016-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.16,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "statement_not_found:comprehensive_income"
+      ]
+    },
+    {
+      "id": "saudi-energy-2025-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.05405405405405406,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "saudi-energy-2025-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.1794871794871795,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "saudi-industrial-investment-group-2025-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.22727272727272727,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "saudi-industrial-investment-group-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.19230769230769232,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "saudi-national-bank-2024-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.06140350877192982,
+      "truth": "bank",
+      "verdict": "bank",
+      "decision": "declined/bank",
+      "judgement": "right",
+      "flags": [
+        "likely_bank"
+      ]
+    },
+    {
+      "id": "saudi-national-bank-2024-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.1891891891891892,
+      "truth": "bank",
+      "verdict": "bank",
+      "decision": "declined/bank",
+      "judgement": "right",
+      "flags": [
+        "likely_bank"
+      ]
+    },
+    {
+      "id": "saudi-networkers-services-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.75,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "saudi-networkers-services-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.6666666666666666,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "saudi-research-and-media-group-2025-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.07575757575757576,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "saudi-tadawul-group-2025-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.0975609756097561,
+      "truth": "other_financial/exchange_operator",
+      "verdict": "corporate",
+      "decision": "needs_review/near_threshold",
+      "judgement": "held",
+      "flags": []
+    },
+    {
+      "id": "saudi-tadawul-group-2025-en-interim-795f",
+      "period": "interim",
+      "covered": true,
+      "share": 0.0975609756097561,
+      "truth": "other_financial/exchange_operator",
+      "verdict": "corporate",
+      "decision": "needs_review/near_threshold",
+      "judgement": "held",
+      "flags": []
+    },
+    {
+      "id": "sipchem-2018-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.07792207792207792,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "sipchem-2022-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.125,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "sipchem-2024-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.3333333333333333,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "sipchem-2025-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.4583333333333333,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "sipchem-2025-en-interim-ed27",
+      "period": "interim",
+      "covered": true,
+      "share": 0.34782608695652173,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "spimaco-2025-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.19230769230769232,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "spimaco-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.6956521739130435,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "spimaco-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.22727272727272727,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "sultan-food-2025-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.07017543859649122,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "sure-global-tech-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.3,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "sure-global-tech-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.3,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "tabuk-cement-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.391304347826087,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "tabuk-cement-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.16666666666666666,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "takween-advanced-industries-na-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.07692307692307693,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "united-carton-industries-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.29411764705882354,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "united-carton-industries-2026-en-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.2777777777777778,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "united-electronics-2021-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.29411764705882354,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    },
+    {
+      "id": "united-electronics-2025-en",
+      "period": "annual",
+      "covered": true,
+      "share": 0.06756756756756757,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "needs_review/too_narrow",
+      "judgement": "held",
+      "flags": []
+    },
+    {
+      "id": "united-foods-2022-ar",
+      "period": "annual",
+      "covered": true,
+      "share": 0.09302325581395349,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": []
+    },
+    {
+      "id": "wajd-life-trading-2026-ar-interim",
+      "period": "interim",
+      "covered": true,
+      "share": 0.47368421052631576,
+      "truth": "corporate",
+      "verdict": "corporate",
+      "decision": "pass",
+      "judgement": "right",
+      "flags": [
+        "low_selectivity"
+      ]
+    }
+  ],
+  "decline": {
+    "negative_controls": {
+      "right": 3,
+      "held": 13,
+      "wrong": 6,
+      "errored": 0
+    },
+    "corporate": {
+      "right": 154,
+      "held": 2,
+      "wrong": 0,
+      "errored": 0
+    },
+    "by_period_kind": {
+      "annual": {
+        "negative_controls": {
+          "right": 2,
+          "held": 7,
+          "wrong": 3,
+          "errored": 0
+        },
+        "corporate": {
+          "right": 45,
+          "held": 2,
+          "wrong": 0,
+          "errored": 0
+        }
+      },
+      "interim": {
+        "negative_controls": {
+          "right": 1,
+          "held": 6,
+          "wrong": 3,
+          "errored": 0
+        },
+        "corporate": {
+          "right": 109,
+          "held": 0,
+          "wrong": 0,
+          "errored": 0
+        }
+      }
+    },
+    "wrong": [
+      {
+        "id": "al-waha-capital-2023-en",
+        "truth": "other_financial/investment_holding",
+        "decision": "pass"
+      },
+      {
+        "id": "arzan-financial-group-for-financing-and-investment-2024-en",
+        "truth": "other_financial/investment_holding",
+        "decision": "pass"
+      },
+      {
+        "id": "b-investments-holding-2020-en-interim",
+        "truth": "other_financial/investment_holding",
+        "decision": "pass"
+      },
+      {
+        "id": "b-investments-holding-2023-en-interim",
+        "truth": "other_financial/investment_holding",
+        "decision": "pass"
+      },
+      {
+        "id": "esterad-investment-2024-en",
+        "truth": "other_financial/investment_holding",
+        "decision": "pass"
+      },
+      {
+        "id": "esterad-investment-2025-en-interim",
+        "truth": "other_financial/investment_holding",
+        "decision": "pass"
+      }
+    ],
+    "errored": []
+  },
+  "coverage": 1.0,
+  "uncovered": [],
+  "errored": [],
+  "missing": [],
+  "confusion": [
+    [
+      "bank",
+      "bank",
+      4
+    ],
+    [
+      "corporate",
+      "corporate",
+      156
+    ],
+    [
+      "insurer",
+      "corporate",
+      1
+    ],
+    [
+      "insurer",
+      "insurer",
+      1
+    ],
+    [
+      "other_financial/asset_manager",
+      "other_financial/asset_manager",
+      1
+    ],
+    [
+      "other_financial/consumer_finance",
+      "other_financial/consumer_finance",
+      3
+    ],
+    [
+      "other_financial/exchange_operator",
+      "corporate",
+      2
+    ],
+    [
+      "other_financial/exchange_operator",
+      "other_financial/exchange_operator",
+      2
+    ],
+    [
+      "other_financial/investment_holding",
+      "bank",
+      1
+    ],
+    [
+      "other_financial/investment_holding",
+      "corporate",
+      7
+    ]
+  ]
+}

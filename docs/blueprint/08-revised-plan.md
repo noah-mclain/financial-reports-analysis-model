@@ -3,7 +3,7 @@
 Status: v1, 2026-09-26. Supersedes [07-build-plan.md](07-build-plan.md), which targeted
 2026-09-30. [04-execution-phases.md](04-execution-phases.md) remains the production roadmap.
 
-**Target:** 2026-10-26. **Restarted:** 2026-09-26.
+**Target:** 2026-10-27 (moved from 2026-10-26). **Restarted:** 2026-09-26.
 
 ## What changed
 
@@ -101,7 +101,7 @@ so the classifier learns to decline them.
 | 3: Oct 10 to 16 | SEC FSDS dataset (bilingual pairs are not built), issuer-grouped split, length audit. Baseline vs QLoRA for normalization on the train holdout, with training data smaller by the holdout share. Grounding checker, templates, English narration. GGUF export of the promoted adapter | Gate C, provisional until the checkpoint. Normalization beats baseline on held-out issuers |
 | 4: Oct 17 to 23 | Upload page, background job, stage timeline, results page (statements with click-to-source, metrics with formulas, summary with citations). Docker profile complete. Dry runs on the train holdout, fix the most common failure classes on non-holdout documents | Gate D. Gate E waits for the checkpoint |
 | Oct 24 (planned) | Checkpoint, run by the owner: `model_test`, then `blind`, then Gates A to E confirmed | Scores frozen. The date is a plan that moves only later, never earlier than "all planned work complete and every check passing" (D13) |
-| Oct 25 to 26 | Rehearsal, accuracy report, README. Which documents the rehearsal uses is an open question (note after the gates) | Two clean end-to-end runs on documents never seen before, if the open question allows it |
+| Oct 25 to 27 | Rehearsal, accuracy report, README. Which documents the rehearsal uses is an open question (note after the gates) | Two clean end-to-end runs on documents never seen before, if the open question allows it |
 
 When a week overruns, cut inside that week. Cash flow statements are the first cut to
 restore if time is left, not the first thing to add.

@@ -41,7 +41,7 @@ written analysis, all on a single Apple Silicon machine (M3 Pro, 18 GB unified m
 | [03-repository-layout.md](03-repository-layout.md) | Complete monorepo tree with file responsibilities |
 | [04-execution-phases.md](04-execution-phases.md) | Production roadmap: phases 0 to 4 with tasks, interfaces and exit gates. Reference, not the current build |
 | [07-build-plan.md](07-build-plan.md) | Superseded 18-day plan to 2026-09-30. Kept for the record |
-| [08-revised-plan.md](08-revised-plan.md) | **The plan being executed**: live demo on unseen documents by 2026-10-26, run profiles, data pools, gates |
+| [08-revised-plan.md](08-revised-plan.md) | **The plan being executed**: live demo on unseen documents by 2026-10-27, run profiles, data pools, gates |
 | [09-ingest-locate.md](09-ingest-locate.md) | Ingest part 1: per-page text and OCR, statement page locator, industry signal, and how they are scored |
 | [10-ingest-convert.md](10-ingest-convert.md) | Ingest part 2: docling on the located ranges, OCR mode and language per range, a child process per document, peak memory |
 | [11-ingest-structure.md](11-ingest-structure.md) | Ingest part 3a: docling tables to statements with provenance, periods, scale and currency, Arabic visual-order repair, continuation, checks |
