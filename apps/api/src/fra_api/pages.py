@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Resp
 from jinja2 import Environment, PackageLoader, select_autoescape
 
 from fra_api.jobs import settings_of, store_of
-from fra_api.views import analysis_view
+from fra_api.views import analysis_view, flag_label, plain_label, reason_label
 from fra_core.jobs import JobSettings, JobStore
 from fra_core.profile import Profile
 from fra_core.schemas import JobStage
@@ -38,6 +38,18 @@ _PDFIUM_LOCK = RLock()
 
 _templates = Environment(
     loader=PackageLoader("fra_api", "templates"), autoescape=select_autoescape(["html"])
+)
+_templates.globals.update(
+    flag_label=flag_label,
+    plain_label=plain_label,
+    reason_label=reason_label,
+    stage_label=lambda stage: {
+        "locate": "Find statement pages",
+        "convert": "Read page content",
+        "structure": "Build statements",
+        "metrics": "Calculate metrics",
+        "narrate": "Write summary",
+    }.get(stage, stage.replace("_", " ").capitalize()),
 )
 
 
@@ -192,6 +204,7 @@ def add_page_routes(app: FastAPI, profile: Profile) -> None:
         sha256: str,
         page_no: int,
         box: Annotated[str | None, Query()] = None,
+        analysis_id: Annotated[str | None, Query(alias="analysis")] = None,
     ) -> HTMLResponse:
         store = store_of(request)
         _within_page_limit(settings_of(request), page_no)
@@ -199,6 +212,12 @@ def add_page_routes(app: FastAPI, profile: Profile) -> None:
         width, height = page_size(pdf, page_no)
         overlay = place_box(parse_box(box), width, height) if box is not None else None
         upload = store.get_upload(sha256)
+        job = store.get_job(analysis_id) if analysis_id is not None else None
+        analysis_url = (
+            f"/analyses/{analysis_id}/view"
+            if job is not None and job.upload_sha256 == sha256
+            else None
+        )
         return _page(
             "source.html",
             profile=profile.value,
@@ -207,4 +226,5 @@ def add_page_routes(app: FastAPI, profile: Profile) -> None:
             page_no=page_no,
             box_given=box is not None,
             overlay=overlay,
+            analysis_url=analysis_url,
         )

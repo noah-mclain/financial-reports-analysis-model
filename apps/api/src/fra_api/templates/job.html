@@ -2,40 +2,49 @@
 {% block title %}{{ filename }}: analysing{% endblock %}
 {% block main %}
 <h1>{{ filename }}</h1>
-<p class="muted">Job <code>{{ job.id }}</code>: <span id="overall" class="badge {{ job.status.value }}">{{ job.status.value }}</span></p>
+<p class="muted">Job <code>{{ job.id }}</code>: <span id="overall" class="badge {{ job.status.value }}">{% if job.status.value == 'completed' %}Analysis complete{% elif job.status.value == 'needs_review' %}Held for review{% elif job.status.value == 'running' %}In progress{% elif job.status.value == 'queued' %}Queued{% else %}Failed{% endif %}</span></p>
 <div class="panel">
-  <table id="timeline">
-    <thead><tr><th>Stage</th><th>State</th><th class="num">Seconds</th><th>Detail</th></tr></thead>
-    <tbody>
-    {% for stage in stages %}
-      <tr data-stage="{{ stage }}"><td>{{ stage }}</td><td><span class="badge waiting">waiting</span></td>
-        <td class="num"></td><td class="detail muted"></td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
+  <div class="scroll-wrap">
+    <p class="scroll-cue" id="timeline-scroll-cue">Swipe or scroll to see all analysis stage details.</p>
+    <div class="scroll" role="region" tabindex="0" aria-label="Analysis stage timeline" aria-describedby="timeline-scroll-cue">
+      <table id="timeline">
+        <thead><tr><th>Analysis stage</th><th>State</th><th class="num">Seconds</th><th>Detail</th></tr></thead>
+        <tbody>
+        {% for stage in stages %}
+          <tr data-stage="{{ stage }}"><td>{{ stage_label(stage) }}</td><td><span class="badge waiting">Waiting</span></td>
+            <td class="num"></td><td class="detail muted"></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
 </div>
 <div id="end"></div>
 <script>
 const jobId = {{ job.id | tojson }};
 const started = {};
+const labels = {queued: "Queued", running: "In progress", done: "Stage complete", skipped: "Skipped", failed: "Failed", completed: "Analysis complete", needs_review: "Held for review"};
 const row = (stage) => document.querySelector(`tr[data-stage="${stage}"]`);
 const setState = (stage, state, detail, seconds) => {
   const r = row(stage);
   if (!r) return;
-  r.cells[1].innerHTML = `<span class="badge ${state}">${state}</span>`;
+  const badge = document.createElement("span");
+  badge.className = `badge ${state}`;
+  badge.textContent = labels[state] || state;
+  r.cells[1].replaceChildren(badge);
   if (seconds !== undefined) r.cells[2].textContent = seconds.toFixed(1);
   if (detail) r.querySelector(".detail").textContent = detail;
 };
 const finish = (kind, detail) => {
   const overall = document.getElementById("overall");
   overall.className = `badge ${kind}`;
-  overall.textContent = kind;
+  overall.textContent = labels[kind] || kind;
   const end = document.getElementById("end");
   if (kind === "failed") {
     end.innerHTML = '<div class="banner bad"></div>';
     end.firstChild.textContent = `The analysis failed: ${detail}`;
   } else {
-    end.innerHTML = `<p><a href="/analyses/${jobId}/view">See the results</a></p>`;
+    end.innerHTML = `<p class="job-result-link"><a href="/analyses/${jobId}/view">See the results</a></p>`;
     setTimeout(() => { window.location = `/analyses/${jobId}/view`; }, 1200);
   }
 };

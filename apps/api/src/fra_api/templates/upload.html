@@ -2,6 +2,7 @@
 {% block main %}
 <h1>Analyse a financial report</h1>
 <p class="muted">A statement of financial position and a profit or loss statement, in English, digital or scanned. Up to {{ max_mb }} MB and {{ max_pages }} pages. Reports identified as mainly Arabic, banks and insurers are declined with the reason. Poor OCR can miss Arabic text, and other non-English languages may not be detected.</p>
+<p class="muted">After upload, the job moves from <strong>Queued</strong> to <strong>In progress</strong>, then to <strong>Analysis complete</strong> or <strong>Held for review</strong>. Completion describes the job state; the results page shows statement checks separately.</p>
 <form class="panel" id="upload">
   <label for="file">Financial report (PDF)</label>
   <input type="file" id="file" name="file" accept="application/pdf,.pdf" required>

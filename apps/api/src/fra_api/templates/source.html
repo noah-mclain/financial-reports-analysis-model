@@ -3,7 +3,7 @@
 {% block main %}
 <h1>{{ filename }}, page {{ page_no }}</h1>
 <p class="muted">{% if overlay %}The outlined region is where the figure was read{% if overlay.clipped %}; it ran past the page edge and is cut to the page{% endif %}.{% elif box_given %}The recorded region lies outside this page, so nothing can be outlined.{% else %}No region selected.{% endif %}
-  <a href="javascript:history.back()">Back</a></p>
+  {% if analysis_url %}<a href="{{ analysis_url }}">Back to this analysis</a>{% else %}<a href="/">Back to upload</a>{% endif %}</p>
 <div class="panel" style="padding:0">
   <div style="position:relative">
     <img id="page" src="/documents/{{ sha256 }}/pages/{{ page_no }}.png" alt="Page {{ page_no }}" style="display:block;width:100%;height:auto">
@@ -12,6 +12,9 @@
     {% endif %}
   </div>
 </div>
+<nav class="page-index" aria-label="Source page navigation">
+  {% if analysis_url %}<a href="{{ analysis_url }}">Return to results</a>{% endif %}<a href="/">Upload another report</a>
+</nav>
 {% if overlay %}<script>
 const page = document.getElementById("page");
 const show = () => document.getElementById("region").scrollIntoView({block: "center"});
