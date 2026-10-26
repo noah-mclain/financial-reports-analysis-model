@@ -267,7 +267,7 @@ def _ocr_page(
     width: float,
     height: float,
 ) -> PageText:
-    image = page.render(scale=config.ocr_dpi / 72).to_pil()
+    image = page.render(scale=config.page_ocr_dpi / 72).to_pil()
     timed = _TimedEngine(ocr)
     try:
         lines, language = read_with_fallback(timed, image, config.ocr_languages)
@@ -355,7 +355,7 @@ def _settings(config: IngestConfig, ocr: OcrEngine | None) -> dict[str, Any]:
     return {
         "min_text_chars": config.min_text_chars,
         "header_fraction": config.header_fraction,
-        "ocr_dpi": config.ocr_dpi,
+        "ocr_dpi": config.page_ocr_dpi,
         "ocr_languages": list(config.ocr_languages),
         "ocr_engine": ocr.name if ocr is not None else None,
         # What the settings change in a Tesseract read; no other engine looks at them.

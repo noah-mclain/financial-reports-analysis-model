@@ -116,7 +116,7 @@ class DoclingRunner:
             self.config, plan.ocr, plan.ocr_language
         ):
             # A plan is built by plan_ranges under this rule. One that breaks it was written
-            # under other settings; converting it would pair an unmeasured engine and backend.
+            # under other settings; converting it would ignore the configured backend contract.
             raise ValueError(
                 f"range {plan.label}: the pdfium renderer is not configured for "
                 f"{self.config.convert_ocr} {plan.ocr} OCR in {plan.ocr_language}"

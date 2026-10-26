@@ -1,5 +1,6 @@
 """Per-page text: text layer where there is one, OCR where there is not, cached per document."""
 
+from collections.abc import Sequence
 from pathlib import Path
 
 import pypdfium2 as pdfium
@@ -7,7 +8,7 @@ import pytest
 from support import FakeOcr, make_blank_pdf
 
 from fra_core.schemas import PageMode, TextSource
-from fra_ingest.config import IngestConfig
+from fra_ingest.config import IngestConfig, OcrEngineName
 from fra_ingest.errors import IngestError
 from fra_ingest.ocr import OcrEngineError, OcrLine, OcrUnavailableError
 from fra_ingest.pages import document_language, profiles, read_pages, text_layer_is_garbled
@@ -299,3 +300,32 @@ def test_page_count_reads_no_page_and_an_unreadable_file_is_an_ingest_error(
     broken.write_bytes(b"%PDF-1.7 not really")
     with pytest.raises(IngestError):
         page_count(broken)
+
+
+@pytest.mark.parametrize("engine", ["ocrmac", "tesseract"])
+def test_tesseract_resolution_changes_page_rendering_and_only_its_cache(
+    tmp_path: Path, engine: OcrEngineName
+) -> None:
+    from PIL import Image
+
+    from fra_ingest.pages import ocr_key
+
+    sizes: list[tuple[int, int]] = []
+
+    class RecordingOcr(FakeOcr):
+        def recognize(self, image: Image.Image, languages: Sequence[str]) -> list[OcrLine]:
+            sizes.append(image.size)
+            return super().recognize(image, languages)
+
+    ocr = RecordingOcr([TITLE])
+    ocr.name = "tesseract" if engine == "tesseract" else "vision"
+    pdf = make_blank_pdf(tmp_path / "scan.pdf")
+    before = IngestConfig(convert_ocr=engine)
+    after = IngestConfig(convert_ocr=engine, tesseract_dpi=150)
+    read_pages(pdf, before, ocr, cache_dir=tmp_path / "cache")
+    sizes.clear()
+    read_pages(pdf, after, ocr, cache_dir=tmp_path / "cache")
+    assert bool(sizes) is (engine == "tesseract")
+    assert (ocr_key(before, ocr) != ocr_key(after, ocr)) is (engine == "tesseract")
+    if engine == "tesseract":
+        assert sizes[0] == (1240, 1755)  # 595 by 842 points, rounded up at 150 dpi.
