@@ -9,10 +9,10 @@ from collections import Counter, defaultdict
 from collections.abc import Sequence
 from typing import Any, Literal
 
-from dataset_builder import SYSTEM_PROMPT, render_input
 from dataset_contracts import Contract, DatasetError, Text, digest
 from dataset_exclusions import FrozenExclusions, checked, target_name
 
+from fra_core.normalization_prompt import normalization_messages
 from fra_core.schemas import StatementType
 from fra_core.schemas.normalization import parse_normalization_answer
 from fra_core.taxonomy import Taxonomy, load_taxonomy
@@ -40,13 +40,7 @@ class Prediction(Contract):
 
 def inference_messages(row: EvalRow) -> list[dict[str, str]]:
     """The exact dataset prompt, without its assistant target or evaluation metadata."""
-    return [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {
-            "role": "user",
-            "content": render_input(row.label, row.statement.value),
-        },
-    ]
+    return normalization_messages(row.label, row.statement.value)
 
 
 def parse_answer(
