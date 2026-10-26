@@ -152,7 +152,7 @@ def test_main_filters_nonfit_labels_before_model_validation(tmp_path: Path, caps
     train_path.write_text(json.dumps(train("Net sales", "revenue")) + "\n", encoding="utf-8")
     valid_example = contract_example(record).model_dump(mode="json")
     invalid_foreign = contract_example(foreign).model_dump(mode="json")
-    invalid_foreign["canonical_id"] = 42
+    invalid_foreign["canonical_id"] = 731942857
     examples_path.write_text(
         json.dumps(valid_example) + "\n" + json.dumps(invalid_foreign) + "\n", encoding="utf-8"
     )
@@ -179,7 +179,7 @@ def test_main_filters_nonfit_labels_before_model_validation(tmp_path: Path, caps
 
     assert result == 1
     error = capsys.readouterr().err
-    assert "42" not in error
+    assert "731942857" not in error
     assert "upstream fit example" not in error
     assert json.loads(report_path.read_text(encoding="utf-8"))["fit_source_count"] == 1
 
@@ -223,7 +223,7 @@ def test_main_rejects_malformed_example_json_without_echoing_line(tmp_path: Path
 def test_main_reports_invalid_authorized_label_with_line_only(tmp_path: Path, capsys) -> None:
     record = source(cik_in(Part.FIT))
     bad_example = contract_example(record).model_dump(mode="json")
-    bad_example["canonical_id"] = 42
+    bad_example["canonical_id"] = 731942857
     examples_path = tmp_path / "examples.jsonl"
     examples_path.write_text(json.dumps(bad_example) + "\n", encoding="utf-8")
     sources_path = tmp_path / "sources.jsonl"
@@ -255,7 +255,7 @@ def test_main_reports_invalid_authorized_label_with_line_only(tmp_path: Path, ca
     assert result == 1
     error = capsys.readouterr().err
     assert "line 1" in error
-    assert "42" not in error
+    assert "731942857" not in error
     assert "canonical_id" not in error
 
 
