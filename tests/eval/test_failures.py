@@ -13,6 +13,7 @@ from harness.failures import (
 
 from fra_ingest.errors import IngestError
 from fra_ingest.ocr import OcrEngineError, OcrTimeoutError, OcrUnavailableError
+from fra_model.runtime import ModelRuntimeError
 
 
 def test_ocr_timeout_and_engine_errors_map_to_their_reasons_with_detail() -> None:
@@ -25,7 +26,20 @@ def test_ocr_timeout_and_engine_errors_map_to_their_reasons_with_detail() -> Non
         "error": "unreadable_pdf",
         "detail": "x.pdf: not a pdf",
     }
-    assert set(DOCUMENT_ERRORS) == {IngestError, OcrTimeoutError, OcrEngineError}
+    assert set(DOCUMENT_ERRORS) == {IngestError, OcrTimeoutError, OcrEngineError, ModelRuntimeError}
+
+
+def test_model_failures_keep_detail_without_triggering_the_ocr_guard() -> None:
+    detail = "normalization response: invalid normalization response schema/catalog"
+    assert document_failure(ModelRuntimeError(detail)) == {
+        "error": "model_runtime",
+        "detail": detail,
+    }
+    assert ModelRuntimeError in DOCUMENT_ERRORS
+    guard = EngineGuard(planned=6)
+    for _ in range(6):
+        guard.record("model_runtime", detail)
+    guard.finish()
 
 
 def test_unavailable_engine_is_not_a_document_failure() -> None:

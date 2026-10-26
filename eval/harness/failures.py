@@ -1,10 +1,12 @@
-"""One rule for a document a harness could not read.
+"""One rule for a document a harness could not read or normalize.
 
 A page the OCR engine cannot read, or does not answer for in time, fails its document, not the
 run: the harness records the reason and the detail and goes on. When the first documents of a run
 all fail the same way on the engine, the engine is broken and the run stops (`EngineGuard`); each
 harness then writes the report of the rows it has, marked `aborted`, and raises again. An engine
-that cannot run at all (`OcrUnavailableError`) is never a document failure.
+that cannot run at all (`OcrUnavailableError`) is never a document failure. Enabled model
+runtime errors fail their documents, retaining the strict rejection detail; they neither
+fall back to baseline output nor count towards the OCR engine abort rule.
 """
 
 from __future__ import annotations
@@ -13,8 +15,9 @@ from typing import Any
 
 from fra_ingest.errors import IngestError
 from fra_ingest.ocr import PER_DOCUMENT_OCR_ERRORS, ocr_failure
+from fra_model.runtime import ModelRuntimeError
 
-DOCUMENT_ERRORS = (IngestError, *PER_DOCUMENT_OCR_ERRORS)
+DOCUMENT_ERRORS = (IngestError, *PER_DOCUMENT_OCR_ERRORS, ModelRuntimeError)
 # How many documents show that the engine, not the pool, is the problem.
 ENGINE_PROBE = 3
 _ENGINE_REASONS = ("ocr_timeout", "ocr_engine")
@@ -35,7 +38,10 @@ def aborted(report: dict[str, Any], exc: EngineFailure) -> dict[str, Any]:
 
 def document_failure(exc: Exception) -> dict[str, str]:
     """The reason and detail to record against a document: an ingest error as it is, an OCR
-    timeout or engine error as `ocr_timeout` or `ocr_engine`. Anything else is raised again."""
+    timeout or engine error as `ocr_timeout` or `ocr_engine`, a model error as `model_runtime`.
+    Anything else is raised again."""
+    if isinstance(exc, ModelRuntimeError):
+        return {"error": "model_runtime", "detail": str(exc)}
     failure = exc if isinstance(exc, IngestError) else ocr_failure(exc)
     return {"error": failure.reason, "detail": failure.detail}
 

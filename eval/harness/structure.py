@@ -28,8 +28,9 @@ from fra_ingest.config import REPO_ROOT, load_config
 from fra_ingest.ocr import make_engine
 from fra_ingest.results import StructureResult
 from fra_ingest.review import StatementReview
-from fra_ingest.structure import structure_pdf
 from harness.failures import DOCUMENT_ERRORS, EngineFailure, EngineGuard, aborted, document_failure
+from harness.model_mapping import evaluation_checks
+from harness.model_mapping import evaluation_structure as structure_pdf
 
 MANIFEST = REPO_ROOT / "eval" / "golden" / "manifest.yaml"
 OUT = REPO_ROOT / "var" / "eval"
@@ -140,17 +141,21 @@ def first_statements(
 
 def load_checks(path: Path) -> dict[str, list[CheckResult]]:
     by_statement: dict[str, list[CheckResult]] = {}
-    for raw in json.loads(path.read_text(encoding="utf-8")):
+    for raw in json.loads(evaluation_checks(path).read_text(encoding="utf-8")):
         check = CheckResult.model_validate(raw)
         by_statement.setdefault(check.statement_id, []).append(check)
     return by_statement
 
 
 def main(argv: list[str] | None = None) -> int:
-    argparse.ArgumentParser(prog="python -m harness.structure").parse_args(argv)
+    parser = argparse.ArgumentParser(prog="python -m harness.structure")
+    parser.add_argument("--english-only", action="store_true")
+    args = parser.parse_args(argv)
     config = load_config()
     ocr = make_engine(config)
     documents = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))["documents"]
+    if args.english_only:
+        documents = [e for e in documents if e["language"] == "en"]
     rows: list[dict[str, Any]] = []
     by_id: dict[str, dict[StatementType, Statement]] = {}
     reasons: list[str] = []
@@ -239,7 +244,7 @@ def main(argv: list[str] | None = None) -> int:
     pairs = []
     if stopped is not None:
         reasons.append(f"aborted: {stopped}")
-    for left, right, gated in () if stopped is not None else PAIRS:
+    for left, right, gated in () if stopped is not None or args.english_only else PAIRS:
         for statement_type in config.enabled_types:
             a, b = by_id.get(left, {}).get(statement_type), by_id.get(right, {}).get(statement_type)
             misses = pair_misses(a, b) if a and b else None
