@@ -68,7 +68,7 @@
               "label": "Right-of-Use Assets",
               "values": {
                 "2025-12-31": "120152194",
-                "2024-12-31": null
+                "2024-12-31": "0"
               },
               "unconfirmed": [],
               "canonical_id": "right_of_use_assets"
@@ -86,7 +86,7 @@
               "label": "Goodwill",
               "values": {
                 "2025-12-31": "97092890",
-                "2024-12-31": null
+                "2024-12-31": "0"
               },
               "unconfirmed": [],
               "canonical_id": "goodwill"
@@ -104,7 +104,7 @@
               "label": "Inventory",
               "values": {
                 "2025-12-31": "5042005277",
-                "2024-12-31": null
+                "2024-12-31": "0"
               },
               "unconfirmed": [],
               "canonical_id": "inventories"
@@ -131,7 +131,7 @@
               "label": "Investments at amortized costs Short -tenn",
               "values": {
                 "2025-12-31": "537771276",
-                "2024-12-31": null
+                "2024-12-31": "0"
               },
               "unconfirmed": [],
               "canonical_id": "short_term_investments"
@@ -175,7 +175,7 @@
             {
               "label": "Legal Reserve",
               "values": {
-                "2025-12-31": null,
+                "2025-12-31": "0",
                 "2024-12-31": "470702541"
               },
               "unconfirmed": [],
@@ -184,7 +184,7 @@
             {
               "label": "General Reserve - Share Premium",
               "values": {
-                "2025-12-31": null,
+                "2025-12-31": "0",
                 "2024-12-31": "330920428"
               },
               "unconfirmed": [],
@@ -194,7 +194,7 @@
               "label": "Merger Reserve",
               "values": {
                 "2025-12-31": "2338053452",
-                "2024-12-31": null
+                "2024-12-31": "0"
               },
               "unconfirmed": [],
               "canonical_id": "other_reserves"
@@ -203,7 +203,7 @@
               "label": "Other Reserves",
               "values": {
                 "2025-12-31": "259470145",
-                "2024-12-31": null
+                "2024-12-31": "0"
               },
               "unconfirmed": [],
               "canonical_id": "other_reserves"
@@ -230,7 +230,7 @@
               "label": "Loans",
               "values": {
                 "2025-12-31": "1319646936",
-                "2024-12-31": null
+                "2024-12-31": "0"
               },
               "unconfirmed": [],
               "canonical_id": "long_term_borrowings"
@@ -239,7 +239,7 @@
               "label": "Lease Liabilities",
               "values": {
                 "2025-12-31": "87818673",
-                "2024-12-31": null
+                "2024-12-31": "0"
               },
               "unconfirmed": [],
               "canonical_id": "lease_liabilities_non_current"
@@ -257,7 +257,7 @@
               "label": "Deferred Revenues - Government Grants",
               "values": {
                 "2025-12-31": "386954",
-                "2024-12-31": null
+                "2024-12-31": "0"
               },
               "unconfirmed": [],
               "canonical_id": null
@@ -284,7 +284,7 @@
               "label": "Loans",
               "values": {
                 "2025-12-31": "59624265",
-                "2024-12-31": null
+                "2024-12-31": "0"
               },
               "unconfirmed": [],
               "canonical_id": null
@@ -319,7 +319,7 @@
             {
               "label": "Income Taxes",
               "values": {
-                "2025-12-31": null,
+                "2025-12-31": "0",
                 "2024-12-31": "1496537"
               },
               "unconfirmed": [],
@@ -338,7 +338,7 @@
               "label": "Deferred Revenues - Governinent Grants",
               "values": {
                 "2025-12-31": "1812703",
-                "2024-12-31": null
+                "2024-12-31": "0"
               },
               "unconfirmed": [],
               "canonical_id": null
@@ -411,7 +411,7 @@
             {
               "label": "Foreign Currency Translation Differences (EAS 13 - Appendix H), Net of Tax",
               "values": {
-                "FY2025": null,
+                "FY2025": "0",
                 "FY2024": "-382736"
               },
               "unconfirmed": [],
@@ -459,7 +459,7 @@
               "label": "Net sales",
               "values": {
                 "FY2025": "23229121314",
-                "FY2024": null
+                "FY2024": "0"
               },
               "unconfirmed": [],
               "canonical_id": "revenue"
@@ -468,7 +468,7 @@
               "label": "Cost of sales",
               "values": {
                 "FY2025": "-19644869218",
-                "FY2024": null
+                "FY2024": "0"
               },
               "unconfirmed": [],
               "canonical_id": "cost_of_revenue"
@@ -477,7 +477,7 @@
               "label": "Gross profit",
               "values": {
                 "FY2025": "3584252096",
-                "FY2024": null
+                "FY2024": "0"
               },
               "unconfirmed": [],
               "canonical_id": "gross_profit"
@@ -495,7 +495,7 @@
               "label": "Selling and Distribution Expenses",
               "values": {
                 "FY2025": "-506874279",
-                "FY2024": null
+                "FY2024": "0"
               },
               "unconfirmed": [],
               "canonical_id": "selling_general_admin"
