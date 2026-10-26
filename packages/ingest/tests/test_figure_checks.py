@@ -363,3 +363,20 @@ def test_net_profit_tie_with_values_but_no_shared_periods_has_no_checks() -> Non
     ).model_copy(update={"periods": [P1]})
     income = INCOME.model_copy(update={"periods": [P2]})
     assert check_net_profit_tie(income, comprehensive) == []
+
+
+def test_tie_confirmation_uses_each_statement_side_even_when_row_ids_overlap() -> None:
+    from fra_ingest.review import confirm_arithmetic
+
+    comprehensive = statement(
+        [item(1, "Net profit for the year", "160", "140"), item(2, "Translation", "-5", "3")],
+        StatementType.COMPREHENSIVE_INCOME,
+        "ci",
+    )
+    ties = check_net_profit_tie(INCOME, comprehensive)
+    confirmed_income = confirm_arithmetic(INCOME, ties)
+    confirmed_comprehensive = confirm_arithmetic(comprehensive, ties)
+    assert not confirmed_income.line_items[0].cells[0].arithmetic_checks
+    assert confirmed_income.line_items[1].cells[0].arithmetic_checks == [ties[0].id]
+    assert confirmed_comprehensive.line_items[0].cells[0].arithmetic_checks == [ties[0].id]
+    assert not confirmed_comprehensive.line_items[1].cells[0].arithmetic_checks

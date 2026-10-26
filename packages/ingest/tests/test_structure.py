@@ -464,3 +464,25 @@ def test_labels_rebuilt_from_the_page_words_are_marked_in_the_serialized_stateme
         for label in ("النقد المخزون", "عقارات", "Total assets")
         for f in statement["flags"]
     )
+
+
+def test_structure_persists_exact_confirmation_through_result_json() -> None:
+    from fra_ingest.results import StructureResult
+
+    result, checks = structure_document(inputs([("docling/p1-2.json", document())]), IngestConfig())
+    restored = StructureResult.model_validate_json(result.model_dump_json())
+    coverage = {
+        (row_id, check.period_key): check.id
+        for check in checks
+        if check.status == "pass" and check.kind != "eps" and "single_addend" not in check.detail
+        for row_id in check.line_item_ids
+    }
+    assert coverage
+    for statement in restored.statements:
+        for row in statement.line_items:
+            for cell in row.cells:
+                check_id = coverage.get((row.id, cell.period_key))
+                if check_id is not None:
+                    assert check_id in cell.arithmetic_checks
+                else:
+                    assert not cell.arithmetic_checks
