@@ -47,8 +47,9 @@ precondition. No checkpoint is run as part of this runbook edit.
    **unmet for the scanned document**: all four scanned or partly scanned documents were held for
    review and no summary was produced, and a bounded extraction attempt did not clear them. (b)
    is recorded in the plan for the two documents with expected files. Do not start step 1 until
-   the scanned half is either recorded as met in the plan or covered by an owner exception. No
-   such exception has been recorded.
+   the scanned half is either recorded as met in the plan or covered by an owner exception. D24
+   (2026-10-27) records that exception: the scanned half remains **not met**, with partial
+   summaries on two of four scanned or partly scanned documents as the evidence.
 4. Before any checkpoint result exists, fix the candidate in writing: the update-1,000 adapter
    path, `shasum -a 256` for `adapters.safetensors` and `adapter_config.json`, and the base-model
    manifest hash. Use this exact candidate for the checkpoint record. If a different candidate
