@@ -399,8 +399,9 @@ builder does is what it will do.
   `model_test` row reaches its output, so no `model_test` row is written there before the
   checkpoint (`sec_fsds.py` already drops `blind` filers, but it writes `model_test` rows, tagged
   by pool, into the same `labels-<quarter>.jsonl.gz` file as the `train` rows, so the builder's
-  filter on pool is the only barrier). Gate C on `model_test` at the checkpoint is scored by the
-  eval harness, not from the training directory.
+  filter on pool is the only barrier). Gate C on `model_test` is not measured at this checkpoint (D23): the
+  example pipeline accepts only `train` sources. Were it scored, it would be by the eval harness,
+  not from the training directory.
 - **Counts, read from `eval/corpus/candidates.yaml` and `eval/corpus/fetched.yaml` on 3 October,
   after the corpus was extended on 2 and 3 October** (the extension is described in the README's
   "Current size"). The `train` pool has 118 issuers and 208 documents (106 corporate issuers, 87
