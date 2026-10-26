@@ -44,10 +44,11 @@ precondition. No checkpoint is run as part of this runbook edit.
    upload-to-summary results for both a digital and a scanned English document, and (b) eval
    numbers for both profiles; each part not met needs its own owner exception in the decision
    log. As of 26 October (a) is met for the digital document (Almarai, summary present) and
-   covered for the scanned document by the owner's exception D24, and (b) is recorded in the plan
-   for the two documents with expected files. The precondition is therefore satisfied. If a
-   later change touches the Docker profile or the scanned-document path, recheck it before
-   step 1.
+   **unmet for the scanned document**: all four scanned or partly scanned documents were held for
+   review and no summary was produced, and a bounded extraction attempt did not clear them. (b)
+   is recorded in the plan for the two documents with expected files. Do not start step 1 until
+   the scanned half is either recorded as met in the plan or covered by an owner exception. No
+   such exception has been recorded.
 4. Before any checkpoint result exists, fix the candidate in writing: the update-1,000 adapter
    path, `shasum -a 256` for `adapters.safetensors` and `adapter_config.json`, and the base-model
    manifest hash. Use this exact candidate for the checkpoint record. If a different candidate

@@ -179,10 +179,12 @@ from 8 of the 28 English blind issuers. The 29 and 33 Arabic documents, respecti
 excluded by manifest language; eleven Arabic-only issuers leave each scored denominator.
 No protected documents were opened for these counts. Runtime for the smaller scored set has
 not been measured; the per-document budgets above remain targets. Gate D evidence was recorded on 26 October (below). Therefore the Gate D precondition for step 1
-is **met**: the digital document produced a summary in the Docker profile; the scanned half is
-covered by the owner's exception D24 ([decision log](06-decisions-and-risks.md)), taken after a
-bounded extraction attempt found no general fix that clears the scanned holds; and Docker eval
-numbers are recorded below for the two documents that have expected files.
+is **met for the digital document and for the Docker eval numbers, and not met for the scanned
+document**: no scanned English document produced a summary in the Docker profile, because every
+scanned analysis was held for review (the OCR misreads digits, drops values and flips signs, so
+subtotal and identity checks fail). Before step 1, for the scanned summary the owner either
+records a specific Gate D exception in [the decision log](06-decisions-and-risks.md) or a scanned
+English document completes with a summary recorded here.
 
 Gate D evidence, 26 October 2026 (main `410629a`; Docker Desktop 27.3.1, 12 CPUs, 14.1 GB VM; the
 Docker profile with Tesseract; `make docker-up`, upload through the API, status read until final;
