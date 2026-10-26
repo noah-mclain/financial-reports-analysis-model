@@ -1,16 +1,28 @@
 """Per-page text: text layer where there is one, OCR where there is not, cached per document."""
 
+import json
+import os
+from collections.abc import Sequence
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Barrier
 
 import pypdfium2 as pdfium
 import pytest
 from support import FakeOcr, make_blank_pdf
 
 from fra_core.schemas import PageMode, TextSource
-from fra_ingest.config import IngestConfig
+from fra_ingest.config import IngestConfig, OcrEngineName
 from fra_ingest.errors import IngestError
 from fra_ingest.ocr import OcrEngineError, OcrLine, OcrUnavailableError
-from fra_ingest.pages import document_language, profiles, read_pages, text_layer_is_garbled
+from fra_ingest.pages import (
+    _write_cache,
+    document_language,
+    profiles,
+    read_pages,
+    text_layer_is_garbled,
+)
+from fra_ingest.results import PageText
 from fra_ingest.text_match import is_visual_arabic
 
 TITLE = OcrLine("Statement of financial position", 0.98, left=0.2, top=0.05, width=0.6, height=0.03)
@@ -59,6 +71,82 @@ def test_the_cache_is_reused(tmp_path: Path) -> None:
     pages = read_pages(pdf, IngestConfig(), again, cache_dir=tmp_path / "cache")
     assert again.calls == 0
     assert pages[0].header_text == TITLE.text
+
+
+def test_overlapping_cache_writers_use_distinct_temporary_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+
+    path = tmp_path / "pages.json"
+    rendezvous = Barrier(2)
+    replace = os.replace
+
+    def synchronized_replace(source: str | Path, target: str | Path) -> None:
+        rendezvous.wait(timeout=5)
+        replace(source, target)
+
+    monkeypatch.setattr(os, "replace", synchronized_replace)
+    page_a = PageText(
+        page_no=1,
+        mode=PageMode.IMAGE,
+        source=TextSource.OCR,
+        header_text="writer A",
+        char_count=8,
+        width_pt=595,
+        height_pt=842,
+    )
+    page_b = page_a.model_copy(update={"header_text": "writer B"})
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        writers = [
+            executor.submit(_write_cache, path, {"writer": name}, [page])
+            for name, page in (("A", page_a), ("B", page_b))
+        ]
+        for writer in writers:
+            writer.result(timeout=10)
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["settings"]["writer"] in {"A", "B"}
+    assert payload["pages"][0]["header_text"] in {"writer A", "writer B"}
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
+def test_a_failed_cache_replace_removes_its_temporary_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail_replace(source: str | Path, target: str | Path) -> None:
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(os, "replace", fail_replace)
+    page = PageText(
+        page_no=1,
+        mode=PageMode.IMAGE,
+        source=TextSource.OCR,
+        char_count=0,
+        width_pt=595,
+        height_pt=842,
+    )
+
+    with pytest.raises(OSError, match="replace failed"):
+        _write_cache(tmp_path / "pages.json", {}, [page])
+
+    assert list(tmp_path.glob("*.tmp")) == []
+
+
+def test_a_failed_cache_write_removes_its_temporary_file(tmp_path: Path) -> None:
+    page = PageText(
+        page_no=1,
+        mode=PageMode.IMAGE,
+        source=TextSource.OCR,
+        char_count=0,
+        width_pt=595,
+        height_pt=842,
+    )
+
+    with pytest.raises(TypeError):
+        _write_cache(tmp_path / "pages.json", {"unsupported": object()}, [page])
+
+    assert list(tmp_path.glob("*.tmp")) == []
 
 
 def test_a_cache_without_ocr_is_not_reused_once_an_engine_exists(tmp_path: Path) -> None:
@@ -299,3 +387,32 @@ def test_page_count_reads_no_page_and_an_unreadable_file_is_an_ingest_error(
     broken.write_bytes(b"%PDF-1.7 not really")
     with pytest.raises(IngestError):
         page_count(broken)
+
+
+@pytest.mark.parametrize("engine", ["ocrmac", "tesseract"])
+def test_tesseract_resolution_changes_page_rendering_and_only_its_cache(
+    tmp_path: Path, engine: OcrEngineName
+) -> None:
+    from PIL import Image
+
+    from fra_ingest.pages import ocr_key
+
+    sizes: list[tuple[int, int]] = []
+
+    class RecordingOcr(FakeOcr):
+        def recognize(self, image: Image.Image, languages: Sequence[str]) -> list[OcrLine]:
+            sizes.append(image.size)
+            return super().recognize(image, languages)
+
+    ocr = RecordingOcr([TITLE])
+    ocr.name = "tesseract" if engine == "tesseract" else "vision"
+    pdf = make_blank_pdf(tmp_path / "scan.pdf")
+    before = IngestConfig(convert_ocr=engine)
+    after = IngestConfig(convert_ocr=engine, tesseract_dpi=150)
+    read_pages(pdf, before, ocr, cache_dir=tmp_path / "cache")
+    sizes.clear()
+    read_pages(pdf, after, ocr, cache_dir=tmp_path / "cache")
+    assert bool(sizes) is (engine == "tesseract")
+    assert (ocr_key(before, ocr) != ocr_key(after, ocr)) is (engine == "tesseract")
+    if engine == "tesseract":
+        assert sizes[0] == (1240, 1755)  # 595 by 842 points, rounded up at 150 dpi.

@@ -13,6 +13,7 @@ from fra_core.schemas import (
     Provenance,
     Statement,
     StatementType,
+    is_provenance_flag,
 )
 from fra_ingest.review import review_statement
 
@@ -113,6 +114,16 @@ def test_critical_cell_flags_hold_with_their_count() -> None:
         "row_realigned:1",
     ]
     assert review.flagged_cells == 4
+
+
+def test_ocr_parenthesis_repair_is_a_critical_sign_doubt() -> None:
+    repaired = item(1, "-10", "ocr_parenthesis_repaired")
+    review = review_statement(statement([repaired, *ROWS[1:]]), PASSING, primary=True)
+
+    assert not is_provenance_flag("ocr_parenthesis_repaired")
+    assert review.status == "needs_review"
+    assert review.reasons == ["ocr_parenthesis_repaired:1"]
+    assert review.flagged_cells == 1
 
 
 def test_a_confirmed_blank_holds_nothing() -> None:

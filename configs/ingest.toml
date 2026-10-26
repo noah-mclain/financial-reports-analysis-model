@@ -30,8 +30,8 @@ device = "mps"
 # flagged ocr_unavailable). The week 2 bake-off compared them (14): the Docker image sets
 # FRA_OCR_ENGINE=tesseract; FRA_OCR_ENGINE also overrides this for one run.
 ocr_engine = "ocrmac"
-# Vision full-page ranges in these languages use pdfium; [] keeps docling's default.
-# Tesseract, layout-region OCR and text ranges keep the default (14, scan renderer).
+# Full-page Vision and Tesseract ranges in these languages use pdfium.
+# [] keeps docling's default; layout-region OCR and text ranges keep it (14, scan renderer).
 pdfium_full_page_languages = ["en-US"]
 # Page images at 2x (144 dpi), for the review report and click-to-source.
 images_scale = 2.0
@@ -50,6 +50,9 @@ child_timeout_s = 900
 memory_budget_gb = 3.5
 
 [tesseract]
+# Locator page-read resolution only; conversion uses convert.ocr_scale.
+# Omit to use ocr.dpi. Vision continues to use ocr.dpi.
+dpi = 150
 # Used only when ocr_engine is tesseract, by our own page reads and by docling alike.
 # Page segmentation mode; 3 is Tesseract's own default (fully automatic).
 psm = 3

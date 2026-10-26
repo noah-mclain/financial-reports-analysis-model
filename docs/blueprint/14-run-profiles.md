@@ -669,16 +669,17 @@ the engine, but nothing checks docling's call.
 
 ### Scan renderer
 
-The native Vision path uses Docling's `PyPdfiumDocumentBackend` for a conversion range
+The Vision and Tesseract paths use Docling's `PyPdfiumDocumentBackend` for a conversion range
 only when its plan calls for full-page OCR and its one OCR language is listed in
 `convert.pdfium_full_page_languages`. The setting is a list in `configs/ingest.toml`, initially
 `["en-US"]`; an empty list keeps Docling's default backend for every range. Each entry must
-be in `ocr.languages` and readable by Vision, or configuration fails.
+be in `ocr.languages` and readable by the selected engine, or configuration fails.
+With OCR disabled, the dormant list is validated against Vision's language contract.
 
-The rule applies only to `ocrmac`. Tesseract, including the Docker profile, keeps the default
-backend whatever the list contains: its pdfium path is unmeasured. Layout-region OCR, text
-and skipped ranges also keep the default. Arabic stays on the default because the diagnostic
-pdfium run read the print better but assigned tokens to cells worse; digital ranges stay on
+The rule applies to `ocrmac` and `tesseract`, including the Docker profile. Tesseract's
+pdfium path is an extraction candidate awaiting measurement; the Vision measurements below
+do not establish its quality. Layout-region OCR, text and skipped ranges keep the default.
+Arabic stays on the default because the diagnostic pdfium run read the print better but assigned tokens to cells worse; digital ranges stay on
 the default because they have not been measured. The initial list enables English only.
 
 This choice was made on `dev` on 10 October 2026 and awaits confirmation on fit scans. The
@@ -686,7 +687,14 @@ diagnostic comparisons are not a gate result. `convert.json` records `renderer` 
 or `pdfium`) in each `settings_plans` entry. The plans govern the conversion settings hash:
 a changed renderer invalidates conversion and its derived outputs, while unaffected ranges
 retain their cache keys. An older plan without `renderer` loads as `default`. Locate and
-page-read caches are unaffected.
+page-read caches are unaffected by the renderer selection.
+
+`tesseract.dpi` optionally overrides `ocr.dpi` for Tesseract locator page reads and their
+CLI resolution hint. The shipped value is 150; Vision keeps `ocr.dpi` at 100. Omitting the
+override uses `ocr.dpi`. This setting survives effective-config transport and changes the
+page and locate cache digests when active. Conversion continues to use `convert.ocr_scale`;
+page-read DPI does not change its image scale. These settings are candidates for measurement,
+not evidence that a document or gate passed.
 
 #### Measured scan renderer table
 

@@ -28,8 +28,9 @@ LEGACY_HASHES = {
 }
 
 
-def test_only_listed_full_page_vision_ranges_select_pdfium() -> None:
-    config = IngestConfig(pdfium_full_page_languages=("en-US",))
+@pytest.mark.parametrize("engine", ["ocrmac", "tesseract"])
+def test_only_listed_full_page_ranges_select_pdfium(engine: OcrEngineName) -> None:
+    config = IngestConfig(convert_ocr=engine, pdfium_full_page_languages=("en-US",))
     doc = located([IMG, IMG, TXT], [(1, 1), (2, 2), (3, 3)])
     plans = plan_ranges(doc, {1: "en-US", 2: "ar-SA"}, config)
     assert [(p.ocr, p.renderer) for p in plans] == [
@@ -62,14 +63,14 @@ def test_empty_setting_preserves_existing_plans(engine: OcrEngineName) -> None:
     assert all(p.renderer == "default" for p in plans)
 
 
-@pytest.mark.parametrize("engine", ["tesseract", "none"])
-def test_unmeasured_or_disabled_engines_keep_default_renderer(engine: OcrEngineName) -> None:
+@pytest.mark.parametrize("engine", ["none"])
+def test_disabled_engine_keeps_default_renderer(engine: OcrEngineName) -> None:
     config = IngestConfig(convert_ocr=engine, pdfium_full_page_languages=("en-US",))
     plans = plan_ranges(located([IMG, TXT], [(1, 1), (2, 2)]), {1: "en-US"}, config)
     assert all(p.renderer == "default" for p in plans)
 
 
-def test_docker_profile_keeps_default_renderer(
+def test_docker_profile_selects_listed_full_page_renderer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("FRA_PROFILE", "docker")
@@ -78,7 +79,7 @@ def test_docker_profile_keeps_default_renderer(
     path.write_text('[convert]\npdfium_full_page_languages = ["en-US"]\n')
     config = load_config(path)
     assert config.convert_ocr == "tesseract"
-    assert plan_ranges(located([IMG], [(1, 1)]), {1: "en-US"}, config)[0].renderer == "default"
+    assert plan_ranges(located([IMG], [(1, 1)]), {1: "en-US"}, config)[0].renderer == "pdfium"
 
 
 @pytest.mark.parametrize("value", ['"en-US"', "42", "[42]", '["unknown"]'])
@@ -133,9 +134,12 @@ def test_hash_preserves_legacy_default_and_changes_only_affected_ranges(mode: Pa
 
 
 @pytest.mark.parametrize("mode", [TXT, IMG])
-def test_legacy_cache_reused_unless_the_renderer_changes(tmp_path: Path, mode: PageMode) -> None:
+@pytest.mark.parametrize("engine", ["ocrmac", "tesseract"])
+def test_legacy_cache_reused_unless_the_renderer_changes(
+    tmp_path: Path, mode: PageMode, engine: OcrEngineName
+) -> None:
     doc = located([mode], [(1, 1)])
-    old = IngestConfig(artifact_root=tmp_path)
+    old = IngestConfig(artifact_root=tmp_path, convert_ocr=engine)
     first = convert_pdf(
         Path("unread.pdf"),
         doc,
@@ -144,7 +148,8 @@ def test_legacy_cache_reused_unless_the_renderer_changes(tmp_path: Path, mode: P
         runner_factory=lambda _: FakeRunner(),
         docling=RELEASE,
     )
-    assert first.settings_hash == LEGACY_HASHES[mode]
+    if engine == "ocrmac":
+        assert first.settings_hash == LEGACY_HASHES[mode]
     path = tmp_path / doc.document.sha256 / "convert.json"
     payload = json.loads(path.read_text())
     for plan in payload["settings_plans"]:
@@ -155,7 +160,9 @@ def test_legacy_cache_reused_unless_the_renderer_changes(tmp_path: Path, mode: P
     assert restored.settings_plans is not None
     assert restored.settings_plans[0].renderer == "default"
 
-    selected = IngestConfig(artifact_root=tmp_path, pdfium_full_page_languages=("en-US",))
+    selected = IngestConfig(
+        artifact_root=tmp_path, convert_ocr=engine, pdfium_full_page_languages=("en-US",)
+    )
     runner = FakeRunner()
     second = convert_pdf(
         Path("unread.pdf"),
@@ -171,8 +178,10 @@ def test_legacy_cache_reused_unless_the_renderer_changes(tmp_path: Path, mode: P
     assert ConvertResult.model_validate_json(path.read_text()) == second
 
 
+@pytest.mark.parametrize("engine", ["ocrmac", "tesseract"])
 def test_converter_factory_receives_backend_and_keys_by_renderer(
     monkeypatch: pytest.MonkeyPatch,
+    engine: OcrEngineName,
 ) -> None:
     from fra_ingest import converter
 
@@ -186,8 +195,13 @@ def test_converter_factory_receives_backend_and_keys_by_renderer(
 
     class FormatOption:
         def __init__(
-            self, *, pipeline_options: object, backend: type[object] = DefaultBackend
+            self,
+            *,
+            pipeline_options: object,
+            backend: type[object] = DefaultBackend,
+            pipeline_cls: object = None,
         ) -> None:
+            assert (pipeline_cls is not None) is (engine == "tesseract")
             received.append(backend)
 
     class Factory:
@@ -211,7 +225,8 @@ def test_converter_factory_receives_backend_and_keys_by_renderer(
             setattr(module, key, value)
         monkeypatch.setitem(sys.modules, name, module)
     monkeypatch.setattr(converter, "pipeline_options", lambda config, plan: object())
-    config = IngestConfig(pdfium_full_page_languages=("en-US",))
+    monkeypatch.setattr(converter, "tesseract_pipeline", lambda: object())
+    config = IngestConfig(convert_ocr=engine, pdfium_full_page_languages=("en-US",))
     plans = plan_ranges(located([IMG, IMG], [(1, 1), (2, 2)]), {1: "en-US", 2: "ar-SA"}, config)
     runner = DoclingRunner(config)
     english, arabic = [runner._converter(p) for p in plans]
@@ -226,7 +241,9 @@ def test_converter_factory_receives_backend_and_keys_by_renderer(
 @pytest.mark.parametrize(
     "update,plan",
     [
-        ({"convert_ocr": "tesseract"}, {"ocr": "full_page", "ocr_language": "en-US"}),
+        ({"convert_ocr": "none"}, {"ocr": "full_page", "ocr_language": "en-US"}),
+        ({"convert_ocr": "tesseract"}, {"ocr": "full_page", "ocr_language": "ar-SA"}),
+        ({"convert_ocr": "tesseract"}, {"ocr": "pdf_aware", "ocr_language": "en-US"}),
         ({}, {"ocr": "full_page", "ocr_language": "ar-SA"}),
         ({}, {"ocr": "pdf_aware", "ocr_language": "en-US"}),
         ({"pdfium_full_page_languages": ()}, {"ocr": "full_page", "ocr_language": "en-US"}),
