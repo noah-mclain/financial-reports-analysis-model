@@ -283,7 +283,7 @@ records what each run measured; the conditions are not repeated here. What the r
   candidate (up to 6.0 GB, 1.4) is deleted first under condition 3. Whether the bake-off's
   worst case of about 25 GB is already counted in that 68 GB reading is not known, so no
   figure is claimed for the two together; the `df` taken before the run decides.
-- **Memory:** the peak of dequantizing and converting the 7B on 18 GB is not measured.
+- **Memory:** measured in the 26 October rehearsal below: peak footprint 13.9 GB for the dequantize (interpreter timed directly); the convert's peak is not valid under `uv run`.
 
 The route, as amended:
 
@@ -295,7 +295,67 @@ The route, as amended:
 - **Complete the snapshot** before fusing.
 - **Send `"cache_prompt": false`** in any comparison between runtimes.
 
-Runs of the 7B export recorded here (condition 7 of 1.4): none yet.
+Runs of the 7B export recorded here (condition 7 of 1.4):
+
+**Rehearsal, 26 October 2026** (throwaway adapter: the 20-update `first-training-smoke` adapter on
+the 4-bit Qwen2.5-7B-Instruct; llama.cpp build b11146, mlx-lm 0.31.3 in a separate environment;
+18 GB machine). Free disk 162 GB before and 160 GB after; the lowest reading during the run was
+131 GB. Kernel memory pressure level: highest 2 (read every 10 seconds); swap used peaked at
+6.1 GB during the f16 load and was 1.8 GB at the end. No stop rule fired. Condition 6's staged
+deletion was followed; the f16 file's sha256 is `3eec0f88c8ed20e5f09e8aef6f5d086ba3101e0c58b6451a1bd8d031c5960436`
+and the Q4_K_M file's `2116901e55f167bcdc1fa59fd6fb92ba85ece39e15c3b92220bf7f9f9b609d1f`.
+
+| Step | Wall time | Maximum resident set size | Peak memory footprint | Output |
+| --- | --- | --- | --- | --- |
+| MLX reference answers (4-bit base plus adapter) | 17 s | not recorded | not recorded | 10 answers |
+| `mlx_lm fuse --dequantize`, interpreter timed directly | 45.1 s | 4,575,625,216 B | 13,875,913,584 B | 14,885,500 KB directory (`du -sk`, not `stat`) |
+| `convert_hf_to_gguf.py` f16, under `uv run` | 63.4 s | 1,635,155,968 B (the wrapper, not the converter) | not valid under a wrapper | 15,237,853,056 B |
+| `llama-quantize` Q4_K_M | 55.2 s | 3,831,873,536 B | 3,869,625,752 B | 4,683,073,408 B; no format fallbacks |
+
+The dequantize's peak footprint was 13.9 GB on the 18 GB machine, so the estimate of about 15 GB
+held in order of magnitude and the step fit, with swap in use during the later f16 load
+(about 48 minutes from the end of conversion to the verified f16 answers, mostly loading and
+answering from a 15 GB file on 18 GB).
+
+Agreement with the MLX answers on the 10 held-out prompts: f16 10 of 10, Q4_K_M 3 of 10. The bar
+of 9 in 10 is therefore met by f16 and missed by Q4_K_M in this run. The comparison is weak
+evidence about a trained adapter: the 20-update adapter's MLX answers are degenerate
+(`{"canonicalidididid...`), so a small numeric change in quantization moves the answer. It does
+show that Q4_K_M cannot be assumed to keep a model's answers; the real adapter must be tested at
+Q4_K_M, Q5_K_M, Q6_K and Q8_0 against gold (below), not only for agreement.
+
+Not shown by this run: the real adapter's behavior, task accuracy against gold, margins in
+log-odds, and the Docker (CPU, container) speed of the 7B f16 or quantized files.
+
+**Real export, 26 October 2026** (the 1,000-update adapter, `adapters.safetensors` sha256
+`2f7234d7a96bdf02b9c4384f0a4b17389ade5a05ad4fa13c70513ba5fee28a1e`, on the same base, tools and
+machine). Same conditions as the rehearsal; no stop rule fired; highest memory pressure level 2;
+free disk 160 GB before, 123 GB after (the f16 file, 15,237,853,056 B, sha256
+`19b4c85f66bd1761be1608a17e2aa140b4cdad26e4e503a541ccc568058e693f`, was deleted after the checks).
+Fuse 36 s, convert 58 s, quantize 15 to 813 s per level (the Q5_K_M run was slowed by memory
+pressure). Files: Q4_K_M 4,683,073,408 B; Q5_K_M 5,444,831,104 B; Q6_K 6,254,198,656 B; Q8_0
+8,098,525,056 B; no quantize format fallbacks. Their sha256 values are in
+`var/spikes/gguf7b-real/SHA256SUMS` (local).
+
+Acceptance rule, fixed before the run and applied to each level on both frozen validation panels
+(llama-server, greedy, at most 64 tokens, Metal; the MLX adapter's scored predictions as the
+reference): accuracy within 1.0 point, macro-F1 within 2.0 points, taxonomy-critical errors not
+above the MLX adapter's, invalid outputs not above the MLX adapter's plus 2.
+
+| Level | Representative accuracy | Rep. macro-F1 | Rep. critical | Challenge accuracy | Chal. macro-F1 | Chal. critical | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| MLX adapter (reference) | 0.916 | 0.592 | 0 | 0.881 | 0.538 | 6 | n/a |
+| Q4_K_M | 0.916 | 0.581 | 0 | 0.893 | 0.539 | 5 | accepted |
+| Q5_K_M | 0.916 | 0.580 | 0 | 0.899 | 0.544 | 4 | accepted |
+| Q6_K | 0.912 | 0.584 | 0 | 0.899 | 0.544 | 4 | accepted |
+| Q8_0 | 0.912 | 0.588 | 0 | 0.881 | 0.538 | 6 | accepted |
+
+The f16 file reproduced the MLX adapter's answers on 10 of 10 representative rows (identical
+strings), checked last because loading a 15 GB file on 18 GB was slow (23.6 minutes for the 10 rows).
+The level that ships, Q4_K_M, is accepted. These are validation diagnostics on the same panels
+used to measure the adapter, not Gate C, and the differences between levels are within noise on
+panels of 512 and 168 rows. Not measured: margins in log-odds, the Docker (CPU) speed of these
+files, and any pipeline use of the model, which does not exist yet.
 
 Before and during week 3:
 
