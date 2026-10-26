@@ -130,8 +130,25 @@ Footnote text, fixed, one per caveat and language:
 - Every displayed currency amount from a caveated statement carries the footnote mark; ratios
   do not.
 - Summary: footnote marks on the sentences, the footnote texts once below the summary.
-- A held statement is still not narrated (N4). The caveat never turns a hold into a pass or a
-  pass into a hold, except through `scale_implausible`.
+- Completed summaries retain the existing source checks and grammar. The owner-authorized
+  English partial path is an exception to blanket N4 suppression: each included metric must
+  trace every input to a passed document subtotal, balance identity or net-profit tie in the
+  same row and period, with all source, period, mapping, figure and unit guards satisfied.
+  EPS checks, single-addend repetitions, statement pass status and checked-cell counts do not
+  authorize inputs. Held balance sheets exclude all balance-dependent summary metrics.
+- Local extraction holds and missing critical mappings stay visible; they exclude affected
+  facts without claiming the entire document is verified. Unsupported notices, language or
+  period conflicts, contradictory units, decline and industry holds suppress the partial
+  summary. Old analyses default to no arithmetic confirmation; structure version 53 rebuilds
+  this evidence from checks rather than reinterpreting counts.
+- A partial summary uses fixed versioned grammar, explains every omitted summary metric
+  without its figures, and retains the held verdict. The results page labels it
+  “Partial summary: some statements could not be confirmed”. Actual image-page profiles,
+  carried into the analysis, require this exact caveat when a source page is scanned:
+  “Figures were read by OCR from a scanned page. Included figures passed the document's own
+  arithmetic checks; they have not been verified against an independent source.” Missing
+  page profiles or no eligible facts suppress partial narration. Held Arabic remains
+  suppressed; completed Arabic is unchanged. Unit caveats never turn a hold into a pass.
 
 ## Where it lands
 

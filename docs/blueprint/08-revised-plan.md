@@ -28,7 +28,10 @@ dedupe. Nothing from extraction onward exists yet.
    never an input to it. No per-issuer rules.
 2. **Right, or visibly unsure.** On an unseen document the tool either produces figures that
    pass their own checks, or it shows what it extracted, marks what failed, and does not
-   narrate (N4). Balance sheet identity, subtotal sums and scale sanity are the self-test.
+   narrate unchecked facts (N4). The owner-authorized English partial summary may state
+   individually arithmetic-confirmed metrics with explicit exclusions and the scanned-page
+   caveat; the analysis remains held ([13](13-unit-caveats.md), Display). Balance sheet
+   identity, subtotal sums and scale sanity are the self-test.
 3. **Scanned documents run live.** A fast OCR pass locates statement pages, and an accurate
    pass reads only those pages. Budget: under 1 minute for a digital report, 2 to 4 minutes
    for a scanned filing, with a stage timeline on screen.

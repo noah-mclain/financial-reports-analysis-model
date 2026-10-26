@@ -11,19 +11,24 @@ from fra_model.templates import templates
 @dataclass(frozen=True)
 class SummaryBuilt:
     narrative: Narrative
+    partial: bool = False
 
 
 def build_summary(analysis: Analysis) -> SummaryBuilt | SummarySuppressed:
     payload = summary_payload(analysis)
     if isinstance(payload, SummarySuppressed):
         return payload
-    return SummaryBuilt(check_template(payload, templates(payload)))
+    return SummaryBuilt(check_template(payload, templates(payload)), partial=payload.partial)
 
 
-def validate_summary(analysis: Analysis, narrative: Narrative) -> Narrative:
+def validate_summary(
+    analysis: Analysis, narrative: Narrative, *, partial: bool | None = None
+) -> Narrative:
     payload = summary_payload(analysis)
     if not isinstance(payload, SummaryPayload):
         raise GroundingError("; ".join(payload.reasons))
+    if partial is not None and partial != payload.partial:
+        raise GroundingError("partial marker differs from summary eligibility")
     return check_template(payload, narrative)
 
 

@@ -3,9 +3,26 @@
 from fra_analytics import format_metric
 from fra_core.schemas import Claim, Footnote, Narrative, NarrativeSection, PeriodKind, Sentence
 from fra_core.schemas.narrative import SectionHeading
-from fra_model.payload import SUMMARY_IDS, SummaryFact, SummaryPayload
+from fra_model.payload import SUMMARY_IDS, OmissionReason, SummaryFact, SummaryPayload
 
 TEMPLATE_VERSION = "1"
+PARTIAL_TEMPLATE_VERSION = "1-partial"
+SCAN_CAVEAT = (
+    "Figures were read by OCR from a scanned page. Included figures passed the document's own "
+    "arithmetic checks; they have not been verified against an independent source."
+)
+_EXCLUSIONS: dict[OmissionReason, str] = {
+    "balance_held": "{label} was not included because the balance sheet could not be confirmed.",
+    "missing_statement": "{label} was not included because its source statement is unavailable.",
+    "missing_metric": "{label} was not included because the metric is unavailable.",
+    "undefined": "{label} was not included because the metric is undefined.",
+    "unconfirmed": "{label} was not included because its input figures have not all passed "
+    "the document's own arithmetic checks.",
+    "invalid_period": "{label} was not included because its reporting period "
+    "could not be confirmed.",
+    "unverified": "{label} was not included because its source figures or calculation "
+    "could not be verified.",
+}
 # Wording keyed by SUMMARY_IDS so the authorized metric catalog has one source of truth;
 # financial metadata (unit, anchor statement) stays in analytics.
 _WORDING: tuple[tuple[SectionHeading, str, str], ...] = (
@@ -64,10 +81,21 @@ def templates(payload: SummaryPayload) -> Narrative:
         section = sections.setdefault(heading, NarrativeSection(heading=heading))
         section.sentences.append(sentence_for(payload, fact))
         notes.update((f.id, f) for f in fact.footnotes)
+    if payload.partial:
+        section = sections.setdefault(
+            SectionHeading.WATCH_ITEMS, NarrativeSection(heading=SectionHeading.WATCH_ITEMS)
+        )
+        for omission in payload.omissions:
+            label = LABELS[omission.metric_id][1]
+            section.sentences.append(
+                Sentence(text=_EXCLUSIONS[omission.reason].format(label=label))
+            )
+        if payload.scanned:
+            section.sentences.append(Sentence(text=SCAN_CAVEAT))
     return Narrative(
         language=payload.language,
         origin="direct_template",
-        template_version=TEMPLATE_VERSION,
+        template_version=PARTIAL_TEMPLATE_VERSION if payload.partial else TEMPLATE_VERSION,
         sections=list(sections.values()),
         footnotes=list(notes.values()),
     )
