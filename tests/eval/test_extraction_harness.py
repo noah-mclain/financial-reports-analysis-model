@@ -16,6 +16,7 @@ from harness.extraction import (
     convert_timing,
     engine_report,
     engine_root,
+    environment_record,
     remove_artifacts,
     report,
     scanned_breakdown,
@@ -35,7 +36,7 @@ from fra_core.schemas import (
     Statement,
     StatementType,
 )
-from fra_ingest.config import REPO_ROOT
+from fra_ingest.config import REPO_ROOT, IngestConfig
 from fra_ingest.results import ConvertResult, RangeConversion
 
 P = Period(key="2025-12-31", end_date=date(2025, 12, 31), kind=PeriodKind.INSTANT)
@@ -112,6 +113,29 @@ def test_rows_align_by_label_or_by_a_shared_value() -> None:
         item(4, "Total", "15"),
     ]
     assert align_rows(expected, items) == [0, 2, 3]
+
+
+def test_environment_record_reports_effective_tesseract_page_read_dpi(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import harness.extraction as extraction
+
+    monkeypatch.setattr(extraction.platform, "platform", lambda: "test-platform")
+    monkeypatch.setattr(
+        extraction.subprocess,
+        "run",
+        lambda *args, **kwargs: type("Result", (), {"stdout": "tesseract 5.4.0\n", "stderr": ""})(),
+    )
+    monkeypatch.setattr(extraction, "tessdata_digests", lambda *args: {})
+
+    lines = environment_record(
+        IngestConfig(convert_ocr="tesseract", ocr_dpi=100, tesseract_dpi=150)
+    )
+    tesseract_settings = next(line for line in lines if line.startswith("tesseract settings:"))
+
+    assert "page-read dpi 150" in tesseract_settings
+    assert "ocr_scale 3.0" in tesseract_settings
+    assert "100" not in tesseract_settings
 
 
 def test_a_misread_a_missing_row_and_an_extra_row_are_scored() -> None:
