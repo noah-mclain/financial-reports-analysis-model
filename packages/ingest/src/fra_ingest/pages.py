@@ -10,6 +10,7 @@ import ctypes
 import hashlib
 import json
 import os
+import tempfile
 import time
 from collections.abc import Sequence
 from pathlib import Path
@@ -437,6 +438,13 @@ def _write_cache(path: Path, settings: dict[str, Any], pages: Sequence[PageText]
         "settings": settings,
         "pages": [page.model_dump(mode="json") for page in pages],
     }
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    os.replace(temporary, path)
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
