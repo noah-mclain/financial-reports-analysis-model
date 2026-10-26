@@ -36,19 +36,33 @@ services:
     init: true
     volumes:
       - fra-var:/app/var
+      - ./var/models:/app/var/models:ro
+    environment:
+      FRA_NORMALIZATION_ENABLED: "${FRA_NORMALIZATION_ENABLED:-0}"
+      FRA_LLM_PORT: "${FRA_LLM_PORT:?set FRA_LLM_PORT in .env}"
     command: ["fra-worker"]
 
-  # The Docker profile's model server (docs/blueprint/14-run-profiles.md): the fused adapter as
-  # a GGUF file, served by llama.cpp on the CPU. Off by default; put the file at
-  # var/models/model.gguf, then `docker compose --profile llm up llm`.
+  # Optional CPU server. The pinned full image was inspected for the R19 benchmark.
+  # Both processes see the same absolute model path; only the worker hashes its bytes.
   llm:
     profiles: [llm]
-    image: ghcr.io/ggml-org/llama.cpp:server
-    command: ["-m", "/models/model.gguf", "--host", "0.0.0.0", "--port", "${FRA_LLM_PORT:?set FRA_LLM_PORT in .env}", "--jinja", "-ngl", "0"]
-    ports:
-      - "127.0.0.1:${FRA_LLM_PORT:?set FRA_LLM_PORT in .env}:${FRA_LLM_PORT}"
+    image: ghcr.io/ggml-org/llama.cpp@sha256:139d4c374d80269e0b706c55901b0b4caea3d5caa4734d5652b299a2f3da9503
+    entrypoint: ["/bin/sh", "-ec"]
+    environment:
+      FRA_LLM_PORT: "${FRA_LLM_PORT:?set FRA_LLM_PORT in .env}"
+    command:
+      - |
+        exec python3 /config/normalization_config.py --config /config/normalization.toml --root /app --port "$$FRA_LLM_PORT"
     volumes:
-      - ./var/models:/models:ro
+      - ./configs/normalization.toml:/config/normalization.toml:ro
+      - ./packages/core/src/fra_core/normalization_config.py:/config/normalization_config.py:ro
+      - ./var/models:/app/var/models:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:$$FRA_LLM_PORT/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
 
 volumes:
   # Created from the image's /app/var, so it starts owned by the app user.

@@ -215,3 +215,18 @@ a first look. The holdout and the dry runs reduce that risk; they do not remove 
 ## Working rules
 
 Carried from 07. Commit at the end of each working day with the gate status in the message.
+
+
+## Optional normalization integration contract
+
+The default pipeline keeps deterministic mapping. An opt-in, timed mapping stage can propose
+unmapped labels through the pinned local trained normalizer, after baseline structure and
+before metrics. Label-only training/inference bytes are shared; amounts and source audit stay
+outside model messages. Only unchanged deterministic evidence policy can accept a proposal,
+and numerical/review failures remain holds. Enabled runtime or identity failures fail the
+analysis visibly; no fallback conceals them. The gate can accept zero new fills.
+
+The [normalization runbook](../runbooks/normalization-context-shadow.md#optional-production-mapping)
+records configuration, cache separation and paired English-dev commands. This implementation
+is not a measured model-quality result, Gate A/B improvement, checkpoint run or permission to
+open protected examples. D13/D16/D17 and issuer boundaries continue to apply.

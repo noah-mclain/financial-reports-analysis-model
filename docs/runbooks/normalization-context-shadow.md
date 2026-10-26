@@ -1,9 +1,11 @@
 # PDF normalization context shadow inspection
 
 `fra_ingest.normalization_context.build_normalization_request(statement, target_id)` builds
-a typed, amount-free request from an existing PDF `Statement`. This callable is for synthetic
-tests and shadow inspection only. Production mapping, prompts, training rows and model calls
-are unchanged. A fresh request demonstrates context construction, not improved normalization.
+a typed, amount-free request from an existing PDF `Statement`. The optional production mapping
+stage now uses its literal label and statement fields, while keeping context and audit out of
+the trained model input. The historical shadow measurements below remain diagnostics, not
+measured production gains. A fresh request demonstrates context construction, not improved
+normalization.
 
 ## Contract and evidence policy
 
@@ -165,8 +167,8 @@ model promotion or a claim of reliable document-grounded normalization.
 `fra_ingest.normalization_decision.baseline_decision(statement, target_id, index, checks)`
 recomputes the existing deterministic mapper after discarding incoming mapping conclusions.
 `assess_proposal(statement, target_id, taxonomy, checks, response)` accepts a non-null proposal
-only when it matches that supported baseline. These are shadow callables with no production
-routing, prompt change or model invocation. Prefix-only matches remain unresolved; no aliases
+only when it matches that supported baseline. These began as shadow callables without production routing. The optional integration below
+now invokes the same unchanged evidence gate; its diagnostic measurements remain historical. Prefix-only matches remain unresolved; no aliases
 were added to improve coverage.
 
 Decisions distinguish `supported`, `unresolved`, `rejected`, `model_abstention` and `invalid`.
@@ -203,3 +205,138 @@ Tests use construction fixtures, including the four intentionally underdetermine
 They establish boundary behavior, not real-document accuracy, PDF label layout, EPS arithmetic
 or a model-quality score. Explicit source-positive captions are separate evidence and do not
 repair those negative controls. Independent full-diff review remains a separate gate.
+
+
+## Optional production mapping
+
+`FRA_NORMALIZATION_ENABLED` defaults to `0`; only `0` and `1` are accepted. The worker records
+mapping as skipped when disabled or declined. Enabled jobs validate the server lazily inside
+the timed mapping stage, after baseline structure and before metrics. A connection error,
+timeout, redirect, wrong model, prompt-pin mismatch, or invalid response envelope/identity
+fails the job at `mapping`; there is no lexicon fallback for an enabled failure. An
+out-of-catalog or otherwise invalid answer is audited as a rejected proposal and does not fail
+the document.
+
+`fra_core.normalization_prompt` now owns the existing training/scoring prompt and label-only
+renderer. The system SHA-256 remains
+`bba5f9cdf6ea3e553c9b899a0d4419128e84f6255f73870dba2090ded1bc0606`.
+The user message is compact, sorted Unicode JSON with only `label` and `statement`. Literal
+whitespace and printed digits in labels remain unchanged. Context, audit, amounts, raw value
+text, coordinates, check operands and proposed/expected answers are never model messages.
+Existing training rows and dataset tests are unchanged.
+
+Only unmapped balance/income rows with value cells and a nonblank caption are proposed.
+Headings and blank-caption totals have no usable label-only model input and retain their
+baseline mapping state. Existing lexicon and anchor mappings are never replaced or tagged as
+model output. A semantic null object answer records `model_abstained`; unsupported proposals
+retain `model_rejected:<reason-code>` as mapping evidence. Invalid answers are audited as
+rejected proposals with `model_rejected:invalid_model_response`; they are neither mapped nor
+counted as abstentions.
+Accepted output carries `mapping_source: model`, `model_proposed` evidence and a visible
+"Model proposed; evidence checked" origin on the results page. This is categorical support,
+not a claim that the number, entity, units or denominator has been verified.
+
+The existing `assess_proposal` gate is unchanged: support must match the recomputed
+independent deterministic mapper. Truly unmapped rows under the same checks may therefore
+receive **zero accepted fills**. The source-positive synthetic acceptance test proves the
+reachable integration path, not a coverage improvement. Subtotal, identity, EPS and tie
+policies, critical findings and review thresholds are unchanged. After any acceptance the
+same numerical checkers run again. Structure version 54 retains EPS source notes and statement
+headers for that purpose, including after a cache round trip. Earlier failed/skipped checks
+and review holds survive; checks are merged by ID without duplicate-count inflation.
+
+Every enabled invocation still runs the model when baseline structure was cached. It writes
+separate files under `<artifact-root>/<document-sha256>/normalization/`: `statements.json`,
+`checks.json` and `audit.json`. None is a deterministic structure-cache entry. The audit holds
+model configuration, prompt hash, per-row response, prior mapping state, original request audit
+and evidence decision. Join rows by document SHA-256, statement ID and line-item ID, retaining
+statement source order and page/table/row lineage. The existing mapping evaluator matches
+expected rows by their reported figures and order among repeated figures; that comparison
+runs after inference. Expected values/labels are never supplied to the runtime. A missing or
+ambiguous match remains unverified; it is not a zero-error score.
+
+### Serve and enable
+
+The single model pin is `configs/normalization.toml`: the owner-provided fused 1000-update,
+47-ID LoRA file `var/models/qwen2.5-7b-normalization-q4_k_m.gguf`, 4,683,073,408 bytes, SHA-256
+`1b87968d3116a9fc228d52373e7783f784008a44d214c10479dab291fb2404b3`.
+This records the owner's artifact identity, not a new export or accuracy measurement.
+The worker hashes local bytes and requires `/props.model_path` to equal the complete absolute
+realpath (resolving model-directory symlinks). Both profiles set that same absolute path as the
+server alias; response model identity must match. The HTTP client ignores proxies and refuses
+redirects. Port configuration comes
+only from `FRA_LLM_PORT` in `.env`/the launch environment. The explicit timeout is in the pin
+configuration; requests use temperature zero, at most 64 output tokens and `cache_prompt:false`.
+
+From this task checkout, in separate terminals:
+
+```sh
+make llm
+FRA_NORMALIZATION_ENABLED=1 make worker
+make dev
+```
+
+`make llm` uses the installed `llama-server`, loopback only and `-ngl 99`. Both servers use
+an explicit 2048-token context, one slot and zero prompt-cache RAM (`-c 2048 -np 1 --cache-ram 0`).
+These bounds are configuration, not a measured peak-memory guarantee. The optional Docker
+CPU service uses `-ngl 0`, the previously recorded R19 full-image digest, readonly model mounts
+and a health check. It publishes no host port. The worker connects to `llm` on `FRA_LLM_PORT`;
+both containers see the model at `/app/var/models/...`, so basename matching is unnecessary.
+Start the sidecar and wait for health before enabling a worker with queued jobs; the runtime
+does not retry startup failures. The CPU image's server entrypoint and health command still
+require a live coordinator check. Native and Compose share the stdlib configuration/command
+helper; the CPU image needs Python 3.11 or later for TOML parsing, without installing the
+application or Pydantic. Relative pins resolve from the profile root; absolute pins remain
+absolute and must be mounted at the same path in worker and server.
+
+```sh
+docker compose --profile llm up -d --wait llm
+FRA_NORMALIZATION_ENABLED=1 docker compose up -d --build --wait api worker
+```
+
+Ordinary `make docker-up` and `make docker-health` keep the disabled default and do not need a
+model server. No weights or additional packages are fetched by the application.
+
+Native `make smoke PDF=/absolute/path/to/dev.pdf` copies all required configurations into
+isolated state, including the normalization pin, and links its model directory to this
+checkout's directory. No weights are copied. OFF requires no model file. For ON, first restart
+`make llm` from this checkout with the realpath command above, then run
+`FRA_NORMALIZATION_ENABLED=1 make smoke PDF=/absolute/path/to/dev.pdf`. Make forwards the
+checkout's `.env` port. Direct `bash scripts/smoke_job.sh` calls must supply `FRA_LLM_PORT`
+in the environment because the script does not load `.env`. Both paths resolve to the same file; size,
+SHA-256, `/props` and response identities remain mandatory. Exit 2 means `needs_review`.
+
+### Paired English dev evaluation
+
+`eval-extraction`, `eval-structure`, `eval-mapping` and `eval-gates` use the worker's same
+post-structure mapping path. Enabled runs read the separate normalization checks; disabled runs read baseline
+checks. This goes beyond a runtime smoke call. `ENGLISH_ONLY=1` selects the six English entries
+in the golden manifest, before opening PDFs or expected examples. It has no protected-pool
+argument. Keep baseline reports before the enabled commands overwrite the normal `var/eval`
+report names.
+
+```sh
+FRA_PROFILE=native FRA_NORMALIZATION_ENABLED=0 make eval-structure ENGLISH_ONLY=1
+FRA_PROFILE=native FRA_NORMALIZATION_ENABLED=0 make eval-extraction ENGLISH_ONLY=1
+FRA_PROFILE=native FRA_NORMALIZATION_ENABLED=0 make eval-mapping ENGLISH_ONLY=1
+FRA_PROFILE=native FRA_NORMALIZATION_ENABLED=0 make eval-gates ENGLISH_ONLY=1
+# Preserve the four baseline reports, then start make llm in another terminal.
+FRA_PROFILE=native FRA_NORMALIZATION_ENABLED=1 make eval-structure ENGLISH_ONLY=1
+FRA_PROFILE=native FRA_NORMALIZATION_ENABLED=1 make eval-extraction ENGLISH_ONLY=1
+FRA_PROFILE=native FRA_NORMALIZATION_ENABLED=1 make eval-mapping ENGLISH_ONLY=1
+FRA_PROFILE=native FRA_NORMALIZATION_ENABLED=1 make eval-gates ENGLISH_ONLY=1
+```
+
+An enabled runtime transport, envelope, or identity rejection fails that document with reason
+`model_runtime` and the original detail, then evaluation continues to the next document.
+Invalid model answers are retained as rejected proposals in the mapping audit and do not fail
+the document. Reports retain failed document IDs
+and exit nonzero; failed mappings contribute no baseline statements or checks. Extraction
+reports separate failed and scored document counts per stratum. OCR engine failures retain
+their existing abort rule; repeated model failures do not trigger the OCR engine guard.
+Declined documents produce no mapping/check artifacts, and gate evaluation does not read
+stale checks for them. No retry, schema coercion or prompt/gate relaxation hides a failure.
+
+The coordinator owns the live six-document comparison, full `make test` and independent
+whole-diff review. Unit tests do not establish model precision or Gate A/B improvement. No
+training, export, protected-pool scoring or new checkpoint is part of this integration.

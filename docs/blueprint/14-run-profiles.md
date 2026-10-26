@@ -736,3 +736,24 @@ every document is not comparable, with the reason `earlier report uses evidence 
 earlier evidence, incomplete evidence and malformed evidence are not comparable with a stated
 reason. These fingerprints describe saved inputs and outputs; they do not establish that a
 cached read is correct.
+
+
+## Optional trained normalization integration
+
+The native normalization path can now use the same llama.cpp HTTP runtime as Docker; the MLX
+training/scoring route is unchanged. The application remains disabled by default. Native
+`make llm` serves on loopback with Metal; the optional Compose `llm` profile serves on the
+internal network with CPU only. Settings and the owner-provided trained artifact pin live in
+`configs/normalization.toml`; its identity is separate from the R19 base-model benchmark and
+the historical export measurements above. No new export timing, memory, disk, agreement or
+accuracy result is asserted here.
+
+Native and CPU serving share a stdlib configuration reader and command builder. Model paths
+resolve symlinks before exact runtime identity checks; isolated smoke state links the same
+model directory without copying weights. Both commands explicitly bound context to 2048 tokens,
+parallel slots to one and prompt-cache RAM to zero; peak memory still needs live measurement.
+
+See [the normalization runbook](../runbooks/normalization-context-shadow.md#optional-production-mapping)
+for identity verification, amount-free prompt parity, evidence gating, error behavior, readonly
+mounts, artifact matching and paired six-English-dev commands. Live serving and comparison
+remain required before claiming production quality or profile parity for this trained file.

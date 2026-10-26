@@ -26,6 +26,10 @@ fi
 mkdir "$STATE/configs" "$STATE/var"
 cp "$ROOT/configs/ingest.toml" "$ROOT/configs/analytics.toml" "$STATE/configs/"
 cp "$ROOT/configs/jobs.toml" "$STATE/configs/jobs.toml"
+cp "$ROOT/configs/normalization.toml" "$STATE/configs/normalization.toml"
+# Keep isolated job artifacts while sharing the server's exact resolved model identity.
+# A dangling link is fine when mapping is disabled; enabled identity validation stays loud.
+ln -s "$ROOT/var/models" "$STATE/var/models"
 
 BASE="http://localhost"
 SOCKET_DIR=""

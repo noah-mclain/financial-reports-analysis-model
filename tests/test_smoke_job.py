@@ -359,6 +359,28 @@ def test_inherited_artifact_configuration_is_isolated(
     assert not list(sentinel.iterdir())
 
 
+@pytest.mark.parametrize("enabled", ["0", "1"])
+def test_isolated_state_has_normalization_config_and_same_model_identity(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, enabled: str
+) -> None:
+    from fra_core.normalization import load_normalization_settings
+
+    monkeypatch.setenv("FRA_NORMALIZATION_ENABLED", enabled)
+    monkeypatch.setenv("FRA_PROFILE", "native")
+    monkeypatch.setenv("FRA_LLM_PORT", "8123")
+    result = run_smoke(tmp_path)
+    assert result.returncode == 0, result.stderr
+    state = tmp_path / "run/state"
+    isolated = load_normalization_settings(os.environ, state)
+    serving = load_normalization_settings(os.environ, ROOT)
+    assert isolated.enabled == (enabled == "1")
+    assert isolated.model_path == serving.model_path == serving.model_path.resolve()
+    assert (state / "configs/normalization.toml").read_bytes() == (
+        ROOT / "configs/normalization.toml"
+    ).read_bytes()
+    assert (state / "var/models").is_symlink()
+
+
 def test_all_requests_use_private_socket_even_with_foreign_tcp_api(tmp_path: Path) -> None:
     result = run_smoke(tmp_path, mode="foreign_tcp", log_dir=tmp_path / ("deep" * 30))
     assert result.returncode == 0, result.stdout + result.stderr
