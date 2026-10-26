@@ -95,7 +95,7 @@ checkout with local PDFs already fetched, run these commands from the repository
 
 ```sh
 PYTHONPATH=eval uv run python -m harness.checkpoint_run model_test --checkpoint
-# Run the separate model_test Gate C scorer as well; both model_test steps must be done.
+# blind refuses until the model_test run is recorded as done.
 PYTHONPATH=eval uv run python -m harness.checkpoint_run blind --checkpoint
 ```
 
@@ -127,8 +127,8 @@ PYTHONPATH=eval uv run python -m harness.checkpoint_run model_test --checkpoint 
 Continuation requires the same commit, selected metadata and effective configuration, skips
 all recorded results (including failures), and appends no new log row. An active runner or a
 completed step refuses continuation. Do not use continuation to retry a failed document.
-The `.done` record seals the summary path and sha256. Blind waits for both model_test done
-records and their unchanged result files. The summary says
+The `.done` record seals the summary path and sha256. Blind waits for the model_test done
+record and its unchanged result file. The summary says
 `accuracy: not measured (no reference answers exist for this pool)`: outcomes are observations,
 not verified correctness. It makes no figure-accuracy, Gate A accepted-cell-share or Gate E
 zero-confident-wrong claim. The runner does not run a model, narration or a portability test.
