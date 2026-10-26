@@ -19,7 +19,7 @@ leave each scored denominator ([D21 counts](blueprint/08-revised-plan.md)).
 | A. Extraction | Not met on `dev` (English, 24 October): scanned cells and balance identity miss the bar | [`eval/results/gates-dev-2026-10-24.json`](../eval/results/gates-dev-2026-10-24.json), 6 English golden documents |
 | B. Mapping | Slot accounting met on `dev` (24 October); no mapped slot is verified against an independent reference | same |
 | C. Model | Not met: no adapter has been promoted | [normalization-validation.md](runbooks/normalization-validation.md) |
-| D. Portability | Not measured: CI smoke validates both Compose configurations, builds the image, and checks runtime imports, non-root identity, CPU-only PyTorch, API health, and placeholder worker startup/shutdown; this does not establish Gate D | [ci.md](runbooks/ci.md) |
+| D. Portability | Partly measured (26 October): the Docker profile ran upload to results on five English `dev` documents. The Almarai annual report completed with a summary in 232 s; four scanned or partly scanned Juhayna and Edita documents ended `needs_review` with the summary withheld (111 to 273 s). No scanned document reached a summary, and Docker eval numbers were not recorded, so Gate D is not established | [08-revised-plan.md](blueprint/08-revised-plan.md) |
 | E. Blind | Not measured: waits for the checkpoint | None; the checkpoint has not run |
 
 ## Gate A and B, English golden set (`dev`), 24 October

@@ -178,11 +178,30 @@ documents from 20 issuers (14 annual, 15 interim). The D22 reserve holds 10 Engl
 from 8 of the 28 English blind issuers. The 29 and 33 Arabic documents, respectively, are
 excluded by manifest language; eleven Arabic-only issuers leave each scored denominator.
 No protected documents were opened for these counts. Runtime for the smaller scored set has
-not been measured; the per-document budgets above remain targets. The plan records that the
-Docker profile and narration still need time, and records no successful Docker upload-to-summary
-result for both digital and scanned English documents and no owner exception. Therefore the
-Gate D precondition for step 1 is **currently unmet**. Before step 1, record both successful
-results here or record the owner's specific Gate D exception in [the decision log](06-decisions-and-risks.md).
+not been measured; the per-document budgets above remain targets. Gate D evidence was recorded on 26 October (below). Therefore the Gate D precondition for step 1
+is **met for the digital document and not met for the scanned document**: no scanned English
+document produced a summary in the Docker profile. Before step 1, the owner either records a
+specific Gate D exception for the scanned half in [the decision log](06-decisions-and-risks.md), or
+a scanned English document completes with a summary.
+
+Gate D evidence, 26 October 2026 (main `410629a`; Docker Desktop 27.3.1, 12 CPUs, 14.1 GB VM; the
+Docker profile with Tesseract; `make docker-up`, upload through the API, status read until final;
+documents are `dev` golden documents, not protected ones):
+
+| Document | Pages | Type | Final status | Wall time | Summary |
+| --- | --- | --- | --- | --- | --- |
+| almarai-2025-en-annualreport | 275 | mixed, statements with a text layer | completed | 232 s | present (982 characters) |
+| juhayna-2025-en-standalone | 61 | mixed, balance sheet scanned | needs_review | 111 s | withheld, analysis needs review |
+| juhayna-2024-en-consolidated | 57 | scanned | needs_review | 162 s | withheld, analysis needs review |
+| edita-2025-en-consolidated-ifrs | 85 | scanned | needs_review | 273 s | withheld, analysis needs review |
+| edita-2025-en-consolidated-eas | 66 | scanned | needs_review | 268 s | withheld, analysis needs review |
+
+Reading: the Docker profile runs upload to results end to end on all five documents. Only the
+digital-text document reached a summary; the four scanned or partly scanned documents were held
+for review, so the summary was withheld by design. The two Juhayna documents extracted two
+statements (no balance sheet) in this profile. Eval numbers for the Docker profile were not
+recorded, so "eval numbers recorded for both profiles" is not met either. The run scripts are
+operator scripts outside Git; the evidence is in local `var/gate-d` and `var/gate-d2`.
 
 Decided 2026-10-26 (D22), before checkpoint results: take option 1 of the rehearsal question.
 Reserve the first 8 English blind issuer keys ordered by ascending hex
