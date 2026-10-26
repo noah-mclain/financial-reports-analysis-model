@@ -1,103 +1,136 @@
 # The checkpoint
 
-The one-time look at `model_test` and `blind` (D13, D17;
-[08-revised-plan.md](../blueprint/08-revised-plan.md), [corpus rules](../../eval/corpus/README.md)
-3, 5 and 6). It freezes both pools at its first `model_test` evaluation and cannot be repeated.
-The owner runs it. This runbook fixes the order, the stop rules and what the report may say, so
-the result is the same whoever runs it.
+The owner-run, one-time pipeline look at English `model_test` and the non-reserved English
+`blind` documents (D13, D17, D22 and D23). The first `model_test` evaluation freezes both
+pools; it cannot be repeated. D23 authorizes proceeding and reporting the evidence honestly,
+including gates that cannot be judged. It does not waive the checks below or the separate Gate D
+precondition. No checkpoint is run as part of this runbook edit.
 
-What the checkpoint can and cannot show, stated before it runs:
+## What the checkpoint can establish
 
-- **Gate C is not measured on `model_test`.** The SEC example pipeline accepts only `train`
-  sources at every stage: payload preparation, the reviewed and approved crosswalk artifacts, and
-  the partition contract (`training/sec_examples.py`, `training/dataset_contracts.py`). Scoring
-  the adapter on `model_test` needs an approved-example path for that pool, which means new
-  reviewed artifacts and a change to the pool barriers. Building that in a day, around a one-time
-  look, risks the barriers it depends on, so it is not done. The report says Gate C is not
-  measured on `model_test`, and shows the validation-panel results of the adapter, labelled as
-  diagnostics ([accuracy-report.md](../accuracy-report.md)). It does not present them as the gate.
-- **Gates A, B and E accuracy cannot be measured** on `model_test` or `blind`: reference
-  answers (expected and reviewed gold files) exist only for the `dev` golden documents. On these
-  pools the run measures what needs no reference: completion, held for review, declined, failed,
-  identity checks, critical items mapped or flagged, and time and memory against budget. The
-  report says "not measured" for figure accuracy and for "no confident wrong number" on these
-  pools, and does not substitute another number for them.
-- **Gate E** is judged on the 29 English `blind` documents that remain after the reservation
-  (D22: 8 issuers, 10 documents, chosen by a fixed hash rule and kept for the rehearsal, not
-  run). `model_test` has 36 English documents. The report says so.
-- **The candidate** is the final update-1,000 adapter of the 25 October fit. On the validation
-  panels it did not meet the Gate C margin (lower interval ends +3.2 and +1.8 points against 5;
-  challenge critical errors 6 of 95). The decay re-fit in the training plan is not part of this
-  checkpoint unless it has finished and passed its preregistered rule before step 1.
+- **Gate C is not measured on `model_test`.** `training/sec_examples.py` resolves examples only
+  from approved artifacts and `training/dataset_contracts.py` rejects any source whose pool is
+  not `train` (`partition_examples`, pool check). There is no approved `model_test` example path.
+  Adding one requires new reviewed artifacts and changes to the pool barriers; neither is done
+  before this one-time look. Report Gate C as **not measured on `model_test`**. The fixed
+  validation panels are diagnostics, not Gate C, and do not establish the gate margin or critical
+  item bar.
+- **Gates A, B and E are not judged on these pools.** Reviewed expected answers exist only for
+  the `dev` golden documents. Report pipeline observations available without references:
+  completion, held for review, declined, failed, identity outcomes, critical items mapped or
+  flagged, runtime and memory. State that these observations do not establish Gate A/B accuracy,
+  Gate A accepted-cell share, or Gate E correctness / zero confidently wrong figures. Never say
+  A, B or E passed or failed based on these observations. Gate D is reported only from its own
+  recorded portability evidence.
+- **D22's scope is fixed.** Run 36 English `model_test` documents (25 issuers; 13 annual, 23
+  interim). Run 29 English `blind` documents (20 issuers; 14 annual, 15 interim), excluding 8
+  reserved issuers and their 10 English documents. The reservation is for the rehearsal and is
+  not run at checkpoint. The counts and rule are in [the corpus policy](../../eval/corpus/README.md)
+  and [`rehearsal_reserve.yaml`](../../eval/corpus/rehearsal_reserve.yaml).
+- **The checkpoint candidate is fixed:** the final update-1,000 adapter from the 25 October fit.
+  The decay re-fit is outside this checkpoint and is not a precondition. The validation-panel
+  diagnostic for this candidate did not meet the Gate C margin (lower interval ends +3.2 and
+  +1.8 points against 5; challenge critical errors 6 of 95); do not present that as a
+  `model_test` score or a Gate C result.
 
 ## Before step 1: every item must hold
 
-1. `make test lint typecheck docs-check` pass by exit code on the commit being used, and
-   `make corpus-check` passes. Record `git rev-parse HEAD`; the tree is clean.
-2. Every PR that changes code under test is merged to `main`, and the checkout is that `main`.
-3. The checkpoint tooling is merged: `eval/harness/checkpoint_records.py`,
-   `eval/harness/checkpoint_run.py` and `eval/corpus/rehearsal_reserve.yaml`.
-4. The candidate is fixed in writing before any result exists: adapter path, `shasum -a 256` of
-   `adapters.safetensors` and `adapter_config.json`, and the base model manifest hash.
-5. Nobody has opened, read, run or tuned against a `model_test` document, a `blind` document or
-   a reserved issuer's document. If anyone has, stop: that is a rule 3 or 5 event to record, not to
-   fix by running on.
-6. The machine is idle and on AC power: `pgrep -fl "normalization_(fit|mlx)|mlx_lm"` is empty,
-   `memory_pressure | grep 'free percentage'` is at least 25%, swap is under 1.5 GB
-   (`sysctl vm.swapusage`), the browser and other heavy apps are closed.
-7. The owner has confirmed this is the run: the log row in `eval/corpus/checkpoint_log.tsv` is
-   the commitment.
+1. `make test`, `make lint`, `make typecheck`, `make docs-check` and `make corpus-check` pass on
+   the commit to be used. Record `git rev-parse HEAD`; the tracked tree is clean.
+2. Every PR changing code under test is merged, and the checkout contains the checkpoint tools:
+   `eval/harness/checkpoint_records.py`, `eval/harness/checkpoint_run.py`, and
+   `eval/corpus/rehearsal_reserve.yaml`.
+3. **Gate D precondition:** before step 1, the plan records successful Docker upload-to-summary
+   results for both a digital and a scanned English document, or the owner records a specific
+   exception in the decision log. The current plan says the Docker profile and narration still
+   need time; it records no completed Gate D result or owner exception. This precondition is
+   **currently unmet**. D23 does not supply a Gate D exception. Do not start step 1 until one of
+   the two required records exists.
+4. Before any checkpoint result exists, fix the candidate in writing: the update-1,000 adapter
+   path, `shasum -a 256` for `adapters.safetensors` and `adapter_config.json`, and the base-model
+   manifest hash. Use this exact candidate for the checkpoint record. If a different candidate
+   is later adopted, amend this precondition and the separate export instructions below before
+   starting the checkpoint; do not change candidates after seeing checkpoint results.
+5. Nobody has opened, read, run or tuned against a `model_test` document, a `blind` document, or
+   a reserved issuer's document. If that boundary was crossed, stop and record the event; do not
+   try to repair it with another run.
+6. The machine is idle and on AC power: `pgrep -fl "normalization_(fit|mlx)|mlx_lm"` returns no
+   process; available memory is at least **6 GB** and `memory_pressure` free percentage is at
+   least **25%**; the kernel memory pressure level (`sysctl kern.memorystatus_vm_pressure_level`) reads 1 or 2, the levels the export stop rule in `01-constraints.md` 1.4 treats as safe; the browser and other
+   heavy apps are closed. Keep both memory checks: the 6 GB absolute minimum is an explicit
+   checkpoint safety margin, while the percentage check protects against lower-memory states.
+   The inspected checkpoint dependencies do not expose a 5 GB native heavy-stage floor, so this
+   runbook does not attribute that figure to code.
+7. The owner confirms this is the one-time run. The row in
+   `eval/corpus/checkpoint_log.tsv` is the commitment; do not start without it.
 
-## Step 1: `model_test` through the pipeline
+## Step 1: `model_test` pipeline observations
+
+From the assigned clean repository checkout, run:
 
 ```sh
-cd ~/Developer/GitHub/financial-reports-analysis-model
 caffeinate -i env PYTHONPATH=eval uv run python -m harness.checkpoint_run model_test --checkpoint
 ```
 
-The guard refuses without `--checkpoint` and refuses a second start. It logs the row before any
-document is opened, prints the document count and the projected runtime (an estimate from the
-train-holdout dry runs), runs each English document in its own child process, and continues past
-a failed document. An interrupted run resumes with `--continue`, which requires the same commit,
-document list and configuration. Results and `summary.json` are under `var/checkpoint/model_test/`.
+The guard requires `--checkpoint`, refuses a second start, logs the row before opening a
+document, prints the selected count and holdout-based runtime projection, runs each English
+document in its own child process, and records failures by class. Continue past a failed
+document; do not change settings and rerun after seeing a result. An interrupted run may use
+`--continue` only for the same commit, document list and configuration; it does not retry saved
+failures. Outputs are under `var/checkpoint/model_test/`.
 
-Stop rules: do not change a setting and rerun a document after seeing its result; a failure is
-recorded with its class and reported.
+## Step 2: non-reserved `blind` pipeline observations
 
-## Step 2: `blind` through the pipeline
-
-Only after step 1 is recorded as done; the guard refuses otherwise (D17).
+Start only after step 1 has its single `model_test_pipeline` done record and unchanged result
+file. The guard enforces that prerequisite.
 
 ```sh
 caffeinate -i env PYTHONPATH=eval uv run python -m harness.checkpoint_run blind --checkpoint
 ```
 
-The reserved issuers in `eval/corpus/rehearsal_reserve.yaml` are not run. Their documents stay
-unopened until the rehearsal ([rehearsal.md](rehearsal.md)).
+The runner excludes all D22 reserved issuers. Their documents remain unopened until the
+separate rehearsal ([rehearsal.md](rehearsal.md)). Outputs are under `var/checkpoint/blind/`.
 
-## Step 3: the adapter as a shippable model
+## Report contract
 
-Not a scoring step; it does not look at any pool. Fuse the update-1,000 adapter, convert it to
-GGUF by the route in [14-run-profiles.md](../blueprint/14-run-profiles.md)
-(`scripts/spikes/gguf_route.sh` shows each command, run there on a 0.5B model), and check that
-the llama.cpp server returns the MLX model's reply on at least 50 rows of the validation panels
-(not `model_test`), recording the agreement and the file hashes. It can run before step 1: it
-touches no pool. Until it is done and recorded, the report says the adapter is a measured
-candidate, not a component of the product, because no pipeline code calls a model today.
+Write [the accuracy report](../accuracy-report.md) from the recorded artifacts only. For each
+pipeline pool and every printed results table, report the total and annual/interim counts side by
+side. The runner summary provides `by_period` summaries for every stratum; use these alongside
+the total summary. Do not derive alternate counts from protected PDFs, labels or extraction
+content.
 
-## What the report says
+Report operational observations without converting them into correctness verdicts. State that
+Gate A and B accuracy are **not measured on `model_test` or `blind`**, Gate C is **not measured
+on `model_test`**, and Gate E is **not judged** because these pools have no reviewed references.
+Explain their evidence limits above; do not say these gates passed or failed. Report Gate D only
+with its recorded digital and scanned English results or the owner's recorded exception. Include
+D22 counts, candidate identity, one adapter/one seed, the absence of Arabic gate claims, and the
+fact that the validation panels are diagnostics only.
+Do not pool panels, round a result up, or substitute a measure from another pool.
 
-Write it from the artifacts only, in [accuracy-report.md](../accuracy-report.md), dated:
+Record SHA-256 for **each** pool's `summary.json` and for the complete per-document result set
+(a deterministic manifest of each result path and its SHA-256). Copy the exact
+`var/checkpoint/` artifacts and checksum manifest to a private archive outside Git, and retain
+them until the owner releases them. Keep source PDFs, extracted content, model weights and
+private reports outside Git.
 
-- The pipeline on `model_test` and `blind`: counts and rates from the summary files, with the
-  statement that accuracy was not measured on these pools and why.
-- Gate C: not measured on `model_test`, with the reason above, beside the validation-panel
-  diagnostics of the adapter and their intervals, and a plain statement that the +5 point and 99%
-  critical bars were not shown to be met.
-- Gate E on the remaining `blind` issuers, with the reservation named.
-- Limits: one adapter, one seed, validation panels that are not the gate, no Arabic claim (D21),
-  no scored result for documents with no reference.
-- No number is rounded up, pooled across panels, or replaced by a figure from another pool.
+## Separate GGUF export (not a checkpoint step)
 
-After the report is written: commit `eval/corpus/checkpoint_log.tsv` and the report, record the
-checkpoint date in the plan, and keep the `var/checkpoint/` artifacts private outside Git.
+Export does not evaluate or touch either checkpoint pool and may happen before or after the
+checkpoint. It is not a checkpoint precondition or a product claim. If attempting the real
+candidate export, use only the candidate fixed in precondition 4. If adopting a different
+candidate, amend both precondition 4 and this export instruction before the checkpoint run.
+First complete the mandatory 7B throwaway-adapter rehearsal. Follow every condition in
+[constraints 1.4](../blueprint/01-constraints.md#conditions-for-the-gguf-export),
+including a fresh `df` preflight before **each** rehearsal or real export run with at least the
+then-applicable estimate (currently about 45 GB free), the no-other-heavy-workload rule, staged
+verification/deletion and stop rule. Record every run in [run profiles](../blueprint/14-run-profiles.md);
+its 7B rehearsal has not yet been recorded there. Do not substitute
+`scripts/spikes/gguf_route.sh`: it trains a toy 0.5B adapter, not this candidate.
+
+Acceptance for the real export requires both f16 and quantized GGUF outputs to agree with MLX on
+**every row of both fixed validation panels (680 rows total, no sampling)**. In addition, the
+quantized output must pass document 14's preregistered task-accuracy rule against gold. Agreement
+alone is not accuracy and never makes the adapter a product claim. Until the export is separately
+completed and reviewed, describe the adapter only as a measured candidate; the pipeline does
+not call a model today.

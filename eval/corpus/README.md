@@ -90,14 +90,26 @@ and excluded Arabic strata and Arabic-only issuers.
 
 ### Owner-run checkpoint commands
 
-Only after all planned work, checks and independent reviews pass (D13), on a clean tracked
-checkout with local PDFs already fetched, run these commands from the repository root:
+Under D23 (owner decision, 2026-10-26), the owner may proceed with the one-time pipeline
+observations and report gates honestly. Before the first run, all required checks and the Gate D
+precondition in [the plan](../../docs/blueprint/08-revised-plan.md) must still hold. The current
+plan records no successful Docker upload-to-summary results for both digital and scanned English
+documents and no owner exception, so that precondition is **currently unmet**. Do not start until
+the plan records both results or the owner records a specific exception in the decision log.
+On a clean tracked checkout with local PDFs already fetched, run these commands from the
+repository root:
 
 ```sh
 PYTHONPATH=eval uv run python -m harness.checkpoint_run model_test --checkpoint
-# Run the separate model_test Gate C scorer as well; both model_test steps must be done.
+# blind refuses until the model_test_pipeline run is recorded as done.
 PYTHONPATH=eval uv run python -m harness.checkpoint_run blind --checkpoint
 ```
+
+These commands produce pipeline observations only. Gate A and B accuracy are not measured on
+`model_test` or `blind`, and Gate E is not judged, because these pools have no reviewed reference
+answers. Gate C is not measured on `model_test` because the approved training path accepts only
+`train` examples. Validation-panel diagnostics are not a Gate C score. Do not claim any of these
+gates passed or failed from checkpoint observations.
 
 Each start exclusively creates `var/checkpoint/<step>.marker`, then appends its date, step,
 candidate and commit to `eval/corpus/checkpoint_log.tsv` before reading any PDF bytes.
@@ -115,7 +127,9 @@ and the next document runs; no private failure detail is printed. Results are co
 under `var/checkpoint/<pool>/documents/<id>.json`, plus `summary.json`; intermediate extraction
 artifacts are removed. Wall times include startup; peak memory reports the maximum of the
 separate pipeline and conversion process peaks, not simultaneous aggregate memory. A crashed
-or timed-out child has unknown peak memory. Counts and budgets are reported by period too.
+or timed-out child has unknown peak memory. The summary includes `by_period` summaries for every
+stratum. For every printed pipeline results table, report these annual and interim counts beside
+the total summary; do not derive alternate counts from protected content.
 
 After an interrupted run, continue only the same look:
 
@@ -127,8 +141,11 @@ PYTHONPATH=eval uv run python -m harness.checkpoint_run model_test --checkpoint 
 Continuation requires the same commit, selected metadata and effective configuration, skips
 all recorded results (including failures), and appends no new log row. An active runner or a
 completed step refuses continuation. Do not use continuation to retry a failed document.
-The `.done` record seals the summary path and sha256. Blind waits for both model_test done
-records and their unchanged result files. The summary says
+The `.done` record seals the summary path and sha256. Blind waits for the single
+`model_test_pipeline` done record and its unchanged result file. Record SHA-256 for each `summary.json` and for the
+complete per-document result set (a deterministic path-to-hash manifest). Copy the matching
+artifacts and manifest to a private archive outside Git and retain them until the owner releases
+them. The summary says
 `accuracy: not measured (no reference answers exist for this pool)`: outcomes are observations,
 not verified correctness. It makes no figure-accuracy, Gate A accepted-cell-share or Gate E
 zero-confident-wrong claim. The runner does not run a model, narration or a portability test.
