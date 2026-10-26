@@ -52,7 +52,15 @@ precondition. No checkpoint is run as part of this runbook edit.
    summaries on two of four scanned or partly scanned documents as the evidence.
 4. Before any checkpoint result exists, fix the candidate in writing: the update-1,000 adapter
    path, `shasum -a 256` for `adapters.safetensors` and `adapter_config.json`, and the base-model
-   manifest hash. Use this exact candidate for the checkpoint record. If a different candidate
+   manifest hash. Use this exact candidate for the checkpoint record.
+   **Fixed on 2026-10-27, before any checkpoint result:** the final update-1,000 adapter of the
+   25 October fit, kept at `var/models/candidate-update-1000/` (from
+   `/private/tmp/normalization-fit-20261025/runs/fit/adapter/`);
+   `adapters.safetensors` sha256 `2f7234d7a96bdf02b9c4384f0a4b17389ade5a05ad4fa13c70513ba5fee28a1e`
+   (identical to `0001000_adapters.safetensors`), `adapter_config.json` sha256
+   `5cdfcfca249bfb025076eb71931f43907fe25ac1e142c1a26cc8855281a312eb`; base-model manifest
+   (`local-model.json`) sha256 `d5d0d55fa3528eb37274c0b50b16a1c599ed046f9c5400d753657ef880e96687`.
+   The checkpoint pipeline calls no model; the candidate is recorded for identity only. If a different candidate
    is later adopted, amend this precondition and the separate export instructions below before
    starting the checkpoint; do not change candidates after seeing checkpoint results.
 5. Nobody has opened, read, run or tuned against a `model_test` document, a `blind` document, or
