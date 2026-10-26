@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from dataclasses import replace
 from datetime import date
 from decimal import Decimal
+from html import escape
 from pathlib import Path
 from typing import Literal
 
@@ -246,7 +247,13 @@ def test_upload_runs_through_worker_and_renders_language_scoped_result(
             response = client.get(f"/analyses/{job_id}/view")
             assert response.status_code == 200
             assert persisted.decline.reason in response.text
-            assert "Declined (unsupported_language)" in response.text
+            assert '<h2 id="verdict-title">Declined</h2>' in response.text
+            decline_summary = (
+                "لم يُنتج ملخص لأن المستند رُفض."
+                if language == "ar"
+                else "No summary was produced because this document was declined."
+            )
+            assert decline_summary in response.text
             assert 'id="metrics"' not in response.text
             return
         assert finished.status.value == "completed"
@@ -271,9 +278,10 @@ def test_upload_runs_through_worker_and_renders_language_scoped_result(
         (("total_current_assets", "current-assets"), SOURCE_A),
         (("total_current_liabilities", "current-liabilities"), SOURCE_B),
     ):
-        url = source_url(sha256, source)
-        assert f'<a href="{url}" title="2025-12-31">{ids[0]}</a>' in page
-        assert page.count(f'href="{url}"') == 2  # the statement cell and the metric input
+        url = source_url(sha256, source, job_id)
+        assert f'href="{escape(url, quote=True)}"' in page
+        assert f'title="Original identifier: {ids[0]}; period: 2025-12-31">' in page
+        assert page.count(f'href="{escape(url, quote=True)}"') == 2  # statement and metric input
     assert "total_current_assets" in page and "current_ratio" in page
     assert "total_current_assets / total_current_liabilities" in page
     assert "1.5" in page and "total_current_liabilities" in page
@@ -306,12 +314,12 @@ def test_held_statement_stays_visible_without_a_confident_summary(tmp_path: Path
         assert saved is not None and saved.narrative is None and saved.narrative_suppression
         page = client.get(f"/analyses/{job_id}/view").text
 
-    assert "Some figures did not pass their own checks." in page
-    assert 'class="badge needs_review">held for review</span>' in page
+    assert "Figures are not verified." in page
+    assert 'class="badge needs_review">Held for review</span>' in page
     assert "Summary withheld: the analysis is held for review." in page
     assert "no eligible latest-period facts" not in page
     for label, printed in (("Current assets", "3"), ("Current liabilities", "2")):
-        assert label in page and f'title="printed: {printed}"' in page
+        assert label in page and f'title="Printed as: {printed}"' in page
     assert "Direct template" not in page and "Written by the model" not in page
 
 
@@ -341,6 +349,6 @@ def test_worker_failure_is_recorded_on_the_job_and_its_event_stream(tmp_path: Pa
 
     assert api_job["status"] == "failed"
     assert api_job["error"] == "RuntimeError: synthetic conversion failure"
-    assert 'class="badge failed">failed</span>' in job_page
+    assert 'class="badge failed">Failed</span>' in job_page
     assert '"stage":"convert"' in events and '"kind":"failed"' in events
     assert "synthetic conversion failure" in events

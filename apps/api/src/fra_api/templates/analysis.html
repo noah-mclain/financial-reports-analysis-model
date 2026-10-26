@@ -1,115 +1,155 @@
 {% extends "base.html" %}
-{% block title %}{{ filename }}: results{% endblock %}
 {% macro caveat_marks(notes) %}{% for note in notes %}<sup><a class="caveat-mark" href="#{{ note.anchor }}" aria-label="Caveat: {{ note.id }}">†</a></sup>{% endfor %}{% endmacro %}
-{% macro caveat_text(note) %}<p class="muted" id="{{ note.anchor }}" data-caveat="{{ note.id }}" dir="{{ 'rtl' if note.language == 'ar' else 'ltr' }}" lang="{{ note.language }}" title="{% for key, value in note.evidence.items() %}{{ key }}: {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}">{{ note.text }}</p>{% endmacro %}
-{% macro statement_table(s) %}
-<section class="panel" dir="{{ 'rtl' if s.rtl else 'ltr' }}" lang="{{ s.language }}">
-  <div dir="ltr" lang="en">
-    <h3>{{ s.title }} <span class="badge {{ s.status }}">{{ 'passed its checks' if s.status == 'passed' else 'held for review' }}</span></h3>
-    <p class="muted" style="margin:4px 0">{{ s.units }}{% if s.pages %} · pages {{ s.pages | join(', ') }}{% endif %}</p>
-    {% for note in s.caveats %}{{ caveat_text(note) }}{% endfor %}
-    {% if s.reasons %}<ul class="reasons">{% for r in s.reasons %}<li><code>{{ r }}</code></li>{% endfor %}</ul>{% endif %}
-    {% if s.warnings %}<p class="muted" style="font-size:13px">Warnings: {% for w in s.warnings %}<code>{{ w }}</code>{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
-  </div>
-  <div class="scroll">
+{% macro caveat_text(note) %}<p class="muted caveat-note" id="{{ note.anchor }}" data-caveat="{{ note.id }}" dir="{{ 'rtl' if note.language == 'ar' else 'ltr' }}" lang="{{ note.language }}" title="{% for key, value in note.evidence.items() %}{{ key }}: {{ value }}{% if not loop.last %}; {% endif %}{% endfor %}">{{ note.text }}</p>{% endmacro %}
+{% macro statement_table(s, held) %}
+<div class="scroll-wrap">
+  <p class="scroll-cue muted">Swipe to see more, or scroll horizontally to see all periods and values.</p>
+  <div class="scroll" tabindex="0" role="region" aria-label="{{ s.title }} figures by period">
   <table>
-    <thead><tr><th></th>{% for p in s.periods %}<th class="num" dir="ltr">{{ p }}</th>{% endfor %}</tr></thead>
+    <thead><tr><th>Line item</th>{% for p in s.periods %}<th class="num" dir="ltr">{{ p }}</th>{% endfor %}</tr></thead>
     <tbody>
     {% for row in s.rows %}
       <tr class="{{ 'subtotal' if row.subtotal }}">
-        <td style="padding-inline-start: {{ 10 + 16 * row.depth }}px">{{ row.label }}
-          {% if row.mapping_flag %}<span class="badge needs_review" dir="ltr" title="not mapped to a canonical item">{{ row.mapping_flag }}</span>{% endif %}</td>
+        <td class="line-label" style="padding-inline-start: {{ 10 + 16 * row.depth }}px">{{ row.label }}
+          {% if row.mapping_flag %}<span class="badge needs_review" dir="ltr" title="Technical reason: {{ row.mapping_flag }}">{{ flag_label(row.mapping_flag) }}</span>{% endif %}</td>
         {% for found in row.cells %}
-          <td class="num{{ ' flagged' if found | selectattr('flags') | list }}" dir="ltr">
-          {% for c in found %}<div title="printed: {{ c.printed }}">
+          <td class="num{{ ' flagged' if found | selectattr('flags') | list or held }}" dir="ltr">
+          {% for c in found %}<div class="cell-value" title="Printed as: {{ c.printed }}">
             {% if c.source %}<a href="{{ c.source }}">{{ c.text or '—' }}</a>{% else %}{{ c.text }}{% endif %}
+            {% if c.flags or held %}<span class="flag-marker" aria-label="Needs review" title="This figure is flagged or belongs to a held statement">⚑</span>{% endif %}
             {{ caveat_marks(c.caveats) }}
-            {% if c.flags %}<div class="flag-names"><span aria-hidden="true">⚑</span> flags: {{ c.flags | join(', ') }}</div>{% endif %}</div>
-          {% endfor %}</td>
+            {% if c.flags %}<details class="flag-details"><summary>Review flags</summary><ul>{% for flag in c.flags %}<li>{{ flag_label(flag) }} <code title="Technical flag">{{ flag }}</code></li>{% endfor %}</ul></details>{% endif %}
+          </div>{% endfor %}</td>
         {% endfor %}
       </tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
-</section>
+</div>
 {% endmacro %}
+{% block title %}{{ filename }}: results{% endblock %}
 {% block main %}
 <h1>{{ filename }}</h1>
-<p class="muted">{{ analysis.page_count }} pages · language {{ analysis.language }} ·
-  <span class="badge {{ job.status.value }}">{{ job.status.value }}</span></p>
+{% set statement_status = analysis.status().value %}
+{% set needs_review = job.status.value == 'needs_review' or statement_status == 'needs_review' or job.status.value != statement_status %}
 
 {% if analysis.decline %}
-<div class="banner bad"><strong>Declined ({{ analysis.decline.code }}).</strong> {{ analysis.decline.reason }}
-  This tool covers non-financial companies; banks and insurers use a different statement template.</div>
-{% elif analysis.hold %}
-<div class="banner hold"><strong>Every statement is held for review.</strong> {{ analysis.hold }}</div>
-{% elif job.status.value == 'needs_review' %}
-{% set held = view.statements | selectattr('status', 'equalto', 'needs_review') | list %}
-{% if held %}
-<div class="banner hold">Some figures did not pass their own checks. Statements held for review are
-  shown with their reasons; their figures are as read, not vouched for.</div>
-{% elif not view.statements %}
-<div class="banner hold">No statement was extracted from this document.</div>
+<section class="verdict bad" id="verdict" aria-labelledby="verdict-title">
+  <p class="eyebrow">Result</p><h2 id="verdict-title">Declined</h2>
+  <p>{{ analysis.decline.reason }}</p>
+  <details><summary>Technical decline code</summary><code>{{ analysis.decline.code }}</code></details>
+  <p class="verdict-meta">{{ analysis.page_count }} pages · detected language {{ analysis.language }}</p>
+</section>
+{% elif needs_review %}
+<section class="verdict hold" id="verdict" aria-labelledby="verdict-title">
+  <p class="eyebrow">Result</p><h2 id="verdict-title">Held for review</h2>
+  {% if job.status.value != statement_status %}<p>The saved job state and statement reviews disagree. Figures are held until the status identity can be resolved.</p><details><summary>Technical status details</summary><code>{{ job.status.value }}</code> · <code>{{ statement_status }}</code></details>{% elif not view.statements %}<p>No statement passed review, so there are no figures to rely on.</p>{% elif not analysis.hold %}<p>One or more checks are unresolved. Figures are not verified.</p>{% endif %}
+  {% set lead_reason = namespace(value=analysis.hold, is_flag=false, is_hold=analysis.hold is not none) %}
+  {% if not lead_reason.value %}{% for s in view.statements if s.status == 'needs_review' and not lead_reason.value and s.reasons %}{% set lead_reason.value = s.reasons[0] %}{% endfor %}{% endif %}
+  {% if not lead_reason.value %}{% for flag in analysis.flags if flag != 'low_selectivity' and not lead_reason.value %}{% set lead_reason.value = flag %}{% set lead_reason.is_flag = true %}{% endfor %}{% endif %}
+  {% if lead_reason.value %}<p>{{ lead_reason.value if lead_reason.is_hold else flag_label(lead_reason.value) if lead_reason.is_flag else reason_label(lead_reason.value) }}</p>{% endif %}
+  <p><span class="flag-marker" aria-label="Needs review">⚑</span> marks figures that need review.</p>
+  {% set reason_count = namespace(value=analysis.flags | length) %}
+  {% for s in view.statements if s.status == 'needs_review' %}{% set reason_count.value = reason_count.value + (s.reasons | length) %}{% endfor %}
+  {% if reason_count.value %}<details class="review-details"><summary>Review details ({{ reason_count.value }})</summary>
+    <ul>
+      {% for flag in analysis.flags %}<li>{{ flag_label(flag) }} <code title="Technical flag">{{ flag }}</code></li>{% endfor %}
+      {% for s in view.statements if s.status == 'needs_review' %}{% for reason in s.reasons %}<li>{{ reason_label(reason) }} <code title="Technical reason">{{ reason }}</code></li>{% endfor %}{% endfor %}
+    </ul>
+  </details>{% endif %}
+  <p class="verdict-meta">{{ analysis.page_count }} pages · detected language {{ analysis.language }}</p>
+</section>
 {% else %}
-<div class="banner hold">Every statement passed its own checks, but the document notices below
-  need review before its figures are relied on.</div>
-{% endif %}
-{% endif %}
-
-{% if analysis.flags %}
-<section class="panel" aria-labelledby="document-notices">
-  <h2 id="document-notices">Document notices</h2>
-  <ul class="reasons">{% for flag in analysis.flags %}<li><code>{{ flag }}</code></li>{% endfor %}</ul>
+<section class="verdict good" id="verdict" aria-labelledby="verdict-title">
+  <p class="eyebrow">Result</p><h2 id="verdict-title">Passed statement checks</h2>
+  <p>Every extracted statement passed its review checks. This status does not claim that every pipeline or source check passed.</p>
+  <p class="verdict-meta">{{ analysis.page_count }} pages · detected language {{ analysis.language }}</p>
 </section>
 {% endif %}
 
-<h2>{{ 'الملخص' if analysis.language == 'ar' else 'Summary' }}</h2>
-{% if view.narrative %}
+<section id="summary" aria-labelledby="summary-title">
+<h2 id="summary-title">{{ 'الملخص' if analysis.language == 'ar' else 'Summary' }}</h2>
+{% if analysis.decline %}
+<div class="panel summary-notice" dir="{{ 'rtl' if analysis.language == 'ar' else 'ltr' }}" lang="{{ analysis.language }}">{{ 'لم يُنتج ملخص لأن المستند رُفض.' if analysis.language == 'ar' else 'No summary was produced because this document was declined.' }}</div>
+{% elif view.narrative %}
 <div class="panel" dir="{{ 'rtl' if analysis.narrative.language == 'ar' else 'ltr' }}" lang="{{ analysis.narrative.language }}">
   {% for section in view.narrative %}
     <h3>{{ section.heading }}</h3>
-    {% for parts in section.sentences %}<p>{% for part in parts %}{% if part.href %}<a href="{{ part.href }}" title="the computed metric and its inputs"><bdi dir="ltr">{{ part.text }}</bdi></a>{% else %}{{ part.text }}{% endif %}{{ caveat_marks(part.caveats) }}{% endfor %}</p>{% endfor %}
+    {% for parts in section.sentences %}<p>{% for part in parts %}{% if part.href %}<a href="{{ part.href }}" title="Open the linked computed metric"><bdi dir="ltr">{{ part.text }}</bdi></a>{% else %}{{ part.text }}{% endif %}{{ caveat_marks(part.caveats) }}{% endfor %}</p>{% endfor %}
   {% endfor %}
   {% for note in view.footnotes %}{{ caveat_text(note) }}{% endfor %}
   <p class="muted">{{ view.origin_text }}</p>
 </div>
 {% elif view.summary_notice %}
-<div class="panel muted" dir="{{ 'rtl' if analysis.language == 'ar' else 'ltr' }}" lang="{{ analysis.language }}">{{ view.summary_notice }}</div>
+<div class="panel summary-notice" dir="{{ 'rtl' if analysis.language == 'ar' else 'ltr' }}" lang="{{ analysis.language }}">
+  {{ view.summary_notice }}
+  {% if needs_review %}<p>Review the flagged figures and statement checks below. A written summary is withheld while the analysis is held for review.</p>{% endif %}
+</div>
+{% elif needs_review %}
+<div class="panel summary-notice">Summary withheld: the analysis is held for review. Review the flagged figures and statement checks below.</div>
 {% else %}
 <div class="panel muted">{{ 'لا يوجد ملخص محفوظ بعد. القوائم والمقاييس أدناه كما استُخرجت وحُسبت.' if analysis.language == 'ar' else 'No written summary yet. The statements and metrics below are as extracted and computed.' }}</div>
 {% endif %}
+</section>
 
-{% set primary = view.statements | rejectattr('duplicate') | list %}
-{% set duplicates = view.statements | selectattr('duplicate') | list %}
-<h2>Statements</h2>
-{% if not primary %}<p class="muted">No statement was extracted.</p>{% endif %}
-<p class="muted" style="font-size:13px">Click a figure to see where it was read on the page. Highlighted cells carry a flag, named under the figure.</p>
-{% for s in primary %}{{ statement_table(s) }}{% endfor %}
-{% if duplicates %}
-<details><summary class="muted">{{ duplicates | length }} more table{{ 's' if duplicates | length > 1 }} of a type already shown</summary>
-  {% for s in duplicates %}{{ statement_table(s) }}{% endfor %}
-</details>
-{% endif %}
+<nav class="page-index panel" aria-label="On this page">
+  <strong>On this page</strong>
+  <a href="#verdict">Result</a><a href="#summary">Summary</a>
+  {% if not analysis.decline %}<a href="#metrics">Metrics</a><a href="#statements">Statements</a>{% endif %}
+</nav>
 
 {% if not analysis.decline %}
-<h2>Metrics</h2>
-<p class="muted" style="font-size:13px">{{ view.computed }} of {{ view.metrics | length }} values computed. Each comes from a formula over the cells linked beside it.</p>
-<div class="panel scroll">
-<table>
-  <thead><tr><th>Metric</th><th>Period</th><th class="num">Value</th><th>Formula</th><th>Inputs</th><th>Flags</th></tr></thead>
-  <tbody>
-  {% for m in view.metrics %}
-    <tr id="{{ m.anchor }}">
-      <td>{{ m.name }}</td><td>{{ m.period }}</td>
-      <td class="num">{% if m.value is none %}<span class="muted">not computed</span>{% else %}{{ m.value }}{{ caveat_marks(m.notes) }}{% endif %}</td>
-      <td><code>{{ m.formula }}</code></td>
-      <td>{% for i in m.inputs %}<a href="{{ i.source }}" title="{{ i.period }}">{{ i.canonical_id }}</a> {{ i.text }}{{ caveat_marks(i.caveats) }}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>
-      <td class="muted" style="font-size:13px">{{ (m.flags + m.caveats) | join(', ') }}</td>
-    </tr>
+<section id="metrics" aria-labelledby="metrics-title">
+  <h2 id="metrics-title">Metrics</h2>
+  <p class="muted">{{ view.computed }} of {{ view.metrics | length }} metrics computed. Values are shown as returned; open a metric for its formula, inputs, and flags.</p>
+  {% if needs_review %}<p id="metrics-review-note" class="panel summary-notice">Figures are not verified. ⚑ marks items needing review; † marks unit or currency caveats.</p>{% endif %}
+  <h3>Headline metrics</h3>
+  {% if view.headline_metrics %}
+  <div class="metric-grid">
+    {% for m in view.headline_metrics %}<article class="metric-card">
+      <h4><a href="#{{ m.anchor }}">{{ m.name }}</a></h4><p class="metric-period">{{ m.period }}</p>
+      <p class="metric-value">{{ m.value }}{% if m.flags or m.caveats or needs_review %}<span class="flag-marker" aria-label="Needs review" title="This value has a flag, caveat, or held analysis">⚑</span>{% endif %}{{ caveat_marks(m.notes) }}</p>
+    </article>{% endfor %}
+  </div>
+  {% else %}<p class="panel muted">No metrics were computed for this analysis.</p>{% endif %}
+  <details id="all-metrics" class="section-details">
+    <summary>All metrics and calculation details ({{ view.metrics | length }})</summary>
+    {% for m in view.metrics %}<details class="metric-detail" id="{{ m.anchor }}">
+      <summary><span>{{ m.name }}</span><span>{{ m.period }}</span><span>{% if m.value is none %}not computed{% else %}{{ m.value }}{% endif %}{% if m.flags or m.caveats or needs_review %}<span class="flag-marker" aria-label="Needs review" title="This value has a flag, caveat, or held analysis">⚑</span>{% endif %}{{ caveat_marks(m.notes) }}</span></summary>
+      {% if m.value is none %}<p class="muted">No metric value was computed. See the technical reason below.</p>{% endif %}
+      <dl><dt>Formula</dt><dd><code>{{ m.formula }}</code></dd></dl>
+      <h4>Inputs</h4>
+      {% if m.inputs %}<ul>{% for i in m.inputs %}<li><a href="{{ i.source }}" title="Original identifier: {{ i.canonical_id }}; period: {{ i.period }}">{{ i.label }}</a> — <bdi dir="ltr">{{ i.text }}</bdi>{{ caveat_marks(i.caveats) }}</li>{% endfor %}</ul>{% else %}<p class="muted">No input values were recorded.</p>{% endif %}
+      <h4>Flags and caveats</h4>
+      {% if m.flags or m.caveats %}<ul>{% for flag in m.flags %}<li>{{ flag_label(flag) }} <code title="Technical flag">{{ flag }}</code></li>{% endfor %}{% for caveat in m.caveats %}<li>{{ plain_label(caveat) }} <code title="Technical caveat">{{ caveat }}</code></li>{% endfor %}</ul>{% else %}<p class="muted">No metric-specific flags recorded.</p>{% endif %}
+      {% for note in m.notes %}{{ caveat_text(note) }}{% endfor %}
+    </details>{% endfor %}
+  </details>
+</section>
+
+<section id="statements" aria-labelledby="statements-title">
+  <h2 id="statements-title">Statements</h2>
+  <p class="muted">Every figure links to its source page. ⚑ means the figure or its statement needs review; † marks a unit or currency caveat. Open a statement for all rows and technical reasons.</p>
+  {% for group in view.statement_groups %}
+  <section class="statement-group" aria-labelledby="statement-group-{{ loop.index }}">
+    <h3 id="statement-group-{{ loop.index }}">{{ group.title }}</h3>
+    {% for s in group.statements %}<details class="statement-detail">
+      <summary><span>{{ s.title }}</span><span class="badge {{ s.status }}">{{ 'Passed checks' if s.status == 'passed' else 'Held for review' }}</span><span>{{ s.units }}{% if s.pages %} · pages {{ s.pages | join(', ') }}{% endif %}</span></summary>
+      <div class="panel statement-panel" dir="{{ 'rtl' if s.rtl else 'ltr' }}" lang="{{ s.language }}">
+        {% for note in s.caveats %}{{ caveat_text(note) }}{% endfor %}
+        {% if s.reasons %}<h4>Review reasons</h4><ul class="reasons">{% for reason in s.reasons %}<li>{{ reason_label(reason) }} <details class="inline-detail"><summary>Technical detail</summary><code>{{ reason }}</code></details></li>{% endfor %}</ul>{% endif %}
+        {% if s.warnings %}<h4>Warnings</h4><ul>{% for warning in s.warnings %}<li>{{ flag_label(warning) }} <details class="inline-detail"><summary>Technical detail</summary><code>{{ warning }}</code></details></li>{% endfor %}</ul>{% endif %}
+        {{ statement_table(s, s.status == 'needs_review' or needs_review) }}
+      </div>
+    </details>{% endfor %}
+  </section>
   {% endfor %}
-  </tbody>
-</table>
-</div>
+</section>
 {% endif %}
+
+{% if analysis.flags %}<details class="document-notices">
+  <summary>Document notices ({{ analysis.flags | length }})</summary>
+  <ul>{% for flag in analysis.flags %}<li>{{ flag_label(flag) }} <details class="inline-detail"><summary>Technical detail</summary><code>{{ flag }}</code></details></li>{% endfor %}</ul>
+</details>{% endif %}
 {% endblock %}
