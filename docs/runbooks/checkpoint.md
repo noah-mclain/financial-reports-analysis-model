@@ -40,13 +40,17 @@ precondition. No checkpoint is run as part of this runbook edit.
 2. Every PR changing code under test is merged, and the checkout contains the checkpoint tools:
    `eval/harness/checkpoint_records.py`, `eval/harness/checkpoint_run.py`, and
    `eval/corpus/rehearsal_reserve.yaml`.
-3. **Gate D precondition:** before step 1, the plan records successful Docker upload-to-summary
-   results for both a digital and a scanned English document, or the owner records a specific
-   exception in the decision log. The plan's 26 October Gate D evidence shows a summary for the
-   digital document (Almarai) and none for the four scanned or partly scanned documents, which
-   were held for review. The precondition is therefore met for the digital document and
-   **unmet for the scanned document** until the owner records an exception for that half. D23
-   does not supply it. Do not start step 1 until that record exists.
+3. **Gate D precondition:** before step 1, the plan records (a) successful Docker
+   upload-to-summary results for both a digital and a scanned English document, and (b) eval
+   numbers for both profiles. Each part not met needs a specific owner exception in the decision
+   log, one per part. The plan's 26 October Gate D evidence shows a summary for the digital
+   document (Almarai) and none for the four scanned or partly scanned documents, which were held
+   for review, and records no Docker eval numbers. Part (a) is therefore met for the digital
+   document only and part (b) is unmet. The scanned half of (a) is satisfied when a scanned
+   English document completes with a summary and that result is recorded in the plan, with no
+   exception needed for it; otherwise it needs an exception. D23 supplies neither exception. Do
+   not start step 1 until every part is either recorded as met in the plan or covered by its
+   exception.
 4. Before any checkpoint result exists, fix the candidate in writing: the update-1,000 adapter
    path, `shasum -a 256` for `adapters.safetensors` and `adapter_config.json`, and the base-model
    manifest hash. Use this exact candidate for the checkpoint record. If a different candidate

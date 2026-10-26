@@ -1,6 +1,6 @@
 # Accuracy report
 
-Status: 25 October 2026. Gate A and B results below are from `dev`; nothing here is a held-out
+Status: 26 October 2026. Gate A and B results below are from `dev`; nothing here is a held-out
 gate result. `model_test` and `blind` have not been scored (D13, D17), and the checkpoint has
 not run. The cited Gate A/B and locate results are the dated reports committed under
 [`eval/results/`](../eval/results/README.md), with their SHA-256 and the command that produced
@@ -137,5 +137,5 @@ to +0.074 (the interval includes zero). See
 - `model_test` and `blind` scores for any gate.
 - Gate A and B on the train-holdout dry runs since 7 October.
 - Narration with a language model; the template summary is the shipped path.
-- Docker upload to summary on one digital and one scanned English document.
+- Docker upload to summary on a scanned English document, and eval numbers for the Docker profile. The digital half was measured on 26 October (the Almarai annual report completed with a summary); the four scanned or partly scanned documents were held with the summary withheld.
 - Two clean end-to-end runs on documents never seen before ([procedure](runbooks/rehearsal.md)).

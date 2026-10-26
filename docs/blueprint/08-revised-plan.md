@@ -180,9 +180,11 @@ excluded by manifest language; eleven Arabic-only issuers leave each scored deno
 No protected documents were opened for these counts. Runtime for the smaller scored set has
 not been measured; the per-document budgets above remain targets. Gate D evidence was recorded on 26 October (below). Therefore the Gate D precondition for step 1
 is **met for the digital document and not met for the scanned document**: no scanned English
-document produced a summary in the Docker profile. Before step 1, the owner either records a
-specific Gate D exception for the scanned half in [the decision log](06-decisions-and-risks.md), or
-a scanned English document completes with a summary.
+document produced a summary in the Docker profile. Docker eval numbers are also unrecorded. Before
+step 1, for the scanned summary the owner either records a specific Gate D exception in
+[the decision log](06-decisions-and-risks.md) or a scanned English document completes with a
+summary recorded here, and for the Docker eval numbers the owner records a specific exception or
+the numbers are recorded here.
 
 Gate D evidence, 26 October 2026 (main `410629a`; Docker Desktop 27.3.1, 12 CPUs, 14.1 GB VM; the
 Docker profile with Tesseract; `make docker-up`, upload through the API, status read until final;
