@@ -26,6 +26,7 @@ CRITICAL_CELL_FLAGS = (
     "row_realigned",
     "ambiguous_separator",
     "numeric_columns_split",
+    "ocr_parenthesis_repaired",
 )
 _HOLD_FLAGS = (
     "period_unbound",

@@ -40,12 +40,15 @@ precondition. No checkpoint is run as part of this runbook edit.
 2. Every PR changing code under test is merged, and the checkout contains the checkpoint tools:
    `eval/harness/checkpoint_records.py`, `eval/harness/checkpoint_run.py`, and
    `eval/corpus/rehearsal_reserve.yaml`.
-3. **Gate D precondition:** before step 1, the plan records successful Docker upload-to-summary
-   results for both a digital and a scanned English document, or the owner records a specific
-   exception in the decision log. The current plan says the Docker profile and narration still
-   need time; it records no completed Gate D result or owner exception. This precondition is
-   **currently unmet**. D23 does not supply a Gate D exception. Do not start step 1 until one of
-   the two required records exists.
+3. **Gate D precondition:** before step 1, the plan records (a) successful Docker
+   upload-to-summary results for both a digital and a scanned English document, and (b) eval
+   numbers for both profiles; each part not met needs its own owner exception in the decision
+   log. As of 26 October (a) is met for the digital document (Almarai, summary present) and
+   **unmet for the scanned document**: all four scanned or partly scanned documents were held for
+   review and no summary was produced, and a bounded extraction attempt did not clear them. (b)
+   is recorded in the plan for the two documents with expected files. Do not start step 1 until
+   the scanned half is either recorded as met in the plan or covered by an owner exception. No
+   such exception has been recorded.
 4. Before any checkpoint result exists, fix the candidate in writing: the update-1,000 adapter
    path, `shasum -a 256` for `adapters.safetensors` and `adapter_config.json`, and the base-model
    manifest hash. Use this exact candidate for the checkpoint record. If a different candidate

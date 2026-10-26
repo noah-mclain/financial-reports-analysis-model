@@ -81,7 +81,8 @@ from fra_ingest.visual_order import (
     restore_word_order,
 )
 
-STRUCTURE_VERSION = "53"  # Persist exact row-period arithmetic confirmation
+# Arithmetic confirmation and OCR opening-brace repair change cached results.
+STRUCTURE_VERSION = "54"
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 

@@ -285,7 +285,7 @@ class TesseractOcr:
             "--psm",
             str(self._config.tesseract_psm),
             "--dpi",
-            str(self._config.ocr_dpi),
+            str(self._config.page_ocr_dpi),
             "tsv",
         ]
         try:

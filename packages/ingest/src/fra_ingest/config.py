@@ -44,6 +44,7 @@ _TOML_FIELDS: dict[tuple[str, str], str] = {
     ("convert", "child_timeout_s"): "child_timeout_s",
     ("convert", "memory_budget_gb"): "memory_budget_gb",
     ("tesseract", "psm"): "tesseract_psm",
+    ("tesseract", "dpi"): "tesseract_dpi",
     ("tesseract", "arabic_language"): "tesseract_arabic_language",
     ("artifacts", "root"): "artifact_root",
 }
@@ -76,6 +77,8 @@ class IngestConfig(BaseModel):
     # Tesseract only. Page segmentation mode (3 is Tesseract's own default) and the language
     # string for an Arabic page: Arabic alone, or Arabic with English for the Latin in it. The
     # default is "ara+eng": Arabic alone read no English page at all (docs/blueprint/14).
+    # Optional page-read override; None retains the shared ocr_dpi setting.
+    tesseract_dpi: int | None = Field(default=None, ge=36, le=300)
     tesseract_psm: int = Field(default=3, ge=0, le=13)
     tesseract_arabic_language: Literal["ara", "ara+eng"] = "ara+eng"
     batch_size: int = Field(default=2, ge=1)
@@ -84,6 +87,13 @@ class IngestConfig(BaseModel):
     child_timeout_s: float = Field(default=900.0, gt=0.0)
     memory_budget_gb: float = Field(default=3.5, gt=0.0)
     artifact_root: Path = REPO_ROOT / "var" / "artifacts"
+
+    @property
+    def page_ocr_dpi(self) -> int:
+        """Resolution for locator page reads, before conversion chooses its OCR scale."""
+        if self.convert_ocr == "tesseract" and self.tesseract_dpi is not None:
+            return self.tesseract_dpi
+        return self.ocr_dpi
 
     @model_validator(mode="after")
     def _pdfium_languages_are_readable(self) -> IngestConfig:
@@ -95,11 +105,14 @@ class IngestConfig(BaseModel):
                 raise ValueError(
                     f"pdfium_full_page_languages: {language!r} is not in ocr_languages"
                 )
-            # This is a Vision-only rule, validated even when the selected engine leaves
-            # it dormant (Tesseract is unmeasured; none skips scanned ranges).
-            vision = self.model_copy(update={"convert_ocr": "ocrmac"})
+            # Validate the selected engine; with OCR disabled the list remains dormant.
+            readable = (
+                self
+                if self.convert_ocr != "none"
+                else self.model_copy(update={"convert_ocr": "ocrmac"})
+            )
             try:
-                engine_language(vision, language)
+                engine_language(readable, language)
             except ValueError as exc:
                 raise ValueError(f"pdfium_full_page_languages: {exc}") from exc
         return self

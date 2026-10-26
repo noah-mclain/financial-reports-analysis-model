@@ -67,6 +67,18 @@ def test_confirmation_is_per_cell_and_period_not_a_pass_or_checked_count() -> No
     assert isinstance(build_summary(source), SummarySuppressed)
 
 
+def test_checked_cell_with_reading_change_flag_is_excluded() -> None:
+    source = held()
+    net_income = source.statements[1].line_items[1].cells[1]
+    assert net_income.arithmetic_checks == ["passed-subtotal"]
+    net_income.flags.append("ocr_parenthesis_repaired")
+
+    result = build_summary(source)
+
+    assert isinstance(result, SummaryBuilt)
+    assert "net_margin" not in result.narrative.cited_metric_ids
+
+
 def test_old_analysis_counts_do_not_authorize_partial_and_zero_confirmed_suppresses() -> None:
     source = held(confirmed=False)
     assert isinstance(build_summary(source), SummarySuppressed)

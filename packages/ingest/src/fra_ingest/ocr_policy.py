@@ -17,12 +17,12 @@ _DEFAULT_LANGUAGE = "en-US"
 
 
 def reads_through_pdfium(config: IngestConfig, ocr: RangeOcr, language: str | None) -> bool:
-    """The one rule for the pdfium renderer: a Vision full-page read in a listed language.
+    """Select pdfium for a configured full-page OCR read in a listed language.
 
-    Only those reads were measured. Tesseract (the Docker profile included), layout-region
-    OCR, text ranges and skipped ranges keep docling's default backend."""
+    Layout-region OCR, text ranges and skipped ranges keep docling's default backend.
+    """
     return (
-        config.convert_ocr == "ocrmac"
+        config.convert_ocr in ("ocrmac", "tesseract")
         and ocr == "full_page"
         and language in config.pdfium_full_page_languages
     )
@@ -48,8 +48,6 @@ def plan_ranges(
             # Counter keeps first-seen order among equal counts, so a tie goes to the earliest page.
             reads = Counter(lang for n in image_pages if (lang := ocr_languages.get(n)))
             language = reads.most_common(1)[0][0] if reads else fallback
-        # Only Vision full-page reads were measured. Tesseract (including Docker) keeps
-        # docling's default backend even when its language is listed in the setting.
         renderer: RangeRenderer = (
             "pdfium" if reads_through_pdfium(config, ocr, language) else "default"
         )
