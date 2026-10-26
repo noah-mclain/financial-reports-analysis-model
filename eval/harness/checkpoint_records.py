@@ -12,7 +12,8 @@ from typing import Any
 
 from fra_ingest.config import REPO_ROOT
 
-STEPS = ("model_test_gate_c", "model_test_pipeline", "blind_pipeline")
+BLIND_REQUIRES = "model_test_pipeline"
+STEPS = (BLIND_REQUIRES, "blind_pipeline")
 LOG_HEADER = (
     "# Checkpoint log (D13, D17; docs/blueprint/08-revised-plan.md).\n"
     "# Append-only: one row per step, written before any scoring starts.\n"
@@ -71,19 +72,19 @@ def _exclusive(path: Path, data: dict[str, Any]) -> None:
 def _prerequisites(root: Path, step: str) -> None:
     if step != "blind_pipeline":
         return
-    for required in STEPS[:2]:
-        marker = _read(_path(root, required, "marker"))
-        done = _read(_path(root, required, "done"))
-        if done.get("candidate") != marker.get("candidate") or done.get("commit") != marker.get(
-            "commit"
-        ):
-            raise CheckpointError(f"{required}: done record differs from marker")
-        try:
-            digest = hashlib.sha256(Path(done["result"]).read_bytes()).hexdigest()
-        except (OSError, KeyError, TypeError) as exc:
-            raise CheckpointError(f"{required}: missing result") from exc
-        if digest != done.get("sha256"):
-            raise CheckpointError(f"{required}: result sha256 mismatch")
+    required = BLIND_REQUIRES
+    marker = _read(_path(root, required, "marker"))
+    done = _read(_path(root, required, "done"))
+    if done.get("candidate") != marker.get("candidate") or done.get("commit") != marker.get(
+        "commit"
+    ):
+        raise CheckpointError(f"{required}: done record differs from marker")
+    try:
+        digest = hashlib.sha256(Path(done["result"]).read_bytes()).hexdigest()
+    except (OSError, KeyError, TypeError) as exc:
+        raise CheckpointError(f"{required}: missing result") from exc
+    if digest != done.get("sha256"):
+        raise CheckpointError(f"{required}: result sha256 mismatch")
 
 
 def _log_row(step: str, candidate: str, revision: str) -> str:
