@@ -327,6 +327,36 @@ Q4_K_M, Q5_K_M, Q6_K and Q8_0 against gold (below), not only for agreement.
 Not shown by this run: the real adapter's behavior, task accuracy against gold, margins in
 log-odds, and the Docker (CPU, container) speed of the 7B f16 or quantized files.
 
+**Real export, 26 October 2026** (the 1,000-update adapter, `adapters.safetensors` sha256
+`2f7234d7a96bdf02b9c4384f0a4b17389ade5a05ad4fa13c70513ba5fee28a1e`, on the same base, tools and
+machine). Same conditions as the rehearsal; no stop rule fired; highest memory pressure level 2;
+free disk 160 GB before, 123 GB after (the f16 file, 15,237,853,056 B, sha256
+`19b4c85f66bd1761be1608a17e2aa140b4cdad26e4e503a541ccc568058e693f`, was deleted after the checks).
+Fuse 36 s, convert 58 s, quantize 15 to 813 s per level (the Q5_K_M run was slowed by memory
+pressure). Files: Q4_K_M 4,683,073,408 B; Q5_K_M 5,444,831,104 B; Q6_K 6,254,198,656 B; Q8_0
+8,098,525,056 B; no quantize format fallbacks. Their sha256 values are in
+`var/spikes/gguf7b-real/SHA256SUMS` (local).
+
+Acceptance rule, fixed before the run and applied to each level on both frozen validation panels
+(llama-server, greedy, at most 64 tokens, Metal; the MLX adapter's scored predictions as the
+reference): accuracy within 1.0 point, macro-F1 within 2.0 points, taxonomy-critical errors not
+above the MLX adapter's, invalid outputs not above the MLX adapter's plus 2.
+
+| Level | Representative accuracy | Rep. macro-F1 | Rep. critical | Challenge accuracy | Chal. macro-F1 | Chal. critical | Result |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| MLX adapter (reference) | 0.916 | 0.592 | 0 | 0.881 | 0.538 | 6 | n/a |
+| Q4_K_M | 0.916 | 0.581 | 0 | 0.893 | 0.539 | 5 | accepted |
+| Q5_K_M | 0.916 | 0.580 | 0 | 0.899 | 0.544 | 4 | accepted |
+| Q6_K | 0.912 | 0.584 | 0 | 0.899 | 0.544 | 4 | accepted |
+| Q8_0 | 0.912 | 0.588 | 0 | 0.881 | 0.538 | 6 | accepted |
+
+The f16 file reproduced the MLX adapter's answers on 10 of 10 representative rows (identical
+strings), checked last because loading a 15 GB file on 18 GB was slow (23.6 minutes for the 10 rows).
+The level that ships, Q4_K_M, is accepted. These are validation diagnostics on the same panels
+used to measure the adapter, not Gate C, and the differences between levels are within noise on
+panels of 512 and 168 rows. Not measured: margins in log-odds, the Docker (CPU) speed of these
+files, and any pipeline use of the model, which does not exist yet.
+
 Before and during week 3:
 
 - **Benchmark first.** Done on 2026-10-15: 15 to 19 tokens/s generating in the container (see
