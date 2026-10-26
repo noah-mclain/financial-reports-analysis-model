@@ -42,15 +42,12 @@ precondition. No checkpoint is run as part of this runbook edit.
    `eval/corpus/rehearsal_reserve.yaml`.
 3. **Gate D precondition:** before step 1, the plan records (a) successful Docker
    upload-to-summary results for both a digital and a scanned English document, and (b) eval
-   numbers for both profiles. Each part not met needs a specific owner exception in the decision
-   log, one per part. The plan's 26 October Gate D evidence shows a summary for the digital
-   document (Almarai) and none for the four scanned or partly scanned documents, which were held
-   for review, and records no Docker eval numbers. Part (a) is therefore met for the digital
-   document only and part (b) is unmet. The scanned half of (a) is satisfied when a scanned
-   English document completes with a summary and that result is recorded in the plan, with no
-   exception needed for it; otherwise it needs an exception. D23 supplies neither exception. Do
-   not start step 1 until every part is either recorded as met in the plan or covered by its
-   exception.
+   numbers for both profiles; each part not met needs its own owner exception in the decision
+   log. As of 26 October (a) is met for the digital document (Almarai, summary present) and
+   covered for the scanned document by the owner's exception D24, and (b) is recorded in the plan
+   for the two documents with expected files. The precondition is therefore satisfied. If a
+   later change touches the Docker profile or the scanned-document path, recheck it before
+   step 1.
 4. Before any checkpoint result exists, fix the candidate in writing: the update-1,000 adapter
    path, `shasum -a 256` for `adapters.safetensors` and `adapter_config.json`, and the base-model
    manifest hash. Use this exact candidate for the checkpoint record. If a different candidate

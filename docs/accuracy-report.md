@@ -19,7 +19,7 @@ leave each scored denominator ([D21 counts](blueprint/08-revised-plan.md)).
 | A. Extraction | Not met on `dev` (English, 24 October): scanned cells and balance identity miss the bar | [`eval/results/gates-dev-2026-10-24.json`](../eval/results/gates-dev-2026-10-24.json), 6 English golden documents |
 | B. Mapping | Slot accounting met on `dev` (24 October); no mapped slot is verified against an independent reference | same |
 | C. Model | Not met: no adapter has been promoted | [normalization-validation.md](runbooks/normalization-validation.md) |
-| D. Portability | Partly measured (26 October): the Docker profile ran upload to results on five English `dev` documents. The Almarai annual report completed with a summary in 232 s; four scanned or partly scanned Juhayna and Edita documents ended `needs_review` with the summary withheld (111 to 273 s). No scanned document reached a summary, and Docker eval numbers were not recorded, so Gate D is not established | [08-revised-plan.md](blueprint/08-revised-plan.md) |
+| D. Portability | Established for the digital document only, with an owner exception for the scanned half (D24): the Docker profile ran upload to results on five English `dev` documents; the Almarai annual report completed with a summary in 232 s; four scanned or partly scanned documents ended `needs_review` with the summary withheld (111 to 273 s). Docker cell accuracy: Almarai 138 of 138 (native 138 of 138), Edita IFRS 114 of 126 (native Vision 123 of 126) | [08-revised-plan.md](blueprint/08-revised-plan.md) |
 | E. Blind | Not measured: waits for the checkpoint | None; the checkpoint has not run |
 
 ## Gate A and B, English golden set (`dev`), 24 October
@@ -137,5 +137,5 @@ to +0.074 (the interval includes zero). See
 - `model_test` and `blind` scores for any gate.
 - Gate A and B on the train-holdout dry runs since 7 October.
 - Narration with a language model; the template summary is the shipped path.
-- Docker upload to summary on a scanned English document, and eval numbers for the Docker profile. The digital half was measured on 26 October (the Almarai annual report completed with a summary); the four scanned or partly scanned documents were held with the summary withheld.
+- Docker upload to summary on a scanned English document: waived by the owner (D24) after a bounded extraction attempt; the four scanned or partly scanned documents were held with the summary withheld. Docker identity, mapping and metric numbers (only cell accuracy on two documents is recorded).
 - Two clean end-to-end runs on documents never seen before ([procedure](runbooks/rehearsal.md)).
