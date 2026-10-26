@@ -18,6 +18,7 @@ from fra_analytics.frame import primary_statements
 from fra_analytics.metrics.registry import compute
 from fra_analytics.policy import Policy
 from fra_core.jobs import JobStore
+from fra_core.normalization import NormalizationSettings
 from fra_core.schemas import (
     Analysis,
     Decline,
@@ -35,6 +36,7 @@ from fra_ingest.results import ConvertResult, LocateResult, StructureResult
 from fra_ingest.stage import load_or_locate
 from fra_ingest.structure import current_convert, range_conversion_flags, structure_pdf
 from fra_model import SummaryBuilt, SummarySuppressed, build_summary, validate_summary
+from fra_worker.model_mapping import map_structure
 
 
 @dataclass(frozen=True)
@@ -47,11 +49,16 @@ class Pipeline:
     convert: Callable[[Path, LocateResult], ConvertResult]
     structure: Callable[[Path, ConvertResult | None], StructureResult]
     metrics: Callable[[Sequence[Statement]], list[MetricValue]]
+    mapping: Callable[[StructureResult], StructureResult] | None = None
     summarize: Callable[[Analysis], SummaryBuilt | SummarySuppressed] = build_summary
 
 
 def real_pipeline(
-    config: IngestConfig, policy: Policy, *, worker_lock_fd: int | None = None
+    config: IngestConfig,
+    policy: Policy,
+    *,
+    worker_lock_fd: int | None = None,
+    normalization: NormalizationSettings | None = None,
 ) -> Pipeline:
     """Today's stages, as the dry run calls them: convert in a child process per document."""
     ocr = make_engine(config)
@@ -63,6 +70,9 @@ def real_pipeline(
         structure=lambda pdf, converted: structure_pdf(
             pdf, config, ocr, convert=convert, conversion=converted
         ),
+        mapping=(lambda result: map_structure(result, config.artifact_root, normalization))
+        if normalization is not None and normalization.enabled
+        else None,
         metrics=lambda statements: compute(primary_statements(statements), policy),
     )
 
@@ -152,6 +162,16 @@ def run_job(store: JobStore, job: Job, pipeline: Pipeline, max_pages: int) -> Jo
         else:
             result = pipeline.structure(pdf, converted)
             store.finish_stage(job.id, JobStage.STRUCTURE, f"{len(result.statements)} statements")
+        store.start_stage(job.id, JobStage.MAPPING)
+        if declined is not None:
+            store.finish_stage(job.id, JobStage.MAPPING, "skipped: declined")
+        elif pipeline.mapping is None:
+            store.finish_stage(job.id, JobStage.MAPPING, "skipped: disabled")
+        else:
+            result = pipeline.mapping(result)
+            store.finish_stage(
+                job.id, JobStage.MAPPING, "model proposals checked against source evidence"
+            )
         store.start_stage(job.id, JobStage.METRICS)
         if declined is not None:
             metrics: list[MetricValue] = []

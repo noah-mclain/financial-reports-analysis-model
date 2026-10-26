@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from fra_core.schemas import Document, PageMode, Statement, StatementType, TextSource
 from fra_core.schemas.statement import PeriodConflict, PeriodEvidence
+from fra_ingest.eps_checks import EpsNote
 from fra_ingest.review import StatementReview
 from fra_ingest.table_grid import GridCell
 
@@ -277,6 +278,8 @@ class StructureResult(BaseModel):
     convert_version: str
     settings_hash: str
     statements: list[Statement] = Field(default_factory=list)
+    eps_notes: list[EpsNote] = Field(default_factory=list)
+    statement_headers: dict[str, str] = Field(default_factory=dict)
     tables: list[TableDecision] = Field(default_factory=list)
     reviews: list[StatementReview] = Field(default_factory=list)
     industry: IndustryDecision | None = Field(

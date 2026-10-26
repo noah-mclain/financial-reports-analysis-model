@@ -76,7 +76,7 @@ from fra_ingest.visual_order import (
     restore_word_order,
 )
 
-STRUCTURE_VERSION = "53"  # retain qualified label-cell sources, including value-free headings
+STRUCTURE_VERSION = "54"  # retain source EPS inputs for post-mapping deterministic checks
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -629,6 +629,7 @@ def structure_document(
     decision_by_ref = {f"{d.docling_path}{d.table_ref}": d for d in decisions}
     statements: list[Statement] = []
     checks: list[CheckResult] = []
+    statement_headers: dict[str, str] = {}
     for number, part in enumerate(merged, start=1):
         if per_type[part.type] > 1:
             part = part.model_copy(
@@ -637,6 +638,7 @@ def structure_document(
         statement, results = run_checks(
             _statement(part, metas[part.table_refs[0]], inputs, index, number), index
         )
+        statement_headers[statement.id] = part.header_text
         statement = map_statement(statement, index, results)
         results += check_eps(statement, eps_notes, part.header_text)
         statements.append(statement)
@@ -684,6 +686,8 @@ def structure_document(
         convert_version=inputs.convert.version,
         settings_hash="",
         statements=statements,
+        eps_notes=eps_notes,
+        statement_headers=statement_headers,
         tables=decisions,
         reviews=reviews,
         flags=flags,
