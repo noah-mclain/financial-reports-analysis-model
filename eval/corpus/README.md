@@ -8,7 +8,7 @@ pools so that no score is measured on something the code or the model has alread
 | `dev` | Golden set issuers (Almarai, Juhayna, Edita). Debugging and development | Anyone, any time |
 | `train` | Source documents for model training data. Split again by issuer into fit, validation and holdout parts (`docs/blueprint/04-execution-phases.md` 2.4); the holdout issuers are used for dry runs (rule 6) | The training data builders; the holdout only as rule 6 says |
 | `model_test` | Scoring the model and the full pipeline | Only the eval harness, at the one checkpoint (D13, `docs/blueprint/06-decisions-and-risks.md`) |
-| `blind` | Never used in development. Demo documents are picked from here | Only the blind run at the checkpoint (D13, D17), and the demo after it |
+| `blind` | Never used in development. Demo documents are picked from here | Only the non-reserved blind run at the checkpoint (D13, D17, D22); reserved issuers wait for rehearsal |
 
 ## Rules
 
@@ -24,7 +24,9 @@ pools so that no score is measured on something the code or the model has alread
    then reproduce and fix it on a `dev`, fit or validation document with the same trait. If
    that is impossible, the issuer leaves the holdout (rule 6). When a blind run fails, at or
    after the checkpoint, record the failure with its class; nothing is moved or replaced,
-   because `blind` is frozen (rule 5).
+   because `blind` is frozen (rule 5). D22 reserves the fixed issuer keys in
+   `rehearsal_reserve.yaml`: nobody opens, reads or runs any reserved document before rehearsal.
+   Gate E covers the remaining English blind documents and states that denominator.
 4. **Banks and insurers are `negative_control`.** They are in scope only as documents the tool
    must decline with a reason. Each carries `sector`, and other financial companies a `subsector`,
    so the industry signal can be scored (`docs/blueprint/09-ingest-locate.md`).
@@ -55,30 +57,81 @@ rule 2 again on the downloaded bytes.
 ## English-only scored scope (D21)
 
 Declared by the owner on 2026-10-21, before the planned 24 October checkpoint and any
-`model_test` or `blind` scoring: score every English document in each whole pool, using its
-manifest language, never its result. Apply the rule identically to both pools. Arabic stays
+`model_test` or `blind` scoring: score English documents using their
+manifest language, never their result. Apply the language rule identically to both pools; D22
+excludes the fixed rehearsal reserve from the blind checkpoint run. Arabic stays
 in the corpus and training data and is reported with measured limits, without a gate.
 D14 and D20 remain historical decisions and no longer govern a gate. Arabic uploads are
 declined with a plain reason; the demo promises English reports only.
 
-Recounted 2026-10-21 with `make corpus-check` (exit 0) and fetched metadata joined by document
-key to `candidates.yaml` for issuer and language. This reads metadata only, not protected PDFs,
-labels or outputs. Issuers are distinct recorded issuer names within each pool; an issuer
+Recounted 2026-10-26 from fetched metadata joined by document
+key to `candidates.yaml` for issuer, period and language, with the D22 issuer reservation. This reads metadata only, not protected PDFs,
+labels or outputs. Issuers are distinct normalized `fra_core.split.issuer_key` values within each pool; an issuer
 with both editions contributes its English documents to scoring.
 
-| Pool | All issuers | With English | Arabic-only issuers | English documents scored | Arabic documents reported only |
-|------|-------------|--------------|---------------------|--------------------------|--------------------------------|
-| model_test | 36 | 25 | 11 | 36 | 29 |
-| blind | 39 | 28 | 11 | 39 | 33 |
+| Pool | All issuers | With English | Arabic-only issuers | English documents run at checkpoint | English documents reserved | Arabic documents reported only |
+|------|-------------|--------------|---------------------|-------------------------------------|----------------------------|--------------------------------|
+| model_test | 36 | 25 | 11 | 36 | 0 | 29 |
+| blind | 39 | 28 | 11 | 29 | 10 | 33 |
 
-The issuer counts agree with the coverage table below: Arabic-only is issuers with Arabic
-minus issuers with both editions (`25 - 14 = 11`; `23 - 12 = 11`). Thus Gate E covers 39
-English documents from 28 blind issuers, rather than 72 documents from 39 issuers. The English
-documents of the 14 and 12 bilingual issuers remain scored; Arabic editions and the bilingual
-pair comparison are report-only. The three scanned Egyptian blind filings no longer establish
-demo coverage. The accuracy report must state the smaller promise and the excluded Arabic
-strata and Arabic-only issuers. Preserve corpus membership and issuer pool boundaries.
-Record this policy and recount the denominators in the scoring log before the checkpoint.
+D22 (owner decision, 2026-10-26): sort the English blind issuer keys by ascending hex
+`sha256("rehearsal-reserve-v1:" + issuer_key)` and reserve the first 8, computed from metadata
+only. This is 8 of 28 English blind issuers (28.6%), holding 10 English documents. The
+reservation file contains the rule and issuer keys only. Every reserved issuer has at least
+one English document; an invalid reservation fails loudly. Whole issuers are reserved,
+including any Arabic editions: no reserved document is read or run before rehearsal.
+Gate E's checkpoint denominator is the remaining 29 English documents from 20 issuers,
+not the full 39 English documents from 28 issuers. Of these 29, 14 are annual and 15 interim;
+8 have a digital text layer, 18 mixed and 3 scanned. `model_test` remains 36 documents
+from 25 issuers: 13 annual and 23 interim, with 9 digital, 25 mixed and 2 scanned.
+Arabic editions and bilingual-pair comparisons remain report-only. Preserve corpus membership
+and issuer pool boundaries. The accuracy report must state the reservation, smaller promise
+and excluded Arabic strata and Arabic-only issuers.
+
+### Owner-run checkpoint commands
+
+Only after all planned work, checks and independent reviews pass (D13), on a clean tracked
+checkout with local PDFs already fetched, run these commands from the repository root:
+
+```sh
+PYTHONPATH=eval uv run python -m harness.checkpoint_run model_test --checkpoint
+# Run the separate model_test Gate C scorer as well; both model_test steps must be done.
+PYTHONPATH=eval uv run python -m harness.checkpoint_run blind --checkpoint
+```
+
+Each start exclusively creates `var/checkpoint/<step>.marker`, then appends its date, step,
+candidate and commit to `eval/corpus/checkpoint_log.tsv` before reading any PDF bytes.
+Never edit or delete a log row or a marker to repeat a look. The log is created on first use;
+keep the generated log untracked until the checkpoint steps finish, since tracked edits
+(including a staged log) refuse a checkpoint start. A failed preflight after the start still
+spends the step. Each pool prints its selected count and `dry_run.projection` estimate from
+the latest filename-sorted saved `var/eval/dry_run/*.json` report's timing rows. Selection and
+layer counts use metadata only. Without a saved sample for a layer, its documents are
+explicitly unprojected; zero projected minutes is not an estimate for those documents.
+
+A document runs in a fresh child process through `dry_run.run_document`. PDF absence or a
+sha256 mismatch stops the run and names the document. Pipeline failures are recorded by class
+and the next document runs; no private failure detail is printed. Results are count-only JSON
+under `var/checkpoint/<pool>/documents/<id>.json`, plus `summary.json`; intermediate extraction
+artifacts are removed. Wall times include startup; peak memory reports the maximum of the
+separate pipeline and conversion process peaks, not simultaneous aggregate memory. A crashed
+or timed-out child has unknown peak memory. Counts and budgets are reported by period too.
+
+After an interrupted run, continue only the same look:
+
+```sh
+PYTHONPATH=eval uv run python -m harness.checkpoint_run model_test --checkpoint --continue
+# Or blind, if that is the interrupted step.
+```
+
+Continuation requires the same commit, selected metadata and effective configuration, skips
+all recorded results (including failures), and appends no new log row. An active runner or a
+completed step refuses continuation. Do not use continuation to retry a failed document.
+The `.done` record seals the summary path and sha256. Blind waits for both model_test done
+records and their unchanged result files. The summary says
+`accuracy: not measured (no reference answers exist for this pool)`: outcomes are observations,
+not verified correctness. It makes no figure-accuracy, Gate A accepted-cell-share or Gate E
+zero-confident-wrong claim. The runner does not run a model, narration or a portability test.
 
 The CPU-only recount of saved `dev` evidence on 2026-10-21 still fails the English gates:
 six English documents have identity outcomes 3 ok, 2 skipped and 1 no balance sheet; scale

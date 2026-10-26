@@ -1,0 +1,11 @@
+rule: sha256("rehearsal-reserve-v1:" + issuer_key) hex ascending; first 8 English
+  blind issuers
+issuers:
+- tabuk agricultural development
+- saudi industrial development
+- tesco
+- middle east financial investment
+- aseer trading tourism industry agriculture real estate and contracting
+- agthia
+- najran cement
+- middle east paper

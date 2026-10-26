@@ -101,7 +101,7 @@ so the classifier learns to decline them.
 | 3: Oct 10 to 16 | SEC FSDS dataset (bilingual pairs are not built), issuer-grouped split, length audit. Baseline vs QLoRA for normalization on the train holdout, with training data smaller by the holdout share. Grounding checker, templates, English narration. GGUF export of the promoted adapter | Gate C, provisional until the checkpoint. Normalization beats baseline on held-out issuers |
 | 4: Oct 17 to 23 | Upload page, background job, stage timeline, results page (statements with click-to-source, metrics with formulas, summary with citations). Docker profile complete. Dry runs on the train holdout, fix the most common failure classes on non-holdout documents | Gate D. Gate E waits for the checkpoint |
 | Oct 24 (planned) | Checkpoint, run by the owner: `model_test`, then `blind`, then Gates A to E confirmed | Scores frozen. The date is a plan that moves only later, never earlier than "all planned work complete and every check passing" (D13) |
-| Oct 25 to 27 | Rehearsal, accuracy report, README. Which documents the rehearsal uses is an open question (note after the gates) | Two clean end-to-end runs on documents never seen before, if the open question allows it |
+| Oct 25 to 27 | Rehearsal, accuracy report, README. Use the D22 reserved blind issuers (note after the gates) | Two clean end-to-end runs on reserved documents never run before |
 
 When a week overruns, cut inside that week. Cash flow statements are the first cut to
 restore if time is left, not the first thing to add.
@@ -130,12 +130,14 @@ restore if time is left, not the first thing to add.
   match a computed metric; schema-valid after at most one repair, otherwise the template.
 - **D. Portability.** `docker compose up` on a clean machine runs upload to summary on one
   digital and one scanned English document. Eval numbers recorded for both profiles.
-- **E. Blind.** On the blind pool, every English document ends in a correct result, a correct
-  decline, or a visible `needs_review` with the reason. Zero confident wrong figures.
+- **E. Blind.** On the blind pool excluding the D22 rehearsal reserve, every English document
+  ends in a correct result, a correct decline, or a visible `needs_review` with the reason.
+  Zero confident wrong figures.
 
 D21 was declared by the owner on 21 October, before the planned 24 October checkpoint and
-before any protected scoring. Apply the same whole-pool manifest-language rule to `model_test`
-and `blind`, independently of results. Arabic stays in the code, corpus and training pool;
+before any protected scoring. Apply the same manifest-language rule to `model_test`
+and `blind`, independently of results; D22 excludes the fixed rehearsal reserve from the blind
+run. Arabic stays in the code, corpus and training pool;
 uploads identified from extracted text as mainly Arabic are declined. This script-majority
 check can miss Arabic when OCR is poor and does not identify non-English Latin-script reports.
 The excluded Arabic documents and Arabic-only issuers remain
@@ -157,22 +159,25 @@ pipeline on the documents of the train-holdout issuers, and marked "not yet meas
 [04-execution-phases.md](04-execution-phases.md) 2.4, pool rules in
 [eval/corpus/README.md](../../eval/corpus/README.md)); Gate E waits.
 
-Checkpoint volume under D21, recounted from metadata on 21 October: `model_test` scores
-36 English documents from 25 issuers; `blind` scores 39 English documents from 28 issuers.
-The 29 and 33 Arabic documents, respectively, are excluded identically by manifest language.
-Eleven Arabic-only issuers leave each scored denominator. No protected documents were opened
-for this count. Runtime for the smaller scored set has not been measured; the per-document
-budgets above remain targets. Model scoring, the Docker profile and narration also need time;
-the planned checkpoint date still waits for all gates and checks.
+Checkpoint volume under D21 and D22, recounted from metadata on 26 October: `model_test`
+scores 36 English documents from 25 issuers (13 annual, 23 interim); `blind` runs 29 English
+documents from 20 issuers (14 annual, 15 interim). The D22 reserve holds 10 English documents
+from 8 of the 28 English blind issuers. The 29 and 33 Arabic documents, respectively, are
+excluded by manifest language; eleven Arabic-only issuers leave each scored denominator.
+No protected documents were opened for these counts. Runtime for the smaller scored set has
+not been measured; the per-document budgets above remain targets. Model scoring, the Docker
+profile and narration also need time; the checkpoint date still waits for all gates and checks.
 
-Open question, not decided: Gate E is "every English document" of the blind pool, so a checkpoint that
-runs all English documents of `blind` leaves no blind document that nobody has run, yet the rehearsal is meant to use
-documents never seen before. Two options. (1) Reserve a fixed-hash subset of `blind` issuers
-that the checkpoint does not run, so the rehearsal has documents nobody has run; the cost is
-that Gate E is then judged on the rest, not on every English document. (2) The checkpoint runs all of
-`blind`, and the rehearsal uses documents found on the day from issuers outside the corpus,
-which is closest to the demo itself (anyone uploads any report); the cost is that those
-documents have no expected results to check against.
+Decided 2026-10-26 (D22), before checkpoint results: take option 1 of the rehearsal question.
+Reserve the first 8 English blind issuer keys ordered by ascending hex
+`sha256("rehearsal-reserve-v1:" + issuer_key)`, computed from metadata only. The rule and keys
+live in `eval/corpus/rehearsal_reserve.yaml`; each reserved issuer must have an English document.
+Nobody opens, reads or runs a reserved document before rehearsal. Gate E is judged on the
+remaining English blind documents and reports that smaller denominator. The rehearsal can
+therefore use documents nobody has run. Corpus membership and issuer pool boundaries do not
+change. The pool runner records outcomes, identity and mapping states and operational budgets;
+without reference answers it cannot certify figure accuracy, Gate A accepted-cell share or
+Gate E's zero-confident-wrong promise. Those remain unmeasured by this runner.
 
 The price, stated once: everything measured on `model_test` and `blind` arrives at the very
 end, so a bad surprise there has little time to be fixed. After the freeze a fix can only be
