@@ -74,6 +74,7 @@
 <div class="panel summary-notice" dir="{{ 'rtl' if analysis.language == 'ar' else 'ltr' }}" lang="{{ analysis.language }}">{{ 'لم يُنتج ملخص لأن المستند رُفض.' if analysis.language == 'ar' else 'No summary was produced because this document was declined.' }}</div>
 {% elif view.narrative %}
 <div class="panel" dir="{{ 'rtl' if analysis.narrative.language == 'ar' else 'ltr' }}" lang="{{ analysis.narrative.language }}">
+  {% if analysis.narrative_partial %}<p class="summary-notice">Partial summary: some statements could not be confirmed</p>{% endif %}
   {% for section in view.narrative %}
     <h3>{{ section.heading }}</h3>
     {% for parts in section.sentences %}<p>{% for part in parts %}{% if part.href %}<a href="{{ part.href }}" title="Open the linked computed metric"><bdi dir="ltr">{{ part.text }}</bdi></a>{% else %}{{ part.text }}{% endif %}{{ caveat_marks(part.caveats) }}{% endfor %}</p>{% endfor %}
