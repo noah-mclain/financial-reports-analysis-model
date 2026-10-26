@@ -96,6 +96,7 @@ from harness.structure import (
 MANIFEST = REPO_ROOT / "eval" / "golden" / "manifest.yaml"
 OUT = REPO_ROOT / "var" / "eval"
 NOT_MEASURED = "dev only; not yet measured on model_test"
+NO_REFERENCE = "not measured (no reference answers exist for this pool)"
 # The cell-accuracy bar of each figures block; None is reported with no bar.
 G1: dict[str, float | None] = {"digital": DIGITAL, "scanned_en": SCANNED, "scanned_ar": None}
 # Confidence failures remain reported but do not decide a gate.

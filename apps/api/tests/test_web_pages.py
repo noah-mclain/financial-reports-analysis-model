@@ -4,6 +4,7 @@ formatting, which rounds and never computes."""
 from __future__ import annotations
 
 import io
+import re
 from datetime import date
 from decimal import Decimal, localcontext
 from pathlib import Path
@@ -48,6 +49,7 @@ from fra_core.schemas import (
     StatementReview,
     StatementType,
 )
+from fra_core.schemas.caveat import CaveatId
 from fra_core.schemas.narrative import SectionHeading
 
 PERIOD = Period(key="2025-12-31", end_date=date(2025, 12, 31), kind=PeriodKind.INSTANT)
@@ -223,6 +225,12 @@ def test_a_cell_links_to_its_page_and_box() -> None:
     )
 
 
+def test_source_analysis_parameter_is_url_encoded() -> None:
+    url = source_url("a" * 64, provenance(3), '" onclick="alert(1)')
+    assert "analysis=%22+onclick%3D%22alert%281%29" in url
+    assert '" onclick="alert(1)' not in url
+
+
 def test_an_arabic_statement_is_right_to_left_and_keeps_its_printed_labels() -> None:
     view = statement_view(statement("a" * 64, "ar", "إجمالي الموجودات"), review())
     assert view.rtl and view.units == "SAR thousands"
@@ -380,9 +388,214 @@ def test_the_results_show_statements_metrics_and_say_there_is_no_summary(tmp_pat
         page = client.get(f"/analyses/{job_id}/view").text
     assert "Statement of financial position" in page and "SAR thousands" in page
     assert "(1,234,567)" in page and "/pages/1?box=60.0%2C80.0%2C180.0%2C100.0" in page
-    assert "flags: digit_suspect</div>" in page  # named under the figure, not only on hover
+    assert (
+        "Digit check needs review" in page
+        and '<code title="Technical flag">digit_suspect</code>' in page
+    )
+    assert 'class="flag-marker" aria-label="Needs review"' in page
     assert "1.50×" in page and "total_current_assets / total_current_liabilities" in page
+    assert "1 pages · detected language en" in page
     assert "No written summary yet" in page
+
+
+def test_held_results_lead_with_a_plain_verdict_and_actionable_summary(tmp_path: Path) -> None:
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(
+            settings,
+            client,
+            reviews=[review("needs_review", ["subtotal_failed", "numbers_missing:2"])],
+        )
+        page = client.get(f"/analyses/{job_id}/view").text
+    assert page.index('id="verdict"') < page.index('id="summary"')
+    assert "Held for review" in page
+    assert "A statement subtotal did not match" in page
+    assert "2 figures could not be read" in page
+    assert "subtotal_failed" in page and "numbers_missing:2" in page
+    assert "Review the flagged figures and statement checks" in page
+    assert 'id="metrics-review-note"' in page
+    assert "Figures are not verified" in page
+    assert page.count('class="plain-reasons"') == 0
+    assert 'href="#metric-current_ratio-2025-12-31"' in page
+
+
+def test_informational_document_flag_does_not_hide_a_statement_hold_reason(
+    tmp_path: Path,
+) -> None:
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(
+            settings,
+            client,
+            flags=["low_selectivity"],
+            reviews=[review("needs_review", ["subtotal_failed"])],
+        )
+        page = client.get(f"/analyses/{job_id}/view").text
+    verdict = page.split('<section class="verdict hold"', 1)[1].split("</section>", 1)[0]
+    headline, _ = verdict.split('<details class="review-details"', 1)
+    assert "A statement subtotal did not match" in headline
+    assert "Low selectivity" not in headline
+    notices = page.split('<details class="document-notices"', 1)[1]
+    assert "<code>low_selectivity</code>" in notices
+
+
+def test_many_held_reasons_keep_the_verdict_short_and_details_available(tmp_path: Path) -> None:
+    settings = settings_at(tmp_path)
+    reasons = [f"unrecognized_reason_{index}" for index in range(40)]
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(
+            settings,
+            client,
+            reviews=[review("needs_review", reasons)],
+        )
+        page = client.get(f"/analyses/{job_id}/view").text
+    verdict = page.split('<section class="verdict hold"', 1)[1].split("</section>", 1)[0]
+    assert "One or more checks are unresolved" in verdict
+    headline, details = verdict.split('<details class="review-details"', 1)
+    assert "Unrecognized reason 0" in headline and "unrecognized_reason_0" not in headline
+    assert "Review details (40)" in verdict
+    assert "unrecognized_reason_0" in details and "unrecognized_reason_39" in details
+    assert verdict.count("Technical detail") <= 2
+
+
+def test_metrics_have_headlines_and_keep_all_details_in_collapsed_sections(tmp_path: Path) -> None:
+    settings = settings_at(tmp_path)
+    metrics = [
+        metric(MetricUnit.RATIO, float(index + 1)).model_copy(
+            update={
+                "metric_id": f"metric_{index}",
+                "flags": ["average_fallback_to_closing"] if index == 0 else [],
+            }
+        )
+        for index in range(12)
+    ]
+    metrics.extend(
+        metric(MetricUnit.RATIO, None).model_copy(
+            update={"metric_id": f"unavailable_{index}", "flags": ["missing_input:revenue"]}
+        )
+        for index in range(4)
+    )
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(settings, client, metrics=metrics)
+        page = client.get(f"/analyses/{job_id}/view").text
+    headline = page.split('<section id="metrics"', 1)[1].split("</section>", 1)[0]
+    assert headline.count('class="metric-card"') == 8
+    assert "Metric 0" in headline and "2025-12-31" in headline
+    assert 'id="all-metrics"' in page and "not computed" in page
+    assert page.count('class="metric-detail"') == 16
+    metric_links = re.findall(r'href="(#[^"]+)"', page)
+    for target in metric_links:
+        if target.startswith("#metric-"):
+            assert f'<details class="metric-detail" id="{target[1:]}">' in page
+    assert "total_current_assets / total_current_liabilities" in page
+    assert "Total assets" in page
+    assert "Used closing balance because a prior balance was unavailable" in page
+    assert '<code title="Technical flag">average_fallback_to_closing</code>' in page
+
+
+def test_statements_are_collapsed_and_flags_keep_plain_and_technical_names(tmp_path: Path) -> None:
+    settings = settings_at(tmp_path)
+    unmapped_row = (
+        statement("a" * 64)
+        .line_items[0]
+        .model_copy(
+            update={
+                "canonical_id": None,
+                "mapping_flag": "unmapped",
+                "raw_label": "<script>Revenue</script>",
+            }
+        )
+    )
+    flagged_statement = statement("a" * 64).model_copy(update={"line_items": [unmapped_row]})
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(
+            settings,
+            client,
+            statements=[flagged_statement],
+            reviews=[review("needs_review", ["critical_item_unmapped:total_liabilities"])],
+        )
+        page = client.get(f"/analyses/{job_id}/view").text
+    assert '<details class="statement-detail"' in page
+    assert "Critical statement item could not be mapped" in page
+    assert "critical_item_unmapped:total_liabilities" in page
+    assert "Row not mapped" in page and "unmapped" in page
+    assert "&lt;script&gt;Revenue&lt;/script&gt;" in page
+    assert "<script>Revenue</script>" not in page
+
+
+def test_untrusted_statement_reasons_are_escaped_in_labels_and_details(tmp_path: Path) -> None:
+    settings = settings_at(tmp_path)
+    hostile = "<script>review</script>"
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(
+            settings,
+            client,
+            reviews=[review("needs_review", [hostile])],
+        )
+        page = client.get(f"/analyses/{job_id}/view").text
+    assert "&lt;script&gt;review&lt;/script&gt;" in page
+    assert "<script>review</script>" not in page
+
+
+def test_source_page_links_back_to_the_matching_analysis_and_escapes_bad_ids(
+    tmp_path: Path,
+) -> None:
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(settings, client)
+        sha = client.get(f"/jobs/{job_id}").json()["upload_sha256"]
+        page = client.get(f"/analyses/{job_id}/view").text
+        assert f"analysis={job_id}" in page
+        source = client.get(f"/documents/{sha}/pages/1?analysis={job_id}").text
+        unrelated = client.get(
+            f"/documents/{sha}/pages/1?analysis=%3Cscript%3Ebad%3C%2Fscript%3E"
+        ).text
+    assert f'href="/analyses/{job_id}/view"' in source
+    assert '<nav class="page-index" aria-label="Source page navigation">' in source
+    assert ">Return to results</a>" in source
+    assert re.search(r"\.page-index a\s*\{[^}]*min-height:\s*44px;", source)
+    assert 'href="javascript:history.back()"' not in source
+    assert "<script>bad</script>" not in unrelated
+
+
+def test_source_page_does_not_link_to_an_analysis_for_another_upload(tmp_path: Path) -> None:
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(settings, client)
+        other_upload = client.post(
+            "/documents",
+            content=one_page_pdf(PAGE_W + 1),
+            headers={"Content-Type": "application/pdf", "X-Filename": "other.pdf"},
+        ).json()["sha256"]
+        source = client.get(f"/documents/{other_upload}/pages/1", params={"analysis": job_id}).text
+    assert 'href="/analyses/' not in source
+    assert 'href="/"' in source
+
+
+def test_layout_has_scroll_cue_focus_styles_and_consistent_job_language(tmp_path: Path) -> None:
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(settings, client)
+        analysis = client.get(f"/analyses/{job_id}/view").text
+        job = client.get(f"/jobs/{job_id}/view").text
+        upload = client.get("/").text
+    assert "Swipe to see more" in analysis
+    assert "min-height: 44px" in analysis and ":focus-visible" in analysis
+    assert re.search(r"(?m)^\s*code\s*\{[^}]*overflow-wrap:\s*anywhere;", analysis)
+    assert re.search(
+        r'<div class="scroll-wrap">\s*'
+        r'<p class="scroll-cue" id="timeline-scroll-cue">'
+        r"Swipe or scroll to see all analysis stage details\.</p>\s*"
+        r'<div class="scroll" role="region" tabindex="0" '
+        r'aria-label="Analysis stage timeline" '
+        r'aria-describedby="timeline-scroll-cue">\s*'
+        r'<table id="timeline">',
+        job,
+    )
+    assert "Swipe or scroll to see all analysis stage details." in job
+    assert re.search(r"\.job-result-link a\s*\{[^}]*min-height:\s*44px;", job)
+    assert "Analysis complete" in job and "Completed" not in job
+    assert "Queued" in upload and "Analysis complete" in job
 
 
 def test_document_flags_show_ordered_reasons_without_overriding_review_status(
@@ -396,8 +609,8 @@ def test_document_flags_show_ordered_reasons_without_overriding_review_status(
             flags=["statement_not_extracted:income", "range_not_converted"],
         )
         page = client.get(f"/analyses/{job_id}/view").text
-    assert 'class="badge needs_review">needs_review</span>' in page
-    assert '<h2 id="document-notices">Document notices</h2>' in page
+    assert '<h2 id="verdict-title">Held for review</h2>' in page
+    assert "Statement not extracted · income" in page
     assert page.index("statement_not_extracted:income") < page.index("range_not_converted")
 
 
@@ -410,7 +623,7 @@ def test_document_informational_flag_keeps_completed_status_and_unknown_flag_is_
         informational_page = client.get(f"/analyses/{informational}/view").text
         hostile = finished_job(settings, client, flags=["<script>notice</script>"])
         hostile_page = client.get(f"/analyses/{hostile}/view").text
-    assert 'class="badge completed">completed</span>' in informational_page
+    assert '<h2 id="verdict-title">Passed statement checks</h2>' in informational_page
     assert "low_selectivity" in informational_page
     assert "&lt;script&gt;notice&lt;/script&gt;" in hostile_page
     assert "<script>notice</script>" not in hostile_page
@@ -421,8 +634,8 @@ def test_document_without_flags_has_no_document_notices_section(tmp_path: Path) 
     with TestClient(create_app(Profile.NATIVE, settings)) as client:
         job_id = finished_job(settings, client, flags=[])
         page = client.get(f"/analyses/{job_id}/view").text
-    assert 'class="badge completed">completed</span>' in page
-    assert "Document notices" not in page
+    assert '<h2 id="verdict-title">Passed statement checks</h2>' in page
+    assert "Technical detail" not in page
 
 
 def test_a_declined_document_shows_the_reason_and_no_metrics(tmp_path: Path) -> None:
@@ -439,9 +652,35 @@ def test_a_declined_document_shows_the_reason_and_no_metrics(tmp_path: Path) -> 
             flags=["statement_not_extracted:income"],
         )
         page = client.get(f"/analyses/{job_id}/view").text
-    assert "Declined (bank)" in page and "total deposits on page 3" in page
+    assert "Declined" in page and "total deposits on page 3" in page
+    assert "Technical decline code" in page and "bank" in page
     assert "statement_not_extracted:income" in page
-    assert "<h2>Metrics</h2>" not in page
+    assert 'id="metrics"' not in page
+    assert "No summary was produced because this document was declined." in page
+    assert "Review the flagged figures and statement checks below" not in page
+
+
+def test_arabic_decline_summary_uses_arabic_and_keeps_the_decline_reason(
+    tmp_path: Path,
+) -> None:
+    settings = settings_at(tmp_path)
+    reason = "تقارير البنوك غير مدعومة بسبب قواعد التصنيف."
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(
+            settings,
+            client,
+            statements=[],
+            reviews=[],
+            metrics=[],
+            language="ar",
+            decline=Decline(code="unsupported_language", reason=reason),
+        )
+        page = client.get(f"/analyses/{job_id}/view").text
+    summary = page.split('<section id="summary"', 1)[1].split("</section>", 1)[0]
+    assert reason in page
+    assert 'dir="rtl" lang="ar"' in summary
+    assert "لم يُنتج ملخص لأن المستند رُفض." in summary
+    assert "Review the flagged figures" not in summary
 
 
 def test_a_document_hold_remains_visible_with_document_notices(tmp_path: Path) -> None:
@@ -449,7 +688,7 @@ def test_a_document_hold_remains_visible_with_document_notices(tmp_path: Path) -
     with TestClient(create_app(Profile.NATIVE, settings)) as client:
         job_id = finished_job(settings, client, hold="identity mismatch", flags=["unknown_reason"])
         page = client.get(f"/analyses/{job_id}/view").text
-    assert "Every statement is held for review." in page and "identity mismatch" in page
+    assert "identity mismatch" in page and "Held for review" in page
     assert "unknown_reason" in page
 
 
@@ -511,14 +750,35 @@ def test_a_job_held_only_by_a_document_notice_does_not_say_figures_failed(
     tmp_path: Path,
 ) -> None:
     settings = settings_at(tmp_path)
+    clean_statement = statement("a" * 64)
+    clean_row = clean_statement.line_items[0]
+    clean_statement = clean_statement.model_copy(
+        update={
+            "line_items": [
+                clean_row.model_copy(
+                    update={"cells": [clean_row.cells[0].model_copy(update={"flags": []})]}
+                )
+            ]
+        }
+    )
     with TestClient(create_app(Profile.NATIVE, settings)) as client:
-        flagged = finished_job(settings, client, flags=["range_not_converted:5-6"])
+        flagged = finished_job(
+            settings,
+            client,
+            flags=["range_not_converted:5-6"],
+            statements=[clean_statement],
+            reviews=[review()],
+        )
         empty = finished_job(settings, client, statements=[], reviews=[], metrics=[])
         flagged_page = client.get(f"/analyses/{flagged}/view").text
         empty_page = client.get(f"/analyses/{empty}/view").text
-    assert "Every statement passed its own checks" in flagged_page
+    assert "One or more checks are unresolved" in flagged_page
     assert "did not pass their own checks" not in flagged_page
-    assert "No statement was extracted from this document." in empty_page
+    assert "Figures are not verified" in flagged_page
+    assert 'title="This value has a flag, caveat, or held analysis"' in flagged_page
+    assert 'title="This figure is flagged or belongs to a held statement"' in flagged_page
+    assert "⚑ marks items needing review" in flagged_page
+    assert "No statement passed review" in empty_page
     assert "did not pass their own checks" not in empty_page
 
 
@@ -646,7 +906,7 @@ def test_a_claimed_figure_in_the_summary_links_to_its_metric_row(tmp_path: Path)
         job_id = finished_job(settings, client, narrative=narrative)
         page = client.get(f"/analyses/{job_id}/view").text
     assert 'href="#metric-current_ratio-2025-12-31"' in page and ">1.50</bdi></a>" in page
-    assert '<tr id="metric-current_ratio-2025-12-31">' in page
+    assert '<details class="metric-detail" id="metric-current_ratio-2025-12-31">' in page
     assert "The current ratio is " in page and " at year end." in page
 
 
@@ -742,10 +1002,70 @@ def test_statement_caveats_keep_evidence_and_mark_only_affected_values(
     assert "&#34;" in page  # evidence is safe in the hover title
     assert ("لم تذكر القائمة" if language == "ar" else "The statement") in page
     assert f'dir="{"rtl" if language == "ar" else "ltr"}" lang="{language}"' in page
-    ratio_row = page.split('<tr id="metric-margin-2025-12-31">')[1].split("</tr>")[0]
-    assert "caveat-mark" not in ratio_row.split("<td><code>")[0]
+    ratio_detail = page.split('<details class="metric-detail" id="metric-margin-2025-12-31">')[1]
+    ratio_summary = ratio_detail.split("</summary>", 1)[0]
+    assert "caveat-mark" not in ratio_summary
     # Inputs remain caveated currency amounts even when the resulting ratio is unaffected.
-    assert "caveat-mark" in ratio_row.split("<td><code>")[1]
+    assert "caveat-mark" in ratio_detail.split("<h4>Inputs</h4>", 1)[1].split("<h4>Flags", 1)[0]
+    ids = re.findall(r'\bid="([^"]+)"', page)
+    assert len(ids) == len(set(ids))
+    cash_detail = page.split(
+        '<details class="metric-detail" id="metric-current_ratio-2025-12-31">'
+    )[1]
+    note_anchor = f"metric-current_ratio-2025-12-31-caveat-statement-s1-{caveat_id}"
+    assert f'href="#{note_anchor}"' in cash_detail
+    assert f'id="{note_anchor}"' in cash_detail
+
+
+def test_metric_caveats_keep_same_id_notes_from_each_source_statement(tmp_path: Path) -> None:
+    caveat_id: CaveatId = "currency_from_domicile"
+    sar_statement = statement("a" * 64).model_copy(
+        update={
+            "caveats": [Caveat(id=caveat_id, evidence={"source": "SAR filing"})],
+        }
+    )
+    usd_statement = statement("a" * 64).model_copy(
+        update={
+            "id": "s2",
+            "currency": "USD",
+            "caveats": [Caveat(id=caveat_id, evidence={"source": "USD filing"})],
+        }
+    )
+    computed = metric(MetricUnit.CURRENCY, 1.25)
+    sar_input = computed.inputs["numerator"][0]
+    usd_input = sar_input.model_copy(update={"statement_id": "s2", "currency": "USD"})
+    computed = computed.model_copy(
+        update={"inputs": {"numerator": [sar_input, usd_input]}, "caveats": [caveat_id]}
+    )
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(
+            settings,
+            client,
+            statements=[sar_statement, usd_statement],
+            reviews=[review(), review().model_copy(update={"statement_id": "s2"})],
+            metrics=[computed],
+        )
+        page = client.get(f"/analyses/{job_id}/view").text
+
+    anchor = "metric-current_ratio-2025-12-31-caveat"
+    sar_anchor = f"{anchor}-statement-s1-currency_from_domicile"
+    usd_anchor = f"{anchor}-statement-s2-currency_from_domicile"
+    input_items = re.findall(
+        r"<li>(.*?)</li>",
+        page.split("<h4>Inputs</h4>", 1)[1].split("<h4>Flags", 1)[0],
+    )
+    assert len(input_items) == 2
+    assert f'href="#{sar_anchor}"' in input_items[0]
+    assert f'href="#{usd_anchor}"' in input_items[1]
+    assert page.count(f'id="{sar_anchor}"') == page.count(f'id="{usd_anchor}"') == 1
+    assert f'href="#{sar_anchor}"' in page and f'href="#{usd_anchor}"' in page
+    assert f'id="{sar_anchor}" data-caveat="{caveat_id}"' in page
+    assert f'id="{usd_anchor}" data-caveat="{caveat_id}"' in page
+    assert 'title="source: SAR filing"' in page
+    assert 'title="source: USD filing"' in page
+    ids = re.findall(r'\bid="([^"]+)"', page)
+    assert len(ids) == len(set(ids))
 
 
 def test_summary_footnotes_follow_existing_claims_and_are_listed_once(tmp_path: Path) -> None:
@@ -768,7 +1088,7 @@ def test_summary_footnotes_follow_existing_claims_and_are_listed_once(tmp_path: 
             settings, client, statements=[printed], metrics=[cash, ratio], narrative=narrative
         )
         page = client.get(f"/analyses/{job_id}/view").text
-    summary = page.split("<h2>Summary</h2>")[1].split("<h2>Statements</h2>")[0]
+    summary = page.split('<section id="summary"', 1)[1].split("</section>", 1)[0]
     assert summary.count('class="caveat-mark"') == 2
     assert summary.count("The statement does not name its currency.") == 1
     assert 'href="#metric-current_ratio-2025-12-31"' in summary
@@ -908,7 +1228,42 @@ def test_arabic_decline_page_shows_plain_reason_and_no_financial_outputs(tmp_pat
             decline=Decline(code="unsupported_language", reason=reason),
         )
         page = client.get(f"/analyses/{job_id}/view").text
-    assert "Declined (unsupported_language)" in page and reason in page
-    assert 'class="badge needs_review">needs_review</span>' in page
-    assert 'id="metrics"' not in page and 'class="statement"' not in page
+    assert "Declined" in page and reason in page
+    assert "unsupported_language" in page
+    assert 'id="metrics"' not in page and 'class="statement-detail"' not in page
     assert "1.50×" not in page
+
+
+def test_button_text_contrasts_with_both_theme_accents() -> None:
+    template = Path(__file__).parents[1] / "src/fra_api/templates/base.html"
+    css = template.read_text()
+    light_root = re.search(r":root\s*\{([^}]*)\}", css)
+    dark_root = re.search(r"prefers-color-scheme:\s*dark\)\s*\{\s*:root\s*\{([^}]*)\}", css)
+    button = re.search(r"button\s*\{([^}]*)\}", css)
+    assert light_root is not None and dark_root is not None and button is not None
+
+    def color(declarations: str, name: str) -> str:
+        match = re.search(rf"--{name}:\s*(#[0-9a-fA-F]{{6}})", declarations)
+        assert match is not None
+        return match.group(1)
+
+    def contrast_ratio(foreground: str, background: str) -> float:
+        def luminance(value: str) -> float:
+            channels = [int(value[index : index + 2], 16) / 255 for index in (1, 3, 5)]
+            linear = [
+                channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4
+                for channel in channels
+            ]
+            return sum(
+                weight * channel
+                for weight, channel in zip((0.2126, 0.7152, 0.0722), linear, strict=True)
+            )
+
+        lighter, darker = sorted((luminance(foreground), luminance(background)), reverse=True)
+        return (lighter + 0.05) / (darker + 0.05)
+
+    button_color = re.search(r"color:\s*var\(--([\w-]+)\)", button.group(1))
+    assert button_color is not None
+    foreground_name = button_color.group(1)
+    for theme in (light_root.group(1), dark_root.group(1)):
+        assert contrast_ratio(color(theme, foreground_name), color(theme, "accent")) >= 4.5

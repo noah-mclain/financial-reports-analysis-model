@@ -1,0 +1,589 @@
+{
+  "version": 1,
+  "method": "assisted_review",
+  "reference_scope": "reviewed_packet_slots",
+  "readings": [
+    {
+      "id": "juhayna-2025-en-standalone",
+      "sha256": "9d6b488392963d2f0038c2fa8ec486d4c174a9c020ac7dd8c09ce0f91fe5dad8",
+      "reader": "nada",
+      "source": "pdf_reviewed",
+      "complete": true,
+      "statements": [
+        {
+          "type": "balance",
+          "pages": [
+            5
+          ],
+          "page_mode": "scanned",
+          "scale": 1,
+          "currency": "EGP",
+          "periods": [
+            {
+              "key": "2025-12-31",
+              "end_date": "2025-12-31",
+              "kind": "instant",
+              "months": null,
+              "restated": false,
+              "audited": null
+            },
+            {
+              "key": "2024-12-31",
+              "end_date": "2024-12-31",
+              "kind": "instant",
+              "months": null,
+              "restated": false,
+              "audited": null
+            }
+          ],
+          "rows": [
+            {
+              "label": "Fixed Assets",
+              "values": {
+                "2025-12-31": "2974240332",
+                "2024-12-31": "202428183"
+              },
+              "unconfirmed": [],
+              "canonical_id": "ppe_net"
+            },
+            {
+              "label": "Projects Under Construction",
+              "values": {
+                "2025-12-31": "2022172664",
+                "2024-12-31": "51546033"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Investments in Subsidiaries and Joint Ventures",
+              "values": {
+                "2025-12-31": "1074969544",
+                "2024-12-31": "2508491193"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Right-of-Use Assets",
+              "values": {
+                "2025-12-31": "120152194",
+                "2024-12-31": null
+              },
+              "unconfirmed": [],
+              "canonical_id": "right_of_use_assets"
+            },
+            {
+              "label": "Financial investments at amortised costs Long-tern",
+              "values": {
+                "2025-12-31": "109946586",
+                "2024-12-31": null
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Goodwill",
+              "values": {
+                "2025-12-31": "97092890",
+                "2024-12-31": null
+              },
+              "unconfirmed": [],
+              "canonical_id": "goodwill"
+            },
+            {
+              "label": "Non-Current Assets",
+              "values": {
+                "2025-12-31": "6398574210",
+                "2024-12-31": "2762465409"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_non_current_assets"
+            },
+            {
+              "label": "Inventory",
+              "values": {
+                "2025-12-31": "5042005277",
+                "2024-12-31": null
+              },
+              "unconfirmed": [],
+              "canonical_id": "inventories"
+            },
+            {
+              "label": "Trade Receivables and Other Debtors",
+              "values": {
+                "2025-12-31": "1010905367",
+                "2024-12-31": "8016305"
+              },
+              "unconfirmed": [],
+              "canonical_id": "trade_receivables"
+            },
+            {
+              "label": "Due from Related Parties",
+              "values": {
+                "2025-12-31": "2087033755",
+                "2024-12-31": "361048333"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Investments at amortized costs Short -tenn",
+              "values": {
+                "2025-12-31": "537771276",
+                "2024-12-31": null
+              },
+              "unconfirmed": [],
+              "canonical_id": "short_term_investments"
+            },
+            {
+              "label": "Cash and Cash Equivalents",
+              "values": {
+                "2025-12-31": "705820715",
+                "2024-12-31": "11654741"
+              },
+              "unconfirmed": [],
+              "canonical_id": "cash_and_equivalents"
+            },
+            {
+              "label": "Current Assets",
+              "values": {
+                "2025-12-31": "9383536390",
+                "2024-12-31": "380719379"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_current_assets"
+            },
+            {
+              "label": "Total Assets",
+              "values": {
+                "2025-12-31": "15782110600",
+                "2024-12-31": "3143184788"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_assets"
+            },
+            {
+              "label": "Issued and Paid-up Capital",
+              "values": {
+                "2025-12-31": "1176756353",
+                "2024-12-31": "941405082"
+              },
+              "unconfirmed": [],
+              "canonical_id": "share_capital"
+            },
+            {
+              "label": "Legal Reserve",
+              "values": {
+                "2025-12-31": null,
+                "2024-12-31": "470702541"
+              },
+              "unconfirmed": [],
+              "canonical_id": "other_reserves"
+            },
+            {
+              "label": "General Reserve - Share Premium",
+              "values": {
+                "2025-12-31": null,
+                "2024-12-31": "330920428"
+              },
+              "unconfirmed": [],
+              "canonical_id": "other_reserves"
+            },
+            {
+              "label": "Merger Reserve",
+              "values": {
+                "2025-12-31": "2338053452",
+                "2024-12-31": null
+              },
+              "unconfirmed": [],
+              "canonical_id": "other_reserves"
+            },
+            {
+              "label": "Other Reserves",
+              "values": {
+                "2025-12-31": "259470145",
+                "2024-12-31": null
+              },
+              "unconfirmed": [],
+              "canonical_id": "other_reserves"
+            },
+            {
+              "label": "Retained Earnings",
+              "values": {
+                "2025-12-31": "3172279962",
+                "2024-12-31": "817963643"
+              },
+              "unconfirmed": [],
+              "canonical_id": "retained_earnings"
+            },
+            {
+              "label": "Total Equity",
+              "values": {
+                "2025-12-31": "6946559912",
+                "2024-12-31": "2560991694"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_equity"
+            },
+            {
+              "label": "Loans",
+              "values": {
+                "2025-12-31": "1319646936",
+                "2024-12-31": null
+              },
+              "unconfirmed": [],
+              "canonical_id": "long_term_borrowings"
+            },
+            {
+              "label": "Lease Liabilities",
+              "values": {
+                "2025-12-31": "87818673",
+                "2024-12-31": null
+              },
+              "unconfirmed": [],
+              "canonical_id": "lease_liabilities_non_current"
+            },
+            {
+              "label": "Deferred Tax Liabilities",
+              "values": {
+                "2025-12-31": "380963444",
+                "2024-12-31": "23490814"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Deferred Revenues - Government Grants",
+              "values": {
+                "2025-12-31": "386954",
+                "2024-12-31": null
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Non-Current Linbilities",
+              "values": {
+                "2025-12-31": "1788816007",
+                "2024-12-31": "23490814"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_non_current_liabilities"
+            },
+            {
+              "label": "Provisions",
+              "values": {
+                "2025-12-31": "90633808",
+                "2024-12-31": "150176"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Loans",
+              "values": {
+                "2025-12-31": "59624265",
+                "2024-12-31": null
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Credit Facilities",
+              "values": {
+                "2025-12-31": "5111561262",
+                "2024-12-31": "2307878"
+              },
+              "unconfirmed": [],
+              "canonical_id": "short_term_borrowings"
+            },
+            {
+              "label": "Trade and Other Payables",
+              "values": {
+                "2025-12-31": "1710598225",
+                "2024-12-31": "47003671"
+              },
+              "unconfirmed": [],
+              "canonical_id": "trade_payables"
+            },
+            {
+              "label": "Due to Related Parties",
+              "values": {
+                "2025-12-31": "26748663",
+                "2024-12-31": "484021602"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Income Taxes",
+              "values": {
+                "2025-12-31": null,
+                "2024-12-31": "1496537"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Lease Liabilities",
+              "values": {
+                "2025-12-31": "45755755",
+                "2024-12-31": "23722416"
+              },
+              "unconfirmed": [],
+              "canonical_id": "lease_liabilities_non_current"
+            },
+            {
+              "label": "Deferred Revenues - Governinent Grants",
+              "values": {
+                "2025-12-31": "1812703",
+                "2024-12-31": null
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Current Liabilities Total Liabilities",
+              "values": {
+                "2025-12-31": "7046734681",
+                "2024-12-31": "558702280"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_current_liabilities"
+            },
+            {
+              "label": "Total Liabilities",
+              "values": {
+                "2025-12-31": "8835550688",
+                "2024-12-31": "582193094"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_liabilities"
+            },
+            {
+              "label": "Total Equity and Liabilities",
+              "values": {
+                "2025-12-31": "15782110600",
+                "2024-12-31": "3143184781"
+              },
+              "unconfirmed": [],
+              "canonical_id": "total_liabilities_and_equity"
+            }
+          ]
+        },
+        {
+          "type": "comprehensive_income",
+          "pages": [
+            7
+          ],
+          "page_mode": "digital",
+          "scale": 1,
+          "currency": "EGP",
+          "periods": [
+            {
+              "key": "FY2025",
+              "end_date": "2025-12-31",
+              "kind": "duration",
+              "months": 12,
+              "restated": false,
+              "audited": null
+            },
+            {
+              "key": "FY2024",
+              "end_date": "2024-12-31",
+              "kind": "duration",
+              "months": 12,
+              "restated": false,
+              "audited": null
+            }
+          ],
+          "rows": [
+            {
+              "label": "Net Profit / (Loss) for the year",
+              "values": {
+                "FY2025": "1292020646",
+                "FY2024": "21527625"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Foreign Currency Translation Differences (EAS 13 - Appendix H), Net of Tax",
+              "values": {
+                "FY2025": null,
+                "FY2024": "-382736"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Total Comprehensive Income / (Comprehensive Loss) for the year",
+              "values": {
+                "FY2025": "1292020646",
+                "FY2024": "21144889"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            }
+          ]
+        },
+        {
+          "type": "income",
+          "pages": [
+            6
+          ],
+          "page_mode": "digital",
+          "scale": 1,
+          "currency": "EGP",
+          "periods": [
+            {
+              "key": "FY2025",
+              "end_date": "2025-12-31",
+              "kind": "duration",
+              "months": 12,
+              "restated": false,
+              "audited": null
+            },
+            {
+              "key": "FY2024",
+              "end_date": "2024-12-31",
+              "kind": "duration",
+              "months": 12,
+              "restated": false,
+              "audited": null
+            }
+          ],
+          "rows": [
+            {
+              "label": "Net sales",
+              "values": {
+                "FY2025": "23229121314",
+                "FY2024": null
+              },
+              "unconfirmed": [],
+              "canonical_id": "revenue"
+            },
+            {
+              "label": "Cost of sales",
+              "values": {
+                "FY2025": "-19644869218",
+                "FY2024": null
+              },
+              "unconfirmed": [],
+              "canonical_id": "cost_of_revenue"
+            },
+            {
+              "label": "Gross profit",
+              "values": {
+                "FY2025": "3584252096",
+                "FY2024": null
+              },
+              "unconfirmed": [],
+              "canonical_id": "gross_profit"
+            },
+            {
+              "label": "Other Operating Revenues",
+              "values": {
+                "FY2025": "160673542",
+                "FY2024": "36874647"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Selling and Distribution Expenses",
+              "values": {
+                "FY2025": "-506874279",
+                "FY2024": null
+              },
+              "unconfirmed": [],
+              "canonical_id": "selling_general_admin"
+            },
+            {
+              "label": "General and Administrative Expenses",
+              "values": {
+                "FY2025": "-546732902",
+                "FY2024": "-4143815"
+              },
+              "unconfirmed": [],
+              "canonical_id": "selling_general_admin"
+            },
+            {
+              "label": "Net Reversal of Impairment on Trade Receivables and Other Debtors",
+              "values": {
+                "FY2025": "-443204",
+                "FY2024": "15850"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Other Expenses",
+              "values": {
+                "FY2025": "-54080084",
+                "FY2024": "-833737"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Operating Activities Results",
+              "values": {
+                "FY2025": "2636795169",
+                "FY2024": "31912945"
+              },
+              "unconfirmed": [],
+              "canonical_id": "operating_income"
+            },
+            {
+              "label": "Net Finance (Expenses)/ Income",
+              "values": {
+                "FY2025": "-980618340",
+                "FY2024": "-1014792"
+              },
+              "unconfirmed": [],
+              "canonical_id": null
+            },
+            {
+              "label": "Net Profit/(Loss) for the year Before Income Tax",
+              "values": {
+                "FY2025": "1656176829",
+                "FY2024": "30898153"
+              },
+              "unconfirmed": [],
+              "canonical_id": "profit_before_tax"
+            },
+            {
+              "label": "Income Tax",
+              "values": {
+                "FY2025": "-364156183",
+                "FY2024": "-9370528"
+              },
+              "unconfirmed": [],
+              "canonical_id": "income_tax_expense"
+            },
+            {
+              "label": "Net Profit/(Loss) for the year",
+              "values": {
+                "FY2025": "1292020646",
+                "FY2024": "21527625"
+              },
+              "unconfirmed": [],
+              "canonical_id": "net_income"
+            },
+            {
+              "label": "Earnings per Share in Net Profit/(Loss) for the year (LE/Share)",
+              "values": {
+                "FY2025": "0.86",
+                "FY2024": "0.018"
+              },
+              "unconfirmed": [],
+              "canonical_id": "eps_basic"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
