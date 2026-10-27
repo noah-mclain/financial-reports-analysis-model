@@ -1,0 +1,7 @@
+# Checkpoint log (D13, D17; docs/blueprint/08-revised-plan.md).
+# Append-only: one row per step, written before any scoring starts.
+# Never edit or delete a row. A marker spends the step even if the run fails.
+# candidate: caller-supplied artifact identity; commit: clean tracked repository HEAD.
+date	step	candidate	commit
+2026-10-27	model_test_pipeline	72607d1d7e0a324faa44e83604505b5a5f1e93db:documents=33c5f7f80a34497a5de57751ce49061b50011b7d5033272b36514b0f8fd797b3:config=42138cf1572892d8f7241b168977ce699ab48f362ce6fa141e399d08d175857e	72607d1d7e0a324faa44e83604505b5a5f1e93db
+2026-10-27	blind_pipeline	72607d1d7e0a324faa44e83604505b5a5f1e93db:documents=243fe4b4169b69decd80e242ab8cf8abd3e59e7f1ab03d066f2bd1602b8f4a05:config=42138cf1572892d8f7241b168977ce699ab48f362ce6fa141e399d08d175857e	72607d1d7e0a324faa44e83604505b5a5f1e93db

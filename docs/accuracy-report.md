@@ -1,16 +1,146 @@
 # Accuracy report
 
-Status: 26 October 2026. Gate A and B results below are from `dev`; nothing here is a held-out
-gate result. `model_test` and `blind` have not been scored (D13, D17), and the checkpoint has
-not run. The cited Gate A/B and locate results are the dated reports committed under
+Status: 27 October 2026. Gate A and B results below are from `dev`; nothing here is a held-out
+gate result. The one-time checkpoint pipeline observations ran on 27 October; they do not
+measure gate accuracy or correctness. The cited Gate A/B and locate results are the dated reports committed under
 [`eval/results/`](../eval/results/README.md), with their SHA-256 and the command that produced
 each. The live reports under `var/` are not committed and a later run overwrites them; regenerate
-with `make eval-gates` and `make eval-locate TARGET=golden`. Rows marked "not
-measured" have no run.
+with `make eval-gates` and `make eval-locate TARGET=golden`. Rows marked "not measured" have no
+measurement; checkpoint pipeline observations are not gate measurements.
 
 Scored scope is English documents (D21). Arabic results stay visible where they were measured.
 The 29 Arabic documents in `model_test` and 33 in `blind` are excluded; 11 Arabic-only issuers
 leave each scored denominator ([D21 counts](blueprint/08-revised-plan.md)).
+
+## Checkpoint pipeline observations, 27 October 2026
+
+The owner-run checkpoint used the pipeline-only runner: ingest pipeline, no model call, and no
+reference-answer path. These observations establish operational completion only. A
+`held_for_review` outcome is not a correctness verdict and is not evidence for Gate E. The run
+commit was `72607d1d7e0a324faa44e83604505b5a5f1e93db`. Each summary's `candidate` string is the commit, document-list hash and configuration hash; the configuration SHA-256 is
+`42138cf1572892d8f7241b168977ce699ab48f362ce6fa141e399d08d175857e`. The exact `candidate`
+strings are `72607d1d7e0a324faa44e83604505b5a5f1e93db:documents=33c5f7f80a34497a5de57751ce49061b50011b7d5033272b36514b0f8fd797b3:config=42138cf1572892d8f7241b168977ce699ab48f362ce6fa141e399d08d175857e`
+for `model_test` and
+`72607d1d7e0a324faa44e83604505b5a5f1e93db:documents=243fe4b4169b69decd80e242ab8cf8abd3e59e7f1ab03d066f2bd1602b8f4a05:config=42138cf1572892d8f7241b168977ce699ab48f362ce6fa141e399d08d175857e`
+for `blind`. The recorded candidate identity is one adapter, one seed,
+`adapters.safetensors` SHA-256
+`2f7234d7a96bdf02b9c4384f0a4b17389ade5a05ad4fa13c70513ba5fee28a1e`, `adapter_config.json`
+SHA-256 `5cdfcfca249bfb025076eb71931f43907fe25ac1e142c1a26cc8855281a312eb`, and base-model
+manifest SHA-256 `d5d0d55fa3528eb37274c0b50b16a1c599ed046f9c5400d753657ef880e96687`. The runner
+did not exercise this candidate.
+
+D22 scope: `model_test` was 36 English documents from 25 issuers (13 annual, 23 interim);
+`blind` was 29 English documents from 20 issuers (14 annual, 15 interim). The 8 reserved
+issuers and their 10 English documents were excluded from `blind` and remained unopened. The
+summary document and period fields and row language fields agree with the D22 counts: no count
+differed. Arabic gate claims are not made (D21).
+
+The tables below report each total beside its annual and interim strata. Outcome, identity,
+critical-item, failure-class, time-budget and peak-memory values come from the corresponding
+pool summary's root fields for total and `by_period.annual` / `by_period.interim` fields for
+strata. Industry outcome counts are grouped from `rows[].industry.outcome` and
+`rows[].industry.code`; language counts are grouped from `rows[].language`. The row fields are
+used only for these operational counts.
+
+### `model_test`
+
+| Outcome | Total | Annual | Interim |
+| --- | ---: | ---: | ---: |
+| Completed | 0 | 0 | 0 |
+| Declined | 0 | 0 | 0 |
+| Failed | 0 | 0 | 0 |
+| Held for review | 36 | 13 | 23 |
+
+| Identity outcome | Total | Annual | Interim |
+| --- | ---: | ---: | ---: |
+| Passed | 24 | 6 | 18 |
+| Not met | 12 | 7 | 5 |
+| Held with explanation | 0 | 0 | 0 |
+
+| Critical-item status | Total | Annual | Interim |
+| --- | ---: | ---: | ---: |
+| Mapped | 257 | 85 | 172 |
+| Explicitly flagged | 130 | 45 | 85 |
+| Ambiguous | 29 | 22 | 7 |
+| Statement not found | 16 | 4 | 12 |
+| Unmapped | 0 | 0 | 0 |
+
+| Industry outcome | Total | Annual | Interim |
+| --- | ---: | ---: | ---: |
+| Pass | 35 | 12 | 23 |
+| Needs review, near threshold | 1 | 1 | 0 |
+| Declined: bank | 0 | 0 | 0 |
+| Declined: insurer | 0 | 0 | 0 |
+
+No failure classes were recorded (0 total, annual, or interim; `failure_classes` is empty).
+Every document was held for review. Text-layer documents within budget and peak memory were:
+
+| Operational measure | Total | Annual | Interim |
+| --- | ---: | ---: | ---: |
+| Digital within 60 s | 9/9 | 2/2 | 7/7 |
+| Mixed within 240 s | 25/25 | 10/10 | 15/15 |
+| Scanned within 240 s | 2/2 | 1/1 | 1/1 |
+| Peak memory (GB) | 3.170261412858963 | 3.170261412858963 | 3.0983012318611145 |
+
+All 36 rows were English (`rows[].language = en`; annual 13, interim 23). The summary SHA-256
+is `471e2e2b5ad37b8fe7cd9f1472dcc3ffc98503c562b0ba912d3c25749fa61842`; the per-document
+manifest SHA-256 is `a3c78cd02880be3e59b3889044b43e9cc99c88ca5932074db026cedc51bcd107`.
+
+### `blind`
+
+| Outcome | Total | Annual | Interim |
+| --- | ---: | ---: | ---: |
+| Completed | 0 | 0 | 0 |
+| Declined | 2 | 2 | 0 |
+| Failed | 0 | 0 | 0 |
+| Held for review | 27 | 12 | 15 |
+
+| Identity outcome | Total | Annual | Interim |
+| --- | ---: | ---: | ---: |
+| Passed | 19 | 8 | 11 |
+| Not met | 10 | 6 | 4 |
+| Held with explanation | 0 | 0 | 0 |
+
+| Critical-item status | Total | Annual | Interim |
+| --- | ---: | ---: | ---: |
+| Mapped | 207 | 96 | 111 |
+| Explicitly flagged | 98 | 37 | 61 |
+| Ambiguous | 19 | 11 | 8 |
+| Statement not found | 0 | 0 | 0 |
+| Unmapped | 0 | 0 | 0 |
+
+| Industry outcome | Total | Annual | Interim |
+| --- | ---: | ---: | ---: |
+| Pass | 26 | 11 | 15 |
+| Needs review, near threshold | 1 | 1 | 0 |
+| Declined: bank | 1 | 1 | 0 |
+| Declined: insurer | 1 | 1 | 0 |
+
+No failure classes were recorded (0 total, annual, or interim; `failure_classes` is empty).
+The two declined documents are reported as counts only. Text-layer documents within budget
+and peak memory were:
+
+| Operational measure | Total | Annual | Interim |
+| --- | ---: | ---: | ---: |
+| Digital within 60 s | 8/8 | 3/3 | 5/5 |
+| Mixed within 240 s | 18/18 | 9/9 | 9/9 |
+| Scanned within 240 s | 3/3 | 2/2 | 1/1 |
+| Peak memory (GB) | 2.4050476402044296 | 2.372805617749691 | 2.4050476402044296 |
+
+All 29 rows were English (`rows[].language = en`; annual 14, interim 15). The summary SHA-256
+is `396f1a270cc336d22a192a769030b23489eebff48c90abc785bd1301f3a71b33`; the per-document
+manifest SHA-256 is `020f48b0ad500218d8c5b7962b9f4421932b37a9024e2492c491b298e1f8043d`.
+
+Gate A and B accuracy are **not measured on `model_test` or `blind`**; Gate A's accepted-cell
+share is not judged. Gate C is **not measured on `model_test`**; validation panels are
+diagnostics only and are not pooled or substituted for Gate C. Gate E is **not judged** because
+there are no reviewed references. Never interpret these observations as any of Gates A, B, C,
+or E passing or failing. Gate D is reported only from its separate recorded evidence: its
+digital Docker result met; its scanned half did **not** meet and is covered by the owner's D24
+exception. Partial summaries existed for 2 of 4 scanned or partly scanned `dev` documents,
+`net_margin` only, and all remained held for review.
+
+The summaries and per-document checksum manifests are archived privately outside Git.
 
 ## Gate status
 
@@ -19,8 +149,8 @@ leave each scored denominator ([D21 counts](blueprint/08-revised-plan.md)).
 | A. Extraction | Not met on `dev` (English, 24 October): scanned cells and balance identity miss the bar | [`eval/results/gates-dev-2026-10-24.json`](../eval/results/gates-dev-2026-10-24.json), 6 English golden documents |
 | B. Mapping | Slot accounting met on `dev` (24 October); no mapped slot is verified against an independent reference | same |
 | C. Model | Not met: no adapter has been promoted | [normalization-validation.md](runbooks/normalization-validation.md) |
-| D. Portability | Partly established (26 October): the Docker profile ran upload to results on five English `dev` documents; the Almarai annual report completed with a summary in 232 s; four scanned or partly scanned documents ended `needs_review` with the summary withheld (111 to 273 s). Docker cell accuracy: Almarai 138 of 138 (native 138 of 138), Edita IFRS 114 of 126 (native Vision 123 of 126). No scanned document reached a summary, so Gate D is not established | [08-revised-plan.md](blueprint/08-revised-plan.md) |
-| E. Blind | Not measured: waits for the checkpoint | None; the checkpoint has not run |
+| D. Portability | Partly established (26 October): the Docker profile ran upload to results on five English `dev` documents; the Almarai annual report completed with a summary (the digital half is met). Docker cell accuracy: Almarai 138 of 138 (native 138 of 138), Edita IFRS 114 of 126 (native Vision 123 of 126). The scanned half is **not met** and is covered by the owner's exception D24: with the confirmed-only partial summary, 2 of 4 scanned or partly scanned `dev` documents reach a partial summary (`net_margin` only, each included figure equal to its reviewed reference) and all four stay `needs_review` | [08-revised-plan.md](blueprint/08-revised-plan.md) |
+| E. Blind | Not judged: no reviewed references exist for the checkpoint pools | [Checkpoint observations](#checkpoint-pipeline-observations-27-october-2026) |
 
 ## Gate A and B, English golden set (`dev`), 24 October
 
@@ -132,10 +262,21 @@ not better than the 1,000-update adapter: about the same representative macro-F1
 to +0.074 (the interval includes zero). See
 [normalization-training.md](runbooks/normalization-training.md#the-3000-update-fit-aborted-25-october-2026).
 
+## Rehearsal, 27 October 2026
+
+Two end-to-end runs on reserved issuers' English annual documents ([procedure](runbooks/rehearsal.md)), commit `72607d1d7e0a324faa44e83604505b5a5f1e93db`, normalization flag off (the shipped default). Selection rule, written before any output was seen: the first two of the four reserved English annual documents ordered by fetched SHA-256; native first, Docker second. Neither run is clean under the runbook's reading (completes without `needs_review`, no contradiction in the owner's spot check); that reading awaits the owner's confirmation.
+
+| Run | Profile | Document | Final status | Wall time | Statements | Summary |
+| --- | --- | --- | --- | --- | --- | --- |
+| A | Native | Tesco 2025 annual report (digital, 248 pages) | `needs_review`, declined as an insurer | 5 s | 0 | none |
+| B | Docker | Aseer 2021 annual financial statements (mixed, 73 pages) | `needs_review` | 273 s | 2 (balance, income), both held | withheld, no partial summary |
+
+Run A: the decline reason is `declined:insurer`, score 9.0 from three cues ("insurance revenue" on page 137, "insurance contract liabilities" and "reinsurance contract assets" on page 139). The issuer is a retailer with a bank arm, so this may be a false decline; it is recorded as found, not corrected, and the document was not replaced. Run B: the balance sheet is held for unmapped critical items (cash and equivalents, equity attributable to the parent, total liabilities) and the income statement for unmapped critical items (net income, net income attributable to the parent, operating income) and two unchecked subtotals; balance-dependent metrics are excluded and no figure was confirmed. Two documents do not support a generalization. The owner's spot check of a figure and a formula has not been made.
+
 ## Not measured
 
-- `model_test` and `blind` scores for any gate.
+- Gate A and B accuracy on `model_test` or `blind`, Gate A accepted-cell share there, Gate C on `model_test`, and Gate E correctness: the checkpoint records pipeline operations only, without reviewed references. See [checkpoint pipeline observations](#checkpoint-pipeline-observations-27-october-2026).
 - Gate A and B on the train-holdout dry runs since 7 October.
 - Narration with a language model; the template summary is the shipped path.
-- Docker upload to summary on a scanned English document: the four scanned or partly scanned documents were held with the summary withheld, and a bounded extraction attempt did not clear them. Docker identity, mapping and metric numbers (only cell accuracy on two documents is recorded).
-- Two clean end-to-end runs on documents never seen before ([procedure](runbooks/rehearsal.md)).
+- Gate D scanned portability: not met; D24 records the exception. Partial summaries on 2 of 4 scanned or partly scanned documents contained `net_margin` only and remained held for review. Docker identity, mapping and metric numbers (only cell accuracy on two documents is recorded).
+- Two clean end-to-end runs on documents never seen before ([procedure](runbooks/rehearsal.md)): two runs were made on 27 October on reserved documents, and **neither was clean** (see the rehearsal section below); the owner's spot check has not been made.
