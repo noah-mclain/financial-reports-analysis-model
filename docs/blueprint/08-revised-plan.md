@@ -163,12 +163,13 @@ examples to `train`, so Gate C is not measured on `model_test`; validation panel
 only. Never call Gates A, B, C or E met or failed based on those observations. The runbook
 reports supported operational counts and explicitly names these limits.
 
-The owner runs the checkpoint once under D23; D23 is the owner's explicit decision to proceed
+The owner ran the checkpoint once on 2026-10-27 under D23; see the [checkpoint pipeline
+observations](../accuracy-report.md#checkpoint-pipeline-observations-27-october-2026). D23 is the owner's explicit decision to proceed
 and report limitations honestly. Before the run, required checks and the separate Gate D
-precondition below still must hold. In order: `model_test` pipeline observations are recorded,
-then the non-reserved `blind` pool is run for the first time (D17). This is not a commitment
-that Gates A to E will all be confirmed. Until the run, nothing is scored on `model_test` or
-`blind`. Gates A and B are reported on `dev` and on dry runs of the full
+precondition below still had to hold. In order, `model_test` pipeline observations were recorded,
+then the non-reserved `blind` pool was run for the first time (D17). This is not a commitment
+that Gates A to E will all be confirmed. The checkpoint records pipeline observations, not gate
+scores, on `model_test` or `blind`. Gates A and B are reported on `dev` and on dry runs of the full
 pipeline on the documents of the train-holdout issuers, and marked "not yet measured on
 `model_test`"; Gate C is measured on the train holdout (D16, design in
 [04-execution-phases.md](04-execution-phases.md) 2.4, pool rules in
