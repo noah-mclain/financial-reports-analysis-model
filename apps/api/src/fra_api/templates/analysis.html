@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% macro caveat_marks(notes) %}{% for note in notes %}<sup><a class="caveat-mark" href="#{{ note.anchor }}" aria-label="{{ note.text }}">†</a></sup>{% endfor %}{% endmacro %}
+{% set annotation_ids = namespace(value=0) %}
+{% macro caveat_marks(notes) %}{% for note in notes %}{% set annotation_ids.value = annotation_ids.value + 1 %}<sup class="annotation-tooltip"><a class="caveat-mark" href="#{{ note.anchor }}" aria-label="{{ note.text }}" aria-describedby="{{ note.anchor }}-description-{{ annotation_ids.value }}">†</a><span class="annotation-tooltip-text" id="{{ note.anchor }}-description-{{ annotation_ids.value }}" role="tooltip">{{ note.text }}</span></sup>{% endfor %}{% endmacro %}
 {% macro caveat_text(note) %}<p class="muted caveat-note" id="{{ note.anchor }}" dir="{{ 'rtl' if note.language == 'ar' else 'ltr' }}" lang="{{ note.language }}">{{ note.text }}</p><details class="technical-details"><summary aria-label="Technical details for caveat note">Technical details</summary><code dir="ltr">{{ note.id }}</code><ul>{% for key, value in note.evidence.items() %}<li><code dir="ltr">{{ key }}: {{ value }}</code></li>{% endfor %}</ul></details>{% endmacro %}
 {% macro statement_table(s, held) %}
 <div class="scroll-wrap">
@@ -122,17 +123,29 @@
   {% else %}<p class="panel muted">No metrics were computed for this analysis.</p>{% endif %}
   <details id="all-metrics" class="section-details">
     <summary>All metrics and calculation details ({{ view.metrics | length }})</summary>
-    {% for m in view.metrics %}<details class="metric-detail" id="{{ m.anchor }}">
-      <summary><span>{{ m.name }}</span><span>{{ m.period }}</span><span>{% if m.value is none %}not computed{% else %}{{ m.value }}{% endif %}{% if m.flags or m.caveats or needs_review %}<span class="flag-marker" aria-label="Needs review" title="This value has a flag, caveat, or held analysis">⚑</span>{% endif %}{{ caveat_marks(m.notes) }}</span></summary>
-      {% if m.value is none %}<p class="muted">No metric value was computed. See the technical reason below.</p>{% endif %}
-      <dl><dt>Formula</dt><dd>{{ plain_formula(m.formula) }}</dd></dl>
-      <details class="technical-details"><summary aria-label="Technical details for {{ m.name }} formula">Technical details</summary><code dir="ltr">{{ m.formula }}</code></details>
-      <h4>Inputs</h4>
-      {% if m.inputs %}<ul>{% for i in m.inputs %}<li><a href="{{ i.source }}">{{ i.label }}</a> — <bdi dir="ltr">{{ i.text }}</bdi>{{ caveat_marks(i.caveats) }}<details class="technical-details"><summary aria-label="Technical details for {{ i.label }} input">Technical details</summary><code dir="ltr">{{ i.canonical_id }}</code> · <code dir="ltr">{{ i.period }}</code></details></li>{% endfor %}</ul>{% else %}<p class="muted">No input values were recorded.</p>{% endif %}
-      <h4>Flags and caveats</h4>
-      {% if m.flags or m.caveats %}<ul>{% for flag in m.flags %}<li>{{ flag_label(flag) }}</li>{% endfor %}{% for caveat in m.caveats %}<li>{{ plain_label(caveat) }}</li>{% endfor %}</ul><details class="technical-details"><summary aria-label="Technical details for {{ m.name }} checks">Technical details</summary><ul>{% for flag in m.flags %}<li><code dir="ltr">{{ flag }}</code></li>{% endfor %}{% for caveat in m.caveats %}<li><code dir="ltr">{{ caveat }}</code></li>{% endfor %}</ul></details>{% else %}<p class="muted">No metric-specific flags recorded.</p>{% endif %}
-      {% for note in m.notes %}{{ caveat_text(note) }}{% endfor %}
-    </details>{% endfor %}
+    {% for group in view.metric_groups %}<article class="metric-group" aria-labelledby="{{ group.metric_id }}-group-title">
+      <h4 id="{{ group.metric_id }}-group-title">{{ group.name }}</h4>
+      <div class="metric-period-list">
+      {% for m in group.metrics %}<section class="metric-period" id="{{ m.anchor }}" aria-labelledby="{{ m.anchor }}-title">
+        <h5 id="{{ m.anchor }}-title">{{ m.period }}</h5>
+        <bdi class="metric-value" dir="ltr">{% if m.value is none %}not computed{% else %}{{ m.value }}{% endif %}</bdi><span class="metric-annotations">{% if m.flags or m.caveats or needs_review %}<span class="annotation-tooltip"><span class="flag-marker" tabindex="0" aria-label="Review status indicator" aria-describedby="{{ m.anchor }}-review-description">⚑</span><span class="annotation-tooltip-text" id="{{ m.anchor }}-review-description" role="tooltip">{% if m.flags %}{% for flag in m.flags %}{{ flag_label(flag) }}{% if not loop.last %}; {% endif %}{% endfor %}{% endif %}{% for note in m.notes %}{% if m.flags or not loop.first %} {% endif %}{{ note.text }}{% endfor %}{% if needs_review %} Figures are not verified while the analysis is held for review.{% endif %}</span></span>{% endif %}{{ caveat_marks(m.notes) }}</span>
+      </section>{% endfor %}
+      </div>
+      <details class="metric-detail" aria-label="Calculation details for {{ group.name }}">
+        <summary>View calculation details for {{ group.name }}</summary>
+        <h5>{{ group.name }} calculation</h5>
+        {% for m in group.metrics %}<section class="metric-calculation-period" data-period="{{ m.period }}" aria-labelledby="{{ m.anchor }}-calculation-title">
+          <h6 id="{{ m.anchor }}-calculation-title">{{ m.period }}</h6>
+          {% if m.value is none %}<p class="muted">No metric value was computed. See the technical reason below.</p>{% endif %}
+          <dl><dt>Formula</dt><dd>{{ plain_formula(m.formula) }}<details class="technical-details"><summary aria-label="Technical formula for {{ m.name }}">Technical formula</summary><code dir="ltr">{{ m.formula }}</code></details></dd></dl>
+        <h5>Inputs</h5>
+        {% if m.inputs %}<dl class="metric-inputs">{% for i in m.inputs %}<dt><a href="{{ i.source }}">{{ i.label }}</a> <span class="muted">({{ i.period }})</span></dt><dd><bdi dir="ltr">{{ i.text }}</bdi>{{ caveat_marks(i.caveats) }}<details class="technical-details"><summary aria-label="Technical details for {{ i.label }} input">Technical details</summary><code dir="ltr">{{ i.canonical_id }}</code> · <code dir="ltr">{{ i.period }}</code></details></dd>{% endfor %}</dl>{% else %}<p class="muted">No input values were recorded.</p>{% endif %}
+        <h5>Flags and caveats</h5>
+        {% if m.flags or m.caveats %}<ul>{% for flag in m.flags %}<li>{{ flag_label(flag) }}</li>{% endfor %}{% for caveat in m.caveats %}<li>{{ plain_label(caveat) }}</li>{% endfor %}</ul><details class="technical-details"><summary aria-label="Technical details for {{ m.name }} checks">Technical details</summary><ul>{% for flag in m.flags %}<li><code dir="ltr">{{ flag }}</code></li>{% endfor %}{% for caveat in m.caveats %}<li><code dir="ltr">{{ caveat }}</code></li>{% endfor %}</ul></details>{% else %}<p class="muted">No metric-specific flags recorded.</p>{% endif %}
+        {% for note in m.notes %}{{ caveat_text(note) }}{% endfor %}
+        </section>{% endfor %}
+      </details>
+    </article>{% endfor %}
   </details>
 </section>
 
@@ -163,4 +176,46 @@
   <details class="technical-details"><summary aria-label="Technical details for document notices">Technical details</summary><ul>{% for flag in analysis.flags %}<li><code dir="ltr">{{ flag }}</code></li>{% endfor %}</ul></details>
 </details>{% endif %}
 </div>
+<script>
+(() => {
+  const results = document.getElementById("analysis-results");
+  const reveal = (hash) => {
+    if (!hash || hash === "#") return;
+    let id;
+    try { id = decodeURIComponent(hash.slice(1)); } catch { return; }
+    const target = document.getElementById(id);
+    if (!target || !results.contains(target)) return;
+    for (let parent = target.parentElement; parent; parent = parent.parentElement) {
+      if (parent.tagName === "DETAILS") parent.open = true;
+    }
+    target.scrollIntoView({block: "nearest"});
+  };
+  results.addEventListener("click", (event) => {
+    const link = event.target.closest('a[href^="#"]');
+    if (link) reveal(link.getAttribute("href"));
+  });
+  window.addEventListener("hashchange", () => reveal(location.hash));
+  reveal(location.hash);
+
+  const placeTooltip = (event) => {
+    const wrapper = event.target.closest(".annotation-tooltip");
+    if (!wrapper) return;
+    const tooltip = wrapper.querySelector('[role="tooltip"]');
+    tooltip.hidden = false;
+    const trigger = wrapper.getBoundingClientRect();
+    const box = tooltip.getBoundingClientRect();
+    const left = Math.max(12, Math.min(trigger.left, innerWidth - box.width - 12));
+    const top = trigger.top >= box.height + 12 ? trigger.top - box.height : trigger.bottom;
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${Math.max(12, Math.min(top, innerHeight - box.height - 12))}px`;
+  };
+  results.addEventListener("mouseover", placeTooltip);
+  results.addEventListener("focusin", placeTooltip);
+  results.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      results.querySelectorAll('[role="tooltip"]').forEach((tooltip) => { tooltip.hidden = true; });
+    }
+  });
+})();
+</script>
 {% endblock %}

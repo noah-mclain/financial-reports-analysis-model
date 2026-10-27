@@ -8,7 +8,7 @@
   <div style="position:relative">
     <img id="page" src="/documents/{{ sha256 }}/pages/{{ page_no }}.png" alt="Page {{ page_no }}" style="display:block;width:100%;height:auto">
     {% if overlay %}
-    <div id="region" style="position:absolute;left:{{ '%.3f' % overlay.left }}%;top:{{ '%.3f' % overlay.top }}%;width:{{ '%.3f' % overlay.width }}%;height:{{ '%.3f' % overlay.height }}%;outline:3px solid #d93025;outline-offset:2px;background:rgba(217,48,37,.12)"></div>
+    <div id="region" style="position:absolute;left:{{ '%.3f' % overlay.left }}%;top:{{ '%.3f' % overlay.top }}%;width:{{ '%.3f' % overlay.width }}%;height:{{ '%.3f' % overlay.height }}%;outline:3px solid var(--evidence-outline);outline-offset:2px;background:var(--evidence-fill)"></div>
     {% endif %}
   </div>
 </div>

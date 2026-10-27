@@ -566,15 +566,24 @@ class InputView:
 
 @dataclass(frozen=True)
 class MetricView:
+    metric_id: str
     name: str
     anchor: str
     period: str
+    period_order: tuple[int, int] | None
     value: str | None
     formula: str
     flags: tuple[str, ...]
     caveats: tuple[CaveatId, ...]
     inputs: tuple[InputView, ...] = field(default=())
     notes: tuple[CaveatView, ...] = ()
+
+
+@dataclass(frozen=True)
+class MetricGroup:
+    metric_id: str
+    name: str
+    metrics: tuple[MetricView, ...]
 
 
 def statement_view(
@@ -753,6 +762,7 @@ def metric_view(
     sha256: str,
     metric: MetricValue,
     statement_notes: dict[str, tuple[CaveatView, ...]],
+    period_orders: dict[str, tuple[int, int]],
     job_id: str | None = None,
 ) -> MetricView:
     anchor = metric_anchor(metric.metric_id, metric.period_key)
@@ -785,9 +795,11 @@ def metric_view(
             f"metric {metric.metric_id}: caveats without source statements: {sorted(missing)}"
         )
     return MetricView(
+        metric_id=metric.metric_id,
         name=plain_label(metric.metric_id),
         anchor=anchor,
         period=metric.period_key,
+        period_order=period_orders.get(metric.period_key),
         value=metric_text(metric),
         formula=metric.formula,
         flags=tuple(metric.flags),
@@ -802,6 +814,7 @@ class AnalysisView:
     statements: tuple[StatementView, ...]
     statement_groups: tuple[StatementGroup, ...]
     metrics: tuple[MetricView, ...]
+    metric_groups: tuple[MetricGroup, ...]
     headline_metrics: tuple[MetricView, ...]
     computed: int
     narrative: tuple[SectionView, ...] | None
@@ -821,8 +834,13 @@ def analysis_view(analysis: Analysis) -> AnalysisView:
         statement_view(s, reviews[s.id], analysis.job_id) for s in analysis.statements
     )
     statement_notes = {s.id: s.caveats for s in statements}
+    period_orders = {
+        period.key: (period.end_date.toordinal(), period.months or 0)
+        for statement in analysis.statements
+        for period in statement.periods
+    }
     metrics = [
-        metric_view(analysis.upload_sha256, m, statement_notes, analysis.job_id)
+        metric_view(analysis.upload_sha256, m, statement_notes, period_orders, analysis.job_id)
         for m in analysis.metrics
     ]
     artifact = analysis.narrative
@@ -916,10 +934,30 @@ def analysis_view(analysis: Analysis) -> AnalysisView:
     ordered_metrics = tuple(
         [m for m in metrics if m.value is not None] + [m for m in metrics if m.value is None]
     )
+    grouped_metrics: dict[str, list[MetricView]] = {}
+    for metric in metrics:
+        grouped_metrics.setdefault(metric.metric_id, []).append(metric)
+    metric_groups = tuple(
+        MetricGroup(
+            metric_id,
+            values[0].name,
+            tuple(
+                sorted(
+                    values,
+                    key=lambda item: (
+                        item.period_order is None,
+                        item.period_order if item.period_order is not None else (0, 0),
+                    ),
+                )
+            ),
+        )
+        for metric_id, values in grouped_metrics.items()
+    )
     return AnalysisView(
         statements=statements,
         statement_groups=statement_groups,
         metrics=ordered_metrics,
+        metric_groups=metric_groups,
         headline_metrics=tuple(m for m in ordered_metrics if m.value is not None)[:8],
         computed=sum(1 for m in metrics if m.value is not None),
         narrative=narrative,
