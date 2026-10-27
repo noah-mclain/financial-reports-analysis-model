@@ -3,10 +3,12 @@ formatting, which rounds and never computes."""
 
 from __future__ import annotations
 
+import ast
 import io
 import re
 from datetime import date
 from decimal import Decimal, localcontext
+from html.parser import HTMLParser
 from pathlib import Path
 
 import pypdfium2 as pdfium
@@ -342,7 +344,10 @@ def test_a_stored_narrative_with_an_unexpected_language_is_withheld_not_a_server
     )
     view = analysis_view(analysis)
     assert view.narrative is None
-    assert view.summary_notice == "Summary withheld: its text or references could not be verified."
+    assert (
+        view.summary_notice
+        == "Summary withheld because its text or references could not be verified."
+    )
 
 
 # ---- pages ------------------------------------------------------------------------------------
@@ -374,6 +379,47 @@ def finished_job(settings: JobSettings, client: TestClient, **analysis: object) 
     return job_id
 
 
+class VisibleText(HTMLParser):
+    """Collect rendered text separately from collapsed technical disclosures."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.visible: list[str] = []
+        self.technical: list[str] = []
+        self._details = 0
+        self._technical_details = 0
+        self._technical_stack: list[bool] = []
+        self._head = False
+        self._style = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "head":
+            self._head = True
+        if tag == "style":
+            self._style += 1
+        if tag == "details":
+            self._details += 1
+            class_value = dict(attrs).get("class")
+            technical = class_value is not None and "technical-details" in class_value.split()
+            self._technical_stack.append(technical)
+            if technical:
+                self._technical_details += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "details":
+            self._details -= 1
+            if self._technical_stack.pop():
+                self._technical_details -= 1
+        if tag == "head":
+            self._head = False
+        if tag == "style":
+            self._style -= 1
+
+    def handle_data(self, data: str) -> None:
+        if not self._head and not self._style:
+            (self.technical if self._technical_details else self.visible).append(data)
+
+
 def test_the_upload_page_states_the_limits_and_the_profile(tmp_path: Path) -> None:
     with TestClient(create_app(Profile.DOCKER, settings_at(tmp_path))) as client:
         page = client.get("/").text
@@ -388,12 +434,17 @@ def test_the_results_show_statements_metrics_and_say_there_is_no_summary(tmp_pat
         page = client.get(f"/analyses/{job_id}/view").text
     assert "Statement of financial position" in page and "SAR thousands" in page
     assert "(1,234,567)" in page and "/pages/1?box=60.0%2C80.0%2C180.0%2C100.0" in page
-    assert (
-        "Digit check needs review" in page
-        and '<code title="Technical flag">digit_suspect</code>' in page
-    )
+    parsed = VisibleText()
+    parsed.feed(page)
+    assert "Some digits may have been read incorrectly" in " ".join(parsed.visible)
+    assert "digit_suspect" in parsed.technical
+    assert "digit_suspect" not in " ".join(parsed.visible)
+    assert not re.search(r"(?:\w+:|\b\w+_\w+\b)", " ".join(parsed.visible))
     assert 'class="flag-marker" aria-label="Needs review"' in page
     assert "1.50×" in page and "total_current_assets / total_current_liabilities" in page
+    assert "Total current assets / Total current liabilities" in page
+    assert "total_current_assets / total_current_liabilities" not in " ".join(parsed.visible)
+    assert "total_current_assets / total_current_liabilities" in " ".join(parsed.technical)
     assert "1 pages · detected language en" in page
     assert "No written summary yet" in page
 
@@ -410,7 +461,7 @@ def test_held_results_lead_with_a_plain_verdict_and_actionable_summary(tmp_path:
     assert page.index('id="verdict"') < page.index('id="summary"')
     assert "Held for review" in page
     assert "A statement subtotal did not match" in page
-    assert "2 figures could not be read" in page
+    assert "2 figures were not found where expected" in page
     assert "subtotal_failed" in page and "numbers_missing:2" in page
     assert "Review the flagged figures and statement checks" in page
     assert 'id="metrics-review-note"' in page
@@ -436,7 +487,7 @@ def test_informational_document_flag_does_not_hide_a_statement_hold_reason(
     assert "A statement subtotal did not match" in headline
     assert "Low selectivity" not in headline
     notices = page.split('<details class="document-notices"', 1)[1]
-    assert "<code>low_selectivity</code>" in notices
+    assert '<code dir="ltr">low_selectivity</code>' in notices
 
 
 def test_many_held_reasons_keep_the_verdict_short_and_details_available(tmp_path: Path) -> None:
@@ -452,10 +503,621 @@ def test_many_held_reasons_keep_the_verdict_short_and_details_available(tmp_path
     verdict = page.split('<section class="verdict hold"', 1)[1].split("</section>", 1)[0]
     assert "One or more checks are unresolved" in verdict
     headline, details = verdict.split('<details class="review-details"', 1)
-    assert "Unrecognized reason 0" in headline and "unrecognized_reason_0" not in headline
-    assert "Review details (40)" in verdict
+    assert "Review note — Unrecognized reason 0" in headline
+    assert "unrecognized_reason_0" not in headline
+    assert "Review details" in verdict
     assert "unrecognized_reason_0" in details and "unrecognized_reason_39" in details
-    assert verdict.count("Technical detail") <= 2
+    assert verdict.count('<summary aria-label="Technical details for document review">') == 1
+
+
+def test_review_reasons_are_plain_grouped_ordered_and_traceable(tmp_path: Path) -> None:
+    reasons = [
+        "identity_not_checked:missing_values",
+        "subtotal_not_checked:20",
+        "unchecked",
+        "unparsed:17",
+        "row_misaligned:4",
+        "row_alignment_unresolved",
+        "critical_item_unmapped:total_assets",
+        "critical_item_unmapped:total_current_assets",
+        "critical_item_unmapped:total_current_liabilities",
+        "critical_item_unmapped:total_equity",
+        "critical_item_unmapped:total_liabilities",
+        "critical_item_unmapped:total_liabilities_and_equity",
+        "critical_item_unmapped:equity_attributable_parent",
+        "ambiguous_separator:2",
+        "made_up_reason:some_value",
+    ]
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(
+            settings,
+            client,
+            reviews=[review("needs_review", reasons)],
+            hold=(
+                "industry_uncertain:weak_verdict: bank, score 14.0, 3 distinct cues "
+                "(verdict threshold 14.0, margin 2.0); evidence: page 3 'quoted phrase'"
+            ),
+            flags=["statement_not_extracted:income", "low_selectivity"],
+        )
+        page = client.get(f"/analyses/{job_id}/view").text
+    parser = VisibleText()
+    parser.feed(page)
+    visible = " ".join(parser.visible)
+    assert not re.search(r"(?:\w+:|\b\w+_\w+\b)", visible)
+    assert (
+        "The company may be a bank, but that could not be confirmed, so its statements are held for review."
+        in visible
+    )
+    assert "14.0" not in visible and "quoted phrase" not in visible
+    assert (
+        "The balance check (assets = liabilities + equity) could not be run because some figures are missing"
+        in visible
+    )
+    assert "identity_not_checked:missing_values" in parser.technical
+    assert all(code in parser.technical for code in reasons)
+    assert any(
+        "industry_uncertain:weak_verdict: bank, score 14.0" in item for item in parser.technical
+    )
+    assert "statement_not_extracted:income" in parser.technical
+    assert "low_selectivity" in parser.technical
+    statement_reasons = page.split("<h4>Review reasons</h4>", 1)[1].split("</ul>", 1)[0]
+    assert (
+        "20 totals could not be recalculated from the lines above them, so they are not confirmed"
+        in statement_reasons
+    )
+    assert "17 figures could not be read as numbers" in statement_reasons
+    assert "4 rows may be shifted against their figures" in statement_reasons
+    assert "2 figures use a separator that can be read two ways (comma or dot)" in statement_reasons
+    assert (
+        "7 key lines were not identified (total assets, total current assets, "
+        "total current liabilities, total equity, total liabilities, total liabilities and "
+        "equity, equity attributable to owners)." in statement_reasons
+    )
+    assert "Review note — Made up reason some value" in statement_reasons
+    assert not re.search(r"(?:\w+:|\b\w+_\w+\b)", statement_reasons)
+    assert all(code not in statement_reasons for code in reasons)
+    assert statement_reasons.index("balance check") < statement_reasons.index("totals could not")
+    assert statement_reasons.index("totals could not") < statement_reasons.index(
+        "figures could not be read"
+    )
+    assert statement_reasons.index("figures could not be read") < statement_reasons.index(
+        "rows may be shifted"
+    )
+    assert statement_reasons.index("rows may be shifted") < statement_reasons.index("key lines")
+    assert statement_reasons.index("key lines") < statement_reasons.index("Review note")
+
+
+def test_review_reason_producers_have_dedicated_plain_labels() -> None:
+    from typing import Literal
+
+    from fra_api.views import flag_label, hold_label, plain_label, reason_label
+    from fra_core.schemas import CheckResult, MappingFinding
+    from fra_ingest.review import _HOLD_FLAGS, _WARNING_FLAGS, CRITICAL_CELL_FLAGS, review_statement
+
+    produced = [
+        "identity_failed",
+        "tie_failed",
+        "eps_failed",
+        "digit_suspect:2",
+        "period_outlier:2",
+        "fraction_among_whole:2",
+        "row_realigned:2",
+        "numeric_columns_split:2",
+        "ocr_parenthesis_repaired",
+        "period_unbound:2",
+        "period_conflict:differing_periods",
+        "scale_conflict",
+        "currency_conflict",
+        "currency_missing",
+        "scale_implausible",
+        "value_without_box:r2c3",
+        "likely_bank",
+        "likely_other_financial:brokerage",
+        "image_pages_not_read:2",
+        "ocr_failed_pages:2",
+        "garbled_text_layers_not_read:2",
+        "no_statements_found",
+        "convert_failed:pages_2_4",
+        "ocr_unavailable:pages_2_4",
+        "page_outside_range:pages_2_4",
+        "page_not_converted:2",
+        "memory_over_budget",
+        "period_evidence_unavailable:2:raw_source_mismatch",
+        "error:ValueError: private detail",
+    ]
+    produced.extend(f"{flag}:2" for flag in CRITICAL_CELL_FLAGS)
+    produced.extend(_HOLD_FLAGS)
+    produced.extend(_WARNING_FLAGS)
+    fixture_statement = statement("a" * 64).model_copy(
+        update={
+            "line_items": [
+                statement("a" * 64)
+                .line_items[0]
+                .model_copy(
+                    update={
+                        "cells": [
+                            statement("a" * 64)
+                            .line_items[0]
+                            .cells[0]
+                            .model_copy(update={"flags": [*CRITICAL_CELL_FLAGS, "numbers_missing"]})
+                        ]
+                    }
+                )
+            ],
+            "flags": list(_HOLD_FLAGS) + list(_WARNING_FLAGS),
+            "mapping_findings": (
+                MappingFinding(item_id="total_assets", observed_period_keys=(PERIOD.key,)),
+            ),
+        }
+    )
+    check_kinds: list[
+        tuple[
+            Literal["subtotal", "balance_identity", "net_profit_tie", "eps"],
+            Literal["pass", "fail", "skipped"],
+        ]
+    ] = [
+        ("balance_identity", "skipped"),
+        ("subtotal", "skipped"),
+        ("subtotal", "fail"),
+        ("balance_identity", "fail"),
+        ("net_profit_tie", "fail"),
+        ("eps", "fail"),
+    ]
+    generated = review_statement(
+        fixture_statement,
+        [
+            CheckResult(
+                id=f"{kind}-{status}",
+                statement_id="s1",
+                kind=kind,
+                period_key=PERIOD.key,
+                status=status,
+                detail="missing_values" if status == "skipped" else "",
+            )
+            for kind, status in check_kinds
+        ],
+        primary=True,
+    )
+    produced.extend(generated.reasons)
+    produced.extend(generated.warnings)
+    producer_literals = (
+        "identity_failed",
+        "tie_failed",
+        "eps_failed",
+        "period_unbound",
+        "period_conflict",
+        "scale_conflict",
+        "currency_conflict",
+        "currency_missing",
+        "scale_implausible",
+        "value_without_box",
+        "likely_other_financial",
+        "image_pages_not_read",
+        "ocr_failed_pages",
+        "garbled_text_layers_not_read",
+        "no_statements_found",
+        "convert_failed",
+        "ocr_unavailable",
+        "page_outside_range",
+        "page_not_converted",
+        "memory_over_budget",
+        "period_evidence_unavailable",
+        "error:",
+    )
+    source_roots = [
+        Path(__file__).parents[3] / "packages/ingest/src",
+        Path(__file__).parents[3] / "packages/analytics/src",
+        Path(__file__).parents[3] / "apps/worker/src",
+    ]
+    source_text = "\n".join(
+        path.read_text() for root in source_roots for path in root.rglob("*.py")
+    )
+    assert all(literal in source_text for literal in producer_literals)
+    produced.extend(producer_literals)
+    for code in produced:
+        label = reason_label(code)
+        if code not in generated.reasons:
+            # Flags and warnings render through flag_label on the page.
+            flagged = flag_label(code)
+            assert ":" not in flagged and not re.search(r"\b[a-z]+_[a-z_]+\b", flagged), (
+                code,
+                flagged,
+            )
+        assert "Review note" not in label, code
+        assert ":" not in label and not re.search(r"\b[a-z]+_[a-z_]+\b", label), (code, label)
+        assert not re.search(r"r\d+c\d+", label), (code, label)
+    for code in _HOLD_FLAGS:
+        assert hold_label(code) != f"Review note — {code}"
+    assert flag_label("error:ValueError: private detail") == "A processing error occurred"
+    assert plain_label("ebitda_margin") == "EBITDA margin"
+    assert plain_label("eps_basic") == "EPS basic"
+    assert plain_label("dso") == "DSO"
+    assert plain_label("ebit") == "EBIT"
+    assert plain_label("roe") == "ROE"
+    assert plain_label("roa") == "ROA"
+    assert "eBITDA" not in " ".join(
+        item.label
+        for item in __import__("fra_api.views", fromlist=["review_reasons"]).review_reasons(
+            ("critical_item_unmapped:ebitda",)
+        )
+    )
+
+
+def test_failed_reconciliation_reasons_are_first_in_review_lead() -> None:
+    from fra_api.views import reason_label, review_reasons
+
+    for failed in ("identity_failed", "tie_failed", "eps_failed"):
+        reasons = review_reasons(("unparsed:1", failed, "subtotal_failed"))
+        assert reasons[0].label == reason_label(failed)
+        assert reasons[0].label != reason_label("unparsed:1")
+        assert not re.search(r"(?:\w+:|\b\w+_\w+\b)", reasons[0].label)
+
+
+def test_metric_template_uses_defined_name_for_technical_labels(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from jinja2 import StrictUndefined
+
+    from fra_api import pages
+
+    monkeypatch.setattr(pages._templates, "undefined", StrictUndefined)
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(settings, client, metrics=[metric(MetricUnit.RATIO, None)])
+        response = client.get(f"/analyses/{job_id}/view")
+    assert response.status_code == 200
+    assert 'aria-label="Technical details for Current ratio formula"' in response.text
+    assert 'aria-label="Technical details for Current ratio checks"' in response.text
+
+
+def test_all_page_templates_render_branches_with_strict_undefined(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exercise each results-page branch and all other templates with strict Jinja lookup."""
+    from jinja2 import StrictUndefined
+
+    from fra_api import pages
+    from fra_ingest.review import _WARNING_FLAGS
+
+    monkeypatch.setattr(pages._templates, "undefined", StrictUndefined)
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        assert client.get("/").status_code == 200
+
+        warning_review = review(
+            "needs_review",
+            [
+                "identity_not_checked:missing_values",
+                "subtotal_not_checked:2",
+                "unparsed:1",
+                "row_misaligned:1",
+                "critical_item_unmapped:total_assets",
+                "made_up_reason:sample",
+            ],
+        ).model_copy(update={"warnings": list(_WARNING_FLAGS)})
+        narrated = Narrative(
+            language="en",
+            sections=[
+                NarrativeSection(
+                    heading=SectionHeading.OVERVIEW,
+                    sentences=[Sentence(text="The report is available for review.")],
+                )
+            ],
+        )
+        cases: list[dict[str, object]] = [
+            {},  # completed, with metric formula and inputs
+            {"metrics": [metric(MetricUnit.RATIO, None)]},  # metric without inputs
+            {
+                "metrics": [
+                    metric(MetricUnit.RATIO, 1.5).model_copy(
+                        update={"flags": ["average_fallback_to_closing"]}
+                    )
+                ]
+            },
+            {"reviews": [warning_review], "hold": "industry_uncertain:no_verdict"},
+            {"decline": Decline(code="bank", reason="declined:bank: evidence")},
+            {"narrative": narrated, "narrative_partial": True},
+            {"language": "ar", "statements": [statement("a" * 64, language="ar")]},
+        ]
+        responses = []
+        for values in cases:
+            job_id = finished_job(settings, client, **values)
+            assert client.get(f"/jobs/{job_id}/view").status_code == 200
+            responses.append(client.get(f"/analyses/{job_id}/view"))
+        sha = responses[0].text.split("/documents/", 1)[1].split("/pages/", 1)[0]
+        source_response = client.get(f"/documents/{sha}/pages/1")
+
+    assert source_response.status_code == 200
+    assert all(response.status_code == 200 for response in responses)
+    for response in [source_response, *responses]:
+        aria_values = re.findall(r'\b(?:aria-label|title)="([^"]*)"', response.text)
+        assert all(value.strip() and "  " not in value for value in aria_values), aria_values
+
+
+_PRODUCER_TOKEN = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)+(?:$|:)")
+_PRODUCER_LINE = re.compile(r"flag|reason|warning|hold|decline|mapping_evidence|finding", re.I)
+_PRODUCER_LITERAL = re.compile(r"['\"]([a-z][a-z0-9]*(?:_[a-z0-9]+)+(?:[:][a-zA-Z0-9_]+)?)['\"]")
+
+
+def producer_literals(producer_roots: tuple[Path, ...], root: Path) -> dict[str, set[str]]:
+    """Every flag/reason-like snake_case literal in all Python files under the roots."""
+    findings: dict[str, set[str]] = {}
+    for producer_root in producer_roots:
+        for path in sorted(producer_root.rglob("*.py")):
+            lines = path.read_text(encoding="utf-8").splitlines()
+            constant_lines: set[int] = set()
+            try:
+                tree = ast.parse("\n".join(lines))
+            except SyntaxError as exc:
+                pytest.fail(f"Could not inspect producer source {path}: {exc}")
+            for node in tree.body:
+                if isinstance(node, (ast.Assign, ast.AnnAssign)):
+                    targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                    names = [target.id for target in targets if isinstance(target, ast.Name)]
+                    value = node.value
+                    if any(
+                        re.search(r"FLAG|REASON|WARNING|HOLD", name, re.I) for name in names
+                    ) and isinstance(value, (ast.Tuple, ast.Set, ast.Dict)):
+                        constant_lines.update(
+                            range(node.lineno, (node.end_lineno or node.lineno) + 1)
+                        )
+            for function in ast.walk(tree):
+                if isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)) and (
+                    _PRODUCER_LINE.search(function.name)
+                ):
+                    constant_lines.update(
+                        range(function.lineno, (function.end_lineno or function.lineno) + 1)
+                    )
+            for line_no, line in enumerate(lines, 1):
+                if not _PRODUCER_LINE.search(line) and line_no not in constant_lines:
+                    continue
+                for value in _PRODUCER_LITERAL.findall(line):
+                    if _PRODUCER_TOKEN.match(value):
+                        findings.setdefault(value.split(":", 1)[0], set()).add(
+                            f"{path.relative_to(root)}:{line_no} ({value})"
+                        )
+    return findings
+
+
+def test_producer_label_inventory_covers_flag_and_reason_literals() -> None:
+    """Catch newly added producer codes before they reach a page without a label."""
+    from fra_api.views import FLAG_LABELS
+
+    root = Path(__file__).parents[3]
+    findings = producer_literals(
+        (
+            root / "packages/ingest/src/fra_ingest",
+            root / "packages/analytics/src/fra_analytics",
+            root / "packages/core/src/fra_core",
+            root / "apps/worker/src/fra_worker",
+        ),
+        root,
+    )
+
+    reason_prefixes = {
+        "identity_not_checked",
+        "subtotal_not_checked",
+        "critical_item_unmapped",
+        "ambiguous_separator",
+        "unparsed",
+        "numbers_missing",
+        "row_misaligned",
+        "row_alignment_unresolved",
+        "subtotal_failed",
+        "duplicate_statement",
+        "implausible_magnitude",
+        "industry_uncertain",
+        "no_verdict",
+        "other_financial",
+        "too_narrow",
+        "near_threshold",
+        "weak_verdict",
+    }
+    ignored_groups = {
+        "Internal provenance or measurement keys, never a displayed flag": (
+            "peak_footprint_gb",
+            "period_evidence",
+            "investment_holding",
+            "canonical_id",
+            "line_items",
+            "mapping_findings",
+            "mapping_flag",
+            "holdout_availability",
+            "holdout_for_scoring",
+            "is_glyph_placeholder",
+            "is_provenance_flag",
+            "is_provenance_warning",
+            "compute_and_flag",
+        ),
+        "Model-mapping decision reasons: shown only inside Technical details as mapping evidence": (
+            "anchor_scope_unsettled",
+            "explicit_model_abstention",
+            "invalid_model_response",
+            "model_abstention",
+            "no_supported_mapping",
+            "proposal_disagrees",
+            "source_cell_uncertainty",
+            "source_relationship_conflict",
+            "source_uncertainty",
+            "statement_type_unsupported",
+            "target_value_missing",
+            "unique_rule_mapping",
+            "mapping_evidence",
+        ),
+        "Label-source and header-recovery diagnostics stored on the analysis, not rendered": (
+            "ambiguous_cell",
+            "ambiguous_columns",
+            "ambiguous_page",
+            "ambiguous_rows",
+            "ambiguous_source_geometry",
+            "ambiguous_table",
+            "conflicting_context",
+            "conflicting_periods",
+            "differing_periods",
+            "empty_reading",
+            "geometry_invalid",
+            "header_recovered",
+            "header_recovery_context",
+            "invalid_line_geometry",
+            "invalid_source",
+            "labels_missing_or_conflicting",
+            "missing_bbox",
+            "missing_cell",
+            "no_attributable_reading",
+            "outside_source_rectangle",
+            "period_uncertain",
+            "source_conflicting_title",
+            "source_missing",
+            "source_non_statement_page",
+            "source_primary_ambiguous",
+            "source_scope_unproven",
+            "status_unpreserved",
+            "unparseable_observation",
+        ),
+        "Check messages: the page shows only the eps_failed reason, not these details": (
+            "profit_scale_unsettled",
+            "share_scale_unsettled",
+        ),
+        "Decline code, worded by decline_label": ("unsupported_language",),
+    }
+    ignored = {name: why for why, names in ignored_groups.items() for name in names}
+    known = set(FLAG_LABELS) | reason_prefixes
+    unknown = {
+        prefix: sorted(locations)
+        for prefix, locations in findings.items()
+        if prefix not in known and prefix not in ignored
+    }
+    assert not unknown, f"Producer literals lack a page label or justified ignore: {unknown}"
+
+
+def test_producer_scan_reports_an_unlabeled_literal(tmp_path: Path) -> None:
+    """The scan must see a brand-new flag in any module, whatever its file name."""
+    source = tmp_path / "pkg" / "anything_at_all.py"
+    source.parent.mkdir()
+    source.write_text('flags.append("brand_new_flag:3")\n', encoding="utf-8")
+
+    found = producer_literals((tmp_path / "pkg",), tmp_path)
+
+    assert list(found) == ["brand_new_flag"]
+
+
+@pytest.mark.parametrize(
+    ("reason", "expected"),
+    [
+        ("unparsed:1", "1 figure could not be read as a number"),
+        ("numbers_missing:1", "1 figure was not found where expected"),
+        ("unparsed:2", "2 figures could not be read as numbers"),
+        (
+            "subtotal_not_checked:1",
+            "1 total could not be recalculated from the lines above it, so it is not confirmed",
+        ),
+        (
+            "subtotal_not_checked:2",
+            "2 totals could not be recalculated from the lines above them, so they are not confirmed",
+        ),
+    ],
+)
+def test_review_count_labels_have_singular_and_plural_grammar(reason: str, expected: str) -> None:
+    from fra_api.views import reason_label
+
+    assert reason_label(reason) == expected
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "industry_uncertain:no_verdict: unknown, score 0.0, 0 distinct cues; evidence: none",
+        "industry_uncertain:other_financial: other_financial/brokerage, score 14.0, 3 distinct cues; evidence: none",
+        "industry_uncertain:too_narrow: corporate, score 14.0, 1 distinct cues; evidence: none",
+        "industry_uncertain:near_threshold: corporate, score 12.0, 3 distinct cues; evidence: none",
+        "industry_uncertain:weak_verdict: insurer, score 14.0, 3 distinct cues; evidence: none",
+    ],
+)
+def test_industry_holds_hide_codes_scores_and_evidence(reason: str) -> None:
+    from fra_api.views import hold_label
+
+    label = hold_label(reason)
+    assert "held for review" in label
+    assert not re.search(r"(?:\w+:|\b\w+_\w+\b|\d+\.\d+)", label)
+
+
+@pytest.mark.parametrize(
+    "code", ["no_verdict", "other_financial", "too_narrow", "near_threshold", "weak_verdict"]
+)
+def test_short_industry_hold_reasons_render_as_plain_language(tmp_path: Path, code: str) -> None:
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(
+            settings,
+            client,
+            reviews=[review("needs_review", [f"industry_uncertain:{code}"])],
+            hold=f"industry_uncertain:{code}",
+        )
+        response = client.get(f"/analyses/{job_id}/view")
+    assert response.status_code == 200
+    parser = VisibleText()
+    parser.feed(response.text)
+    visible = " ".join(parser.visible)
+    assert "held for review" in visible
+    assert f"industry_uncertain:{code}" not in visible
+    assert not re.search(r"(?:\w+:|\b\w+_\w+\b)", visible)
+
+
+def test_industry_label_functions_cover_short_long_and_produced_review_codes() -> None:
+    from fra_api.views import hold_label, reason_label
+
+    # Collected from fra_ingest/results.py and industry.py, hold_for_industry, and the
+    # review reason producers in fra_ingest/review.py and fra_analytics/review.py.
+    produced = [
+        "industry_uncertain:no_verdict",
+        "industry_uncertain:other_financial",
+        "industry_uncertain:too_narrow",
+        "industry_uncertain:near_threshold",
+        "industry_uncertain:weak_verdict",
+        "industry_uncertain:weak_verdict: bank, score 14.0, 3 distinct cues; evidence: none",
+        "identity_not_checked:missing_values",
+        "identity_not_checked:identity_totals_not_found",
+        "subtotal_not_checked:1",
+        "subtotal_failed",
+        "numbers_missing:1",
+        "unparsed:1",
+        "implausible_magnitude:1",
+        "unchecked",
+        "row_alignment_unresolved",
+        "row_misaligned:1",
+        "ambiguous_separator:1",
+        "critical_item_unmapped:total_assets",
+        "duplicate_statement",
+    ]
+    for code in produced:
+        for label in (reason_label(code), hold_label(code)):
+            assert isinstance(label, str)
+            assert ":" not in label
+            assert not re.search(r"\b\w+_\w+\b", label)
+
+
+def test_hold_without_code_uses_readable_sentence() -> None:
+    from fra_api.views import hold_label
+
+    assert hold_label("Figures need review") == "Review note — Figures need review"
+
+
+def test_registry_formulas_humanize_identifiers_but_keep_function_names() -> None:
+    from fra_analytics.metrics.registry import REGISTRY
+    from fra_api.views import plain_formula, plain_label
+
+    assert plain_formula("net_income / avg(total_assets)") == "Net income / avg(Total assets)"
+    for metric_spec in REGISTRY:
+        formula = plain_formula(metric_spec.formula)
+        assert not re.search(r"\b[a-z][a-z0-9]*_[a-z0-9_]*\b", formula)
+        identifiers = re.findall(r"\b[a-z][a-z0-9_]*\b", metric_spec.formula)
+        function_names = {name for name in identifiers if name in {"abs", "avg"}}
+        for identifier in identifiers:
+            if identifier not in function_names:
+                assert plain_label(identifier) in formula
+        for function_name in function_names:
+            assert f"{function_name}(" in formula
 
 
 def test_metrics_have_headlines_and_keep_all_details_in_collapsed_sections(tmp_path: Path) -> None:
@@ -490,7 +1152,14 @@ def test_metrics_have_headlines_and_keep_all_details_in_collapsed_sections(tmp_p
     assert "total_current_assets / total_current_liabilities" in page
     assert "Total assets" in page
     assert "Used closing balance because a prior balance was unavailable" in page
-    assert '<code title="Technical flag">average_fallback_to_closing</code>' in page
+    assert "average_fallback_to_closing" in page.split("Technical details", 1)[1]
+    parsed = VisibleText()
+    parsed.feed(page)
+    assert "average_fallback_to_closing" not in " ".join(parsed.visible)
+    assert "average_fallback_to_closing" in " ".join(parsed.technical)
+    assert "missing_input:revenue" not in " ".join(parsed.visible)
+    assert "missing_input:revenue" in " ".join(parsed.technical)
+    assert not re.search(r"(?:\w+:|\b\w+_\w+\b)", " ".join(parsed.visible))
 
 
 def test_statements_are_collapsed_and_flags_keep_plain_and_technical_names(tmp_path: Path) -> None:
@@ -503,6 +1172,12 @@ def test_statements_are_collapsed_and_flags_keep_plain_and_technical_names(tmp_p
                 "canonical_id": None,
                 "mapping_flag": "unmapped",
                 "raw_label": "<script>Revenue</script>",
+                "cells": [
+                    statement("a" * 64)
+                    .line_items[0]
+                    .cells[0]
+                    .model_copy(update={"flags": ["digit_suspect"]})
+                ],
             }
         )
     )
@@ -516,9 +1191,16 @@ def test_statements_are_collapsed_and_flags_keep_plain_and_technical_names(tmp_p
         )
         page = client.get(f"/analyses/{job_id}/view").text
     assert '<details class="statement-detail"' in page
-    assert "Critical statement item could not be mapped" in page
+    assert "1 key line was not identified (total liabilities)." in page
     assert "critical_item_unmapped:total_liabilities" in page
-    assert "Row not mapped" in page and "unmapped" in page
+    assert "Row not mapped" in page and "unmapped" in page.split("Technical details", 1)[1]
+    parsed = VisibleText()
+    parsed.feed(page)
+    assert "unmapped" not in " ".join(parsed.visible)
+    assert "unmapped" in " ".join(parsed.technical)
+    assert "digit_suspect" not in " ".join(parsed.visible)
+    assert "digit_suspect" in " ".join(parsed.technical)
+    assert not re.search(r"(?:\w+:|\b\w+_\w+\b)", " ".join(parsed.visible))
     assert "&lt;script&gt;Revenue&lt;/script&gt;" in page
     assert "<script>Revenue</script>" not in page
 
@@ -610,7 +1292,7 @@ def test_document_flags_show_ordered_reasons_without_overriding_review_status(
         )
         page = client.get(f"/analyses/{job_id}/view").text
     assert '<h2 id="verdict-title">Held for review</h2>' in page
-    assert "Statement not extracted · income" in page
+    assert "A financial statement could not be extracted" in page
     assert page.index("statement_not_extracted:income") < page.index("range_not_converted")
 
 
@@ -635,7 +1317,7 @@ def test_document_without_flags_has_no_document_notices_section(tmp_path: Path) 
         job_id = finished_job(settings, client, flags=[])
         page = client.get(f"/analyses/{job_id}/view").text
     assert '<h2 id="verdict-title">Passed statement checks</h2>' in page
-    assert "Technical detail" not in page
+    assert '<details class="document-notices">' not in page
 
 
 def test_a_declined_document_shows_the_reason_and_no_metrics(tmp_path: Path) -> None:
@@ -652,12 +1334,41 @@ def test_a_declined_document_shows_the_reason_and_no_metrics(tmp_path: Path) -> 
             flags=["statement_not_extracted:income"],
         )
         page = client.get(f"/analyses/{job_id}/view").text
-    assert "Declined" in page and "total deposits on page 3" in page
-    assert "Technical decline code" in page and "bank" in page
+    assert (
+        "Declined" in page and "This looks like a bank, which this tool does not analyse." in page
+    )
+    assert "Technical details" in page and "bank" in page.split("Technical details", 1)[1]
+    parsed = VisibleText()
+    parsed.feed(page)
+    assert "declined:bank" not in " ".join(parsed.visible)
+    assert "declined:bank: total deposits on page 3" in " ".join(parsed.technical)
     assert "statement_not_extracted:income" in page
     assert 'id="metrics"' not in page
     assert "No summary was produced because this document was declined." in page
     assert "Review the flagged figures and statement checks below" not in page
+
+
+def test_unknown_decline_code_uses_generic_visible_sentence(tmp_path: Path) -> None:
+    settings = settings_at(tmp_path)
+    reason = "declined:unknown_type: score 14.0; evidence: page 2 'phrase'"
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(
+            settings,
+            client,
+            statements=[],
+            reviews=[],
+            metrics=[],
+            decline=Decline(code="unknown_type", reason=reason),
+        )
+        page = client.get(f"/analyses/{job_id}/view").text
+    parser = VisibleText()
+    parser.feed(page)
+    visible = " ".join(parser.visible)
+    technical = " ".join(parser.technical)
+    assert "This document was not analysed." in visible
+    assert reason not in visible and "14.0" not in visible and "phrase" not in visible
+    assert reason in technical and "unknown_type" in technical
+    assert not re.search(r"(?:\w+:|\b\w+_\w+\b)", visible)
 
 
 def test_arabic_decline_summary_uses_arabic_and_keeps_the_decline_reason(
@@ -996,10 +1707,14 @@ def test_statement_caveats_keep_evidence_and_mark_only_affected_values(
     with TestClient(create_app(Profile.NATIVE, settings)) as client:
         job_id = finished_job(settings, client, statements=[printed], metrics=[cash, ratio])
         page = client.get(f"/analyses/{job_id}/view").text
-    assert f'data-caveat="{caveat.id}"' in page
+    assert f'data-caveat="{caveat.id}"' not in page
     assert "<script>عملة</script>" not in page
     assert "&lt;script&gt;عملة&lt;/script&gt;" in page
-    assert "&#34;" in page  # evidence is safe in the hover title
+    parsed = VisibleText()
+    parsed.feed(page)
+    assert caveat_id in " ".join(parsed.technical)
+    assert "currency: SAR" in " ".join(parsed.technical)
+    assert caveat_id not in " ".join(parsed.visible)
     assert ("لم تذكر القائمة" if language == "ar" else "The statement") in page
     assert f'dir="{"rtl" if language == "ar" else "ltr"}" lang="{language}"' in page
     ratio_detail = page.split('<details class="metric-detail" id="metric-margin-2025-12-31">')[1]
@@ -1060,10 +1775,12 @@ def test_metric_caveats_keep_same_id_notes_from_each_source_statement(tmp_path: 
     assert f'href="#{usd_anchor}"' in input_items[1]
     assert page.count(f'id="{sar_anchor}"') == page.count(f'id="{usd_anchor}"') == 1
     assert f'href="#{sar_anchor}"' in page and f'href="#{usd_anchor}"' in page
-    assert f'id="{sar_anchor}" data-caveat="{caveat_id}"' in page
-    assert f'id="{usd_anchor}" data-caveat="{caveat_id}"' in page
-    assert 'title="source: SAR filing"' in page
-    assert 'title="source: USD filing"' in page
+    parsed = VisibleText()
+    parsed.feed(page)
+    technical = " ".join(parsed.technical)
+    assert f'id="{sar_anchor}"' in page and f'id="{usd_anchor}"' in page
+    assert "currency_from_domicile" in technical
+    assert "source: SAR filing" in technical and "source: USD filing" in technical
     ids = re.findall(r'\bid="([^"]+)"', page)
     assert len(ids) == len(set(ids))
 
@@ -1090,7 +1807,11 @@ def test_summary_footnotes_follow_existing_claims_and_are_listed_once(tmp_path: 
         page = client.get(f"/analyses/{job_id}/view").text
     summary = page.split('<section id="summary"', 1)[1].split("</section>", 1)[0]
     assert summary.count('class="caveat-mark"') == 2
-    assert summary.count("The statement does not name its currency.") == 1
+    parser = VisibleText()
+    parser.feed(summary)
+    assert "The statement does not name its currency." in " ".join(parser.visible)
+    assert summary.count('class="caveat-mark"') == 2
+    assert summary.count('aria-label="') >= 2
     assert 'href="#metric-current_ratio-2025-12-31"' in summary
     ratio_sentence = summary.split('href="#metric-margin-2025-12-31"')[1].split("</p>")[0]
     assert "caveat-mark" not in ratio_sentence
@@ -1228,8 +1949,11 @@ def test_arabic_decline_page_shows_plain_reason_and_no_financial_outputs(tmp_pat
             decline=Decline(code="unsupported_language", reason=reason),
         )
         page = client.get(f"/analyses/{job_id}/view").text
-    assert "Declined" in page and reason in page
-    assert "unsupported_language" in page
+    assert "Declined" in page
+    parsed = VisibleText()
+    parsed.feed(page)
+    assert reason not in " ".join(parsed.visible)
+    assert "unsupported_language" in " ".join(parsed.technical)
     assert 'id="metrics"' not in page and 'class="statement-detail"' not in page
     assert "1.50×" not in page
 

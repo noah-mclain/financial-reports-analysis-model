@@ -280,11 +280,13 @@ def test_upload_runs_through_worker_and_renders_language_scoped_result(
     ):
         url = source_url(sha256, source, job_id)
         assert f'href="{escape(url, quote=True)}"' in page
-        assert f'title="Original identifier: {ids[0]}; period: 2025-12-31">' in page
+        assert (
+            f'<code dir="ltr">{ids[0]}</code> · <code dir="ltr">2025-12-31</code></details>'
+        ) in page
         assert page.count(f'href="{escape(url, quote=True)}"') == 2  # statement and metric input
-    assert "total_current_assets" in page and "current_ratio" in page
+    assert "Total current assets / Total current liabilities" in page
     assert "total_current_assets / total_current_liabilities" in page
-    assert "1.5" in page and "total_current_liabilities" in page
+    assert "Current ratio" in page and "1.5" in page
     origin = "Direct template" if language == "en" else "قالب مباشر"
     assert origin in page
     assert "Written by the model" not in page
@@ -316,7 +318,7 @@ def test_held_statement_stays_visible_without_a_confident_summary(tmp_path: Path
 
     assert "Figures are not verified." in page
     assert 'class="badge needs_review">Held for review</span>' in page
-    assert "Summary withheld: the analysis is held for review." in page
+    assert "Summary withheld because the analysis is held for review." in page
     assert "no eligible latest-period facts" not in page
     for label, printed in (("Current assets", "3"), ("Current liabilities", "2")):
         assert label in page and f'title="Printed as: {printed}"' in page
