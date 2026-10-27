@@ -186,6 +186,7 @@ _LOCAL_COUNTED_REASONS = {
     "row_realigned",
     "ambiguous_separator",
     "numeric_columns_split",
+    "ocr_parenthesis_repaired",
 }
 
 

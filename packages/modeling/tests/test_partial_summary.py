@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 from test_summary import analysis
 
-from fra_core.schemas import Analysis, Decline
+from fra_core.schemas import Analysis, CheckResult, Decline
+from fra_ingest.review import review_statement
 from fra_model import (
     GroundingError,
     SummaryBuilt,
@@ -77,6 +78,33 @@ def test_checked_cell_with_reading_change_flag_is_excluded() -> None:
 
     assert isinstance(result, SummaryBuilt)
     assert "net_margin" not in result.narrative.cited_metric_ids
+
+
+def test_critical_cell_review_reason_keeps_unaffected_partial_facts() -> None:
+    source = held()
+    income = source.statements[1]
+    net_income = income.line_items[1]
+    cell = net_income.cells[1]
+    cell.flags.append("ocr_parenthesis_repaired")
+    passed_check = CheckResult(
+        id="income:net-income:2025",
+        statement_id=income.id,
+        kind="subtotal",
+        period_key=cell.period_key,
+        status="pass",
+        line_item_ids=[net_income.id],
+    )
+    cell.arithmetic_checks = [passed_check.id]
+    source.reviews[1] = review_statement(income, [passed_check], primary=True)
+
+    result = build_summary(source)
+
+    assert isinstance(result, SummaryBuilt)
+    assert result.narrative.cited_metric_ids == {"ebitda"}
+    assert (
+        "Net margin was not included because its source figures or calculation could not be verified."
+        in text(result)
+    )
 
 
 def test_old_analysis_counts_do_not_authorize_partial_and_zero_confirmed_suppresses() -> None:
