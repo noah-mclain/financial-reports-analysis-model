@@ -9,7 +9,7 @@ from fra_core.presentation import caveat_text
 from fra_core.schemas import Footnote, Narrative
 from fra_core.schemas.narrative import GroundingResult
 from fra_model.payload import SUMMARY_IDS, SummaryPayload
-from fra_model.templates import TEMPLATE_VERSION, templates
+from fra_model.templates import PARTIAL_TEMPLATE_VERSION, TEMPLATE_VERSION, templates
 
 
 class GroundingError(ValueError):
@@ -21,7 +21,8 @@ def check_template(payload: SummaryPayload, narrative: Narrative) -> Narrative:
         candidate = Narrative.model_validate(narrative.model_dump())
         if (
             candidate.origin != "direct_template"
-            or candidate.template_version != TEMPLATE_VERSION
+            or candidate.template_version
+            != (PARTIAL_TEMPLATE_VERSION if payload.partial else TEMPLATE_VERSION)
             or candidate.language != payload.language
             or not payload.facts
         ):
@@ -29,8 +30,20 @@ def check_template(payload: SummaryPayload, narrative: Narrative) -> Narrative:
         order = [SUMMARY_IDS.index(f.metric.metric_id) for f in payload.facts]
         if order != sorted(set(order)):
             raise ValueError("payload facts duplicated or out of order")
+        if payload.partial:
+            included = {f.metric.metric_id for f in payload.facts}
+            omitted = [o.metric_id for o in payload.omissions]
+            if payload.language != "en" or omitted != [m for m in SUMMARY_IDS if m not in included]:
+                raise ValueError("partial payload must explain every omitted metric in order")
+        elif payload.omissions or payload.scanned:
+            raise ValueError("partial notices on a complete payload")
         refs = {(f.metric.metric_id, f.period.key): f for f in payload.facts}
-        sentences = [s for section in candidate.sections for s in section.sentences]
+        sentences = [
+            s
+            for section in candidate.sections
+            for s in section.sentences
+            if not payload.partial or s.claims
+        ]
         if len(sentences) != len(refs):
             raise ValueError("missing or extra sentences")
         used = set()

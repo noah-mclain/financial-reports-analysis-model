@@ -22,7 +22,7 @@ def dev_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Mock, Mock
     entries = []
     config = IngestConfig(artifact_root=tmp_path / "artifacts", convert_ocr="none")
     baseline = StructureResult(
-        version="54",
+        version="55",
         sha256="a" * 64,
         convert_version="1",
         settings_hash="synthetic",

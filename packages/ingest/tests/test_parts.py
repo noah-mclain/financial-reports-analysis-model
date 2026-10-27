@@ -2,6 +2,8 @@
 
 from decimal import Decimal
 
+import pytest
+
 from fra_core.schemas import BBox, StatementType, TextSource
 from fra_core.taxonomy.loader import load_taxonomy
 from fra_ingest.classify import Classification
@@ -64,6 +66,56 @@ def part() -> PartialStatement:
     layout = parse_header(g, StatementType.BALANCE, None)
     classification = Classification(type=StatementType.BALANCE, confidence=0.8)
     return build_part(g, layout, classification, source=TextSource.TEXT)
+
+
+@pytest.mark.parametrize("raw", ["{ 6 543 210)", "{6,543,210)", "  {6543210)  "])
+def test_ocr_curly_opening_parenthesis_keeps_negative_value_and_source(raw: str) -> None:
+    g = grid([ROWS[0], ["Tax impact", "", raw, "-"]])
+    layout = parse_header(grid(ROWS), StatementType.COMPREHENSIVE_INCOME, None)
+    classification = Classification(type=StatementType.COMPREHENSIVE_INCOME, confidence=0.8)
+    built = build_part(g, layout, classification, source=TextSource.OCR)
+    cell = built.line_items[0].cells[0]
+    assert cell.reported == Decimal("-6543210")
+    assert cell.raw_text == raw
+    assert cell.provenance.source is TextSource.OCR
+    assert cell.provenance.bbox == box(2, 1)
+    assert (cell.provenance.row, cell.provenance.col) == (1, 2)
+    assert set(cell.flags) == {"parentheses_negative", "ocr_parenthesis_repaired"}
+
+
+@pytest.mark.parametrize(
+    ("raw", "source"),
+    [
+        ("{6,543,210)", TextSource.TEXT),
+        ("{6,543,21)", TextSource.OCR),
+        ("{6,543,210}", TextSource.OCR),
+        ("6,543,210)", TextSource.OCR),
+        ("{(6,543,210))", TextSource.OCR),
+        ("{-6,543,210)", TextSource.OCR),
+        ("{6,543,210%)", TextSource.OCR),
+        ("{CO)", TextSource.OCR),
+    ],
+)
+def test_ocr_parenthesis_repair_does_not_guess_other_malformed_values(
+    raw: str, source: TextSource
+) -> None:
+    g = grid([ROWS[0], ["Tax impact", "", raw, "-"]])
+    layout = parse_header(grid(ROWS), StatementType.COMPREHENSIVE_INCOME, None)
+    classification = Classification(type=StatementType.COMPREHENSIVE_INCOME, confidence=0.8)
+    cell = build_part(g, layout, classification, source=source).line_items[0].cells[0]
+    assert cell.reported is None
+    assert cell.raw_text == raw
+    assert "unparsed" in cell.flags
+    assert "ocr_parenthesis_repaired" not in cell.flags
+
+
+def test_ocr_parenthesis_repair_preserves_separator_uncertainty() -> None:
+    g = grid([ROWS[0], ["Tax impact", "", "{1.234)", "-"]])
+    layout = parse_header(grid(ROWS), StatementType.COMPREHENSIVE_INCOME, None)
+    classification = Classification(type=StatementType.COMPREHENSIVE_INCOME, confidence=0.8)
+    cell = build_part(g, layout, classification, source=TextSource.OCR).line_items[0].cells[0]
+    assert cell.reported == Decimal("-1.234")
+    assert {"ambiguous_separator", "ocr_parenthesis_repaired"} <= set(cell.flags)
 
 
 def test_what_repair_did_to_the_table_reaches_the_statement_flags() -> None:

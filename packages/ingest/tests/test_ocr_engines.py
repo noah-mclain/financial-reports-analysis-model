@@ -145,7 +145,11 @@ def test_tesseract_gets_the_language_page_mode_and_resolution_of_the_settings(
     tmp_path: Path,
 ) -> None:
     config = IngestConfig(
-        convert_ocr="tesseract", tesseract_psm=6, tesseract_arabic_language="ara+eng", ocr_dpi=150
+        convert_ocr="tesseract",
+        tesseract_psm=6,
+        tesseract_arabic_language="ara+eng",
+        ocr_dpi=100,
+        tesseract_dpi=150,
     )
     engine = TesseractOcr(config, command=fake_tesseract(tmp_path))
     engine.recognize(Image.new("RGB", (10, 10), "white"), ("ar-SA",))

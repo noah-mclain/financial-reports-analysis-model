@@ -17,7 +17,7 @@ from statistics import median
 from pydantic import BaseModel, ConfigDict, Field
 
 from fra_core.labels import normalize_label
-from fra_core.numbers import parse_number
+from fra_core.numbers import ParsedNumber, parse_number
 from fra_core.schemas import (
     BBox,
     Cell,
@@ -259,6 +259,31 @@ def _label_source(
     )
 
 
+def _parse_value(text: str, source: TextSource) -> ParsedNumber:
+    """Repair an OCR opening brace only beside a closing round parenthesis and digits.
+
+    The shared parser still validates grouping and records separator uncertainty. Callers keep
+    the original literal and box. Other delimiters and embedded signs remain unparsed.
+    """
+    parsed = parse_number(text)
+    stripped = text.strip()
+    if (
+        source is TextSource.OCR
+        and parsed.value is None
+        and stripped.startswith("{")
+        and stripped.endswith(")")
+        and all(c.isdecimal() or c.isspace() or c in ",.٬٫" for c in stripped[1:-1])
+    ):
+        repaired = parse_number("(" + stripped[1:])
+        if repaired.value is not None:
+            return ParsedNumber(
+                repaired.value,
+                unit=repaired.unit,
+                flags=(*repaired.flags, "ocr_parenthesis_repaired"),
+            )
+    return parsed
+
+
 def build_part(
     grid: Grid,
     layout: HeaderLayout,
@@ -339,7 +364,7 @@ def build_part(
                 break
             grid_cell = starts[col]
             text = texts[col]
-            parsed = parse_number(text) if text else None
+            parsed = _parse_value(text, source) if text else None
             flags = list(parsed.flags) if parsed else ["numbers_missing"]
             if parsed and parsed.value is not None and abs(parsed.value) > IMPLAUSIBLE:
                 flags.append("implausible_magnitude")

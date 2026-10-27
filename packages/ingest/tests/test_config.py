@@ -23,7 +23,7 @@ def write(tmp_path: Path, text: str) -> Path:
 
 
 def test_repository_config_matches_the_defaults() -> None:
-    assert load_config() == IngestConfig(pdfium_full_page_languages=("en-US",))
+    assert load_config() == IngestConfig(pdfium_full_page_languages=("en-US",), tesseract_dpi=150)
 
 
 def test_defaults_convert_balance_income_and_comprehensive_income() -> None:
@@ -216,3 +216,24 @@ def test_header_resolution_has_one_config_boundary_and_survives_transport(
         transported_config()
     with pytest.raises(ValidationError, match="header_ocr_scale"):
         IngestConfig(header_ocr_scale=7)
+
+
+def test_tesseract_page_resolution_is_configurable_and_transported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fra_ingest.config import EFFECTIVE_CONFIG_ENV, transported_config
+
+    path = write(tmp_path, "[ocr]\ndpi = 120\n[tesseract]\ndpi = 150\n")
+    vision = load_config(path)
+    assert vision.page_ocr_dpi == 120
+    config = load_config(path, ocr_engine="tesseract")
+    assert config.page_ocr_dpi == 150
+    monkeypatch.setenv(EFFECTIVE_CONFIG_ENV, config.model_dump_json())
+    assert transported_config() == config
+    assert IngestConfig(convert_ocr="tesseract", ocr_dpi=120).page_ocr_dpi == 120
+
+
+@pytest.mark.parametrize("dpi", [35, 301])
+def test_tesseract_page_resolution_rejects_out_of_range_values(tmp_path: Path, dpi: int) -> None:
+    with pytest.raises(ValidationError, match="tesseract_dpi"):
+        load_config(write(tmp_path, f"[tesseract]\ndpi = {dpi}\n"))

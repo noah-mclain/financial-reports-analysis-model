@@ -39,9 +39,10 @@ are not reconstructed. There is no new hierarchy, alias engine or mapper call.
 `request.audit` holds document SHA-256, statement and row IDs, statement source-order offsets,
 and deduplicated page/table/row references retained by value cells. Audit is excluded even
 from ordinary request serialization; inspect it explicitly with `request.audit.model_dump()`.
-These references identify value rows, not label regions. Heading rows often have only a
-statement-order reference. Every audit row records `label_region: "unavailable"`; no label
-bbox, value bbox substituted for a label bbox, or invented table reference is emitted.
+These references identify value rows, not label regions. Each request audit row separately
+retains the line item's qualified `label_source` in `label_region`, including heading labels.
+Legacy rows without label sources record `"unavailable"`. Missing or ambiguous label sources
+withhold location; value boxes never substitute for label boxes.
 
 The adapter never reads canonical mappings, mapping evidence, note references, roles or check
 operands. Amount cells are used only for structural presence and audit row identities; their
@@ -241,9 +242,11 @@ independent deterministic mapper. Truly unmapped rows under the same checks may 
 receive **zero accepted fills**. The source-positive synthetic acceptance test proves the
 reachable integration path, not a coverage improvement. Subtotal, identity, EPS and tie
 policies, critical findings and review thresholds are unchanged. After any acceptance the
-same numerical checkers run again. Structure version 54 retains EPS source notes and statement
+same numerical checkers run again. Structure version 55 retains EPS source notes and statement
 headers for that purpose, including after a cache round trip. Earlier failed/skipped checks
-and review holds survive; checks are merged by ID without duplicate-count inflation.
+and review holds survive; checks are merged by ID without duplicate-count inflation. Per-cell
+arithmetic confirmation is then rebuilt from those merged checks, including both sides of
+net-profit ties; failed or skipped rechecks cannot retain stale confirmation.
 
 Every enabled invocation still runs the model when baseline structure was cached. It writes
 separate files under `<artifact-root>/<document-sha256>/normalization/`: `statements.json`,

@@ -56,7 +56,12 @@ from fra_ingest.results import (
     StructureResult,
     TableDecision,
 )
-from fra_ingest.review import StatementReview, hold_for_industry, review_statement
+from fra_ingest.review import (
+    StatementReview,
+    confirm_arithmetic,
+    hold_for_industry,
+    review_statement,
+)
 from fra_ingest.row_alignment import Realignment, realign_rows
 from fra_ingest.stage import load_or_locate, page_ocr_languages
 from fra_ingest.statement_source import (
@@ -76,7 +81,8 @@ from fra_ingest.visual_order import (
     restore_word_order,
 )
 
-STRUCTURE_VERSION = "54"  # retain source EPS inputs for post-mapping deterministic checks
+# Retain EPS recheck inputs, arithmetic confirmation and OCR opening-brace repair in caches.
+STRUCTURE_VERSION = "55"
 NO_CURRENCY = "XXX"  # ISO 4217 code for "no currency"
 _FINANCIAL = ("bank", "insurer", "other_financial")
 
@@ -666,6 +672,8 @@ def structure_document(
         own = [c for c in checks if c.statement_id == s.id]
         if s.type is StatementType.INCOME and s.type not in seen:
             own += ties  # recorded on comprehensive income; they vouch for this statement too
+        s = confirm_arithmetic(s, own)
+        statements[position] = s
         review = review_statement(s, own, primary=s.type not in seen)
         seen.add(s.type)
         if inputs.industry_hold is not None:

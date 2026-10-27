@@ -251,7 +251,7 @@ def test_structure_continuation_roundtrip_and_audit_boundary() -> None:
     second = doc.model_copy(update={"tables": doc.tables[1:]})
     given = inputs([("docling/first.json", first), ("docling/second.json", second)])
     result, checks = structure_document(given, IngestConfig())
-    assert result.version == "54" and len(result.statements) == 1
+    assert result.version == "55" and len(result.statements) == 1
     statement = result.statements[0]
     paths = {i.label_source.docling_path for i in statement.line_items if i.label_source}
     assert paths == {"docling/first.json", "docling/second.json"}

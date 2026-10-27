@@ -48,6 +48,7 @@ from fra_core.schemas import (
     StatementType,
 )
 from fra_core.schemas.caveat import CaveatId
+from fra_core.taxonomy.loader import load_taxonomy
 
 FORMULA_VERSION = "1"
 
@@ -424,11 +425,24 @@ class MetricDescriptor:
     metric_id: str
     unit: MetricUnit
     anchor: StatementType
+    statements: frozenset[StatementType]
+    """Every statement type the formula reads, from the taxonomy's statement of each input."""
 
 
 def metric_descriptor(metric_id: str) -> MetricDescriptor | None:
     """Public display metadata, derived from the formula registry."""
     if metric_id in MARGIN_IDS:
-        return MetricDescriptor(metric_id, MetricUnit.RATIO, StatementType.INCOME)
+        return MetricDescriptor(
+            metric_id, MetricUnit.RATIO, StatementType.INCOME, frozenset({StatementType.INCOME})
+        )
     spec = next((s for s in REGISTRY if s.id == metric_id), None)
-    return None if spec is None else MetricDescriptor(spec.id, spec.unit, spec.anchor)
+    if spec is None:
+        return None
+    taxonomy = load_taxonomy()
+    statements = {spec.anchor}
+    for item_id in spec.inputs:
+        item = taxonomy.by_id(item_id)
+        if item is None:
+            raise ValueError(f"metric {spec.id} reads {item_id}, which the taxonomy lacks")
+        statements.add(item.statement)
+    return MetricDescriptor(spec.id, spec.unit, spec.anchor, frozenset(statements))

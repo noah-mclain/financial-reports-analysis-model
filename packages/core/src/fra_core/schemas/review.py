@@ -17,6 +17,8 @@ PROVENANCE_WARNINGS = ("label_merged", "label_words_from_page", "blank_confirmed
 # Notes on how a number was read, kept on the cell for people. They are not doubts about a
 # figure, so they do not hold a statement or reach the model, and unlike the warnings above they
 # are not listed on the review.
+# ``ocr_parenthesis_repaired`` is deliberately absent: repairing an opening brace chooses the
+# figure's sign, so the result remains a doubt that holds the statement for review.
 READ_NOTES = (
     "digits_reversed",
     "arabic_indic_digits",

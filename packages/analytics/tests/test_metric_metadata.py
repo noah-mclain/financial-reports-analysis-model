@@ -22,3 +22,20 @@ def test_descriptors_cover_registry_without_new_formulas() -> None:
         and margin.anchor is StatementType.INCOME
     )
     assert metric_descriptor("unknown") is None
+
+
+def test_descriptor_statements_come_from_the_taxonomy_inputs() -> None:
+    def reads_balance(key: str) -> bool:
+        descriptor = metric_descriptor(key)
+        assert descriptor is not None
+        return StatementType.BALANCE in descriptor.statements
+
+    assert {k for k in METRIC_IDS if reads_balance(k)} >= {
+        "current_ratio",
+        "total_debt",
+        "net_debt_to_ebitda",
+        "dso",
+    }
+    assert not any(reads_balance(k) for k in ("net_margin", "ebitda"))
+    margin = metric_descriptor("net_margin")
+    assert margin is not None and margin.statements == {StatementType.INCOME}

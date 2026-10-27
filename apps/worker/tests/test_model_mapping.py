@@ -264,6 +264,83 @@ def test_later_failed_identity_holds_after_acceptance(monkeypatch: pytest.Monkey
     assert "identity_failed" in mapped.reviews[0].reasons
 
 
+@pytest.mark.parametrize("status", ["pass", "fail", "skipped"])
+def test_accepted_mapping_rebuilds_arithmetic_confirmation(
+    monkeypatch: pytest.MonkeyPatch, status: str
+) -> None:
+    from fra_core.schemas import CheckResult
+
+    source = result("Revenue")
+    before = CheckResult(
+        id="identity",
+        statement_id="s",
+        kind="balance_identity",
+        period_key="2025",
+        status="pass",
+        line_item_ids=["r1"],
+    )
+    source.statements[0].line_items[0].cells[0].arithmetic_checks = [before.id, "obsolete"]
+    after = CheckResult.model_validate({**before.model_dump(), "status": status})
+    monkeypatch.setattr(
+        "fra_worker.model_mapping.run_checks", lambda statement, index: (statement, [after])
+    )
+    mapped, checked, _ = apply_normalization(
+        source, [before], Runtime('{"canonical_id":"revenue"}')
+    )
+    assert mapped.statements[0].line_items[0].cells[0].arithmetic_checks == (
+        [before.id] if status == "pass" else []
+    )
+    assert checked[0].status == status
+    assert source.statements[0].line_items[0].cells[0].arithmetic_checks == [before.id, "obsolete"]
+
+
+def test_accepted_mapping_confirms_real_subtotal_and_both_sides_of_tie() -> None:
+    source = result("Revenue")
+    income = source.statements[0]
+    revenue = income.line_items[0]
+    revenue.cells[0].reported = Decimal("100")
+    revenue.cells[0].raw_text = "100"
+    income.line_items += [
+        revenue.model_copy(
+            update={
+                "id": row_id,
+                "raw_label": label,
+                "canonical_id": canonical,
+                "is_subtotal": subtotal,
+                "cells": [revenue.cells[0].model_copy(update={"reported": Decimal(value)})],
+            }
+        )
+        for row_id, label, canonical, subtotal, value in (
+            ("r2", "Cost of sales", "cost_of_revenue", False, "-40"),
+            ("r3", "Gross profit", "gross_profit", True, "60"),
+        )
+    ]
+    comprehensive = income.model_copy(
+        update={
+            "id": "comprehensive",
+            "type": StatementType.COMPREHENSIVE_INCOME,
+            "line_items": [income.line_items[-1].model_copy(update={"id": "r1"})],
+        }
+    )
+    source.statements.append(comprehensive)
+    mapped, checked, _ = apply_normalization(source, [], Runtime('{"canonical_id":"revenue"}'))
+    subtotal = next(c for c in checked if c.kind == "subtotal" and c.status == "pass")
+    tie = next(c for c in checked if c.kind == "net_profit_tie" and c.status == "pass")
+    rows = mapped.statements[0].line_items
+    assert rows[0].cells[0].arithmetic_checks == [subtotal.id]
+    assert rows[1].cells[0].arithmetic_checks == [subtotal.id]
+    assert rows[2].cells[0].arithmetic_checks == sorted([subtotal.id, tie.id])
+    assert mapped.statements[1].line_items[0].cells[0].arithmetic_checks == [tie.id]
+    assert all(not row.cells[0].arithmetic_checks for row in income.line_items)
+
+
+def test_unaccepted_mapping_preserves_arithmetic_confirmation() -> None:
+    source = result("Unfamiliar caption")
+    source.statements[0].line_items[0].cells[0].arithmetic_checks = ["existing"]
+    mapped, _, _ = apply_normalization(source, [], Runtime('{"canonical_id":null}'))
+    assert mapped.statements[0].line_items[0].cells[0].arithmetic_checks == ["existing"]
+
+
 def test_off_records_skipped_mapping_stage(tmp_path: Path) -> None:
     store, sha = queued(tmp_path)
     job = store.claim()

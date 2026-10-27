@@ -16,7 +16,7 @@ from fra_ingest.label_match import LabelIndex
 from fra_ingest.normalization_context import build_normalization_request
 from fra_ingest.normalization_decision import assess_proposal
 from fra_ingest.results import StructureResult
-from fra_ingest.review import review_statement
+from fra_ingest.review import confirm_arithmetic, review_statement
 from fra_ingest.table_checks import run_checks
 from fra_model.runtime import LlamaServerRuntime, ModelRuntime
 
@@ -38,7 +38,8 @@ def apply_normalization(
     """Run every eligible unmapped label, preserving baseline mappings and uncertainty.
 
     Numeric checks are reused unchanged when nothing is accepted. After acceptance the same
-    numeric, EPS and cross-statement tie checkers run again; prior review holds remain.
+    numeric, EPS and cross-statement tie checkers run again and arithmetic confirmation is
+    rebuilt from the merged checks; prior review holds remain.
     No proposal is supplied to an arithmetic checker as source evidence.
     """
     runtime.validate()
@@ -124,10 +125,13 @@ def apply_normalization(
     old_reviews = {r.statement_id: r for r in result.reviews}
     reviews = []
     seen: set[StatementType] = set()
-    for statement in statements:
+    for position, statement in enumerate(statements):
         own = [c for c in updated_checks if c.statement_id == statement.id]
         if statement.type is StatementType.INCOME and statement.type not in seen:
             own += [c for c in updated_checks if c.kind == "net_profit_tie"]
+        if accepted:
+            statement = confirm_arithmetic(statement, own)
+            statements[position] = statement
         review = review_statement(statement, own, primary=statement.type not in seen)
         seen.add(statement.type)
         prior = old_reviews.get(statement.id)

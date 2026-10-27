@@ -13,6 +13,7 @@ from fra_core.schemas import (
     Provenance,
     Statement,
     StatementType,
+    is_provenance_flag,
 )
 from fra_ingest.review import review_statement
 
@@ -113,6 +114,16 @@ def test_critical_cell_flags_hold_with_their_count() -> None:
         "row_realigned:1",
     ]
     assert review.flagged_cells == 4
+
+
+def test_ocr_parenthesis_repair_is_a_critical_sign_doubt() -> None:
+    repaired = item(1, "-10", "ocr_parenthesis_repaired")
+    review = review_statement(statement([repaired, *ROWS[1:]]), PASSING, primary=True)
+
+    assert not is_provenance_flag("ocr_parenthesis_repaired")
+    assert review.status == "needs_review"
+    assert review.reasons == ["ocr_parenthesis_repaired:1"]
+    assert review.flagged_cells == 1
 
 
 def test_a_confirmed_blank_holds_nothing() -> None:
@@ -255,3 +266,23 @@ def test_named_mapping_findings_hold_a_clean_statement_in_the_review_artifact() 
     duplicate = review_statement(mapped, PASSING, primary=False)
     assert duplicate.reasons == ["duplicate_statement"]
     assert mapped.mapping_findings
+
+
+def test_arithmetic_confirmation_excludes_eps_failed_skipped_and_other_periods() -> None:
+    from fra_ingest.review import confirm_arithmetic
+
+    source = statement(ROWS)
+    evidence = [
+        *PASSING,
+        check("eps", "pass", ["r4"]),
+        check("subtotal", "fail", ["r4"]),
+        check("subtotal", "skipped", ["r4"]),
+        check("subtotal", "pass", ["r4"], "single_addend"),
+        check("subtotal", "pass", ["r4"]).model_copy(update={"statement_id": "other"}),
+        check("subtotal", "pass", ["r4"]).model_copy(update={"period_key": "other"}),
+    ]
+    confirmed = confirm_arithmetic(source, evidence)
+    assert confirmed.line_items[0].cells[0].arithmetic_checks == [PASSING[0].id]
+    assert confirmed.line_items[3].cells[0].arithmetic_checks == []
+    assert source.line_items[0].cells[0].arithmetic_checks == []
+    assert confirm_arithmetic(confirmed, []).line_items[0].cells[0].arithmetic_checks == []

@@ -279,6 +279,12 @@ class Cell(BaseModel):
     provenance: Provenance
     flags: list[str] = Field(default_factory=list)
 
+    arithmetic_checks: list[str] = Field(
+        default_factory=list,
+        description="IDs of passed document subtotal, tie or balance checks covering this "
+        "exact row and period. Empty for legacy or unchecked cells; not independent verification.",
+    )
+
 
 class LineItem(BaseModel):
     """One row of a statement, with its label as printed and its canonical mapping."""

@@ -338,7 +338,7 @@ def environment_record(config: IngestConfig) -> list[str]:
             f"tesseract: {version}",
             *(f"  {code}.traineddata sha256 {digest}" for code, digest in digests.items()),
             f"tesseract settings: psm {config.tesseract_psm}, Arabic language "
-            f"{config.tesseract_arabic_language}, ocr_dpi {config.ocr_dpi}, "
+            f"{config.tesseract_arabic_language}, page-read dpi {config.page_ocr_dpi}, "
             f"ocr_scale {config.ocr_scale}",
         ]
     return lines
