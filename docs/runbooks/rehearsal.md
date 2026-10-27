@@ -1,10 +1,17 @@
-# End-to-end rehearsal
+# End-to-end rehearsal protocol and record
 
-Two end-to-end runs on two different documents the code has never been run on: the first on the
-native profile, the second on the Docker profile
-([08-revised-plan.md](../blueprint/08-revised-plan.md), 25 to 27 October). This runbook fixes the
-procedure and the record so the runs are comparable. It does not choose the documents: that is
-the open question after the plan's gates, and it is the owner's decision.
+This protocol describes a bounded unseen-document rehearsal, not the ordinary application
+requirements. Task 3's 27 October verification was a separate fresh deployment and UI check on
+already authorized inputs, not a clean unseen-document rehearsal. Its three jobs all ended
+`needs_review`; no clean unseen-document result has been established. See the
+[submission runbook](submission.md) for the assessor workflow and
+[accuracy report](../accuracy-report.md) for dated results.
+
+For a future rehearsal, select two different eligible documents before seeing any output, one
+for native and one for Docker, and record their issuer, period, language, scan type, source URL
+and hash. The first two runs must remain the selected runs; a replacement chosen after an
+outcome is seen must be reported as a replacement, not as a pre-planned run. This protocol does
+not authorize opening or scoring protected pools.
 
 ## Before any run
 
@@ -17,15 +24,16 @@ the open question after the plan's gates, and it is the owner's decision.
    `blind` document before the checkpoint (corpus rule 3); whether a rehearsal run is entered in
    `eval/corpus/scoring_log.tsv` follows the owner's decision on that option. Under option 2 there
    is no expected result, so the run checks internal consistency only, not accuracy.
-3. **Machine idle.** The pipeline runs docling and, for scans, OCR. Do not run it beside a
-   training fit or any other heavy job: check `vm_stat` and `sysctl vm.swapusage`, and stop if
+3. **Rehearsal resource check.** This is a precaution for a heavyweight rehearsal, especially
+   scan conversion; it is not a general app startup requirement. Do not run the rehearsal beside
+   a training fit or another heavy job. Check `vm_stat` and `sysctl vm.swapusage`, and stop if
    free memory is low or swap is in use.
 4. **Configuration present.** `.env` exists in the checkout with `FRA_API_PORT` and
    `FRA_LLM_PORT` set (the Makefile refuses to run without them): `grep -E '^FRA_(API|LLM)_PORT=.+' .env`
    prints both lines.
 5. **Checks green.** `make test lint typecheck docs-check` pass on the commit being rehearsed.
    Record `git rev-parse HEAD`.
-6. **Documents chosen before running.** Choose two different documents, A (native) and B (Docker). Before the first run, write down
+6. **Documents chosen before running.** Choose two different eligible documents, A (native) and B (Docker). Before the first run, write down
    for each document: issuer, period, language, digital or scanned, source URL and `shasum -a 256`. A document
    chosen after seeing its output is not a fresh document.
 
