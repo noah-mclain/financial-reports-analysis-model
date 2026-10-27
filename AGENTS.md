@@ -57,9 +57,12 @@ paid fallback, top-ups, enabling credits or buying another plan are not allowed.
    explicit `--api-key`, custom billing endpoint or provider override. Existing Pi OAuth is
    independent of `codex login`; one client's login does not sign in the other. If necessary,
    use Pi's interactive `/login openai` and select **Sign in with ChatGPT**.
-3. For Codex, run `codex login status` and require **Logged in using ChatGPT**. Use
-   `forced_login_method="chatgpt"` for launched Codex tasks. If missing, let the owner complete
-   `codex login`; do not use `--with-api-key` or exchange the login for an API credential.
+3. Guarded Codex workers use the owner's separately authenticated native profile at
+   `CODEX_HOME=/Users/nadamohamed/.codex-pi`. Run native `codex login status` in that same
+   sanitized environment and require **Logged in using ChatGPT**. Use
+   `forced_login_method="chatgpt"` for launched tasks. If missing, let the owner complete
+   native `codex login` with that explicit `CODEX_HOME`; never copy auth or tokens from
+   `~/.codex`, use `--with-api-key`, or exchange the login for an API credential.
 4. For Claude Code, run `claude auth status` in the same sanitized environment as the task.
    Require a Claude subscription login and first-party provider. If missing, let the owner run
    `claude auth login` and choose the Claude account with subscription. Check `/status` when
@@ -188,9 +191,19 @@ flags: its separate preflight admits only inspected model/UI/trust defaults and 
 refuses unknown provider/MCP/plugin or managed policy, and fingerprints the configuration again
 at execution. It uses a private native server (`--no-daemon`), disables plugins, apps and host
 skill discovery, and supplies canonical instructions explicitly. Credentials stay in their
-original native store; no credential copy, alternate login directory or token bridge is used. Implementation uses the workspace-write sandbox; research/review
-uses read-only. Neither path bypasses the sandbox or approvals. Existing native Codex sessions
-can finish their authorized task without creating a duplicate worker. Do not launch another implementation agent merely to wrap
+dedicated native store at `~/.codex-pi`; the owner explicitly authorized this separate
+native login. Sanitized children always set `CODEX_HOME` to the OS home plus `.codex-pi`,
+ignoring caller overrides, while `HOME` remains the actual OS home. Config, auth,
+requirements and session artifacts use that same dedicated home. Missing dedicated config
+or auth refuses; no normal-profile fallback or credential copying is permitted. The normal
+`~/.codex` profile is untouched and its user config is not consulted. Both live and
+interactive preflight inspect the dedicated config: only the existing safe model/UI/trust
+shape, OpenAI provider, ChatGPT login and exact `shell_environment_policy={inherit="core"}`
+are admitted; no endpoint/provider/helper or general normal-config whitelist is added.
+Managed and ancestor/project `.codex` policy rejection remains. Live exec still ignores
+user configuration/rules; interactive execution rechecks the config fingerprint.
+Implementation uses the workspace-write sandbox; research/review uses read-only. Neither
+path bypasses the sandbox or approvals. Existing native Codex sessions can finish their authorized task without creating a duplicate worker. Do not launch another implementation agent merely to wrap
 an already-running Codex session. Use installed CLI help for task-specific flags rather than
 inventing commands. Pi's runtime executes local tools; no extra LLM-powered orchestration
 service is needed.
@@ -361,6 +374,34 @@ upgrade models or expand the task through native controls. The same authenticati
 role restrictions, model selection, writer isolation, concurrency/depth limits and deadline
 apply. Ctrl+C cancels the entire worker. Quota/authentication errors stop that task without
 retry. Existing jobs are not relaunched merely to change their display.
+
+### Explicit host-runtime capability
+
+Only an owner-authorized bounded Codex implementation task may opt in with
+`herdr-worker launch --host-runtime`, guarded `codex --task-file PATH --host-runtime`,
+or the `herdr_worker` tool's `hostRuntime: true`. The default is false. Task text does
+not activate it. The flag is recorded as the boolean `host_runtime` in run state and
+public results, passed through the supervisor, and checked again at native invocation.
+`auto` selects interactive for this capability; explicit live mode, Claude, review and
+research roles are refused. Nested workers remain disabled.
+
+The native session still uses `--sandbox workspace-write --ask-for-approval on-request`.
+For an in-scope Docker socket, localhost or other host command blocked by the sandbox,
+the worker requests exec escalation using `sandbox_permissions="require_escalated"`
+with a command-specific justification. The owner approves through the native UI.
+The coordinator and worker never enter approval keystrokes. Denied or unavailable
+approval leaves the task blocked; no bypass flags, global unsandboxing or fallback.
+Authentication, subscription credit assertions, managed configuration checks, model
+selection and environment sanitation are unchanged.
+
+Ordinary interactive mode already uses on-request approval. This capability records
+task authorization and supplies explicit worker instructions; it does not add a native
+Docker-only permission boundary or technically remove the approval interface from
+ordinary sessions. Ordinary task packets prohibit host-runtime escalation. Approval
+scope and execution remain controlled by the native client and host policy. An
+approved command can execute outside the sandbox with the owner's host permissions;
+inspect its full effects and prefer command-specific approval. Socket/localhost access
+is not proven until the separate owner-attended smoke test succeeds.
 
 Interactive completion requires the exact private task text in a **new native session** for
 the assigned checkout. Claude uses a fresh explicit session UUID; Codex binds a new native
