@@ -189,6 +189,8 @@ subtotal and identity checks fail). Before step 1, for the scanned summary the o
 records a specific Gate D exception in [the decision log](06-decisions-and-risks.md) or a scanned
 English document completes with a summary recorded here.
 
+D24 (owner decision, 2026-10-27) records that exception for the scanned half: with the confirmed-only partial summary, two of the four scanned or partly scanned `dev` documents reach a partial summary (`net_margin` only, every included figure equal to the reviewed reference) and two get none; all four jobs stay `needs_review`, so the scanned half is not met and the checkpoint proceeds under D23 with that stated. The exception covers nothing else.
+
 Gate D evidence, 26 October 2026 (main `410629a`; Docker Desktop 27.3.1, 12 CPUs, 14.1 GB VM; the
 Docker profile with Tesseract; `make docker-up`, upload through the API, status read until final;
 documents are `dev` golden documents, not protected ones):
