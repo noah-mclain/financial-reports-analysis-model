@@ -14,6 +14,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from fra_core.pools import Identity, Pool, PoolError, PoolRegistry, Source
+from fra_core.schemas.normalization import NormalizationAnswer as NormalizationAnswer
 from fra_core.schemas.statement import BBox, Provenance, StatementType
 from fra_core.split import (
     Look,
@@ -38,12 +39,6 @@ class Contract(BaseModel):
     model_config = ConfigDict(
         extra="forbid", frozen=True, strict=True, revalidate_instances="always"
     )
-
-
-class NormalizationAnswer(Contract):
-    """The one normalization reply schema, shared by the prompt, dataset and scorer."""
-
-    canonical_id: str | None
 
 
 class SourceRecord(Contract):

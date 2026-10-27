@@ -53,7 +53,6 @@ from fra_ingest.ocr import TESSERACT_COMMAND, make_engine
 from fra_ingest.pages import PAGES_STAGE_VERSION, recorded_ocr_calls, sha256_file
 from fra_ingest.results import ConvertResult
 from fra_ingest.review import CRITICAL_CELL_FLAGS
-from fra_ingest.structure import structure_pdf
 from harness.expected import (
     EXPECTED_DIR,
     MANIFEST,
@@ -62,6 +61,8 @@ from harness.expected import (
     ExpectedStatement,
     load_expected,
 )
+from harness.failures import DOCUMENT_ERRORS, EngineFailure, EngineGuard, aborted, document_failure
+from harness.model_mapping import evaluation_structure as structure_pdf
 from harness.paths import STRATA
 from harness.reproducibility import report_evidence
 
@@ -703,6 +704,7 @@ def _document_timing(out_dir: Path, before: tuple[int | None, int | None]) -> Oc
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m harness.extraction")
+    parser.add_argument("--english-only", action="store_true")
     parser.add_argument(
         "--ocr",
         choices=get_args(OcrEngineName),
@@ -745,7 +747,13 @@ def main(argv: list[str] | None = None) -> int:
     document_hashes: dict[str, str] = {}
     expected_hashes: dict[str, str] = {}
     period_kinds: dict[str, str] = {}
-    for path in sorted(EXPECTED_DIR.glob("*.json")):
+    paths = sorted(EXPECTED_DIR.glob("*.json"))
+    if args.english_only:
+        paths = [p for p in paths if entries[p.stem]["language"] == "en"]
+    errored: list[dict[str, str]] = []
+    guard = EngineGuard(len(paths))
+    stopped: EngineFailure | None = None
+    for path in paths:
         expected = load_expected(path)
         pdf = MANIFEST.parent / entries[expected.id]["file"]
         document_hashes[expected.id] = sha256_file(pdf)
@@ -760,7 +768,26 @@ def main(argv: list[str] | None = None) -> int:
         )
         out_dir = config.artifact_root / document_hashes[expected.id]
         before = _stamps(out_dir)
-        result = structure_pdf(pdf, config, engine)
+        try:
+            result = structure_pdf(pdf, config, engine)
+        except DOCUMENT_ERRORS as exc:
+            failure = document_failure(exc)
+            errored.append(
+                {
+                    "id": expected.id,
+                    "reason": failure["error"],
+                    "detail": failure["detail"],
+                    "period_kind": period_kinds[expected.id],
+                }
+            )
+            print(f"{expected.id}: ERROR {failure['error']} {failure['detail']}")
+            try:
+                guard.record(failure["error"], failure["detail"])
+            except EngineFailure as exc_stop:
+                stopped = exc_stop
+                break
+            continue
+        guard.record(None)
         found: dict[StatementType, Statement] = {}
         for extracted in result.statements:
             found.setdefault(extracted.type, extracted)
@@ -784,22 +811,30 @@ def main(argv: list[str] | None = None) -> int:
                 f"cells {score.cells:3}  right {score.right:3}  unconfirmed {score.unconfirmed:3}"
             )
     lines, code = report(files)
+    if errored:
+        code = 1
+        lines.append(f"FAILED documents: {len(errored)}; scored documents: {len(files)}")
     strata = {}
     for kind in (*STRATA, "unknown", "total"):
         subset = [(f, found) for f, found in files if kind == "total" or period_kinds[f.id] == kind]
         stratum_lines, stratum_code = report(subset)
+        failures = [e for e in errored if kind == "total" or e["period_kind"] == kind]
         strata[kind] = {
             "documents": len(subset),
+            "failed_documents": len(failures),
             "report": stratum_lines,
-            "exit_code": stratum_code,
+            "exit_code": 1 if failures else stratum_code,
         }
     payload: dict[str, Any] = {
         "statements": rows,
+        "errored": errored,
+        "planned_documents": len(paths),
         "run_options": {
             "label": label,
             "tagged": tagged,
             "fresh": args.fresh,
             "page_ocr_enabled": engine is not None,
+            "english_only": args.english_only,
         },
         "strata": strata,
         "reproducibility": report_evidence(
@@ -809,6 +844,8 @@ def main(argv: list[str] | None = None) -> int:
             inputs={"manifest": sha256_file(MANIFEST)},
         ),
     }
+    if stopped is not None:
+        payload = aborted(payload, stopped)
     destination = OUT / "extraction-golden.json"
     if tagged:
         cold, timings = split_cold_start([f.id for f, _ in files], timings)
@@ -832,6 +869,8 @@ def main(argv: list[str] | None = None) -> int:
     destination.write_text(
         json.dumps({**payload, "report": lines}, indent=2, ensure_ascii=False), encoding="utf-8"
     )
+    if stopped is not None:
+        raise stopped
     return code
 
 

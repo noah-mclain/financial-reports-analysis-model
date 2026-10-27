@@ -63,7 +63,6 @@ from fra_ingest.label_match import LabelIndex
 from fra_ingest.ocr import make_engine
 from fra_ingest.results import StructureResult
 from fra_ingest.review import StatementReview
-from fra_ingest.structure import structure_pdf
 from harness.confidence import OUTCOMES, confidence_part, output_coverage, statement_outcomes
 from harness.expected import EXPECTED_DIR, ExpectedFile, load_expected
 from harness.extraction import DIGITAL, SCANNED, score_statement, wilson_interval
@@ -81,6 +80,7 @@ from harness.locate_evidence import (
     incomplete_evidence,
 )
 from harness.mapping import SLOT_STATES, critical_slots, document_period_kind
+from harness.model_mapping import evaluation_structure as structure_pdf
 from harness.paths import STRATA
 from harness.structure import (
     PAIRS,
@@ -609,6 +609,7 @@ def earlier_records(report: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m harness.gates", description=__doc__)
+    parser.add_argument("--english-only", action="store_true")
     parser.add_argument("--compare-with", type=Path, help="earlier gates-dev.json report")
     parser.add_argument("--output", type=Path, default=OUT / "gates-dev.json")
     args = parser.parse_args(argv)
@@ -629,6 +630,8 @@ def main(argv: list[str] | None = None) -> int:
     taxonomy = load_taxonomy()
     index = LabelIndex(taxonomy)
     entries = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))["documents"]
+    if args.english_only:
+        entries = [e for e in entries if e["language"] == "en"]
     documents: list[dict[str, Any]] = []
     by_id: dict[str, dict[StatementType, Statement]] = {}
     errors: list[str] = []
@@ -678,7 +681,12 @@ def main(argv: list[str] | None = None) -> int:
         converted = result.industry is None or result.industry.outcome != "declined"
         evidence = document_evidence(config.artifact_root / result.sha256, converted=converted)
         path = EXPECTED_DIR / f"{entry['id']}.json"
-        checks = load_checks(config.artifact_root / result.sha256 / "table_checks.json")
+        # Declines produce no checks; neither old baseline nor normalization artifacts apply.
+        checks = (
+            load_checks(config.artifact_root / result.sha256 / "table_checks.json")
+            if converted
+            else {}
+        )
         record = document_figures(
             entry,
             result,

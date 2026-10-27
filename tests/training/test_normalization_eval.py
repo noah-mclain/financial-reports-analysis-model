@@ -178,3 +178,11 @@ def test_source_language_comparisons_are_never_pooled() -> None:
     assert result["by_source_language"]["sec|en"]["macro_f1_delta_ci95"] == pytest.approx(
         [1 / 47, 1 / 47]
     )
+
+
+def test_legacy_answer_import_is_the_shared_contract() -> None:
+    from dataset_contracts import NormalizationAnswer as LegacyAnswer
+
+    from fra_core.schemas.normalization import NormalizationAnswer
+
+    assert LegacyAnswer is NormalizationAnswer

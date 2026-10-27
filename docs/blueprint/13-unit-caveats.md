@@ -139,7 +139,7 @@ Footnote text, fixed, one per caveat and language:
 - Local extraction holds and missing critical mappings stay visible; they exclude affected
   facts without claiming the entire document is verified. Unsupported notices, language or
   period conflicts, contradictory units, decline and industry holds suppress the partial
-  summary. Old analyses default to no arithmetic confirmation; structure version 54 rebuilds
+  summary. Old analyses default to no arithmetic confirmation; structure version 55 rebuilds
   this evidence from checks rather than reinterpreting counts.
 - A partial summary uses fixed versioned grammar, explains every omitted summary metric
   without its figures, and retains the held verdict. The results page labels it

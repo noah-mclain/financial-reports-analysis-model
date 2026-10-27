@@ -39,6 +39,7 @@ class JobStage(StrEnum):
     LOCATE = "locate"
     CONVERT = "convert"
     STRUCTURE = "structure"
+    MAPPING = "mapping"
     METRICS = "metrics"
     NARRATE = "narrate"
 

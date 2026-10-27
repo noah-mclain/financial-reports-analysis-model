@@ -47,6 +47,7 @@ _templates.globals.update(
         "locate": "Find statement pages",
         "convert": "Read page content",
         "structure": "Build statements",
+        "mapping": "Check model label proposals",
         "metrics": "Calculate metrics",
         "narrate": "Write summary",
     }.get(stage, stage.replace("_", " ").capitalize()),

@@ -27,30 +27,22 @@ from dataset_exclusions import ExclusionAudit, FrozenExclusions, retained_indice
 from progress import Progress
 from pydantic import Field
 
+from fra_core.normalization_prompt import (
+    SYSTEM_PROMPT as SYSTEM_PROMPT,
+)
+from fra_core.normalization_prompt import (
+    normalization_prompt as normalization_prompt,
+)
+from fra_core.normalization_prompt import (
+    render_input as render_input,
+)
 from fra_core.split import cik_key
-from fra_core.taxonomy import Taxonomy, load_taxonomy
+from fra_core.taxonomy import load_taxonomy
 
 BUILDER_VERSION = 2
 TOKEN_LIMIT = 2048
 
 
-def normalization_prompt(taxonomy: Taxonomy) -> str:
-    """One instruction, closed catalog and response schema for training and inference."""
-    catalog: dict[str, list[str]] = {}
-    for item in sorted(taxonomy.items, key=lambda i: i.id):
-        catalog.setdefault(item.statement.value, []).append(item.id)
-    return "\n".join(
-        (
-            "Map the financial statement line item to an id listed for its statement in the "
-            "catalog below. If the statement has no listed ids or none matches, use null. "
-            "Return only a JSON object matching the schema below. No explanation or markdown.",
-            canonical_json(catalog),
-            canonical_json(NormalizationAnswer.model_json_schema()),
-        )
-    )
-
-
-SYSTEM_PROMPT = normalization_prompt(load_taxonomy())
 TRAIN_FILE = "train.jsonl"
 VALID_FILE = "valid.jsonl"
 MANIFEST_FILE = "manifest.json"
@@ -98,11 +90,6 @@ class BuiltDataset:
 def normalize_label(label: str) -> str:
     """NFKC, casefolded, whitespace collapsed: the label identity used for deduplication."""
     return " ".join(unicodedata.normalize("NFKC", label).casefold().split())
-
-
-def render_input(label: str, statement: str) -> str:
-    """Exact model-input identity shared by dataset rendering and evaluation."""
-    return canonical_json({"label": label, "statement": statement})
 
 
 def render_row(example: NormalizationExample) -> Row:

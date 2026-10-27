@@ -1,0 +1,5 @@
+# Owner-provided fused 1000-update, 47-ID LoRA export identity. Verify bytes before use.
+model_path = "var/models/qwen2.5-7b-normalization-q4_k_m.gguf"
+sha256 = "1b87968d3116a9fc228d52373e7783f784008a44d214c10479dab291fb2404b3"
+size_bytes = 4683073408
+timeout_seconds = 120.0

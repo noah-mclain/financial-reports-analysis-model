@@ -200,6 +200,8 @@ class RowView:
     depth: int
     subtotal: bool
     mapped_to: str | None
+    mapping_origin: str | None
+    mapping_evidence: str | None
     mapping_flag: str | None
     cells: tuple[tuple[CellView, ...], ...]  # per period, newest first; () when none was read
 
@@ -296,6 +298,10 @@ def statement_view(
                 depth=item.depth,
                 subtotal=item.is_subtotal,
                 mapped_to=item.canonical_id,
+                mapping_origin="Model proposed; evidence checked"
+                if item.mapping_source == "model"
+                else None,
+                mapping_evidence=item.mapping_evidence,
                 mapping_flag=item.mapping_flag,
                 cells=cells,
             )

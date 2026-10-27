@@ -418,3 +418,9 @@ def test_generic_dedupe_keeps_the_lowest_id_and_reports_conflicts_without_raisin
     )
     assert [k[0] for k in kept] == ["a-1", "c-3"]
     assert conflicts == [("d-4", "e-5")]
+
+
+def test_shipped_prompt_digest_before_shared_contract_move() -> None:
+    assert hashlib.sha256(SYSTEM_PROMPT.encode()).hexdigest() == (
+        "bba5f9cdf6ea3e553c9b899a0d4419128e84f6255f73870dba2090ded1bc0606"
+    )

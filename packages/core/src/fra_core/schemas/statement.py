@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 from enum import StrEnum
+from math import isfinite
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -92,7 +93,10 @@ class BBox(BaseModel):
 
 
 class Provenance(BaseModel):
-    """Where a value was read from. Every displayed number resolves to one of these."""
+    """A source cell in PDF points; every displayed number resolves to one of these.
+
+    Qualified label sources also reuse this location without confirming the cell's reading.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -102,6 +106,71 @@ class Provenance(BaseModel):
     row: int = Field(ge=0, description="TableCell.start_row_offset_idx")
     col: int = Field(ge=0, description="TableCell.start_col_offset_idx")
     source: TextSource = TextSource.TEXT
+
+
+LabelSourceReason = Literal[
+    "text_repaired",
+    "note_split",
+    "reading_uncertain",
+    "merged_or_wrapped",
+    "missing_cell",
+    "missing_bbox",
+    "invalid_source",
+    "ambiguous_cell",
+    "ambiguous_page",
+    "source_missing",
+]
+
+
+class LabelSource(BaseModel):
+    """Qualified location of an original label cell, never glyph or semantic verification."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    status: Literal["retained", "transformed", "merged", "unavailable", "ambiguous"]
+    provenance: Provenance | None = None
+    docling_path: str | None = None
+    reasons: tuple[LabelSourceReason, ...] = ()
+
+    @model_validator(mode="after")
+    def _state(self) -> LabelSource:
+        reasons = set(self.reasons)
+        if len(reasons) != len(self.reasons):
+            raise ValueError("label source has duplicate reasons")
+        transformed = {"text_repaired", "note_split", "reading_uncertain"}
+        if self.status in ("unavailable", "ambiguous"):
+            allowed = (
+                {"ambiguous_cell", "ambiguous_page"}
+                if self.status == "ambiguous"
+                else {"missing_cell", "missing_bbox", "invalid_source", "source_missing"}
+            )
+            if (
+                self.provenance is not None
+                or self.docling_path is not None
+                or not reasons
+                or not reasons <= allowed
+            ):
+                raise ValueError("absent label source must withhold location and name its reason")
+        else:
+            if self.provenance is None or not self.docling_path or not self.docling_path.strip():
+                raise ValueError("available label source needs provenance and a nonblank path")
+            box = self.provenance.bbox
+            if (
+                not all(isfinite(v) for v in (box.left, box.top, box.right, box.bottom))
+                or not 0 <= box.left < box.right
+                or not 0 <= box.top < box.bottom
+            ):
+                raise ValueError("label source bbox must be finite and ordered in PDF points")
+            if self.status == "retained" and reasons:
+                raise ValueError("retained label source cannot claim transformations")
+            if self.status == "transformed" and (not reasons or not reasons <= transformed):
+                raise ValueError("transformed label source needs a transformation reason")
+            if self.status == "merged" and (
+                "merged_or_wrapped" not in reasons
+                or not reasons <= transformed | {"merged_or_wrapped"}
+            ):
+                raise ValueError("merged label source needs its whole-cell qualifier")
+        return self
 
 
 class Period(BaseModel):
@@ -224,6 +293,7 @@ class LineItem(BaseModel):
 
     id: str
     raw_label: str
+    label_source: LabelSource | None = None
     canonical_id: str | None = None
     mapping_source: MappingSource | None = None
     mapping_confidence: float | None = Field(default=None, ge=0.0, le=1.0)

@@ -56,10 +56,10 @@ from fra_ingest.label_mapping import MAPPED_TYPES
 from fra_ingest.label_match import LabelIndex
 from fra_ingest.ocr import make_engine
 from fra_ingest.results import StructureResult
-from fra_ingest.structure import structure_pdf
 from harness.development import development_set, positive_int
 from harness.expected import EXPECTED_DIR, ExpectedFile, ExpectedRow, load_expected
 from harness.failures import DOCUMENT_ERRORS, EngineFailure, EngineGuard, aborted, document_failure
+from harness.model_mapping import evaluation_structure as structure_pdf
 from harness.paths import (
     CANDIDATES,
     CORPUS,
@@ -327,19 +327,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--limit", type=positive_int, help="fit only: the first n documents in id order"
     )
+    parser.add_argument("--english-only", action="store_true", help="golden dev only")
     args = parser.parse_args(argv)
+    if args.target == "fit" and args.english_only:
+        parser.error("--english-only applies to golden dev only")
     if args.target == "fit":
         return run_fit(args.limit)
     if args.limit is not None:
         parser.error("--limit applies to fit only")
-    return run_golden()
+    return run_golden(english_only=args.english_only)
 
 
-def run_golden() -> int:
+def run_golden(*, english_only: bool = False) -> int:
     config = load_config()
     ocr = make_engine(config)
     taxonomy = load_taxonomy()
     documents = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))["documents"]
+    if english_only:
+        documents = [e for e in documents if e["language"] == "en"]
     index = LabelIndex(taxonomy)
     failures: list[str] = []
     total: Counter[str] = Counter()

@@ -27,11 +27,12 @@ endif
 ifeq ($(strip $(FRA_LLM_PORT)),)
 $(error FRA_LLM_PORT is empty: set it in $(ENV_FILE))
 endif
-export FRA_API_PORT FRA_LLM_PORT
+FRA_NORMALIZATION_ENABLED ?= 0
+export FRA_API_PORT FRA_LLM_PORT FRA_NORMALIZATION_ENABLED
 
 .PHONY: help setup unhide-pth fmt lint typecheck test test-sandboxed test-all eval corpus-check corpus-split corpus-fetch sec-fsds dataset-build sec-crosswalk-draft sec-crosswalk-approve sec-prepare sec-coverage sec-roles-draft sec-roles-approve sec-examples clean docs-check label-pages eval-locate eval-convert eval-structure eval-mapping eval-gates dry-run expected-drafts eval-extraction verify-expected dev worker docker-up docker-health ci-workflows-check container-smoke smoke hygiene-check
 
-.PHONY: normalization-prepare normalization-score normalization-predict train-smoke train-stability train-fit
+.PHONY: llm normalization-prepare normalization-score normalization-predict train-smoke train-stability train-fit
 
 help: ## Show this help
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -110,7 +111,7 @@ eval-convert: ## Convert the golden set, a child process per document; records t
 
 eval-structure: ## Structure the golden set: statements, scale and currency, identity, language pairs
 	@$(MAKE) --no-print-directory unhide-pth
-	PYTHONPATH=eval $(UV) run python -m harness.structure
+	PYTHONPATH=eval $(UV) run python -m harness.structure $(if $(filter 1,$(ENGLISH_ONLY)),--english-only)
 
 dry-run: ## One look at the train holdout through the whole pipeline; logged, spent once per candidate, no pool argument; EARLIER=path compares with an earlier run's report
 	@$(MAKE) --no-print-directory unhide-pth
@@ -122,11 +123,11 @@ expected-drafts: ## Draft expected files from the extraction (ONLY=id; keeps che
 
 eval-mapping: ## Label mapping: TARGET=golden (default) the critical items and the expected files; TARGET=fit [LIMIT=n] unmapped labels by failure class
 	@$(MAKE) --no-print-directory unhide-pth
-	PYTHONPATH=eval $(UV) run python -m harness.mapping $(or $(TARGET),golden) $(if $(LIMIT),--limit $(LIMIT))
+	PYTHONPATH=eval $(UV) run python -m harness.mapping $(or $(TARGET),golden) $(if $(LIMIT),--limit $(LIMIT)) $(if $(filter 1,$(ENGLISH_ONLY)),--english-only)
 
 eval-gates: ## Gate A and Gate B over the golden set (dev), per period kind; marked not yet measured on model_test
 	@$(MAKE) --no-print-directory unhide-pth
-	PYTHONPATH=eval $(UV) run python -m harness.gates
+	PYTHONPATH=eval $(UV) run python -m harness.gates $(if $(filter 1,$(ENGLISH_ONLY)),--english-only)
 
 verify-expected: ## Independent evidence for every figure of the expected files (Mac, Vision OCR)
 	@$(MAKE) --no-print-directory unhide-pth
@@ -134,7 +135,7 @@ verify-expected: ## Independent evidence for every figure of the expected files 
 
 eval-extraction: ## Score the extraction against eval/golden/expected (OCR=ocrmac|tesseract|none, LABEL=name, FRESH=1 try one engine)
 	@$(MAKE) --no-print-directory unhide-pth
-	PYTHONPATH=eval $(UV) run python -m harness.extraction $(if $(OCR),--ocr $(OCR)) $(if $(LABEL),--label $(LABEL)) $(if $(FRESH),--fresh)
+	PYTHONPATH=eval $(UV) run python -m harness.extraction $(if $(OCR),--ocr $(OCR)) $(if $(LABEL),--label $(LABEL)) $(if $(FRESH),--fresh) $(if $(filter 1,$(ENGLISH_ONLY)),--english-only)
 
 corpus-check: ## Validate the corpus pool split (no network)
 	@$(MAKE) --no-print-directory unhide-pth
@@ -207,6 +208,10 @@ sec-examples: ## Approved training examples from prepared SEC payloads (PREPARED
 dev: ## Serve the API natively (profile native) on FRA_API_PORT
 	@$(MAKE) --no-print-directory unhide-pth
 	FRA_PROFILE=native $(UV) run uvicorn fra_api.main:app --host 127.0.0.1 --port $(FRA_API_PORT)
+
+llm: ## Serve the pinned normalizer locally on Metal
+	@$(MAKE) --no-print-directory unhide-pth
+	FRA_PROFILE=native FRA_NORMALIZATION_ENABLED=1 $(UV) run python -m fra_model.serve
 
 worker: ## Run queued analysis jobs natively (profile native), beside make dev; ONCE=1 runs the queue and exits
 	@$(MAKE) --no-print-directory unhide-pth

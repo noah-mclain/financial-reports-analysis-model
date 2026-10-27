@@ -228,6 +228,8 @@ def test_a_job_runs_each_stage_in_order_and_leaves_its_analysis(tmp_path: Path) 
         ("finished", JobStage.CONVERT, "1 page ranges"),
         ("started", JobStage.STRUCTURE, None),
         ("finished", JobStage.STRUCTURE, "1 statements"),
+        ("started", JobStage.MAPPING, None),
+        ("finished", JobStage.MAPPING, "skipped: disabled"),
         ("started", JobStage.METRICS, None),
         ("finished", JobStage.METRICS, "1 of 2 values computed"),
         ("started", JobStage.NARRATE, None),

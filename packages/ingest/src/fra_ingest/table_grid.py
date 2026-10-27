@@ -34,6 +34,8 @@ class Grid(BaseModel):
     docling_path: str
     page_no: int
     page_width: float
+    page_height: float | None = None
+    source_page_unambiguous: bool = False
     num_rows: int
     num_cols: int
     cells: tuple[GridCell, ...]
@@ -86,6 +88,9 @@ def build_grid(table: DlTable, document: DlDocument, docling_path: str) -> Grid:
         docling_path=docling_path,
         page_no=page_no,
         page_width=size.width,
+        page_height=size.height,
+        source_page_unambiguous=len(table.prov) == 1
+        and document.pages[str(page_no)].page_no == page_no,
         num_rows=table.data.num_rows,
         num_cols=table.data.num_cols,
         cells=cells,

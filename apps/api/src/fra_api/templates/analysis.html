@@ -11,7 +11,8 @@
     {% for row in s.rows %}
       <tr class="{{ 'subtotal' if row.subtotal }}">
         <td class="line-label" style="padding-inline-start: {{ 10 + 16 * row.depth }}px">{{ row.label }}
-          {% if row.mapping_flag %}<span class="badge needs_review" dir="ltr" title="Technical reason: {{ row.mapping_flag }}">{{ flag_label(row.mapping_flag) }}</span>{% endif %}</td>
+          {% if row.mapping_origin %}<span class="badge" title="{{ row.mapping_evidence }}">{{ row.mapping_origin }}</span>{% endif %}
+          {% if row.mapping_flag %}<span class="badge needs_review" dir="ltr" title="Technical reason: {{ row.mapping_evidence or row.mapping_flag }}">{{ flag_label(row.mapping_flag) }}</span>{% endif %}</td>
         {% for found in row.cells %}
           <td class="num{{ ' flagged' if found | selectattr('flags') | list or held }}" dir="ltr">
           {% for c in found %}<div class="cell-value" title="Printed as: {{ c.printed }}">

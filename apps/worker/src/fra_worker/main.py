@@ -18,6 +18,7 @@ from types import FrameType
 
 from fra_analytics.policy import load_policy
 from fra_core.jobs import JobStore, load_job_settings
+from fra_core.normalization import load_normalization_settings
 from fra_core.paths import ANALYTICS_POLICY, JOB_SETTINGS, REPO_ROOT
 from fra_core.profile import read_profile
 from fra_ingest.config import load_config
@@ -69,7 +70,10 @@ def main(argv: list[str] | None = None) -> int:
         for job_id in store.fail_interrupted():
             print(f"job {job_id}: failed, left running by a stopped worker", file=sys.stderr)
         pipeline = real_pipeline(
-            load_config(), load_policy(ANALYTICS_POLICY), worker_lock_fd=worker_lock_fd
+            load_config(),
+            load_policy(ANALYTICS_POLICY),
+            worker_lock_fd=worker_lock_fd,
+            normalization=load_normalization_settings(os.environ, REPO_ROOT),
         )
         print(f"worker ready: profile {profile.value}, jobs in {settings.root}", file=sys.stderr)
         while True:
