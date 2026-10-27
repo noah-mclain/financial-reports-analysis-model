@@ -991,6 +991,18 @@ def test_producer_label_inventory_covers_flag_and_reason_literals() -> None:
     assert not unknown, f"Producer literals lack a page label or justified ignore: {unknown}"
 
 
+@pytest.mark.parametrize(
+    "flag",
+    ["range_partially_converted:3-5", "input_may_be_unmapped:revenue"],
+)
+def test_flags_built_from_f_strings_have_dedicated_labels(flag: str) -> None:
+    """The scan reads only quoted literals; these producers build ``prefix:{value}`` strings."""
+    from fra_api.views import FLAG_LABELS, flag_label
+
+    assert flag.partition(":")[0] in FLAG_LABELS
+    assert flag_label(flag) == FLAG_LABELS[flag.partition(":")[0]]
+
+
 def test_producer_scan_reports_an_unlabeled_literal(tmp_path: Path) -> None:
     """The scan must see a brand-new flag in any module, whatever its file name."""
     source = tmp_path / "pkg" / "anything_at_all.py"

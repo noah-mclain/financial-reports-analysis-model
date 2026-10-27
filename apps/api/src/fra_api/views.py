@@ -108,6 +108,7 @@ FLAG_LABELS = {
     DUPLICATE_CELL: "More than one figure was read for this period",
     "low_selectivity": "The document contained many unrelated items, so extraction was limited",
     "range_not_converted": "Some statement ranges could not be converted",
+    "range_partially_converted": "Some statement ranges were only partly converted",
     "identity_failed": (
         "The balance check (assets = liabilities + equity) did not hold, "
         "so the figures do not reconcile"
@@ -189,6 +190,9 @@ FLAG_LABELS = {
     "ambiguous_separator": "A figure uses a separator that can be read two ways (comma or dot)",
     "duplicate_input": "A metric input appears more than once",
     "missing_input": "A required value for this metric was not found",
+    "input_may_be_unmapped": (
+        "The missing value may be among statement lines that could not be identified"
+    ),
     "undefined_zero_denominator": (
         "This metric could not be calculated because its denominator is zero"
     ),
