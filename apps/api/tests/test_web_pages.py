@@ -395,7 +395,7 @@ class VisibleText(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag == "head":
             self._head = True
-        if tag == "style":
+        if tag in {"style", "script"}:
             self._style += 1
         if tag == "details":
             self._details += 1
@@ -412,7 +412,7 @@ class VisibleText(HTMLParser):
                 self._technical_details -= 1
         if tag == "head":
             self._head = False
-        if tag == "style":
+        if tag in {"style", "script"}:
             self._style -= 1
 
     def handle_data(self, data: str) -> None:
@@ -767,7 +767,7 @@ def test_metric_template_uses_defined_name_for_technical_labels(
         job_id = finished_job(settings, client, metrics=[metric(MetricUnit.RATIO, None)])
         response = client.get(f"/analyses/{job_id}/view")
     assert response.status_code == 200
-    assert 'aria-label="Technical details for Current ratio formula"' in response.text
+    assert 'aria-label="Technical formula for Current ratio"' in response.text
     assert 'aria-label="Technical details for Current ratio checks"' in response.text
 
 
@@ -1157,10 +1157,24 @@ def test_metrics_have_headlines_and_keep_all_details_in_collapsed_sections(tmp_p
     assert "Metric 0" in headline and "2025-12-31" in headline
     assert 'id="all-metrics"' in page and "not computed" in page
     assert page.count('class="metric-detail"') == 16
+    assert page.count('class="metric-group"') == 16
+    assert page.count('aria-label="Calculation details for') == 16
+    assert page.count("<summary>View calculation details for ") == 16
+    assert '<summary aria-label="Technical formula for Metric 0">' in page
+    assert '<code dir="ltr">total_current_assets / total_current_liabilities</code>' in page
+    first_group = page.split('class="metric-group"', 1)[1].split("</article>", 1)[0]
+    assert first_group.index('class="metric-period-list"') < first_group.index(
+        'class="metric-detail"'
+    )
+    assert 'id="metric-metric_0-2025-12-31"' in first_group
+    assert "2025-12-31" in first_group and "100.0%" in first_group
+    assert ".annotation-tooltip:hover > .annotation-tooltip-text" in page
+    assert ".annotation-tooltip:focus-within > .annotation-tooltip-text" in page
+    assert ".flag-marker:focus-visible" in page
     metric_links = re.findall(r'href="(#[^"]+)"', page)
     for target in metric_links:
         if target.startswith("#metric-"):
-            assert f'<details class="metric-detail" id="{target[1:]}">' in page
+            assert f'id="{target[1:]}"' in page
     assert "total_current_assets / total_current_liabilities" in page
     assert "Total assets" in page
     assert "Used closing balance because a prior balance was unavailable" in page
@@ -1172,6 +1186,153 @@ def test_metrics_have_headlines_and_keep_all_details_in_collapsed_sections(tmp_p
     assert "missing_input:revenue" not in " ".join(parsed.visible)
     assert "missing_input:revenue" in " ".join(parsed.technical)
     assert not re.search(r"(?:\w+:|\b\w+_\w+\b)", " ".join(parsed.visible))
+
+
+def test_metric_details_group_by_identity_and_sort_periods_without_losing_records() -> None:
+    older = Period(
+        key="Prior reported period", end_date=date(2024, 12, 31), kind=PeriodKind.INSTANT
+    )
+    newer = Period(
+        key="Current reported period", end_date=date(2025, 12, 31), kind=PeriodKind.INSTANT
+    )
+
+    def at_period(metric_value: MetricValue, metric_id: str, period: Period) -> MetricValue:
+        return metric_value.model_copy(
+            update={
+                "metric_id": metric_id,
+                "period_key": period.key,
+                "inputs": {
+                    role: [cell.model_copy(update={"period_key": period.key}) for cell in cells]
+                    for role, cells in metric_value.inputs.items()
+                },
+            }
+        )
+
+    metrics = [
+        at_period(metric(MetricUnit.RATIO, None), "margin", newer),
+        at_period(metric(MetricUnit.RATIO, 0.312), "ratio", older),
+        at_period(metric(MetricUnit.RATIO, 0.25), "margin", older),
+        at_period(metric(MetricUnit.RATIO, 0.47), "ratio", newer),
+    ]
+    analysis = Analysis(
+        job_id="1" * 32,
+        upload_sha256="a" * 64,
+        page_count=1,
+        language="en",
+        statements=[statement("a" * 64).model_copy(update={"periods": [older, newer, PERIOD]})],
+        reviews=[review()],
+        metrics=metrics,
+    )
+    view = analysis_view(analysis)
+    assert [
+        (group.metric_id, [item.period for item in group.metrics]) for group in view.metric_groups
+    ] == [("margin", [older.key, newer.key]), ("ratio", [older.key, newer.key])]
+    assert view.metric_groups[0].metrics[0].value == "25.0%"
+    assert view.metric_groups[0].metrics[1].value is None
+    assert [item.anchor for group in view.metric_groups for item in group.metrics] == [
+        metric_anchor("margin", older.key),
+        metric_anchor("margin", newer.key),
+        metric_anchor("ratio", older.key),
+        metric_anchor("ratio", newer.key),
+    ]
+
+
+def test_metric_group_rendering_keeps_period_rows_visible_and_details_named(tmp_path: Path) -> None:
+    older = Period(key="2024-12-31", end_date=date(2024, 12, 31), kind=PeriodKind.INSTANT)
+    newer = Period(key="2025-12-31", end_date=date(2025, 12, 31), kind=PeriodKind.INSTANT)
+    older_value = metric(MetricUnit.CURRENCY, 13_039_259_000).model_copy(
+        update={
+            "period_key": older.key,
+            "metric_id": "total_assets",
+            "flags": ["scale_assumed_units"],
+        }
+    )
+    older_value = older_value.model_copy(
+        update={
+            "formula": "total_assets",
+            "inputs": {
+                role: [cell.model_copy(update={"period_key": older.key}) for cell in cells]
+                for role, cells in older_value.inputs.items()
+            },
+        }
+    )
+    newer_value = older_value.model_copy(
+        update={
+            "period_key": newer.key,
+            "value": 1.47,
+            "flags": [],
+            "formula": "total_current_assets / total_current_liabilities",
+            "inputs": {
+                role: [cell.model_copy(update={"period_key": newer.key}) for cell in cells]
+                for role, cells in older_value.inputs.items()
+            },
+        }
+    )
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        periods_statement = statement("a" * 64).model_copy(update={"periods": [older, newer]})
+        job_id = finished_job(
+            settings,
+            client,
+            statements=[periods_statement],
+            metrics=[
+                newer_value,
+                older_value,
+                metric(MetricUnit.TIMES, 1.47),
+                metric(MetricUnit.RATIO, 0.312).model_copy(update={"metric_id": "net_margin"}),
+            ],
+        )
+        page = client.get(f"/analyses/{job_id}/view").text
+    group = page.split('class="metric-group"', 1)[1].split("</article>", 1)[0]
+    old_row = group.split(f'id="{metric_anchor("total_assets", older.key)}"', 1)[1].split(
+        "</section>", 1
+    )[0]
+    new_row = group.split(f'id="{metric_anchor("total_assets", newer.key)}"', 1)[1].split(
+        "</section>", 1
+    )[0]
+    assert group.index(
+        f'<section class="metric-period" id="{metric_anchor("total_assets", older.key)}"'
+    ) < group.index(
+        f'<section class="metric-period" id="{metric_anchor("total_assets", newer.key)}"'
+    )
+    assert "2024-12-31" in old_row and "13,039,259,000" in old_row
+    assert "2025-12-31" in new_row and "1 SAR" in new_row
+    assert old_row.index("2024-12-31") < old_row.index("13,039,259,000")
+    assert "<details" not in old_row and "<details" not in new_row
+    assert group.count('class="metric-detail"') == 1
+    assert group.count("View calculation details for Total assets") == 1
+    assert group.count(">Total assets</h4>") == 1
+    assert 'aria-label="Calculation details for Total assets"' in group
+    assert group.index("1 SAR") < group.index('class="metric-detail"')
+    calculation = group.split('class="metric-detail"', 1)[1]
+    assert ">Total assets calculation</h5>" in calculation
+    old_calculation = calculation.split('data-period="2024-12-31"', 1)[1].split("</section>", 1)[0]
+    new_calculation = calculation.split('data-period="2025-12-31"', 1)[1].split("</section>", 1)[0]
+    assert ">2024-12-31</h6>" in old_calculation
+    assert ">2025-12-31</h6>" in new_calculation
+    assert "Scale not stated; figures treated as single units" in old_calculation
+    assert "Scale not stated; figures treated as single units" not in new_calculation
+    assert '<code dir="ltr">total_assets</code>' in old_calculation
+    assert "total_current_assets / total_current_liabilities" not in old_calculation
+    assert "Total current assets / Total current liabilities" in new_calculation
+    assert (
+        '<code dir="ltr">total_current_assets / total_current_liabilities</code>' in new_calculation
+    )
+    assert "(2024-12-31)" in old_calculation and "(2025-12-31)" not in old_calculation
+    assert "(2025-12-31)" in new_calculation and "(2024-12-31)" not in new_calculation
+    assert "average_fallback_to_closing" not in old_row.split("</summary>", 1)[0]
+    assert "Scale not stated; figures treated as single units" in old_row
+    next_group = page.split('aria-labelledby="current_ratio-group-title"', 1)[1].split(
+        "</article>", 1
+    )[0]
+    assert "1.47×" in next_group and "13,039,259,000" not in next_group
+    assert (
+        next_group.count('class="metric-period"') == next_group.count('class="metric-detail"') == 1
+    )
+    percent_group = page.split('aria-labelledby="net_margin-group-title"', 1)[1].split(
+        "</article>", 1
+    )[0]
+    assert "31.2%" in percent_group and "1.47×" not in percent_group
 
 
 def test_statements_are_collapsed_and_flags_keep_plain_and_technical_names(tmp_path: Path) -> None:
@@ -1264,6 +1425,104 @@ def test_source_page_does_not_link_to_an_analysis_for_another_upload(tmp_path: P
         source = client.get(f"/documents/{other_upload}/pages/1", params={"analysis": job_id}).text
     assert 'href="/analyses/' not in source
     assert 'href="/"' in source
+
+
+def test_global_theme_control_is_available_on_every_page(tmp_path: Path) -> None:
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(settings, client)
+        sha = client.get(f"/jobs/{job_id}").json()["upload_sha256"]
+        pages = [
+            client.get("/").text,
+            client.get(f"/jobs/{job_id}/view").text,
+            client.get(f"/analyses/{job_id}/view").text,
+            client.get(f"/documents/{sha}/pages/1?analysis={job_id}").text,
+        ]
+
+    for page in pages:
+        assert '<button type="button" data-theme-toggle hidden' in page
+        assert "Switch to ${next} mode" in page
+        assert 'button.textContent = theme === "dark" ? "Dark" : "Light"' in page
+        assert page.index("window.fraTheme") < page.index("<style>")
+    assert all('aria-label="Theme"' in page for page in pages)
+
+
+def test_theme_preferences_are_validated_persisted_and_follow_system_by_default() -> None:
+    template = Path(__file__).parents[1] / "src/fra_api/templates/base.html"
+    page = template.read_text()
+    bootstrap = page.split("<style>", maxsplit=1)[0]
+    assert 'const key = "fra-theme"' in bootstrap
+    assert "localStorage.getItem(key)" in bootstrap
+    assert 'stored === "light" || stored === "dark"' in bootstrap
+    assert 'window.matchMedia("(prefers-color-scheme: dark)")' in bootstrap
+    assert 'preference || (media.matches ? "dark" : "light")' in bootstrap
+    assert "localStorage.setItem(key, preference)" in bootstrap
+    assert 'media.addEventListener("change"' in bootstrap
+    assert "if (!preference) apply()" in bootstrap
+    assert "try {" in bootstrap and "catch {}" in bootstrap
+    assert ':root[data-theme="light"]' in page
+    assert ':root[data-theme="dark"]' in page
+    assert "color-scheme: light" in page and "color-scheme: dark" in page
+
+
+def test_theme_tokens_cover_nested_surfaces_controls_and_source_evidence() -> None:
+    root = Path(__file__).parents[1] / "src/fra_api/templates"
+    base = (root / "base.html").read_text()
+    source = (root / "source.html").read_text()
+    assert "--surface-nested:" in base and "--surface-technical:" in base
+    assert "--control-bg:" in base and "--selection-bg:" in base
+    assert ".technical-details" in base and "::selection" in base
+    assert ".banner.bad" in base and ".summary-notice" in base
+    assert "color-scheme: light" in base and "color-scheme: dark" in base
+    assert "--color-scheme" not in base
+    assert "var(--evidence-outline)" in source and "var(--evidence-fill)" in source
+    assert "#d93025" not in source and "rgba(217,48,37,.12)" not in source
+
+
+def test_notice_colors_use_shared_rules_for_system_and_explicit_themes(tmp_path: Path) -> None:
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        page = client.get("/").text
+    css = page.split("<style>", maxsplit=1)[1].split("</style>", maxsplit=1)[0]
+    rules = [
+        (selector.strip(), declarations)
+        for selector, declarations in re.findall(r"(?m)^\s*([^{}]+)\{([^{}]*)\}", css)
+    ]
+
+    def theme_tokens(declarations: str) -> dict[str, str]:
+        names = ("banner-background", "banner-foreground", "notice-background", "notice-foreground")
+        return {
+            name: match.group(1).strip()
+            for name in names
+            if (match := re.search(rf"--{name}:\s*([^;]+);", declarations))
+        }
+
+    system_roots = [declarations for selector, declarations in rules if selector == ":root"]
+    explicit_dark = [
+        declarations for selector, declarations in rules if selector == ':root[data-theme="dark"]'
+    ]
+    explicit_light = [
+        declarations for selector, declarations in rules if selector == ':root[data-theme="light"]'
+    ]
+    assert len(system_roots) == 2 and len(explicit_dark) == len(explicit_light) == 1
+    assert theme_tokens(system_roots[0]) == theme_tokens(explicit_light[0])
+    assert theme_tokens(system_roots[1]) == theme_tokens(explicit_dark[0])
+
+    banner_rules = [
+        (selector, declarations) for selector, declarations in rules if ".banner.bad" in selector
+    ]
+    notice_rules = [
+        (selector, declarations)
+        for selector, declarations in rules
+        if "#analysis-results .summary-notice" in selector
+    ]
+    assert len(banner_rules) == len(notice_rules) == 1
+    assert banner_rules[0][0] == ".banner.bad"
+    assert "background: var(--banner-background)" in banner_rules[0][1]
+    assert "color: var(--banner-foreground)" in banner_rules[0][1]
+    assert notice_rules[0][0] == "#analysis-results .summary-notice"
+    assert "background: var(--notice-background)" in notice_rules[0][1]
+    assert "color: var(--notice-foreground)" in notice_rules[0][1]
 
 
 def test_layout_has_scroll_cue_focus_styles_and_consistent_job_language(tmp_path: Path) -> None:
@@ -1498,7 +1757,7 @@ def test_a_job_held_only_by_a_document_notice_does_not_say_figures_failed(
     assert "One or more checks are unresolved" in flagged_page
     assert "did not pass their own checks" not in flagged_page
     assert "Figures are not verified" in flagged_page
-    assert 'title="This value has a flag, caveat, or held analysis"' in flagged_page
+    assert 'aria-describedby="metric-current_ratio-2025-12-31-review-description"' in flagged_page
     assert 'title="This figure is flagged or belongs to a held statement"' in flagged_page
     assert "⚑ marks items needing review" in flagged_page
     assert "No statement passed review" in empty_page
@@ -1629,7 +1888,7 @@ def test_a_claimed_figure_in_the_summary_links_to_its_metric_row(tmp_path: Path)
         job_id = finished_job(settings, client, narrative=narrative)
         page = client.get(f"/analyses/{job_id}/view").text
     assert 'href="#metric-current_ratio-2025-12-31"' in page and ">1.50</bdi></a>" in page
-    assert '<details class="metric-detail" id="metric-current_ratio-2025-12-31">' in page
+    assert 'id="metric-current_ratio-2025-12-31"' in page
     assert "The current ratio is " in page and " at year end." in page
 
 
@@ -1729,16 +1988,23 @@ def test_statement_caveats_keep_evidence_and_mark_only_affected_values(
     assert caveat_id not in " ".join(parsed.visible)
     assert ("لم تذكر القائمة" if language == "ar" else "The statement") in page
     assert f'dir="{"rtl" if language == "ar" else "ltr"}" lang="{language}"' in page
-    ratio_detail = page.split('<details class="metric-detail" id="metric-margin-2025-12-31">')[1]
-    ratio_summary = ratio_detail.split("</summary>", 1)[0]
-    assert "caveat-mark" not in ratio_summary
+    ratio_group = page.split('aria-labelledby="margin-group-title"', 1)[1].split("</article>", 1)[0]
+    ratio_row = ratio_group.split('id="metric-margin-2025-12-31"', 1)[1].split("</section>", 1)[0]
+    assert "caveat-mark" not in ratio_row
+    ratio_detail = ratio_group.split('class="metric-detail"', 1)[1]
     # Inputs remain caveated currency amounts even when the resulting ratio is unaffected.
-    assert "caveat-mark" in ratio_detail.split("<h4>Inputs</h4>", 1)[1].split("<h4>Flags", 1)[0]
+    assert "caveat-mark" in ratio_detail.split("<h5>Inputs</h5>", 1)[1].split("<h5>Flags", 1)[0]
     ids = re.findall(r'\bid="([^"]+)"', page)
     assert len(ids) == len(set(ids))
-    cash_detail = page.split(
-        '<details class="metric-detail" id="metric-current_ratio-2025-12-31">'
-    )[1]
+    cash_detail = page.split('aria-labelledby="current_ratio-group-title"', 1)[1].split(
+        "</article>", 1
+    )[0]
+    cash_row = cash_detail.split('class="metric-period"', 1)[1].split("</section>", 1)[0]
+    review_tooltip = cash_row.split('role="tooltip">', 1)[1].split("</span>", 1)[0]
+    assert "held for review" not in review_tooltip
+    assert ("لم تذكر القائمة" if language == "ar" else "The statement") in review_tooltip
+    headline = page.split('class="metric-grid"', 1)[1].split('id="all-metrics"', 1)[0]
+    assert "flag-marker" in headline
     note_anchor = f"metric-current_ratio-2025-12-31-caveat-statement-s1-{caveat_id}"
     assert f'href="#{note_anchor}"' in cash_detail
     assert f'id="{note_anchor}"' in cash_detail
@@ -1778,13 +2044,22 @@ def test_metric_caveats_keep_same_id_notes_from_each_source_statement(tmp_path: 
     anchor = "metric-current_ratio-2025-12-31-caveat"
     sar_anchor = f"{anchor}-statement-s1-currency_from_domicile"
     usd_anchor = f"{anchor}-statement-s2-currency_from_domicile"
-    input_items = re.findall(
-        r"<li>(.*?)</li>",
-        page.split("<h4>Inputs</h4>", 1)[1].split("<h4>Flags", 1)[0],
-    )
-    assert len(input_items) == 2
-    assert f'href="#{sar_anchor}"' in input_items[0]
-    assert f'href="#{usd_anchor}"' in input_items[1]
+    input_items = page.split("<h5>Inputs</h5>", 1)[1].split("<h5>Flags", 1)[0]
+    assert input_items.count(f'href="#{sar_anchor}"') == 1
+    assert input_items.count(f'href="#{usd_anchor}"') == 1
+    assert input_items.index(f'href="#{sar_anchor}"') < input_items.index(f'href="#{usd_anchor}"')
+    assert "SAR filing" in page and "USD filing" in page
+    descriptions = re.findall(r'aria-describedby="([^"]+)"', page)
+    assert len(descriptions) == len(set(descriptions))
+    for description in descriptions:
+        assert page.count(f'id="{description}" role="tooltip"') == 1
+    for note_anchor in (sar_anchor, usd_anchor):
+        labels = re.findall(
+            rf'href="#{note_anchor}" aria-label="([^"]+)" aria-describedby="([^"]+)"', page
+        )
+        assert labels
+        for text, description in labels:
+            assert f'id="{description}" role="tooltip">{text}</span>' in page
     assert page.count(f'id="{sar_anchor}"') == page.count(f'id="{usd_anchor}"') == 1
     assert f'href="#{sar_anchor}"' in page and f'href="#{usd_anchor}"' in page
     parsed = VisibleText()
@@ -1970,13 +2245,16 @@ def test_arabic_decline_page_shows_plain_reason_and_no_financial_outputs(tmp_pat
     assert "1.50×" not in page
 
 
-def test_button_text_contrasts_with_both_theme_accents() -> None:
-    template = Path(__file__).parents[1] / "src/fra_api/templates/base.html"
-    css = template.read_text()
+def test_button_text_contrasts_with_both_theme_accents(tmp_path: Path) -> None:
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        page = client.get("/")
+    assert page.status_code == 200
+    css = page.text
     light_root = re.search(r":root\s*\{([^}]*)\}", css)
     dark_root = re.search(r"prefers-color-scheme:\s*dark\)\s*\{\s*:root\s*\{([^}]*)\}", css)
-    button = re.search(r"button\s*\{([^}]*)\}", css)
-    assert light_root is not None and dark_root is not None and button is not None
+    buttons = re.findall(r"(?m)^\s*button\s*\{([^}]*)\}", css)
+    assert light_root is not None and dark_root is not None and buttons
 
     def color(declarations: str, name: str) -> str:
         match = re.search(rf"--{name}:\s*(#[0-9a-fA-F]{{6}})", declarations)
@@ -1998,7 +2276,15 @@ def test_button_text_contrasts_with_both_theme_accents() -> None:
         lighter, darker = sorted((luminance(foreground), luminance(background)), reverse=True)
         return (lighter + 0.05) / (darker + 0.05)
 
-    button_color = re.search(r"color:\s*var\(--([\w-]+)\)", button.group(1))
+    button_color = next(
+        (
+            match
+            for declarations in buttons
+            if "background: var(--accent)" in declarations
+            if (match := re.search(r"color:\s*var\(--([\w-]+)\)", declarations))
+        ),
+        None,
+    )
     assert button_color is not None
     foreground_name = button_color.group(1)
     for theme in (light_root.group(1), dark_root.group(1)):
