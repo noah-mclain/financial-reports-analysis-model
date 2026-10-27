@@ -352,3 +352,104 @@ def test_worker_failure_is_recorded_on_the_job_and_its_event_stream(tmp_path: Pa
     assert 'class="badge failed">Failed</span>' in job_page
     assert '"stage":"convert"' in events and '"kind":"failed"' in events
     assert "synthetic conversion failure" in events
+
+
+def partial_pipeline(sha256: str, *, scanned: bool = True) -> Pipeline:
+    """A checked income statement beside an unavailable balance sheet."""
+    from fra_analytics import Policy, compute
+    from fra_core.schemas import PageMode, PageProfile
+
+    original = pipeline_for(sha256, "en")
+
+    def locate(pdf: Path) -> LocateResult:
+        result = original.locate(pdf)
+        result.document.pages = [
+            PageProfile(
+                page_no=1,
+                mode=PageMode.IMAGE if scanned else PageMode.TEXT,
+                char_count=0 if scanned else 100,
+                width_pt=600,
+                height_pt=800,
+            )
+        ]
+        return result
+
+    def structure(pdf: Path, converted: ConvertResult | None) -> StructureResult:
+        result = original.structure(pdf, converted)
+        statement = result.statements[0]
+        statement.type = StatementType.INCOME
+        statement.periods = [PERIOD.model_copy(update={"kind": PeriodKind.DURATION, "months": 12})]
+        for row, canonical in zip(statement.line_items, ["net_income", "revenue"], strict=True):
+            row.canonical_id = canonical
+            row.raw_label = canonical
+            row.cells[0].arithmetic_checks = ["income:subtotal:current"]
+        result.flags = ["statement_not_extracted:balance"]
+        return result
+
+    policy = Policy(
+        negative_margin_denominator="compute_and_flag",
+        include_lease_liabilities=True,
+        day_count_basis=365,
+    )
+    return replace(
+        original, locate=locate, structure=structure, metrics=lambda s: compute(s, policy)
+    )
+
+
+@pytest.mark.parametrize("scanned", [True, False])
+def test_partial_summary_persists_marker_scan_profile_and_held_verdict(
+    tmp_path: Path, scanned: bool
+) -> None:
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        uploaded = client.post(
+            "/documents",
+            content=PDF,
+            headers={"Content-Type": "application/pdf", "X-Filename": "partial.pdf"},
+        )
+        sha = uploaded.json()["sha256"]
+        job_id = client.post(f"/documents/{sha}/analyses").json()["id"]
+        store = JobStore(settings.root)
+        job = store.claim()
+        assert job is not None
+        finished = run_job(store, job, partial_pipeline(sha, scanned=scanned), settings.max_pages)
+        assert finished.status.value == "needs_review"
+        source = store.load_analysis(job_id)
+        assert source is not None and source.narrative is not None
+        assert source.narrative_partial
+        assert source.scanned_pages == ([1] if scanned else [])
+        assert source.narrative.cited_metric_ids == {"net_margin"}
+        response = client.get(f"/analyses/{job_id}")
+        assert response.json()["narrative_partial"] is True
+        assert response.json()["scanned_pages"] == source.scanned_pages
+        page = client.get(f"/analyses/{job_id}/view").text
+        assert "Partial summary: some statements could not be confirmed" in page
+        assert '<h2 id="verdict-title">Held for review</h2>' in page
+        assert "Net margin:" in page and "150.0%" in page
+        assert ("Figures were read by OCR from a scanned page." in page) is scanned
+        assert "Current ratio was not included because its source statement is unavailable." in page
+        assert store.events(job_id)[-2].detail == "checked partial direct-template summary"
+        # Persisted marker must agree with the checked grammar at rendering time.
+        source.narrative_partial = False
+        from fra_api.views import analysis_view
+
+        assert analysis_view(source).narrative is None
+
+
+def test_missing_page_profile_cannot_authorize_a_caveat_free_partial(tmp_path: Path) -> None:
+    settings = settings_at(tmp_path)
+    store = JobStore(settings.root)
+    with store.upload_writer(settings) as writer:
+        writer.write(PDF)
+        upload = writer.finish("unknown-pages.pdf")
+    queued = store.enqueue(upload.sha256)
+    job = store.claim()
+    assert job is not None
+    pipeline = partial_pipeline(upload.sha256)
+    pipeline = replace(pipeline, locate=pipeline_for(upload.sha256, "en").locate)
+    finished = run_job(store, job, pipeline, settings.max_pages)
+    saved = store.load_analysis(queued.id)
+    assert finished.status.value == "needs_review"
+    assert saved is not None and saved.scanned_pages is None
+    assert saved.narrative is None
+    assert saved.narrative_suppression == ["scanned-page profile unavailable or invalid"]

@@ -498,7 +498,10 @@ def analysis_view(analysis: Analysis) -> AnalysisView:
     ar = analysis.language == "ar"
     summary_notice = None
     origin_text = ""
-    if artifact is not None and artifact.language not in ("en", "ar"):
+    if artifact is not None and (
+        artifact.language not in ("en", "ar")
+        or (analysis.narrative_partial and artifact.origin != "direct_template")
+    ):
         artifact = None
         summary_notice = (
             "حُجب الملخص: تعذر التحقق من النص أو مراجعه."
@@ -507,7 +510,7 @@ def analysis_view(analysis: Analysis) -> AnalysisView:
         )
     elif artifact is not None and artifact.origin == "direct_template":
         try:
-            artifact = validate_summary(analysis, artifact)
+            artifact = validate_summary(analysis, artifact, partial=analysis.narrative_partial)
             origin_text = (
                 "قالب مباشر تم التحقق منه مقابل المقاييس المحسوبة."
                 if ar

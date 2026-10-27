@@ -63,6 +63,60 @@ def vouched_cells(checks: Sequence[CheckResult]) -> set[tuple[str, str]]:
     return {(i, c.period_key) for c in checks if c.status == "pass" for i in c.line_item_ids}
 
 
+def confirm_arithmetic(statement: Statement, checks: Sequence[CheckResult]) -> Statement:
+    """Persist exact arithmetic coverage, independently of review counts and status.
+
+    Ties list the income match first and the comprehensive head second, and structure passes
+    them to both statements. Restrict each side even when local row IDs overlap. EPS checks
+    and repeated single addends cannot authorize facts. Rebuilding clears stale confirmation.
+    """
+    coverage: dict[tuple[str, str], list[str]] = {}
+    for check in checks:
+        if (
+            check.status != "pass"
+            or check.kind not in ("subtotal", "balance_identity", "net_profit_tie")
+            or "single_addend" in check.detail
+            or (check.statement_id != statement.id and check.kind != "net_profit_tie")
+        ):
+            continue
+        ids = check.line_item_ids
+        if check.kind == "net_profit_tie":
+            if len(ids) != 2:
+                continue
+            if (
+                statement.type is StatementType.COMPREHENSIVE_INCOME
+                and check.statement_id == statement.id
+            ):
+                ids = ids[1:]
+            elif statement.type is StatementType.INCOME and check.statement_id != statement.id:
+                ids = ids[:1]
+            else:
+                continue
+        for row_id in ids:
+            coverage.setdefault((row_id, check.period_key), []).append(check.id)
+    return statement.model_copy(
+        update={
+            "line_items": [
+                row.model_copy(
+                    update={
+                        "cells": [
+                            cell.model_copy(
+                                update={
+                                    "arithmetic_checks": sorted(
+                                        set(coverage.get((row.id, cell.period_key), []))
+                                    )
+                                }
+                            )
+                            for cell in row.cells
+                        ]
+                    }
+                )
+                for row in statement.line_items
+            ]
+        }
+    )
+
+
 def is_critical(cell: Cell) -> bool:
     return _lost(cell) or any(f in CRITICAL_CELL_FLAGS for f in cell.flags)
 

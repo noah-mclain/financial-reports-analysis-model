@@ -101,6 +101,10 @@ class Analysis(BaseModel):
     upload_sha256: str = Field(pattern=_SHA256)
     page_count: int = Field(ge=1)
     language: str
+    scanned_pages: list[int] | None = Field(
+        default=None,
+        description="Actual image-page profile; None means unavailable in old analyses",
+    )
     statements: list[Statement] = Field(default_factory=list)
     reviews: list[StatementReview] = Field(default_factory=list)
     flags: list[str] = Field(
@@ -117,6 +121,7 @@ class Analysis(BaseModel):
     )
 
     narrative_suppression: list[str] = Field(default_factory=list)
+    narrative_partial: bool = False
 
     def status(self) -> JobStatus:
         """``completed`` only when there are statements and every one passed review; a

@@ -91,6 +91,11 @@ def analysis_of(
         upload_sha256=job.upload_sha256,
         page_count=located.document.page_count,
         language=located.document.language,
+        scanned_pages=located.document.scanned_pages
+        if len(located.document.pages) == located.document.page_count
+        and {p.page_no for p in located.document.pages}
+        == set(range(1, located.document.page_count + 1))
+        else None,
         statements=result.statements,
         reviews=result.reviews,
         flags=list(dict.fromkeys([*located.flags, *conversion_flags, *result.flags])),
@@ -166,8 +171,17 @@ def run_job(store: JobStore, job: Job, pipeline: Pipeline, max_pages: int) -> Jo
         store.start_stage(job.id, JobStage.NARRATE)
         summary = pipeline.summarize(analysis)
         if isinstance(summary, SummaryBuilt):
-            analysis.narrative = validate_summary(analysis, summary.narrative)
-            store.finish_stage(job.id, JobStage.NARRATE, "checked direct-template summary")
+            analysis.narrative = validate_summary(
+                analysis, summary.narrative, partial=summary.partial
+            )
+            analysis.narrative_partial = summary.partial
+            store.finish_stage(
+                job.id,
+                JobStage.NARRATE,
+                "checked partial direct-template summary"
+                if summary.partial
+                else "checked direct-template summary",
+            )
         else:
             analysis.narrative_suppression = list(summary.reasons)
             store.finish_stage(job.id, JobStage.NARRATE, "skipped: " + "; ".join(summary.reasons))
