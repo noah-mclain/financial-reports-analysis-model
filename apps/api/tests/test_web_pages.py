@@ -6,6 +6,8 @@ from __future__ import annotations
 import ast
 import io
 import re
+import shutil
+import subprocess
 from datetime import date
 from decimal import Decimal, localcontext
 from html.parser import HTMLParser
@@ -1378,6 +1380,89 @@ def test_statements_are_collapsed_and_flags_keep_plain_and_technical_names(tmp_p
     assert "<script>Revenue</script>" not in page
 
 
+def test_statement_interpretations_are_compact_and_keep_cell_provenance(tmp_path: Path) -> None:
+    prior = Period(key="2024-12-31", end_date=date(2024, 12, 31), kind=PeriodKind.INSTANT)
+    base_row = statement("a" * 64).line_items[0]
+    base_cell = base_row.cells[0]
+    source = statement("a" * 64).model_copy(
+        update={
+            "periods": [PERIOD, prior],
+            "caveats": [Caveat(id="currency_inferred", evidence={"currency": "SAR"})],
+            "line_items": [
+                base_row.model_copy(
+                    update={
+                        "cells": [
+                            base_cell.model_copy(
+                                update={
+                                    "reported": Decimal("0"),
+                                    "raw_text": "—",
+                                    "flags": ["dash_as_zero"],
+                                }
+                            ),
+                            base_cell.model_copy(
+                                update={
+                                    "period_key": prior.key,
+                                    "reported": Decimal("-10"),
+                                    "raw_text": "(10)",
+                                    "flags": ["parentheses_negative", "digit_suspect"],
+                                }
+                            ),
+                        ]
+                    }
+                )
+            ],
+        }
+    )
+    settings = settings_at(tmp_path)
+    with TestClient(create_app(Profile.NATIVE, settings)) as client:
+        job_id = finished_job(
+            settings,
+            client,
+            statements=[source],
+            reviews=[review()],
+        )
+        page = client.get(f"/analyses/{job_id}/view").text
+
+    first_cell = re.search(r'<div class="cell-value"[^>]*>.*?</div>', page, re.DOTALL)
+    assert first_cell is not None
+    first_html = first_cell.group()
+    assert "—" in first_html
+    assert 'class="flag-labels"' not in first_html
+    assert 'role="tooltip">A printed dash was read as zero</span>' in first_html
+    assert 'tabindex="0"' in first_html and "aria-describedby=" in first_html
+    assert "/pages/1?box=60.0%2C80.0%2C180.0%2C100.0" in first_html
+    assert "dash_as_zero" in first_html
+    assert "Needs review" not in first_html
+
+    second_cell = re.search(
+        r'<div class="cell-value"[^>]*>.*?</div>', page[first_cell.end() :], re.DOTALL
+    )
+    assert second_cell is not None
+    second_html = second_cell.group()
+    assert "(10)" in second_html
+    assert 'role="tooltip">Parentheses indicate a negative figure</span>' in second_html
+    assert "digit_suspect" in second_html
+    assert "Some digits may have been read incorrectly" in second_html
+    assert "Needs review" in second_html
+    assert 'Printed as <bdi dir="ltr">(10)</bdi>' in second_html
+    assert ">Details</summary>" in second_html
+    assert page.index("2025-12-31") < page.index("2024-12-31")
+    visible_labels = re.findall(r'<ul class="flag-labels">(.*?)</ul>', page, re.DOTALL)
+    assert all("A printed dash was read as zero" not in labels for labels in visible_labels)
+    assert all("Parentheses indicate a negative figure" not in labels for labels in visible_labels)
+    assert 'href="#statement-s1-currency_inferred"' in page
+    assert 'id="statement-s1-currency_inferred"' in page
+    assert 'class="caveat-mark"' in page
+    assert 'results.addEventListener("focusin", placeTooltip)' in page
+    assert 'results.addEventListener("mouseover", placeTooltip)' in page
+
+    css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+    assert ".caveat-mark {" in css
+    assert "text-decoration: none" in css
+    assert "td.num a.caveat-mark" in css and "border: 0" in css
+    assert ".interpretation-mark:focus-visible" in css
+
+
 def test_untrusted_statement_reasons_are_escaped_in_labels_and_details(tmp_path: Path) -> None:
     settings = settings_at(tmp_path)
     hostile = "<script>review</script>"
@@ -1455,14 +1540,120 @@ def test_theme_preferences_are_validated_persisted_and_follow_system_by_default(
     assert "localStorage.getItem(key)" in bootstrap
     assert 'stored === "light" || stored === "dark"' in bootstrap
     assert 'window.matchMedia("(prefers-color-scheme: dark)")' in bootstrap
-    assert 'preference || (media.matches ? "dark" : "light")' in bootstrap
+    assert 'root.dataset.theme = preference || (media.matches ? "dark" : "light")' in bootstrap
     assert "localStorage.setItem(key, preference)" in bootstrap
     assert 'media.addEventListener("change"' in bootstrap
     assert "if (!preference) apply()" in bootstrap
     assert "try {" in bootstrap and "catch {}" in bootstrap
     assert ':root[data-theme="light"]' in page
     assert ':root[data-theme="dark"]' in page
+    assert ':root, :root[data-theme="light"]' in page
     assert "color-scheme: light" in page and "color-scheme: dark" in page
+    assert "@media (prefers-color-scheme: dark)" not in page
+
+
+def test_theme_bootstrap_runs_against_storage_and_os_changes() -> None:
+    node = shutil.which("node")
+    assert node is not None, "Node.js is required to execute the page theme bootstrap"
+    template = Path(__file__).parents[1] / "src/fra_api/templates/base.html"
+    bootstrap = (
+        template.read_text().split("<script>", maxsplit=1)[1].split("</script>", maxsplit=1)[0]
+    )
+    harness = r"""
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+function load(stored, osDark, storageBlocked = false) {
+  const root = {dataset: {}};
+  const attrs = {};
+  const button = {textContent: '', setAttribute: (key, value) => attrs[key] = value};
+  let onChange;
+  const listeners = new Map();
+  const media = {matches: osDark, addEventListener: (_name, callback) => onChange = callback};
+  const values = new Map(stored === undefined ? [] : [['fra-theme', stored]]);
+  const context = {
+    document: {documentElement: root, querySelectorAll: () => [button], addEventListener: (name, callback) => listeners.set(name, callback)},
+    window: {matchMedia: () => media, addEventListener: (name, callback) => listeners.set(name, callback)},
+    localStorage: {
+      getItem: () => {if (storageBlocked) throw Error('blocked'); return values.get('fra-theme') ?? null;},
+      setItem: (_key, value) => {if (storageBlocked) throw Error('blocked'); values.set('fra-theme', value);}
+    }
+  };
+  vm.runInNewContext(BOOTSTRAP, context);
+  return {root, button, attrs, values, media, changed: () => onChange(),
+    dispatch: (name, event) => listeners.get(name)(event), theme: context.window.fraTheme};
+}
+let BOOTSTRAP = '';
+"""
+    # Pass the page script as data so the test executes the actual template code in a JS runtime.
+    runner = (
+        harness.replace("let BOOTSTRAP = '';", f"let BOOTSTRAP = {bootstrap!r};")
+        + r"""
+let state = load('light', true);
+assert.equal(state.root.dataset.theme, 'light');
+state = load('dark', false);
+assert.equal(state.root.dataset.theme, 'dark');
+state = load(undefined, true);
+assert.equal(state.root.dataset.theme, 'dark');
+assert.equal(state.button.textContent, 'Dark');
+assert.equal(state.attrs['aria-label'], 'Switch to light mode');
+state.theme.set('light');
+assert.equal(state.root.dataset.theme, 'light');
+assert.equal(state.values.get('fra-theme'), 'light');
+assert.equal(state.button.textContent, 'Light');
+assert.equal(state.attrs['aria-label'], 'Switch to dark mode');
+state.media.matches = false;
+state.changed();
+assert.equal(state.root.dataset.theme, 'light');
+state.media.matches = true;
+state.changed();
+assert.equal(state.root.dataset.theme, 'light');
+state = load(state.values.get('fra-theme'), true);
+assert.equal(state.root.dataset.theme, 'light');
+state.theme.set('dark');
+assert.equal(state.root.dataset.theme, 'dark');
+assert.equal(state.values.get('fra-theme'), 'dark');
+state.media.matches = false;
+state.changed();
+assert.equal(state.root.dataset.theme, 'dark');
+state = load(state.values.get('fra-theme'), false);
+assert.equal(state.root.dataset.theme, 'dark');
+state.theme.set('light');
+assert.equal(state.root.dataset.theme, 'light');
+state = load(undefined, false);
+assert.equal(state.root.dataset.theme, 'light');
+state.media.matches = true;
+state.changed();
+assert.equal(state.root.dataset.theme, 'dark');
+state = load('bogus', true);
+assert.equal(state.root.dataset.theme, 'dark');
+assert.throws(() => state.theme.set('system'), /Invalid theme preference/);
+state = load(undefined, false, true);
+assert.equal(state.root.dataset.theme, 'light');
+state.theme.set('dark');
+assert.equal(state.root.dataset.theme, 'dark');
+assert.equal(state.button.textContent, 'Dark');
+state.dispatch('pageshow', {persisted: true});
+assert.equal(state.root.dataset.theme, 'dark', 'blocked storage must retain explicit in-memory choice');
+state = load('light', false);
+state.values.set('fra-theme', 'dark');
+state.dispatch('pageshow', {persisted: true});
+assert.equal(state.root.dataset.theme, 'dark', 'BFCache restore must refresh saved preference');
+assert.equal(state.button.textContent, 'Dark');
+assert.equal(state.attrs['aria-label'], 'Switch to light mode');
+state.dispatch('storage', {key: 'unrelated', newValue: 'light'});
+assert.equal(state.root.dataset.theme, 'dark', 'unrelated storage changes must be ignored');
+state.dispatch('storage', {key: 'fra-theme', newValue: 'light'});
+assert.equal(state.root.dataset.theme, 'light', 'same-origin preference changes must be applied');
+state.dispatch('storage', {key: null, newValue: null});
+assert.equal(state.root.dataset.theme, 'light', 'clearing storage must return to the OS preference');
+state.media.matches = true;
+state.changed();
+assert.equal(state.root.dataset.theme, 'dark');
+state.dispatch('storage', {key: 'fra-theme', newValue: 'invalid'});
+assert.equal(state.root.dataset.theme, 'dark', 'invalid storage events must be ignored');
+"""
+    )
+    subprocess.run([node, "-e", runner], check=True, capture_output=True, text=True)
 
 
 def test_theme_tokens_cover_nested_surfaces_controls_and_source_evidence() -> None:
@@ -1497,16 +1688,27 @@ def test_notice_colors_use_shared_rules_for_system_and_explicit_themes(tmp_path:
             if (match := re.search(rf"--{name}:\s*([^;]+);", declarations))
         }
 
-    system_roots = [declarations for selector, declarations in rules if selector == ":root"]
+    light_roots = [
+        declarations
+        for selector, declarations in rules
+        if selector == ':root, :root[data-theme="light"]'
+    ]
     explicit_dark = [
         declarations for selector, declarations in rules if selector == ':root[data-theme="dark"]'
     ]
-    explicit_light = [
-        declarations for selector, declarations in rules if selector == ':root[data-theme="light"]'
-    ]
-    assert len(system_roots) == 2 and len(explicit_dark) == len(explicit_light) == 1
-    assert theme_tokens(system_roots[0]) == theme_tokens(explicit_light[0])
-    assert theme_tokens(system_roots[1]) == theme_tokens(explicit_dark[0])
+    assert len(light_roots) == len(explicit_dark) == 1
+    assert theme_tokens(light_roots[0]) == {
+        "banner-background": "var(--bad-bg)",
+        "banner-foreground": "var(--bad)",
+        "notice-background": "var(--hold-bg)",
+        "notice-foreground": "var(--hold)",
+    }
+    assert theme_tokens(explicit_dark[0]) == {
+        "banner-background": "transparent",
+        "banner-foreground": "var(--ink)",
+        "notice-background": "var(--panel)",
+        "notice-foreground": "var(--ink)",
+    }
 
     banner_rules = [
         (selector, declarations) for selector, declarations in rules if ".banner.bad" in selector
@@ -2251,8 +2453,8 @@ def test_button_text_contrasts_with_both_theme_accents(tmp_path: Path) -> None:
         page = client.get("/")
     assert page.status_code == 200
     css = page.text
-    light_root = re.search(r":root\s*\{([^}]*)\}", css)
-    dark_root = re.search(r"prefers-color-scheme:\s*dark\)\s*\{\s*:root\s*\{([^}]*)\}", css)
+    light_root = re.search(r':root, :root\[data-theme="light"\]\s*\{([^}]*)\}', css)
+    dark_root = re.search(r':root\[data-theme="dark"\]\s*\{([^}]*)\}', css)
     buttons = re.findall(r"(?m)^\s*button\s*\{([^}]*)\}", css)
     assert light_root is not None and dark_root is not None and buttons
 

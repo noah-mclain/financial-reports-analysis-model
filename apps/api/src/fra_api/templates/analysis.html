@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% set annotation_ids = namespace(value=0) %}
+{% set interpretation_flags = ('dash_as_zero', 'parentheses_negative') %}
 {% macro caveat_marks(notes) %}{% for note in notes %}{% set annotation_ids.value = annotation_ids.value + 1 %}<sup class="annotation-tooltip"><a class="caveat-mark" href="#{{ note.anchor }}" aria-label="{{ note.text }}" aria-describedby="{{ note.anchor }}-description-{{ annotation_ids.value }}">†</a><span class="annotation-tooltip-text" id="{{ note.anchor }}-description-{{ annotation_ids.value }}" role="tooltip">{{ note.text }}</span></sup>{% endfor %}{% endmacro %}
+{% macro interpretation_marks(flags) %}{% for flag in flags if flag in interpretation_flags %}{% set annotation_ids.value = annotation_ids.value + 1 %}<span class="annotation-tooltip"><span class="interpretation-mark" tabindex="0" aria-label="{{ flag_label(flag) }}" aria-describedby="interpretation-description-{{ annotation_ids.value }}">i</span><span class="annotation-tooltip-text" id="interpretation-description-{{ annotation_ids.value }}" role="tooltip">{{ flag_label(flag) }}</span></span>{% endfor %}{% endmacro %}
 {% macro caveat_text(note) %}<p class="muted caveat-note" id="{{ note.anchor }}" dir="{{ 'rtl' if note.language == 'ar' else 'ltr' }}" lang="{{ note.language }}">{{ note.text }}</p><details class="technical-details"><summary aria-label="Technical details for caveat note">Technical details</summary><code dir="ltr">{{ note.id }}</code><ul>{% for key, value in note.evidence.items() %}<li><code dir="ltr">{{ key }}: {{ value }}</code></li>{% endfor %}</ul></details>{% endmacro %}
 {% macro statement_table(s, held) %}
 <div class="scroll-wrap">
@@ -16,12 +18,15 @@
           {% if row.mapping_flag %}<span class="badge needs_review">{{ flag_label(row.mapping_flag) }}</span>{% endif %}
           {% if row.mapping_flag or row.mapping_evidence %}<details class="technical-details"><summary aria-label="Technical details for {{ row.label }}">Technical details</summary>{% if row.mapping_flag %}<code dir="ltr">{{ row.mapping_flag }}</code>{% endif %}{% if row.mapping_evidence %}<p>{{ row.mapping_evidence }}</p>{% endif %}</details>{% endif %}</td>
         {% for found in row.cells %}
-          <td class="num{{ ' flagged' if found | selectattr('flags') | list or held }}" dir="ltr">
+          {% set review_flags = namespace(value=false) %}{% for cell in found if cell.flags | reject('in', interpretation_flags) | list %}{% set review_flags.value = true %}{% endfor %}
+          <td class="num{{ ' flagged' if review_flags.value or held }}" dir="ltr">
           {% for c in found %}<div class="cell-value" title="Printed as: {{ c.printed }}">
             {% if c.source %}<a href="{{ c.source }}">{{ c.text or '—' }}</a>{% else %}{{ c.text }}{% endif %}
-            {% if c.flags or held %}<span class="flag-marker" aria-label="Needs review" title="This figure is flagged or belongs to a held statement">⚑</span>{% endif %}
+            {% if c.flags | reject('in', interpretation_flags) | list or held %}<span class="flag-marker" aria-label="Needs review" title="This figure is flagged or belongs to a held statement">⚑</span>{% endif %}
+            {{ interpretation_marks(c.flags) }}
             {{ caveat_marks(c.caveats) }}
-            {% if c.flags %}<ul class="flag-labels">{% for flag in c.flags %}<li>{{ flag_label(flag) }}</li>{% endfor %}</ul><details class="technical-details"><summary aria-label="Technical details for figure {{ c.text }}">Technical details</summary><ul>{% for flag in c.flags %}<li><code dir="ltr">{{ flag }}</code></li>{% endfor %}</ul></details>{% endif %}
+            {% if c.flags | reject('in', interpretation_flags) | list %}<ul class="flag-labels">{% for flag in c.flags if flag not in interpretation_flags %}<li>{{ flag_label(flag) }}</li>{% endfor %}</ul>{% endif %}
+            <details class="technical-details cell-technical"><summary aria-label="Technical details for figure {{ c.text }}">Details</summary><p>Printed as <bdi dir="ltr">{{ c.printed }}</bdi></p>{% if c.flags %}<ul>{% for flag in c.flags %}<li><code dir="ltr">{{ flag }}</code></li>{% endfor %}</ul>{% endif %}</details>
           </div>{% endfor %}</td>
         {% endfor %}
       </tr>
