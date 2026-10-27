@@ -21,7 +21,16 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Resp
 from jinja2 import Environment, PackageLoader, select_autoescape
 
 from fra_api.jobs import settings_of, store_of
-from fra_api.views import analysis_view, flag_label, plain_label, reason_label
+from fra_api.views import (
+    analysis_view,
+    decline_label,
+    flag_label,
+    hold_label,
+    plain_formula,
+    plain_label,
+    reason_label,
+    review_reasons,
+)
 from fra_core.jobs import JobSettings, JobStore
 from fra_core.profile import Profile
 from fra_core.schemas import JobStage
@@ -42,7 +51,11 @@ _templates = Environment(
 _templates.globals.update(
     flag_label=flag_label,
     plain_label=plain_label,
+    plain_formula=plain_formula,
+    hold_label=hold_label,
     reason_label=reason_label,
+    review_reasons=review_reasons,
+    decline_label=decline_label,
     stage_label=lambda stage: {
         "locate": "Find statement pages",
         "convert": "Read page content",

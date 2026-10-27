@@ -58,6 +58,9 @@ PLAIN_LABELS = {
     "total_current_liabilities": "Total current liabilities",
     "total_equity": "Total equity",
     "equity_attributable_parent": "Equity attributable to owners",
+    "EBITDA": "EBITDA",
+    "DSO": "DSO",
+    "EPS": "EPS",
     "cash_and_equivalents": "Cash and equivalents",
     "short_term_investments": "Short-term investments",
     "trade_receivables": "Trade receivables",
@@ -71,9 +74,9 @@ PLAIN_LABELS = {
     "current_ratio": "Current ratio",
     "quick_ratio": "Quick ratio",
     "cash_ratio": "Cash ratio",
-    "roa": "Return on assets",
-    "roe": "Return on equity",
-    "dso": "Days sales outstanding",
+    "roa": "ROA",
+    "roe": "ROE",
+    "dso": "DSO",
     "dio": "Days inventory outstanding",
     "dpo": "Days payable outstanding",
     "total_debt": "Total debt",
@@ -86,8 +89,8 @@ PLAIN_LABELS = {
     "gross_margin": "Gross margin",
     "operating_margin": "Operating margin",
     "net_margin": "Net margin",
-    "return_on_equity": "Return on equity",
-    "return_on_assets": "Return on assets",
+    "return_on_equity": "ROE",
+    "return_on_assets": "ROA",
     "asset_turnover": "Asset turnover",
     "debt_ratio": "Debt ratio",
     "working_capital": "Working capital",
@@ -100,61 +103,383 @@ FLAG_LABELS = {
     "parentheses_negative": "Parentheses indicate a negative figure",
     "per_share": "Per-share value",
     "scale_assumed_units": "Scale not stated; figures treated as single units",
-    "scale_missing": "Scale was not stated",
     "unmapped": "Row not mapped",
-    "digit_suspect": "Digit check needs review",
+    "digit_suspect": "Some digits may have been read incorrectly",
     DUPLICATE_CELL: "More than one figure was read for this period",
+    "low_selectivity": "The document contained many unrelated items, so extraction was limited",
+    "range_not_converted": "Some statement ranges could not be converted",
+    "range_partially_converted": "Some statement ranges were only partly converted",
+    "identity_failed": (
+        "The balance check (assets = liabilities + equity) did not hold, "
+        "so the figures do not reconcile"
+    ),
+    "tie_failed": (
+        "Net profit does not match between the income statement and the statement of "
+        "comprehensive income"
+    ),
+    "eps_failed": "Earnings per share does not match net profit and the share count",
+    "period_outlier": "A reporting period differs from the other periods",
+    "fraction_among_whole": "A fractional value appeared among whole-number figures",
+    "row_realigned": "Rows were rearranged to match their figures",
+    "numeric_columns_split": "A numeric column was split while reading the table",
+    "ocr_parenthesis_repaired": "A repaired bracket may change whether a figure is negative",
+    "period_unbound": "A reporting period could not be matched to a statement column",
+    "period_conflict": "Reporting-period evidence conflicts, so the period is uncertain",
+    "scale_conflict": (
+        "The figure scale is unclear because the document gives conflicting information"
+    ),
+    "currency_conflict": (
+        "The currency is unclear because the document gives conflicting information"
+    ),
+    "currency_missing": "The report does not identify a currency",
+    "scale_implausible": "The stated figure scale appears implausible",
+    "value_without_box": "A figure has no matching box on the page",
+    "likely_bank": "The document may be a bank report, so its figures need review",
+    "likely_insurer": "The document may be an insurer report, so its figures need review",
+    "likely_other_financial": (
+        "The document may be from another kind of financial company, so its figures need review"
+    ),
+    "image_pages_not_read": "Some image pages could not be read",
+    "ocr_failed_pages": "Text could not be read from some pages",
+    "garbled_text_layers_not_read": "Some garbled page text could not be read",
+    "no_statements_found": "No financial statements were found in the document",
+    "convert_failed": "Some statement pages could not be processed",
+    "convert_partial": "Some statement pages were only partly processed",
+    "ocr_unavailable": "Text recognition was unavailable for some statement pages",
+    "page_outside_range": "A statement page was outside the supported page range",
+    "page_not_converted": "A statement page could not be processed",
+    "page_image_missing": "An image for a statement page was unavailable",
+    "memory_over_budget": "Processing stopped after reaching the memory limit",
+    "period_evidence_unavailable": (
+        "Reporting-period evidence was unavailable, so the period is uncertain"
+    ),
+    "words_reversed": "Some words may have been read in reverse order",
+    "word_order_uncertain": "Word order is uncertain",
+    "words_from_page": "Some words were read from the page outside the table",
+    "digits_reversed": "Some digits may have been read in reverse order",
+    "arabic_indic_digits": "Arabic-Indic digits were converted to standard digits",
+    "dash_as_zero": "A printed dash was read as zero",
+    "word_as_zero": "A word meaning nil was read as zero",
+    "not_available": "The figure was printed as not available",
+    "footnote_marker": "A footnote marker was removed from the figure",
+    "trailing_sign": "A sign printed after the figure was applied to it",
+    "european_separators": "A decimal comma with thousands dots was interpreted",
+    "comma_decimal": "A decimal comma was interpreted",
+    "period_not_a_duration": "This metric needs a period with a length, not a single date",
+    "period_longer_than_year": "This metric needs a one-year period, but the period is longer",
+    "interim_not_annualized": "Not computed: this ratio is not annualised for a part-year period",
+    "blank_confirmed": "This cell is blank on the page",
+    "letters_spaced": "Some letters may have been read with incorrect spacing",
+    "year_joined": "A year may have been joined incorrectly",
+    "label_words_from_page": "Some row labels were read outside the table",
+    "label_merged": "A row label may have merged with another row",
+    "spanned_cell": "A figure spans more than one table cell",
+    "bbox_synthesized": "A figure's page location was estimated",
+    "rows_realigned": "Rows were rearranged to match their figures",
+    "needs_review": "This statement needs review",
+    "currency_mismatch": ("Figures use different currencies, so they cannot be compared directly"),
+    "scale_mismatch": "Figures use different scales, so they cannot be compared directly",
+    "identity_totals_not_found": (
+        "The balance check could not run because key totals were not found"
+    ),
+    "implausible_magnitude": "A figure has an implausible magnitude",
+    "unparsed": "A figure could not be read as a number",
+    "numbers_missing": "A figure was not found where expected",
+    "unchecked": "Some figures were not confirmed by any arithmetic check",
+    "row_misaligned": "A row may be shifted against its figures",
+    "ambiguous_separator": "A figure uses a separator that can be read two ways (comma or dot)",
+    "duplicate_input": "A metric input appears more than once",
+    "missing_input": "A required value for this metric was not found",
+    "input_may_be_unmapped": (
+        "The missing value may be among statement lines that could not be identified"
+    ),
+    "undefined_zero_denominator": (
+        "This metric could not be calculated because its denominator is zero"
+    ),
+    "undefined_negative_denominator": (
+        "This metric could not be calculated with a negative denominator"
+    ),
+    "negative_base": "This metric uses a negative base value and needs review",
+    "arithmetic_result": "The arithmetic result needs review",
+    "unrepresentable_result": "The arithmetic result could not be represented",
+    "sign_unexpected": "A figure's sign is unexpected and needs review",
+    "peak_footprint_rss_fallback": "Peak memory use could not be measured accurately",
+    "statement_not_found": "A financial statement was not found",
+    "merged_or_wrapped": "A row may be merged with or wrapped around another row",
+    "note_split": "A note may have been split from its related figure",
+    "text_repaired": "Some extracted text was repaired and needs review",
+    "reading_uncertain": "Some text could not be read with confidence",
+    "error": "A processing error occurred",
+    "all_ranges_failed": "No statement pages could be processed",
+    "statement_not_extracted": "A financial statement could not be extracted",
+    "scale_missing": "The report does not state a figure scale",
+    "currency_inferred": "The currency was inferred and needs review",
+    "currency_from_domicile": (
+        "The currency was inferred from the company location and needs review"
+    ),
+    "row_alignment_unresolved": "Some rows could not be matched to their figures with confidence",
+    "ocr_failed": "Text recognition failed on a page",
+    "critical_item_unmapped": "A key statement line could not be identified",
 }
 
 
 def plain_label(identifier: str) -> str:
     """A short reader-facing label; the original identifier remains available in the detail."""
-    return PLAIN_LABELS.get(
-        identifier, identifier.replace("_", " ").replace(":", " · ").capitalize()
+    if identifier in PLAIN_LABELS:
+        return PLAIN_LABELS[identifier]
+    words = identifier.replace("_", " ").replace(":", " · ").split()
+    acronyms = {
+        "ebitda": "EBITDA",
+        "eps": "EPS",
+        "dso": "DSO",
+        "ebit": "EBIT",
+        "roe": "ROE",
+        "roa": "ROA",
+    }
+    rendered = [acronyms.get(word.lower(), word.lower()) for word in words]
+    if rendered and rendered[0] not in acronyms.values():
+        rendered[0] = rendered[0].capitalize()
+    return " ".join(rendered)
+
+
+def plain_formula(formula: str) -> str:
+    """Replace canonical item identifiers in a formula with reader-facing labels."""
+    function_names = {"abs", "avg"}
+    return re.sub(
+        r"\b[a-z][a-z0-9_]*\b",
+        lambda match: (
+            match.group() if match.group() in function_names else plain_label(match.group())
+        ),
+        formula,
     )
 
 
 def flag_label(flag: str) -> str:
     """Explain common extraction and calculation flags without dropping their source code."""
-    return FLAG_LABELS.get(flag, plain_label(flag))
+    if flag.startswith("error:"):
+        return FLAG_LABELS["error"]
+    identifier = flag.partition(":")[0]
+    label = FLAG_LABELS.get(identifier)
+    if label is not None:
+        match = re.fullmatch(
+            r"(image_pages_not_read|ocr_failed_pages|garbled_text_layers_not_read|"
+            r"page_not_converted|digit_suspect|period_outlier|fraction_among_whole|"
+            r"row_realigned|numeric_columns_split):(\d+)",
+            flag,
+        )
+        if match:
+            count = int(match.group(2))
+            counted_labels = {
+                "image_pages_not_read": (
+                    f"{count} image {'page could' if count == 1 else 'pages could'} not be read"
+                ),
+                "ocr_failed_pages": (
+                    f"Text could not be read from {count} {'page' if count == 1 else 'pages'}"
+                ),
+                "garbled_text_layers_not_read": (
+                    f"{count} {'page had' if count == 1 else 'pages had'} garbled text "
+                    "that could not be read"
+                ),
+                "page_not_converted": (
+                    f"{count} {'page could' if count == 1 else 'pages could'} not be processed"
+                ),
+                "digit_suspect": (
+                    f"{count} {'figure may have' if count == 1 else 'figures may have'} "
+                    "misread digits"
+                ),
+                "period_outlier": (
+                    f"{count} "
+                    f"{'reporting period differs' if count == 1 else 'reporting periods differ'} "
+                    "from the other periods"
+                ),
+                "fraction_among_whole": (
+                    f"{count} {('fractional value' if count == 1 else 'fractional values')} "
+                    "appeared among whole-number figures"
+                ),
+                "row_realigned": (
+                    f"{count} {'row was' if count == 1 else 'rows were'} "
+                    "rearranged to match figures"
+                ),
+                "numeric_columns_split": (
+                    f"{count} {'numeric column was' if count == 1 else 'numeric columns were'} "
+                    "split while reading the table"
+                ),
+            }
+            return counted_labels[match.group(1)]
+        return label
+    return plain_label(identifier)
+
+
+def readable_code(code: str) -> str:
+    """Make an unfamiliar machine identifier readable without exposing its syntax."""
+    return re.sub(r"\s+", " ", re.sub(r"[^\w -]", " ", code.replace("_", " "))).strip().capitalize()
+
+
+def decline_label(reason: str, decline_code: str | None = None) -> str:
+    """Describe a decline without exposing evidence text or an internal reason code."""
+    match = re.match(r"declined:([^:]+):", reason)
+    code = decline_code or (match.group(1) if match else reason)
+    labels = {
+        "bank": "This looks like a bank, which this tool does not analyse.",
+        "insurer": "This looks like an insurer, which this tool does not analyse.",
+        "unsupported_language": (
+            "This report is mainly in Arabic, which this tool does not analyse."
+        ),
+    }
+    return labels.get(code, "This document was not analysed.")
+
+
+def hold_label(reason: str) -> str:
+    """Describe an analysis hold while keeping industry scores and evidence private."""
+    match = re.match(r"industry_uncertain:([^:]+)(?::\s*([^,]+))?", reason)
+    if match:
+        code, kind = match.groups()
+        if kind is None:
+            kind = "unknown"
+        kind = kind.split("/", maxsplit=1)[0].replace("_", " ")
+        suspected = {
+            "bank": "a bank",
+            "insurer": "an insurer",
+            "other financial": "another kind of financial company",
+            "unknown": "the company type",
+            "corporate": "a company type",
+        }.get(kind, "the company type")
+        wording = {
+            "no_verdict": "could not be identified",
+            "other_financial": "could not be confirmed",
+            "too_narrow": "could not be confirmed from enough evidence",
+            "near_threshold": "could not be confirmed",
+            "weak_verdict": "could not be confirmed",
+        }.get(code, "could not be confirmed")
+        if kind in {"bank", "insurer", "other financial"}:
+            return (
+                f"The company may be {suspected}, but that {wording}, "
+                "so its statements are held for review."
+            )
+        return f"The company type {wording}, so its statements are held for review."
+    return f"Review note — {readable_code(reason)}"
 
 
 def reason_label(reason: str) -> str:
     """Turn review reason codes into short descriptions while retaining the exact reason."""
+    if reason.startswith("industry_uncertain:"):
+        return hold_label(reason)
     if reason == "subtotal_failed":
-        return "A statement subtotal did not match"
+        return "A statement subtotal did not match, so the figures do not reconcile"
+    if reason == "identity_failed":
+        return FLAG_LABELS[reason]
+    if reason == "tie_failed":
+        return FLAG_LABELS[reason]
+    if reason == "eps_failed":
+        return FLAG_LABELS[reason]
     if reason == "duplicate_statement":
-        return "A duplicate statement was found"
+        return "A duplicate statement was found, so its figures may be repeated"
     match = re.fullmatch(
         r"(subtotal_not_checked|numbers_missing|unparsed|implausible_magnitude):(\d+)", reason
     )
     if match:
         count = int(match.group(2))
-        descriptions = {
-            "subtotal_not_checked": (
-                "statement subtotal could not be checked"
+        kind = match.group(1)
+        if kind == "subtotal_not_checked":
+            return (
+                "1 total could not be recalculated from the lines above it, so it is not confirmed"
                 if count == 1
-                else "statement subtotals could not be checked"
-            ),
-            "numbers_missing": "1 figure could not be read"
+                else (
+                    f"{count} totals could not be recalculated from the lines above them, "
+                    "so they are not confirmed"
+                )
+            )
+        if kind == "numbers_missing":
+            return (
+                "1 figure was not found where expected"
+                if count == 1
+                else f"{count} figures were not found where expected"
+            )
+        if kind == "unparsed":
+            return (
+                "1 figure could not be read as a number"
+                if count == 1
+                else f"{count} figures could not be read as numbers"
+            )
+        return (
+            "1 figure has an implausible magnitude"
             if count == 1
-            else "figures could not be read",
-            "unparsed": "1 figure could not be interpreted"
-            if count == 1
-            else "figures could not be interpreted",
-            "implausible_magnitude": "1 figure has an implausible magnitude"
-            if count == 1
-            else "figures have implausible magnitudes",
-        }
-        if match.group(1) == "subtotal_not_checked":
-            return f"{count} {descriptions[match.group(1)]}"
-        if count == 1:
-            return descriptions[match.group(1)]
-        return f"{count} {descriptions[match.group(1)]}"
+            else f"{count} figures have implausible magnitudes"
+        )
+    if reason == "unchecked":
+        return "Some figures were not confirmed by any arithmetic check"
+    if reason == "row_alignment_unresolved":
+        return "Some rows could not be matched to their figures with confidence"
+    if reason.startswith("row_misaligned:"):
+        count_text = reason.partition(":")[2]
+        rows = "row" if count_text == "1" else "rows"
+        return f"{count_text} {rows} may be shifted against their figures"
+    if reason.startswith("ambiguous_separator:"):
+        count_text = reason.partition(":")[2]
+        figures = "figure" if count_text == "1" else "figures"
+        return f"{count_text} {figures} use a separator that can be read two ways (comma or dot)"
+    if reason == "identity_not_checked:missing_values":
+        return (
+            "The balance check (assets = liabilities + equity) could not be run because "
+            "some figures are missing"
+        )
+    if reason == "identity_not_checked:identity_totals_not_found":
+        return (
+            "The balance check (assets = liabilities + equity) could not be run because "
+            "key totals were not found"
+        )
+    # The flag table is the single label source for reasons that share producer codes.
+    # Strip only the value-with-box coordinates before dispatch; they are trace data.
     if reason.startswith("critical_item_unmapped:"):
-        item = reason.partition(":")[2]
-        return f"Critical statement item could not be mapped: {plain_label(item)}"
-    return plain_label(reason)
+        return f"The line {plain_label(reason.partition(':')[2])} could not be identified"
+    label = flag_label(reason)
+    if reason.partition(":")[0] in FLAG_LABELS:
+        return label
+    return f"Review note — {readable_code(reason)}"
+
+
+@dataclass(frozen=True)
+class ReasonView:
+    label: str
+
+
+def review_reasons(reasons: tuple[str, ...]) -> tuple[ReasonView, ...]:
+    """Group key-line omissions and order statement review issues by confirmation impact."""
+    priority = {"block": 0, "read": 1, "mapping": 2, "note": 3}
+    items: list[tuple[int, int, ReasonView]] = []
+    critical = [reason for reason in reasons if reason.startswith("critical_item_unmapped:")]
+    if critical:
+        names = [plain_label(reason.partition(":")[2]) for reason in critical]
+        names = [
+            name if name.isupper() else name[0].lower() + name[1:] if name else name
+            for name in names
+        ]
+        noun = "line" if len(names) == 1 else "lines"
+        verb = "was" if len(names) == 1 else "were"
+        label = f"{len(names)} key {noun} {verb} not identified ({', '.join(names)})."
+        items.append((priority["mapping"], reasons.index(critical[0]), ReasonView(label)))
+    for index, reason in enumerate(reasons):
+        if reason.startswith("critical_item_unmapped:"):
+            continue
+        if reason.startswith(
+            ("identity_not_checked:", "subtotal_failed", "subtotal_not_checked:")
+        ) or reason in {"identity_failed", "tie_failed", "eps_failed"}:
+            group = "block"
+        elif reason.startswith(
+            (
+                "numbers_missing:",
+                "unparsed:",
+                "implausible_magnitude:",
+                "row_misaligned:",
+                "ambiguous_separator:",
+                "row_alignment_unresolved",
+            )
+        ):
+            group = "read"
+        else:
+            group = "note"
+        items.append((priority[group], index, ReasonView(reason_label(reason))))
+    return tuple(item for _, _, item in sorted(items, key=lambda item: (item[0], item[1])))
 
 
 def source_url(sha256: str, provenance: Provenance, job_id: str | None = None) -> str:
@@ -512,7 +837,7 @@ def analysis_view(analysis: Analysis) -> AnalysisView:
         summary_notice = (
             "حُجب الملخص: تعذر التحقق من النص أو مراجعه."
             if ar
-            else "Summary withheld: its text or references could not be verified."
+            else "Summary withheld because its text or references could not be verified."
         )
     elif artifact is not None and artifact.origin == "direct_template":
         try:
@@ -527,7 +852,7 @@ def analysis_view(analysis: Analysis) -> AnalysisView:
             summary_notice = (
                 "حُجب الملخص: تعذر التحقق من النص أو مراجعه."
                 if ar
-                else "Summary withheld: its text or references could not be verified."
+                else "Summary withheld because its text or references could not be verified."
             )
     elif artifact is not None:
         origin_text = (
@@ -541,13 +866,13 @@ def analysis_view(analysis: Analysis) -> AnalysisView:
             summary_notice = (
                 "حُجب الملخص: التحليل قيد المراجعة."
                 if ar
-                else "Summary withheld: the analysis is held for review."
+                else "Summary withheld because the analysis is held for review."
             )
         else:
             summary_notice = (
                 "حُجب الملخص: لا تتوفر حقائق مؤهلة من أحدث فترة."
                 if ar
-                else "Summary withheld: no eligible latest-period facts are available."
+                else "Summary withheld because no eligible latest-period facts are available."
             )
     summary_notes = (
         {
@@ -573,7 +898,7 @@ def analysis_view(analysis: Analysis) -> AnalysisView:
             summary_notice = (
                 "حُجب الملخص: تعذر التحقق من النص أو مراجعه."
                 if ar
-                else "Summary withheld: its text or references could not be verified."
+                else "Summary withheld because its text or references could not be verified."
             )
     footnotes = {
         note.anchor: note
